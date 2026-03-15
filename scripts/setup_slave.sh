@@ -24,6 +24,9 @@
 
 set -e
 
+# Réouvrir stdin depuis le terminal si le script est exécuté via pipe (curl | bash)
+[ -t 0 ] || exec < /dev/tty
+
 REPO_PATH="/home/artoo/r2d2"
 USER="artoo"
 GITHUB_RAW="https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main"

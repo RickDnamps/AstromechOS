@@ -31,6 +31,9 @@
 
 set -e
 
+# Réouvrir stdin depuis le terminal si le script est exécuté via pipe (curl | bash)
+[ -t 0 ] || exec < /dev/tty
+
 HOTSPOT_CON="r2d2-master-hotspot"
 
 # Couleurs
