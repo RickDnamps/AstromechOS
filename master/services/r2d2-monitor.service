@@ -1,0 +1,21 @@
+[Unit]
+Description=R2-D2 Master Monitor (watchdog systemd)
+After=r2d2-master.service
+
+[Service]
+Type=simple
+User=artoo
+# Redémarre r2d2-master s'il est inactif depuis plus de 10s
+ExecStart=/bin/bash -c '\
+  while true; do \
+    sleep 10; \
+    if ! systemctl is-active --quiet r2d2-master; then \
+      echo "r2d2-master inactif — redémarrage" | systemd-cat -t r2d2-monitor; \
+      systemctl start r2d2-master; \
+    fi; \
+  done'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

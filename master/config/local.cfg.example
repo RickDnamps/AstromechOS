@@ -1,0 +1,33 @@
+# local.cfg — Configuration locale spécifique à ton R2-D2
+# Ce fichier N'EST PAS suivi par git — il survit aux git pull.
+# Copier ce fichier : cp local.cfg.example local.cfg
+# Puis éditer les valeurs ci-dessous.
+#
+# Les valeurs ici ont PRIORITÉ sur main.cfg.
+
+[github]
+# URL de ton repo GitHub (ou fork)
+# Exemple original  : https://github.com/TON_USER/r2d2.git
+# Exemple fork      : https://github.com/FORK_USER/r2d2.git
+# Exemple SSH       : git@github.com:TON_USER/r2d2.git
+repo_url = https://github.com/RickDnamps/R2D2_Control.git
+
+# Branche à suivre (défaut: main)
+branch = main
+
+# Pull automatique au boot du Master (si wlan1 disponible)
+auto_pull_on_boot = true
+
+[hotspot]
+# SSID et mot de passe du point d'accès Wi-Fi du Master
+# Modifier ici après setup_hotspot.sh si tu veux personnaliser
+ssid = R2D2_Control
+password = r2d2droid
+
+[deploy]
+# Pin GPIO BCM du bouton physique sur le dôme
+button_pin = 17
+
+[slave]
+# Hostname du Slave sur le hotspot (username: artoo)
+host = r2-slave.local

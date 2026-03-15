@@ -1,0 +1,5 @@
+pyserial>=3.5
+pyvesc>=1.0.0
+adafruit-circuitpython-pca9685>=2.4.0
+RPi.GPIO>=0.7.1
+# Audio via aplay (natif Raspberry Pi OS) — pas de dépendance pip requise

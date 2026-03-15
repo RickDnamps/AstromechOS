@@ -1,0 +1,18 @@
+[Unit]
+Description=R2-D2 Slave Version Check (run once at boot)
+After=network.target
+Before=r2d2-slave.service
+
+[Service]
+Type=oneshot
+User=artoo
+WorkingDirectory=/home/artoo/r2d2
+# La vérification de version est intégrée dans main.py
+# Ce service est un placeholder pour les dépendances systemd
+ExecStart=/bin/true
+RemainAfterExit=yes
+StandardOutput=journal
+SyslogIdentifier=r2d2-version
+
+[Install]
+WantedBy=multi-user.target

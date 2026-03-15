@@ -1,0 +1,18 @@
+[Unit]
+Description=R2-D2 Slave Controller
+After=r2d2-version.service
+Wants=r2d2-version.service
+
+[Service]
+Type=simple
+User=artoo
+WorkingDirectory=/home/artoo/r2d2
+ExecStart=/usr/bin/python3 /home/artoo/r2d2/slave/main.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=r2d2-slave
+
+[Install]
+WantedBy=multi-user.target
