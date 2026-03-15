@@ -453,49 +453,53 @@ journalctl -u r2d2-slave -f   # logs en temps réel
 
 ## ÉTAPE 6 — Firmware RP2040
 
-### 6.1 — Prérequis
+### 6.1 — Installer MicroPython sur le RP2040
 
-- Installer **Thonny** sur ton PC ou utiliser `mpremote`
-- Le RP2040 doit avoir MicroPython installé
-
-### 6.2 — Installer MicroPython sur le RP2040
+> Aucun logiciel requis pour cette étape — juste glisser-déposer un fichier.
 
 1. Télécharger le firmware MicroPython pour RP2040 :
    https://micropython.org/download/RPI_PICO/
 
-2. Brancher le RP2040 en mode BOOTSEL (maintenir BOOT enfoncé, brancher USB)
+2. Mettre le RP2040 en mode BOOTSEL :
+   - Maintenir le bouton **BOOT** enfoncé
+   - Brancher le câble USB
+   - Relâcher BOOT
+   - Un lecteur `RPI-RP2` apparaît sur ton PC
 
-3. Copier le fichier `.uf2` sur le lecteur `RPI-RP2` qui apparaît
+3. Glisser-déposer le fichier `.uf2` sur ce lecteur → le RP2040 redémarre automatiquement avec MicroPython installé ✅
 
-### 6.3 — Installer le driver GC9A01
+### 6.2 — Copier le firmware R2-D2
 
-Via `mpremote` depuis ton PC :
+> **Thonny** (ou `mpremote`) est nécessaire à partir d'ici pour envoyer du code sur le RP2040.
+> Installer Thonny : https://thonny.org (Windows/Mac/Linux)
+
+**Via Thonny :**
+1. Ouvrir Thonny → menu `Run` → `Select interpreter` → `MicroPython (Raspberry Pi Pico)`
+2. Ouvrir chaque fichier depuis `rp2040/firmware/` et faire `File` → `Save as` → `Raspberry Pi Pico`
+
+**Via `mpremote` (ligne de commande) :**
 ```bash
 pip install mpremote
+
+# Installer le driver GC9A01 (écran rond)
 mpremote connect auto mip install gc9a01
-```
 
-### 6.4 — Copier le firmware R2-D2
-
-```bash
-# Depuis le dossier rp2040/firmware/
+# Copier les fichiers firmware R2-D2
 cd J:/R2-D2_Build/software/rp2040/firmware
-
 mpremote connect auto cp main.py :main.py
 mpremote connect auto cp display.py :display.py
 mpremote connect auto cp touch.py :touch.py
 ```
 
-### 6.5 — Tester l'affichage
+### 6.3 — Tester l'affichage
 
+**Via Thonny :** ouvrir le REPL (console en bas) → le RP2040 doit afficher l'écran de boot R2-D2.
+
+**Via `mpremote` :**
 ```bash
 mpremote connect auto repl
-# Dans le REPL MicroPython :
-import display, gc9a01
-# ... ou simplement laisser main.py démarrer
+# Ctrl+D pour soft-reboot et voir main.py démarrer
 ```
-
-Le RP2040 doit afficher l'écran de boot R2-D2 au démarrage.
 
 ---
 
