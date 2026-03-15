@@ -140,21 +140,22 @@ for CON in $(nmcli -g NAME connection show | grep -v "$HOTSPOT_CON"); do
 done
 
 # =============================================================================
-# ÉTAPE 4 — Tenter de se connecter maintenant
+# ÉTAPE 4 — Vérifier que le hotspot est visible (connexion après reboot)
 # =============================================================================
 echo ""
-info "Étape 4 — Connexion au hotspot Master..."
+info "Étape 4 — Vérification visibilité hotspot..."
 
-# Scanner d'abord pour vérifier que le réseau est visible
+# Scanner pour vérifier que le réseau est visible — NE PAS tenter de se connecter
+# maintenant car nmcli connection up casse la session SSH (switch WiFi immédiat)
 VISIBLE=$(nmcli device wifi list ifname wlan0 2>/dev/null | grep "$HOTSPOT_SSID" || true)
 
 if [[ -n "$VISIBLE" ]]; then
-    nmcli connection up "$HOTSPOT_CON" && ok "Connecté au hotspot '${HOTSPOT_SSID}' ✓" \
-        || warn "Connexion échouée — vérifier mot de passe ou redémarrer"
+    ok "Hotspot '${HOTSPOT_SSID}' détecté — connexion automatique au reboot"
 else
-    warn "Hotspot '${HOTSPOT_SSID}' non visible maintenant"
+    warn "Hotspot '${HOTSPOT_SSID}' non visible maintenant — vérifier que le Master est allumé"
     warn "La connexion s'activera automatiquement au reboot si le Master est en marche"
 fi
+info "Connexion différée au reboot (évite la déconnexion SSH)"
 
 # =============================================================================
 # ÉTAPE 5 — Hostname + avahi

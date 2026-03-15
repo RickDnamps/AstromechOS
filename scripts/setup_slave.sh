@@ -134,6 +134,17 @@ fi
 bash "$NETWORK_SCRIPT"
 
 # =============================================================================
+# ÉTAPE 5b — Fix WiFi power saving (évite les ARP incomplets / SSH qui drop)
+# =============================================================================
+info "Étape 5b — Désactivation WiFi power saving..."
+cat > /etc/udev/rules.d/70-wifi-powersave.rules << 'EOF'
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan0", RUN+="/sbin/iw dev wlan0 set power_save off"
+EOF
+# Appliquer immédiatement si wlan0 est déjà actif
+iw dev wlan0 set power_save off 2>/dev/null || true
+ok "WiFi power saving désactivé (règle udev permanente)"
+
+# =============================================================================
 # Résumé
 # =============================================================================
 echo ""

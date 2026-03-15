@@ -110,6 +110,20 @@ sudo -u "$USER" pip3 install --break-system-packages -q \
 ok "Dépendances Python installées"
 
 # =============================================================================
+# ÉTAPE 5b — Pré-téléchargement vendor Slave (cache offline pour deploy.sh)
+# =============================================================================
+info "Étape 5b/8 — Pré-téléchargement dépendances Slave (vendor/)..."
+VENDOR_DIR="$REPO_PATH/slave/vendor"
+mkdir -p "$VENDOR_DIR"
+chown "$USER:$USER" "$VENDOR_DIR"
+if sudo -u "$USER" pip3 download -q setuptools wheel -d "$VENDOR_DIR" && \
+   sudo -u "$USER" pip3 download -q -r "$REPO_PATH/slave/requirements.txt" -d "$VENDOR_DIR" 2>/dev/null; then
+    ok "Vendor Slave prêt ($(ls $VENDOR_DIR | wc -l) paquets)"
+else
+    warn "Vendor Slave échoué — pas de connexion internet ? deploy.sh utilisera PyPI directement"
+fi
+
+# =============================================================================
 # ÉTAPE 6 — Copie local.cfg
 # =============================================================================
 info "Étape 6/8 — Configuration local.cfg..."
@@ -126,6 +140,23 @@ fi
 # =============================================================================
 info "Étape 7/8 — Configuration réseau..."
 bash "$REPO_PATH/scripts/setup_master_network.sh"
+
+# =============================================================================
+# ÉTAPE 7b — Clé SSH Ed25519 (pour rsync automatique Master → Slave)
+# =============================================================================
+info "Étape 7b/8 — Génération clé SSH Ed25519..."
+SSH_KEY="/home/$USER/.ssh/id_ed25519"
+if [ -f "$SSH_KEY" ]; then
+    ok "Clé SSH déjà présente : $SSH_KEY"
+else
+    sudo -u "$USER" ssh-keygen -t ed25519 -C "r2-master" -f "$SSH_KEY" -N ""
+    ok "Clé SSH générée : $SSH_KEY"
+fi
+echo ""
+echo -e "  ${YEL}Clé publique à copier sur le Slave (après installation du Slave) :${NC}"
+echo "    ssh-copy-id artoo@r2-slave.local"
+echo "  (ou via setup_ssh_keys.sh une fois le Slave connecté au hotspot)"
+echo ""
 
 # =============================================================================
 # ÉTAPE 8 — Services systemd

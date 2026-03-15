@@ -89,26 +89,38 @@ echo "      rsync OK — version déployée: ${LOCAL_VERSION}"
 echo "      Dépendances pip..."
 REQS="$REPO_PATH/slave/requirements.txt"
 
+_pip_install_slave() {
+    # Tente installation offline depuis vendor/, fallback PyPI si échec
+    ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
+        "pip3 install --break-system-packages -q --no-index --find-links=${SLAVE_REPO}/slave/vendor -r ${SLAVE_REPO}/slave/requirements.txt" \
+    || {
+        echo "      → vendor/ incomplet, fallback installation PyPI..."
+        ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
+            "pip3 install --break-system-packages -q -r ${SLAVE_REPO}/slave/requirements.txt"
+    }
+}
+
 if [ -d "$VENDOR_DIR" ] && [ "$(ls -A $VENDOR_DIR)" ]; then
     # Installer depuis le cache local — fonctionne sans internet
     echo "      → installation offline depuis vendor/"
-    ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
-        "pip3 install --break-system-packages -q --no-index --find-links=${SLAVE_REPO}/vendor -r ${SLAVE_REPO}/requirements.txt"
+    _pip_install_slave
 else
     # Pas de vendor/ : télécharger depuis PyPI (nécessite NAT wlan1 actif)
     echo "      → vendor/ absent, téléchargement PyPI (nécessite internet via Master NAT)"
     if ip addr show wlan1 2>/dev/null | grep -q "inet "; then
-        # Pré-télécharger sur le Master ET installer sur le Slave
+        # Pré-télécharger sur le Master (setuptools + wheel en premier pour éviter erreurs)
         mkdir -p "$VENDOR_DIR"
+        pip3 download -q setuptools wheel -d "$VENDOR_DIR"
         pip3 download -q -r "$REQS" -d "$VENDOR_DIR"
         # Re-rsync le vendor/ fraîchement créé
-        rsync -az -e "ssh $SSH_OPTS" "$VENDOR_DIR/" "${SLAVE_USER}@${SLAVE_HOST}:${SLAVE_REPO}/vendor/"
-        ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
-            "pip3 install --break-system-packages -q --no-index --find-links=${SLAVE_REPO}/vendor -r ${SLAVE_REPO}/requirements.txt"
+        rsync -az -e "ssh $SSH_OPTS" "$VENDOR_DIR/" "${SLAVE_USER}@${SLAVE_HOST}:${SLAVE_REPO}/slave/vendor/"
+        _pip_install_slave
         echo "      → vendor/ créé pour les prochains déploiements offline"
     else
-        echo "      ATTENTION: vendor/ absent et wlan1 indisponible — pip ignoré"
-        echo "                 Lancer 'bash scripts/vendor_deps.sh' avec internet pour créer le cache"
+        echo "      ATTENTION: vendor/ absent et wlan1 indisponible — tentative PyPI direct..."
+        ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
+            "pip3 install --break-system-packages -q -r ${SLAVE_REPO}/slave/requirements.txt" \
+        || echo "      ÉCHEC pip — lancer 'bash scripts/vendor_deps.sh' avec internet pour créer le cache"
     fi
 fi
 
@@ -118,8 +130,8 @@ fi
 if [ "$FIRST_INSTALL" = true ]; then
     echo "[4/5] Installation services systemd sur le Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" bash << 'REMOTE'
-        sudo cp /home/artoo/r2d2/services/r2d2-slave.service   /etc/systemd/system/
-        sudo cp /home/artoo/r2d2/services/r2d2-version.service /etc/systemd/system/
+        sudo cp /home/artoo/r2d2/slave/services/r2d2-slave.service   /etc/systemd/system/
+        sudo cp /home/artoo/r2d2/slave/services/r2d2-version.service /etc/systemd/system/
         sudo systemctl daemon-reload
         sudo systemctl enable r2d2-version r2d2-slave
         echo "Services installés et activés"

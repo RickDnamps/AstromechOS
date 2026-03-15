@@ -20,7 +20,7 @@ from shared.base_driver import BaseDriver
 
 log = logging.getLogger(__name__)
 
-_SOUNDS_DIR  = os.path.join(os.path.dirname(__file__), '..', 'sounds')
+_SOUNDS_DIR  = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'sounds'))
 _INDEX_FILE  = os.path.join(_SOUNDS_DIR, 'sounds_index.json')
 
 
