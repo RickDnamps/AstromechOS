@@ -7,7 +7,9 @@ Séquence de boot:
 2. Init logging
 3. git pull si wlan1 disponible
 4. Démarrage UARTController + TeecesController + DeployController
-5. Démarrage API Flask (Phase 4 — placeholder minimal ici)
+5. Phase 2: VescDriver + DomeMotorDriver + BodyServoDriver (décommenter)
+6. Phase 3: ScriptEngine (décommenter)
+7. Phase 4: API Flask sur port 5000 (décommenter)
 """
 
 import logging
@@ -15,6 +17,7 @@ import configparser
 import signal
 import sys
 import os
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -22,6 +25,18 @@ from master.uart_controller import UARTController
 from master.teeces_controller import TeecesController
 from master.deploy_controller import DeployController
 from master.config.config_loader import load, is_auto_pull_enabled
+import master.registry as reg
+
+# ---- Phase 2 — Décommenter pour activer ----
+# from master.drivers.vesc_driver        import VescDriver
+# from master.drivers.dome_motor_driver  import DomeMotorDriver
+# from master.drivers.body_servo_driver  import BodyServoDriver
+
+# ---- Phase 3 — Décommenter pour activer ----
+# from master.script_engine import ScriptEngine
+
+# ---- Phase 4 — Décommenter pour activer ----
+# from master.flask_app import create_app
 
 VERSION_FILE = "/home/artoo/r2d2/VERSION"
 
@@ -89,10 +104,35 @@ def main() -> None:
     # Boot: tentative git pull
     try_git_pull(cfg)
 
-    # Init composants
-    uart = UARTController(cfg)
+    # Init composants Phase 1
+    uart   = UARTController(cfg)
     teeces = TeecesController(cfg)
     deploy = DeployController(cfg, uart, teeces)
+
+    # Registre partagé (accessible par Flask blueprints)
+    reg.uart   = uart
+    reg.teeces = teeces
+    reg.deploy = deploy
+
+    # ------------------------------------------------------------------
+    # Phase 2 — Drivers propulsion / dôme / servos
+    # Décommenter les blocs ci-dessous pour activer
+    # ------------------------------------------------------------------
+    # vesc  = VescDriver(uart)
+    # dome  = DomeMotorDriver(uart)
+    # servo = BodyServoDriver(uart)
+    # if vesc.setup():  reg.vesc  = vesc
+    # if dome.setup():  reg.dome  = dome
+    # if servo.setup(): reg.servo = servo
+
+    # ------------------------------------------------------------------
+    # Phase 3 — Moteur de scripts
+    # ------------------------------------------------------------------
+    # engine = ScriptEngine(
+    #     uart=uart, teeces=teeces,
+    #     vesc=reg.vesc, dome=reg.dome, servo=reg.servo
+    # )
+    # reg.engine = engine
 
     # Callbacks UART entrants
     def on_heartbeat_ack(value: str) -> None:
@@ -120,6 +160,20 @@ def main() -> None:
     teeces.random_mode()
     deploy.start()
 
+    # ------------------------------------------------------------------
+    # Phase 4 — Serveur Flask (API REST + Web UI)
+    # Décommenter pour activer le dashboard sur http://r2-master.local:5000
+    # ------------------------------------------------------------------
+    # app = create_app()
+    # flask_port = cfg.getint('master', 'flask_port', fallback=5000)
+    # flask_thread = threading.Thread(
+    #     target=lambda: app.run(host='0.0.0.0', port=flask_port,
+    #                            use_reloader=False, threaded=True),
+    #     name='flask', daemon=True
+    # )
+    # flask_thread.start()
+    # log.info(f"Flask démarré sur port {flask_port}")
+
     log.info("Master opérationnel")
 
     # Gestion arrêt propre
@@ -128,6 +182,10 @@ def main() -> None:
         deploy.stop()
         uart.stop()
         teeces.shutdown()
+        # Phase 2: if reg.vesc:  reg.vesc.shutdown()
+        # Phase 2: if reg.dome:  reg.dome.shutdown()
+        # Phase 2: if reg.servo: reg.servo.shutdown()
+        # Phase 3: if reg.engine: reg.engine.stop_all()
         log.info("Master arrêté proprement")
         sys.exit(0)
 

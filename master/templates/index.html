@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>R2-D2 Control</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<!-- ================================================================
+     TOPBAR — Status
+================================================================ -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="r2-icon">◉</span>
+    <span>R2-D2 Control</span>
+  </div>
+  <div class="topbar-status">
+    <span class="status-pill" id="pill-heartbeat">● Heartbeat</span>
+    <span class="status-pill" id="pill-uart">● UART</span>
+    <span class="status-pill" id="pill-teeces">● Teeces</span>
+    <span class="status-pill" id="pill-vesc">● VESC</span>
+    <span id="uptime-label" class="uptime">--:--:--</span>
+    <span id="version-label" class="version">v?</span>
+  </div>
+</header>
+
+<!-- ================================================================
+     MAIN GRID
+================================================================ -->
+<main class="grid">
+
+  <!-- ---- AUDIO ---- -->
+  <section class="card" id="card-audio">
+    <h2>🔊 Audio</h2>
+    <div class="category-grid" id="audio-categories">
+      <!-- Généré par JS -->
+    </div>
+    <div class="row mt">
+      <button class="btn btn-danger" onclick="api('/audio/stop','POST')">⏹ Stop</button>
+    </div>
+  </section>
+
+  <!-- ---- MOTION ---- -->
+  <section class="card" id="card-motion">
+    <h2>🚗 Propulsion</h2>
+    <div class="dpad">
+      <button class="dpad-btn dpad-up"    onmousedown="drive(0.6,0.6)"  onmouseup="driveStop()" ontouchstart="drive(0.6,0.6)" ontouchend="driveStop()">▲</button>
+      <button class="dpad-btn dpad-left"  onmousedown="drive(-0.4,0.4)" onmouseup="driveStop()" ontouchstart="drive(-0.4,0.4)" ontouchend="driveStop()">◀</button>
+      <button class="dpad-btn dpad-stop"  onclick="driveStop()">■</button>
+      <button class="dpad-btn dpad-right" onmousedown="drive(0.4,-0.4)" onmouseup="driveStop()" ontouchstart="drive(0.4,-0.4)" ontouchend="driveStop()">▶</button>
+      <button class="dpad-btn dpad-down"  onmousedown="drive(-0.6,-0.6)" onmouseup="driveStop()" ontouchstart="drive(-0.6,-0.6)" ontouchend="driveStop()">▼</button>
+    </div>
+    <div class="speed-control">
+      <label>Vitesse max <span id="speed-val">60%</span></label>
+      <input type="range" id="speed-slider" min="10" max="100" value="60"
+             oninput="setSpeed(this.value)">
+    </div>
+  </section>
+
+  <!-- ---- DOME ---- -->
+  <section class="card" id="card-dome">
+    <h2>🌀 Dôme</h2>
+    <div class="dome-controls">
+      <button class="btn" onmousedown="domeTurn(-0.5)" onmouseup="domeStop()" ontouchstart="domeTurn(-0.5)" ontouchend="domeStop()">◀ Gauche</button>
+      <button class="btn" onclick="domeStop()">Centre</button>
+      <button class="btn" onmousedown="domeTurn(0.5)"  onmouseup="domeStop()" ontouchstart="domeTurn(0.5)" ontouchend="domeStop()">Droite ▶</button>
+    </div>
+    <div class="row mt">
+      <label class="toggle-label">
+        Aléatoire
+        <input type="checkbox" id="dome-random" onchange="domeRandom(this.checked)">
+        <span class="toggle-switch"></span>
+      </label>
+    </div>
+  </section>
+
+  <!-- ---- TEECES ---- -->
+  <section class="card" id="card-teeces">
+    <h2>💡 Teeces</h2>
+    <div class="btn-group">
+      <button class="btn btn-active" onclick="teecesMode('random')">Aléatoire</button>
+      <button class="btn" onclick="teecesMode('leia')">Leia</button>
+      <button class="btn btn-dark" onclick="teecesMode('off')">OFF</button>
+    </div>
+    <div class="row mt">
+      <input type="text" id="teeces-text" placeholder="Texte FLD..." maxlength="20"
+             class="input-text">
+      <button class="btn" onclick="sendTeecesText()">Envoyer</button>
+    </div>
+  </section>
+
+  <!-- ---- SERVOS ---- -->
+  <section class="card" id="card-servos">
+    <h2>🦾 Servos Body</h2>
+    <div class="servo-grid" id="servo-list">
+      <!-- Généré par JS -->
+    </div>
+    <div class="row mt">
+      <button class="btn" onclick="api('/servo/open_all','POST')">Ouvrir tout</button>
+      <button class="btn btn-dark" onclick="api('/servo/close_all','POST')">Fermer tout</button>
+    </div>
+  </section>
+
+  <!-- ---- SCRIPTS ---- -->
+  <section class="card" id="card-scripts">
+    <h2>📜 Scripts</h2>
+    <div id="script-list" class="script-list">
+      <!-- Généré par JS -->
+    </div>
+    <div class="row mt">
+      <button class="btn btn-danger" onclick="api('/scripts/stop_all','POST')">⏹ Stop all</button>
+    </div>
+    <div class="running-scripts mt">
+      <strong>En cours:</strong>
+      <span id="running-scripts">—</span>
+    </div>
+  </section>
+
+  <!-- ---- SYSTÈME ---- -->
+  <section class="card" id="card-system">
+    <h2>⚙️ Système</h2>
+    <div class="btn-group-v">
+      <button class="btn btn-warn" onclick="confirmAction('Reboot Master ?', '/system/reboot')">
+        🔁 Reboot Master
+      </button>
+      <button class="btn btn-warn" onclick="confirmAction('Reboot Slave ?', '/system/reboot_slave')">
+        🔁 Reboot Slave
+      </button>
+      <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master ?', '/system/shutdown')">
+        ⏻ Shutdown Master
+      </button>
+    </div>
+  </section>
+
+</main>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

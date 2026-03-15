@@ -1,0 +1,110 @@
+"""
+Blueprint API Motion — Phase 4.
+Contrôle la propulsion (VESC) et le moteur dôme.
+
+Endpoints propulsion:
+  POST /motion/drive        {"left": 0.5, "right": 0.5}
+  POST /motion/arcade       {"throttle": 0.5, "steering": 0.0}
+  POST /motion/stop
+  GET  /motion/state
+
+Endpoints dôme:
+  POST /motion/dome/turn    {"speed": 0.3}
+  POST /motion/dome/stop
+  POST /motion/dome/random  {"enabled": true}
+  GET  /motion/dome/state
+"""
+
+from flask import Blueprint, request, jsonify
+import master.registry as reg
+
+motion_bp = Blueprint('motion', __name__, url_prefix='/motion')
+
+
+# ------------------------------------------------------------------
+# Propulsion
+# ------------------------------------------------------------------
+
+@motion_bp.post('/drive')
+def drive():
+    """Propulsion différentielle. Body: {"left": float, "right": float}"""
+    body  = request.get_json(silent=True) or {}
+    left  = float(body.get('left',  0.0))
+    right = float(body.get('right', 0.0))
+    if reg.vesc:
+        reg.vesc.drive(left, right)
+    elif reg.uart:
+        # Fallback: envoyer directement via UART si VescDriver non initialisé
+        reg.uart.send('M', f'{left:.3f},{right:.3f}')
+    return jsonify({'status': 'ok', 'left': left, 'right': right})
+
+
+@motion_bp.post('/arcade')
+def arcade():
+    """Arcade drive. Body: {"throttle": float, "steering": float}"""
+    body     = request.get_json(silent=True) or {}
+    throttle = float(body.get('throttle', 0.0))
+    steering = float(body.get('steering', 0.0))
+    if reg.vesc:
+        reg.vesc.arcade_drive(throttle, steering)
+    return jsonify({'status': 'ok', 'throttle': throttle, 'steering': steering})
+
+
+@motion_bp.post('/stop')
+def stop_motion():
+    """Arrêt propulsion."""
+    if reg.vesc:
+        reg.vesc.stop()
+    elif reg.uart:
+        reg.uart.send('M', '0.000,0.000')
+    return jsonify({'status': 'ok'})
+
+
+@motion_bp.get('/state')
+def motion_state():
+    """État courant propulsion."""
+    state = reg.vesc.state if reg.vesc else {}
+    return jsonify(state)
+
+
+# ------------------------------------------------------------------
+# Dôme
+# ------------------------------------------------------------------
+
+@motion_bp.post('/dome/turn')
+def dome_turn():
+    """Rotation dôme. Body: {"speed": float}"""
+    body  = request.get_json(silent=True) or {}
+    speed = float(body.get('speed', 0.0))
+    if reg.dome:
+        reg.dome.turn(speed)
+    elif reg.uart:
+        reg.uart.send('D', f'{speed:.3f}')
+    return jsonify({'status': 'ok', 'speed': speed})
+
+
+@motion_bp.post('/dome/stop')
+def dome_stop():
+    """Arrêt rotation dôme."""
+    if reg.dome:
+        reg.dome.stop()
+    elif reg.uart:
+        reg.uart.send('D', '0.000')
+    return jsonify({'status': 'ok'})
+
+
+@motion_bp.post('/dome/random')
+def dome_random():
+    """Mode aléatoire dôme. Body: {"enabled": bool}"""
+    body    = request.get_json(silent=True) or {}
+    enabled = bool(body.get('enabled', False))
+    if reg.dome:
+        reg.dome.set_random(enabled)
+    return jsonify({'status': 'ok', 'random': enabled})
+
+
+@motion_bp.get('/dome/state')
+def dome_state():
+    """État courant dôme."""
+    state = reg.dome.state if reg.dome else {}
+    return jsonify(state)

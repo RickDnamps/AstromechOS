@@ -1,0 +1,21 @@
+# Séquence Cantina — R2 joue la musique de la cantina et danse
+# ---------------------------------------------------------------
+sound,CANTINA
+sleep,0.5
+dome,turn,0.3
+sleep,1.5
+dome,turn,-0.3
+sleep,1.5
+dome,turn,0.3
+sleep,1.5
+dome,turn,-0.3
+sleep,1.5
+dome,stop
+servo,utility_arm_left,1.0,300
+sleep,0.4
+servo,utility_arm_left,0.0,300
+sleep,0.4
+servo,utility_arm_right,1.0,300
+sleep,0.4
+servo,utility_arm_right,0.0,300
+sleep,2.0

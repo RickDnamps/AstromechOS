@@ -1,0 +1,19 @@
+# Séquence Célébration — R2-D2 exprime sa joie
+# ---------------------------------------------------------------
+sound,Celebration
+sleep,0.5
+servo,utility_arm_left,1.0,400
+servo,utility_arm_right,1.0,400
+sleep,0.5
+dome,turn,0.6
+sleep,0.8
+dome,turn,-0.6
+sleep,0.8
+dome,stop
+sleep,0.3
+servo,utility_arm_left,0.0,400
+servo,utility_arm_right,0.0,400
+sleep,0.5
+sound,RANDOM,happy
+teeces,random
+sleep,2.0

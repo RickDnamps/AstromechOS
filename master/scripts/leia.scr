@@ -1,0 +1,12 @@
+# Séquence Leia — R2 joue le message holographique de Leia
+# ---------------------------------------------------------------
+teeces,leia
+sound,LEIA
+sleep,0.5
+dome,turn,-0.2
+sleep,2.0
+dome,stop
+sleep,5.0
+teeces,random
+sleep,1.0
+sound,RANDOM,happy

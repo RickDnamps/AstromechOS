@@ -1,0 +1,338 @@
+/* R2-D2 Control Dashboard — Dark Theme */
+
+:root {
+  --bg:         #0a0e1a;
+  --bg-card:    #111827;
+  --bg-hover:   #1e2a3a;
+  --border:     #1e3a5f;
+  --accent:     #00aaff;
+  --accent2:    #0066cc;
+  --green:      #00cc66;
+  --red:        #cc2200;
+  --orange:     #ff8800;
+  --text:       #cdd6e8;
+  --text-dim:   #5a7a9a;
+  --radius:     8px;
+  --font:       'Courier New', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  min-height: 100vh;
+}
+
+/* ================================================================
+   TOPBAR
+================================================================ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #060b14;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.r2-icon {
+  font-size: 24px;
+  color: var(--accent);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: #1a2233;
+  color: var(--text-dim);
+  transition: all 0.3s;
+}
+
+.status-pill.ok    { color: var(--green); border-color: var(--green); }
+.status-pill.error { color: var(--red);   border-color: var(--red); }
+
+.uptime  { font-size: 11px; color: var(--text-dim); }
+.version { font-size: 11px; color: var(--accent2); }
+
+/* ================================================================
+   MAIN GRID
+================================================================ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.card h2 {
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+/* ================================================================
+   BUTTONS
+================================================================ */
+.btn {
+  background: var(--bg-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 12px;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.btn:hover        { background: var(--accent2); border-color: var(--accent); color: #fff; }
+.btn:active       { opacity: 0.7; }
+.btn.btn-active   { background: var(--accent2); border-color: var(--accent); color: #fff; }
+.btn.btn-dark     { background: #1a1a2e; }
+.btn.btn-danger   { background: #2a0a0a; border-color: var(--red); color: var(--red); }
+.btn.btn-danger:hover { background: var(--red); color: #fff; }
+.btn.btn-warn     { background: #2a1a00; border-color: var(--orange); color: var(--orange); }
+.btn.btn-warn:hover   { background: var(--orange); color: #000; }
+
+.btn-group   { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-group-v { display: flex; flex-direction: column; gap: 8px; }
+.row         { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.mt          { margin-top: 12px; }
+
+/* ================================================================
+   AUDIO CATEGORIES
+================================================================ */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.category-btn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 4px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text);
+  text-align: center;
+  transition: background 0.15s;
+  touch-action: manipulation;
+}
+
+.category-btn:hover  { background: var(--accent2); color: #fff; }
+.category-btn .count { display: block; font-size: 9px; color: var(--text-dim); margin-top: 2px; }
+
+/* ================================================================
+   D-PAD PROPULSION
+================================================================ */
+.dpad {
+  display: grid;
+  grid-template-areas:
+    ".    up   ."
+    "left stop right"
+    ".    down .";
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  width: 150px;
+  margin: 0 auto;
+}
+
+.dpad-btn {
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  font-size: 18px;
+  color: var(--text);
+  text-align: center;
+  touch-action: manipulation;
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.dpad-btn:active { background: var(--accent2); }
+.dpad-up    { grid-area: up; }
+.dpad-left  { grid-area: left; }
+.dpad-stop  { grid-area: stop; background: #1a0505; border-color: var(--red); color: var(--red); }
+.dpad-right { grid-area: right; }
+.dpad-down  { grid-area: down; }
+
+.speed-control {
+  margin-top: 14px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.speed-control input[type=range] {
+  width: 100%;
+  margin-top: 6px;
+  accent-color: var(--accent);
+}
+
+/* ================================================================
+   DOME
+================================================================ */
+.dome-controls {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* ================================================================
+   TOGGLE
+================================================================ */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.toggle-label input { display: none; }
+
+.toggle-switch {
+  width: 36px;
+  height: 18px;
+  background: #1a2233;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  width: 12px; height: 12px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  top: 2px; left: 2px;
+  transition: left 0.2s, background 0.2s;
+}
+
+.toggle-label input:checked + .toggle-switch { background: var(--accent2); }
+.toggle-label input:checked + .toggle-switch::after { left: 20px; background: #fff; }
+
+/* ================================================================
+   SERVOS
+================================================================ */
+.servo-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.servo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.servo-row label {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.servo-row .btn { font-size: 10px; padding: 4px 8px; }
+
+/* ================================================================
+   SCRIPTS
+================================================================ */
+.script-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.script-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.script-item label {
+  flex: 1;
+  font-size: 12px;
+}
+
+.running-scripts {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* ================================================================
+   INPUTS
+================================================================ */
+.input-text {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+}
+
+.input-text:focus { outline: none; border-color: var(--accent); }
+
+/* ================================================================
+   RESPONSIVE
+================================================================ */
+@media (max-width: 600px) {
+  .grid { grid-template-columns: 1fr; }
+  .category-grid { grid-template-columns: repeat(2, 1fr); }
+}

@@ -23,7 +23,11 @@ from slave.uart_listener import UARTListener
 from slave.watchdog import WatchdogController
 from slave.version_check import VersionChecker
 from slave.drivers.display_driver import DisplayDriver
-from slave.drivers.audio_driver import AudioDriver
+from slave.drivers.audio_driver   import AudioDriver
+
+# ---- Phase 2 — Décommenter pour activer ----
+# from slave.drivers.vesc_driver        import VescDriver
+# from slave.drivers.body_servo_driver  import BodyServoDriver
 
 UART_PORT = "/dev/ttyAMA0"
 UART_BAUD = 115200
@@ -103,6 +107,24 @@ def main() -> None:
     else:
         log.warning("AudioDriver indisponible — son désactivé")
 
+    # ------------------------------------------------------------------
+    # Phase 2 — Propulsion VESC + Servos body
+    # Décommenter les blocs ci-dessous pour activer
+    # ------------------------------------------------------------------
+    # vesc  = VescDriver()
+    # servo = BodyServoDriver()
+    # if vesc.setup():
+    #     uart.register_callback('M', vesc.handle_uart)
+    #     watchdog.register_stop_callback(vesc.stop)
+    #     watchdog.register_resume_callback(lambda: log.info("VESC réactivé"))
+    # else:
+    #     log.warning("VescDriver indisponible — propulsion désactivée")
+    #
+    # if servo.setup():
+    #     uart.register_callback('SRV', servo.handle_uart)
+    # else:
+    #     log.warning("BodyServoDriver indisponible — servos désactivés")
+
     # Démarrer UART
     uart.start()
 
@@ -122,6 +144,8 @@ def main() -> None:
         watchdog.stop()
         uart.stop()
         audio.shutdown()
+        # Phase 2: if vesc.is_ready():  vesc.shutdown()
+        # Phase 2: if servo.is_ready(): servo.shutdown()
         display.shutdown()
         log.info("Slave arrêté proprement")
         sys.exit(0)
