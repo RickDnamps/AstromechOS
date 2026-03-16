@@ -51,7 +51,7 @@ ERROR_MESSAGES = {
 # Labels courts des items de boot (max ~11 chars pour tenir sur 1 ligne)
 # Ordre = ordre d'affichage sur l'ecran
 BOOT_LABELS = {
-    'UART':   'UART MASTER',   # UART /dev/ttyAMA0 slipring → Master
+    'UART':   'Pi4B MASTER',   # UART /dev/ttyAMA0 slipring → Master (CRITICAL)
     'VESC_G': 'VESC LEFT',     # FSESC /dev/ttyACM0 — left drive
     'VESC_D': 'VESC RIGHT',    # FSESC /dev/ttyACM1 — right drive
     'DOME':   'DOME MOTOR',    # Motor Driver HAT I2C 0x40 — dome rotation
@@ -171,14 +171,17 @@ def draw_boot_progress(tft, items):
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, 8, ring_color)
 
     # --- Titre ---
-    _text_center(tft, 'SYSTEM STATUS:', 20, ring_color)
-    _text_center(tft, state_line,       30, ring_color)
+    # y=32 : inner ring width = 2*sqrt(107^2-88^2) = 122px — "SYSTEM STATUS:"(112px) fits
+    # y=44 : inner ring width = 150px — state line fits
+    _text_center(tft, 'SYSTEM STATUS:', 32, ring_color)
+    _text_center(tft, state_line,       44, ring_color)
 
-    # --- Liste des items (vga1_8x8 → 8px/char × 8px tall) ---
-    # Largeur utile ~170px centree (x=35..205), 8px/char → 21 chars max
-    # Format: "N.LABEL.......STATUS" = ~21 chars
+    # --- Liste des items ---
+    # y=60..115 : inner ring width >= 168px
+    # x=32, 22 chars * 8px = 176px → x: 32..208 (inner edge at ~31..209 at y=60)
+    # Format: "N.LABEL(11)..STATUS" cible 22 chars
     ok_count = 0
-    y = 46
+    y = 60
     for i, (key, label) in enumerate(BOOT_LABELS.items()):
         status = items.get(key, 'pending')
         if status == 'ok':
@@ -186,26 +189,24 @@ def draw_boot_progress(tft, items):
         color      = STATUS_COLOR[status]
         status_str = STATUS_TEXT[status]
 
-        # Construire la ligne avec dots
-        num_str = '{}.'.format(i + 1)          # "1."
-        # Tronquer label a 11 chars
-        short = label[:11].upper()
-        left  = '{}{}'.format(num_str, short)   # "1.UART MASTER"
-        # Total cible = 21 chars
-        dot_count = max(1, 21 - len(left) - len(status_str))
-        line = '{}{}{}'.format(left, '.' * dot_count, status_str)
+        num_str   = '{}.'.format(i + 1)
+        short     = label[:11].upper()
+        left      = '{}{}'.format(num_str, short)
+        dot_count = max(1, 22 - len(left) - len(status_str))
+        line      = '{}{}{}'.format(left, '.' * dot_count, status_str)
 
-        _text(tft, line, 34, y, color)
-        y += 11  # 8px font + 3px espace
+        _text(tft, line, 32, y, color)
+        y += 11  # 8px font + 3px gap
 
     # --- Barre de progression ---
-    pct = ok_count / max(1, len(items))
-    bar_y = y + 5
-    _progress_bar(tft, 34, bar_y, 172, 10, pct, ring_color)
+    # y=123 : largement dans la zone centrale du cercle
+    pct   = ok_count / max(1, len(items))
+    bar_y = y + 4
+    _progress_bar(tft, 32, bar_y, 176, 9, pct, ring_color)
 
     # --- Pied de page ---
-    _text_center(tft, 'GLOBAL STATUS:',  bar_y + 14, GRAY)
-    _text_center(tft, global_text,       bar_y + 24, ring_color)
+    _text_center(tft, 'GLOBAL STATUS:', bar_y + 13, GRAY)
+    _text_center(tft, global_text,      bar_y + 23, ring_color)
 
 
 def draw_operational(tft, version):
