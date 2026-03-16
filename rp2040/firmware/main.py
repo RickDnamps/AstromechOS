@@ -71,8 +71,11 @@ STATE_OK            = "OK"
 STATE_ERROR         = "ERROR"
 STATE_TELEM         = "TELEM"
 
-# Cycle de navigation par swipe (apres le boot)
-SCREENS = [STATE_BOOT_PROGRESS, STATE_OK, STATE_TELEM]
+# Cycle de navigation par swipe — disponible seulement apres READY
+SCREENS = [STATE_OK, STATE_TELEM, STATE_BOOT_PROGRESS]
+
+# Etats ou la navigation swipe est autorisee (robot operationnel)
+NAVIGABLE = {STATE_OK, STATE_TELEM, STATE_BOOT_PROGRESS}
 
 # Demarre directement sur l'ecran de diagnostic
 state             = STATE_BOOT_PROGRESS
@@ -208,19 +211,25 @@ def parse_command(line):
 # ------------------------------------------------------------------
 def on_swipe_left(x, y):
     global screen_idx, state, _needs_redraw
+    if state not in NAVIGABLE:
+        return  # bloque pendant le boot ou en erreur
     screen_idx = (screen_idx + 1) % len(SCREENS)
     state = SCREENS[screen_idx]
     _needs_redraw = True
 
 def on_swipe_right(x, y):
     global screen_idx, state, _needs_redraw
+    if state not in NAVIGABLE:
+        return  # bloque pendant le boot ou en erreur
     screen_idx = (screen_idx - 1) % len(SCREENS)
     state = SCREENS[screen_idx]
     _needs_redraw = True
 
 def on_double_tap(x, y):
-    """Double tap — revenir au diagnostic de boot."""
+    """Double tap — revenir au diagnostic seulement si operationnel."""
     global state, _needs_redraw
+    if state not in NAVIGABLE:
+        return  # rien faire si boot en cours ou erreur
     state = STATE_BOOT_PROGRESS
     _needs_redraw = True
 
