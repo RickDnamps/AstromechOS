@@ -161,17 +161,8 @@ def main():
     REFRESH_MS = 1000  # refresh toutes les 1s (évite tearing avec fallback circles)
 
     while True:
-        # Lecture commandes USB serial — non-bloquant via buffer.any()
-        while sys.stdin.buffer.any():
-            try:
-                ch = sys.stdin.buffer.read(1).decode('utf-8', 'ignore')
-                if ch:
-                    buf += ch
-                    if '\n' in buf:
-                        line, buf = buf.split('\n', 1)
-                        parse_command(line)
-            except Exception:
-                break
+        # TODO: lecture commandes USB serial (DISP:) — à implémenter
+        # quand le Slave sera connecté via USB
 
         # Touch polling
         touch.poll()
