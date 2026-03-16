@@ -20,7 +20,6 @@ Gestes tactiles:
 """
 
 import sys
-import select
 import gc9a01
 import time
 from machine import SPI, Pin, I2C
@@ -161,15 +160,11 @@ def main():
     last_draw = time.ticks_ms()
     REFRESH_MS = 200  # refresh spinner toutes les 200ms
 
-    # Polling non-bloquant sur stdin USB serial
-    poller = select.poll()
-    poller.register(sys.stdin, select.POLLIN)
-
     while True:
-        # Lecture commandes USB serial — non-bloquant
-        while poller.poll(0):
+        # Lecture commandes USB serial — non-bloquant via buffer.any()
+        while sys.stdin.buffer.any():
             try:
-                ch = sys.stdin.read(1)
+                ch = sys.stdin.buffer.read(1).decode('utf-8', 'ignore')
                 if ch:
                     buf += ch
                     if '\n' in buf:
