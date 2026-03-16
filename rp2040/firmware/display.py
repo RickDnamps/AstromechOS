@@ -51,12 +51,13 @@ ERROR_MESSAGES = {
 # Labels courts des items de boot (max ~11 chars pour tenir sur 1 ligne)
 # Ordre = ordre d'affichage sur l'ecran
 BOOT_LABELS = {
-    'UART':   'Pi4B MASTER',   # UART /dev/ttyAMA0 slipring → Master (CRITICAL)
-    'VESC_G': 'VESC LEFT',     # FSESC /dev/ttyACM0 — left drive
-    'VESC_D': 'VESC RIGHT',    # FSESC /dev/ttyACM1 — right drive
-    'DOME':   'DOME MOTOR',    # Motor Driver HAT I2C 0x40 — dome rotation
-    'SERVOS': 'SERVOS BODY',   # PCA9685 I2C 0x41 — panels + arms
-    'AUDIO':  'AUDIO',         # 3.5mm jack — MP3 sounds
+    'UART':    'Pi4B MASTER',   # UART /dev/ttyAMA0 slipring → Master (CRITICAL)
+    'VESC_G':  'VESC LEFT',     # FSESC /dev/ttyACM0 — left drive
+    'VESC_D':  'VESC RIGHT',    # FSESC /dev/ttyACM1 — right drive
+    'DOME':    'DOME MOTOR',    # Motor Driver HAT I2C 0x40 — dome rotation
+    'SERVOS':  'SERVOS BODY',   # PCA9685 I2C 0x41 — panels + arms
+    'AUDIO':   'AUDIO',         # 3.5mm jack — MP3 sounds
+    'BT_CTRL': 'BT CONTROL',    # Bluetooth controller (optional)
 }
 
 # Textes de statut par etat
@@ -65,6 +66,7 @@ STATUS_TEXT = {
     'progress': 'CHECKING',
     'ok':       'OK',
     'fail':     'ERROR',
+    'none':     'NO CTRL',
 }
 
 STATUS_COLOR = {
@@ -72,6 +74,7 @@ STATUS_COLOR = {
     'progress': ORANGE,
     'ok':       GREEN,
     'fail':     RED,
+    'none':     BLUE,
 }
 
 
@@ -150,15 +153,15 @@ def draw_boot_progress(tft, items):
     """
     # Determiner l'etat global
     statuses = list(items.values())
-    has_fail     = any(s == 'fail'     for s in statuses)
-    has_progress = any(s == 'progress' for s in statuses)
-    all_ok       = all(s == 'ok'       for s in statuses)
+    has_fail     = any(s == 'fail'           for s in statuses)
+    has_progress = any(s == 'progress'       for s in statuses)
+    all_done     = all(s in ('ok', 'none')   for s in statuses)
 
     if has_fail:
         ring_color  = RED
         state_line  = 'BOOT ERROR'
         global_text = 'BOOT FAILED'
-    elif all_ok:
+    elif all_done:
         ring_color  = GREEN
         state_line  = 'OK'
         global_text = 'BOOT COMPLETE'
@@ -184,10 +187,10 @@ def draw_boot_progress(tft, items):
     y = 60
     for i, (key, label) in enumerate(BOOT_LABELS.items()):
         status = items.get(key, 'pending')
-        if status == 'ok':
+        if status in ('ok', 'none'):
             ok_count += 1
-        color      = STATUS_COLOR[status]
-        status_str = STATUS_TEXT[status]
+        color      = STATUS_COLOR.get(status, GRAY)
+        status_str = STATUS_TEXT.get(status, status)
 
         num_str   = '{}.'.format(i + 1)
         short     = label[:11].upper()
@@ -196,7 +199,7 @@ def draw_boot_progress(tft, items):
         line      = '{}{}{}'.format(left, '.' * dot_count, status_str)
 
         _text(tft, line, 32, y, color)
-        y += 11  # 8px font + 3px gap
+        y += 10  # 8px font + 2px gap (7 items, tighter spacing)
 
     # --- Barre de progression ---
     # y=123 : largement dans la zone centrale du cercle

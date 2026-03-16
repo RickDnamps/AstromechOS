@@ -90,12 +90,13 @@ boot_timed_out    = False
 # Items de boot et leur statut — tous en attente au demarrage
 # Memes cles que BOOT_LABELS dans display.py
 boot_items = {
-    'UART':   'pending',   # UART slipring → Master
-    'VESC_G': 'pending',   # VESC gauche /dev/ttyACM0
-    'VESC_D': 'pending',   # VESC droite  /dev/ttyACM1
-    'DOME':   'pending',   # Motor Driver HAT I2C 0x40
-    'SERVOS': 'pending',   # PCA9685 body I2C 0x41
-    'AUDIO':  'pending',   # Jack 3.5mm natif
+    'UART':    'pending',   # UART slipring → Master
+    'VESC_G':  'pending',   # VESC gauche /dev/ttyACM0
+    'VESC_D':  'pending',   # VESC droite  /dev/ttyACM1
+    'DOME':    'pending',   # Motor Driver HAT I2C 0x40
+    'SERVOS':  'pending',   # PCA9685 body I2C 0x41
+    'AUDIO':   'pending',   # Jack 3.5mm natif
+    'BT_CTRL': 'pending',   # Bluetooth controller (optional)
 }
 
 _needs_redraw  = True              # forcer redraw au demarrage
@@ -198,6 +199,18 @@ def parse_command(line):
         except ValueError:
             pass
         state = STATE_TELEM
+
+    elif cmd == "BT":
+        sub = parts[1].upper() if len(parts) > 1 else ""
+        if sub == "CONNECTED":
+            boot_items['BT_CTRL'] = 'ok'
+        elif sub == "NONE":
+            boot_items['BT_CTRL'] = 'none'
+        elif sub == "FAIL":
+            boot_items['BT_CTRL'] = 'fail'
+        state = STATE_BOOT_PROGRESS
+        _needs_redraw = True
+        return
 
     _needs_redraw = True
 

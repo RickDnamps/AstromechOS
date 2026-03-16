@@ -72,6 +72,16 @@ class DisplayDriver(BaseDriver):
             return self._send(f"DISP:READY:{version}")
         return self._send("DISP:READY")
 
+    def bt_connected(self, name: str = "") -> bool:
+        """Manette Bluetooth connectée."""
+        if name:
+            return self._send(f"DISP:BT:CONNECTED:{name}")
+        return self._send("DISP:BT:CONNECTED")
+
+    def bt_none(self) -> bool:
+        """Aucune manette connectée (info, pas une erreur)."""
+        return self._send("DISP:BT:NONE")
+
     # ------------------------------------------------------------------
     # États opérationnels
     # ------------------------------------------------------------------
