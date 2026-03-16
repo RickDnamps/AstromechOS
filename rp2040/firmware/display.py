@@ -54,17 +54,17 @@ def _fill_circle(tft, cx, cy, r, color):
 
 
 def draw_boot(tft):
-    """Splash boot : fond noir, logo R2-D2 simplifié."""
+    """Splash boot : fond noir, logo R2-D2 simplifié (rectangles uniquement)."""
     _clear(tft, BLACK)
-    # Dôme (demi-cercle haut)
-    _fill_circle(tft, CENTER_X, CENTER_Y - 10, 55, WHITE)
-    _fill_circle(tft, CENTER_X, CENTER_Y - 10, 45, BLACK)
-    # Corps (rectangle)
-    tft.fill_rect(CENTER_X - 30, CENTER_Y + 50, 60, 45, WHITE)
-    tft.fill_rect(CENTER_X - 24, CENTER_Y + 56, 48, 33, BLACK)
+    # Dôme (rectangle blanc + intérieur noir)
+    tft.fill_rect(CENTER_X - 55, CENTER_Y - 75, 110, 60, WHITE)
+    tft.fill_rect(CENTER_X - 45, CENTER_Y - 65, 90, 45, BLACK)
+    # Corps (rectangle blanc + intérieur noir)
+    tft.fill_rect(CENTER_X - 35, CENTER_Y - 5, 70, 50, WHITE)
+    tft.fill_rect(CENTER_X - 27, CENTER_Y + 3, 54, 34, BLACK)
     # Texte
-    _text(tft, "R2-D2",  CENTER_X - 25, CENTER_Y + 100, WHITE)
-    _text(tft, "BOOT...", CENTER_X - 28, CENTER_Y + 115, GRAY)
+    _text(tft, "R2-D2",  CENTER_X - 25, CENTER_Y + 60, WHITE)
+    _text(tft, "BOOT...", CENTER_X - 28, CENTER_Y + 75, GRAY)
 
 
 def draw_syncing(tft, version: str, spinner_step: int = 0):
