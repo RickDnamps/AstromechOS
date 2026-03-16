@@ -21,14 +21,37 @@ _INDEX_FILE = os.path.join(
 )
 
 
+def _load_index() -> dict:
+    with open(_INDEX_FILE, encoding='utf-8') as f:
+        return json.load(f)
+
+
 @audio_bp.get('/categories')
 def get_categories():
-    """Liste des catégories de sons disponibles."""
+    """Liste des catégories avec nombre de sons."""
     try:
-        with open(_INDEX_FILE, encoding='utf-8') as f:
-            data = json.load(f)
-        categories = {k: len(v) for k, v in data.get('categories', {}).items()}
-        return jsonify({'categories': categories, 'total': data.get('total', 0)})
+        data = _load_index()
+        cats = data.get('categories', {})
+        return jsonify({
+            'categories': [{'name': k, 'count': len(v)} for k, v in cats.items()],
+            'total': sum(len(v) for v in cats.values())
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@audio_bp.get('/sounds')
+def get_sounds():
+    """Liste des sons d'une catégorie. Query: ?category=happy"""
+    category = request.args.get('category', '').strip().lower()
+    if not category:
+        return jsonify({'error': 'Paramètre "category" requis'}), 400
+    try:
+        data = _load_index()
+        sounds = data.get('categories', {}).get(category)
+        if sounds is None:
+            return jsonify({'error': f'Catégorie inconnue: {category}'}), 404
+        return jsonify({'category': category, 'sounds': sounds})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

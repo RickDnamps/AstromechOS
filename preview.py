@@ -81,6 +81,27 @@ FAKE_SCRIPTS = {
     "scripts": ["patrol", "celebrate", "cantina", "leia"]
 }
 
+# Sons simulés — noms réels tirés de sounds_index.json (patterns CLAUDE.md)
+FAKE_SOUNDS = {
+    "happy":   [f"Happy{i:03d}" for i in range(1, 21)],
+    "sad":     [f"Sad__{i:03d}" for i in range(1, 21)],
+    "alarm":   [f"ALARM{i:03d}" for i in range(1, 12)],
+    "misc":    [f"MISC_{i:03d}" for i in range(1, 37)],
+    "hum":     [f"HUM__{i:03d}" for i in range(1, 26)],
+    "quote":   [f"Quote{i:03d}" for i in range(1, 48)],
+    "razz":    [f"RAZZ_{i:03d}" for i in range(1, 24)],
+    "scream":  [f"SCREA{i:03d}" for i in range(1, 5)],
+    "whistle": [f"WHIST{i:03d}" for i in range(1, 26)],
+    "ooh":     [f"OOH__{i:03d}" for i in range(1, 8)],
+    "special": ["Cantina", "ImperialMarch", "StarWars", "R2Beeps",
+                "Startup", "Shutdown", "Processing", "Searching",
+                "Found", "Alert", "Excited", "Sad_Long",
+                "Chat001", "Chat002", "Chat003", "Giggle",
+                "Whisper", "Sneeze", "Yawn", "Burp",
+                "Fart001", "Fart002", "Scream_Long", "Cry001",
+                "Happy_Long", "Processing2", "Booting", "Ready"],
+}
+
 FAKE_MOTION_STATE = {
     "left": 0.0, "right": 0.0, "dome": 0.0, "dome_auto": False
 }
@@ -142,6 +163,12 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self.send_json(FAKE_SERVOS)
         elif path == '/servo/state':
             self.send_json(FAKE_SERVO_STATE)
+        elif path == '/audio/sounds':
+            from urllib.parse import urlparse, parse_qs
+            params = parse_qs(urlparse(self.path).query)
+            cat = params.get('category', ['happy'])[0].lower()
+            sounds = FAKE_SOUNDS.get(cat, [f"{cat.upper()}001"])
+            self.send_json({'category': cat, 'sounds': sounds})
         elif path == '/scripts/list':
             self.send_json(FAKE_SCRIPTS)
         elif path == '/scripts/running':
