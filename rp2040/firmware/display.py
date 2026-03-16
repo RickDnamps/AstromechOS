@@ -49,13 +49,14 @@ ERROR_MESSAGES = {
 }
 
 # Labels courts des items de boot (max ~11 chars pour tenir sur 1 ligne)
+# Ordre = ordre d'affichage sur l'ecran
 BOOT_LABELS = {
-    'UART':    'UART MASTER',
-    'VERSION': 'SYNC VERSION',
-    'AUDIO':   'AUDIO',
-    'VESC_L':  'VESC GAUCHE',
-    'VESC_R':  'VESC DROIT',
-    'SERVOS':  'SERVOS',
+    'UART':   'UART MASTER',   # UART /dev/ttyAMA0 → slipring → Master
+    'VESC_G': 'VESC GAUCHE',   # FSESC /dev/ttyACM0 — propulsion gauche
+    'VESC_D': 'VESC DROITE',   # FSESC /dev/ttyACM1 — propulsion droite
+    'DOME':   'MOTEUR DOME',   # Motor Driver HAT I2C 0x40 — rotation dome
+    'SERVOS': 'SERVOS BODY',   # PCA9685 I2C 0x41 — panneaux + bras
+    'AUDIO':  'AUDIO',         # Jack 3.5mm natif — sons MP3
 }
 
 # Textes de statut par etat

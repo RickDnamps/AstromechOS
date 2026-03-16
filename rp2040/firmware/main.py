@@ -85,13 +85,14 @@ operational_since = 0   # ticks pour auto-transition OPERATIONAL → OK
 boot_timed_out    = False
 
 # Items de boot et leur statut — tous en attente au demarrage
+# Memes cles que BOOT_LABELS dans display.py
 boot_items = {
-    'UART':    'pending',
-    'VERSION': 'pending',
-    'AUDIO':   'pending',
-    'VESC_L':  'pending',
-    'VESC_R':  'pending',
-    'SERVOS':  'pending',
+    'UART':   'pending',   # UART slipring → Master
+    'VESC_G': 'pending',   # VESC gauche /dev/ttyACM0
+    'VESC_D': 'pending',   # VESC droite  /dev/ttyACM1
+    'DOME':   'pending',   # Motor Driver HAT I2C 0x40
+    'SERVOS': 'pending',   # PCA9685 body I2C 0x41
+    'AUDIO':  'pending',   # Jack 3.5mm natif
 }
 
 _needs_redraw  = True              # forcer redraw au demarrage

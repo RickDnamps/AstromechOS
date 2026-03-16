@@ -58,7 +58,7 @@ class VersionChecker:
         if local_version == master_version:
             log.info("Versions identiques — démarrage normal")
             if self._display:
-                self._display.ok(local_version)
+                self._display.ready(local_version)  # écran vert OPÉRATIONNEL 3s
             return True
 
         # Versions différentes → rsync
@@ -69,7 +69,7 @@ class VersionChecker:
         success = self._trigger_rsync(master_version)
         if success:
             if self._display:
-                self._display.ok(master_version)
+                self._display.ready(master_version)  # écran vert OPÉRATIONNEL 3s
             return True
         else:
             log.error("Sync échoué — démarrage en mode dégradé avec version locale")
