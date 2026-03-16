@@ -103,15 +103,11 @@ _boot_start_ms = time.ticks_ms()   # reference pour le timeout boot
 
 
 def apply_state():
-    global state, _needs_redraw
+    global _needs_redraw
     if state == STATE_BOOT_PROGRESS:
         disp.draw_boot_progress(tft, boot_items)
     elif state == STATE_OPERATIONAL:
         disp.draw_operational(tft, version)
-        # Auto-transition vers OK apres 3 secondes
-        if time.ticks_diff(time.ticks_ms(), operational_since) >= 3000:
-            state = STATE_OK
-            _needs_redraw = True
     elif state == STATE_OK:
         disp.draw_ok(tft, version)
     elif state == STATE_ERROR:
@@ -253,9 +249,7 @@ _poller.register(sys.stdin, select.POLLIN)
 # ------------------------------------------------------------------
 apply_state()  # afficher ecran diagnostic immediatement
 
-buf       = ""
-last_draw = time.ticks_ms()
-REFRESH_MS = 500  # refresh toutes les 500ms
+buf = ""
 
 while True:
     # Lecture commandes DISP: depuis Slave — non-bloquant
@@ -277,13 +271,17 @@ while True:
         except Exception:
             pass
 
+    # Auto-transition OPERATIONAL → OK apres 3 secondes
+    if state == STATE_OPERATIONAL:
+        if time.ticks_diff(time.ticks_ms(), operational_since) >= 3000:
+            state = STATE_OK
+            _needs_redraw = True
+
     # Verifier timeout de boot
     _check_boot_timeout()
 
-    # Refresh — seulement si changement d'etat ou timer
-    now = time.ticks_ms()
-    if _needs_redraw or time.ticks_diff(now, last_draw) >= REFRESH_MS:
+    # Redessiner SEULEMENT si quelque chose a change — pas de timer
+    if _needs_redraw:
         apply_state()
-        last_draw = now
 
     time.sleep_ms(20)
