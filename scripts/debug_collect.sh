@@ -109,16 +109,11 @@ fi
 cat "$OUT_DIR/README.txt"
 
 # ──────────────────────────────────────────────
-# PUSH SUR GITHUB
+# RÉCUPÉRER DEPUIS LE PC DE DEV
 # ──────────────────────────────────────────────
 echo ""
-echo "=== Push GitHub ==="
-cd $REPO
-git add debug/
-git commit -m "debug: collect $TIMESTAMP"
-git push
-
-echo ""
 echo "=== Fait ==="
-echo "Sur ton PC de dev, fais: git pull"
-echo "Les fichiers sont dans: debug/$TIMESTAMP/"
+echo "Fichiers dans: $OUT_DIR"
+echo ""
+echo "Pour récupérer sur ton PC Windows (Git Bash) :"
+echo "  scp -r artoo@r2-master.local:/home/artoo/r2d2/debug/$TIMESTAMP/ \"J:/R2-D2_Build/software/debug/\""
