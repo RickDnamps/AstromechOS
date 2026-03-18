@@ -558,6 +558,23 @@ R2-Slave   →  Pi 4B 2G  (Corps)   →  r2-slave.local   /  192.168.4.x (DHCP M
 Configurer les hostnames via **Raspberry Pi Imager** (⚙️ Options) avant de graver la SD.
 Résolution `.local` assurée par **avahi-daemon** (installé par les scripts réseau).
 
+### UART sur Pi 4B Trixie — Libérer ttyAMA0
+
+Par défaut sur Trixie, le Bluetooth occupe `/dev/ttyAMA0`. Ajouter dans `/boot/firmware/config.txt` :
+```
+dtoverlay=miniuart-bt
+```
+> ⚠️ Utiliser **`miniuart-bt`** et NON `disable-bt` — `miniuart-bt` déplace le BT sur le mini UART, ttyAMA0 est libéré pour GPIO 14/15, **le Bluetooth reste fonctionnel** (manettes Switch Pro, Xbox, etc.)
+> `disable-bt` = BT complètement coupé → plus de manettes sans fil
+
+```bash
+# Sur les deux Pi (Master et Slave)
+echo "dtoverlay=miniuart-bt" | sudo tee -a /boot/firmware/config.txt
+sudo reboot
+# Vérifier après reboot :
+ls /dev/ttyAMA0   # doit exister
+```
+
 ### Username
 ```
 Username sur les deux Pi : artoo
