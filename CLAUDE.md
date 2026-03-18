@@ -56,20 +56,30 @@ pour l'API REST Flask et la structure modulaire.
 - Batterie 24V (XT60) — source principale
 
 ### Batterie recommandée
-**24V 10Ah Li-ion ou LiPo, connecteur XT60**
+**6S LiPo 10000mAh — connecteur XT90-S**
+
+| Spec | Valeur |
+|------|--------|
+| Tension nominale | 22.2V (6S × 3.7V) |
+| Tension pleine charge | 25.2V (6S × 4.2V) |
+| Capacité | 10 000mAh (10Ah) |
+| Connecteur | **XT90-S** (anti-spark intégré — plus besoin de connecteur séparé) |
+| Compatibilité VESC | ✅ FSESC Mini 6.7 PRO supporte 4-13S |
+| Compatibilité bucks | ✅ 22-25V dans la plage d'entrée des bucks |
 
 Usage prévu : maison + sorties courtes dans la rue (pas d'événements).
 
 | Composant | Conso réelle estimée |
 |-----------|---------------------|
-| 2× Hub Motors (déplacement casual ~20%) | ~50-100W |
+| 2× Hub Motors 250W (usage casual ~20%) | ~50-100W |
 | 2× Pi 4B + électronique | ~30W |
 | Servos + LEDs + audio | ~15W |
-| **Total moyen** | **~100-150W = 4-6A à 24V** |
+| **Total moyen** | **~100-150W = 4-6A** |
 
-Autonomie avec 10Ah : **~1h30** — largement suffisant pour l'usage prévu.
+Autonomie : **~1h30** — largement suffisant pour l'usage prévu.
 
-> ✅ LiFePO4 = plus safe, plus de cycles de charge, mais légèrement plus lourd
+> ✅ XT90-S = anti-spark intégré dans le connecteur batterie — supprime le besoin d'un connecteur XT90-S séparé dans le câblage
+> ✅ 6S = standard communauté R2-D2 pour systèmes "24V"
 > ❌ Éviter SLA (acide-plomb) — trop lourd pour un robot mobile
 > ⚠️ Ne pas décharger sous 20% de capacité pour préserver la durée de vie
 
@@ -103,7 +113,7 @@ Autonomie avec 10Ah : **~1h30** — largement suffisant pour l'usage prévu.
 |-----------|--------|-------------|------|
 | Fusible + holder | **80A** | Fil + batterie, le plus court possible | Protection court-circuit principal |
 | Interrupteur principal | **30A+** | Après fusible 80A | Tout couper d'un coup |
-| XT90-S (paire) | — | Entre switch principal et VESCs | Anti-spark condensateurs VESC |
+| XT90-S | — | Connecteur batterie (intégré) | Anti-spark condensateurs VESC — pas de connecteur séparé requis |
 | Fusible + holder | **15A** | Branche électronique (bucks) | Protection Pi/servos |
 | Interrupteur secondaire | **10A** | Branche électronique | Allumer électronique séparément |
 
