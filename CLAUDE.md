@@ -1,5 +1,11 @@
 # R2-D2 Project — Claude Code Context
 
+## ⚙️ Instructions Claude Code
+- **Toujours committer et pusher sur GitHub après chaque modification** — `git add ... && git commit && git push`
+- Ne jamais laisser des changements non commités en fin de session
+
+---
+
 ## 🎯 Vision
 Système de contrôle distribué pour une réplique R2-D2 grandeur nature.
 Architecture Master/Slave sur deux Raspberry Pi communiquant via UART physique
@@ -45,9 +51,27 @@ pour l'API REST Flask et la structure modulaire.
 > ✅ Fils en parallèle pour augmenter la capacité de courant sans changer le slipring
 
 ### Propulsion
-- 2× Hub Motor 250W/24V (double shaft) — roues motrices
+- 2× Hub Motor 250W/24V (double shaft) — roues motrices (250W = pleine charge, usage réel ~20-30W chacun)
 - 4× JayCreer 58mm Omni Wheels — stabilisation omnidirectionnelle
 - Batterie 24V (XT60) — source principale
+
+### Batterie recommandée
+**24V 10Ah Li-ion ou LiPo, connecteur XT60**
+
+Usage prévu : maison + sorties courtes dans la rue (pas d'événements).
+
+| Composant | Conso réelle estimée |
+|-----------|---------------------|
+| 2× Hub Motors (déplacement casual ~20%) | ~50-100W |
+| 2× Pi 4B + électronique | ~30W |
+| Servos + LEDs + audio | ~15W |
+| **Total moyen** | **~100-150W = 4-6A à 24V** |
+
+Autonomie avec 10Ah : **~1h30** — largement suffisant pour l'usage prévu.
+
+> ✅ LiFePO4 = plus safe, plus de cycles de charge, mais légèrement plus lourd
+> ❌ Éviter SLA (acide-plomb) — trop lourd pour un robot mobile
+> ⚠️ Ne pas décharger sous 20% de capacité pour préserver la durée de vie
 
 ### Architecture d'alimentation
 ```
