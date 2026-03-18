@@ -40,7 +40,13 @@ class UARTListener:
 
     def setup(self) -> bool:
         try:
-            self._serial = serial.Serial(self._port, self._baud, timeout=0.1)
+            self._serial = serial.Serial(
+                self._port, self._baud,
+                timeout=0.1,
+                exclusive=True,
+                rtscts=False,
+                dsrdtr=False
+            )
             log.info(f"UART Slave ouvert: {self._port} @ {self._baud}")
             return True
         except serial.SerialException as e:
