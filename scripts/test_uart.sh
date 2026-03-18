@@ -7,14 +7,16 @@ REPO=/home/artoo/r2d2
 SLAVE=artoo@r2-slave.local
 
 echo "=== Nettoyage ==="
-# Tuer les anciennes instances sur le Slave
-ssh $SLAVE "pkill -9 python3 2>/dev/null; pkill -9 -f 'tail -f' 2>/dev/null; true"
-# Tuer les anciennes instances locales (Master)
-pkill -9 python3 2>/dev/null
-# Tuer les anciennes queues de log
+# Stopper les services systemd (sinon ils reprennent le port UART après pkill)
+sudo systemctl stop r2d2-master.service r2d2-monitor.service 2>/dev/null
+ssh $SLAVE "sudo systemctl stop r2d2-slave.service 2>/dev/null; true"
+sleep 1
+# Tuer toute instance résiduelle
+ssh $SLAVE "pkill -9 -f 'slave.main' 2>/dev/null; pkill -9 -f 'tail -f' 2>/dev/null; true"
+pkill -9 -f 'master.main' 2>/dev/null
 pkill -9 -f 'tail -f /tmp/master.log' 2>/dev/null
 pkill -9 -f 'tail -f /tmp/slave.log' 2>/dev/null
-sleep 3
+sleep 2
 
 # Vider les logs
 > /tmp/master.log
@@ -40,7 +42,7 @@ cleanup() {
     echo "=== Arrêt ==="
     kill $TAIL_M $TAIL_S 2>/dev/null
     kill $MASTER_PID 2>/dev/null
-    ssh $SLAVE "pkill -9 python3" 2>/dev/null
+    ssh $SLAVE "pkill -9 -f 'slave.main'" 2>/dev/null
     exit 0
 }
 trap cleanup INT TERM
