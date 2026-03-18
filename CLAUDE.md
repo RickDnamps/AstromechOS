@@ -934,35 +934,37 @@ J:\R2-D2_Build\software\others\r2_control-master\
 
 ## 📱 Build Android (Windows — PC de dev)
 
-```bash
-# ADB
-ADB="C:/Users/erict/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+### Workflow — après chaque modif Android
 
-# Build APK debug
+```bash
+# 1. Build APK debug (depuis J:/R2-D2_Build/software/)
 powershell.exe -Command "& { \$env:JAVA_HOME='C:/Program Files/Android/Android Studio/jbr'; Set-Location 'J:/R2-D2_Build/software/android'; ./gradlew.bat assembleDebug }"
 
-# Installer + lancer
-"$ADB" install -r android/app/build/outputs/apk/debug/app-debug.apk
+# 2. Copier l'APK dans android/compiled/
+cp android/app/build/outputs/apk/debug/app-debug.apk android/compiled/R2-D2_Control.apk
+
+# 3. Committer + pusher
+git add android/compiled/R2-D2_Control.apk
+git commit -m "ci: update R2-D2_Control.apk [skip ci]"
+git push
+```
+
+L'APK est ensuite disponible directement sur GitHub :
+`android/compiled/R2-D2_Control.apk`
+
+> ⚠️ Le GitHub Actions workflow existe mais ne pas s'en fier — build local + copie manuelle est la méthode fiable
+> ⚠️ Toujours synchroniser `android/app/src/main/assets/` si `master/static/` ou `master/templates/index.html` change
+
+### Installer sur téléphone (ADB)
+
+```bash
+ADB="C:/Users/erict/AppData/Local/Android/Sdk/platform-tools/adb.exe"
+"$ADB" install -r android/compiled/R2-D2_Control.apk
 "$ADB" shell am start -n com.r2d2.control/.MainActivity
 
-# Voir crashes en temps réel
+# Voir crashes
 "$ADB" logcat -s AndroidRuntime:E
 ```
 
-> ⚠️ `window.insetsController` doit être appelé APRÈS `setContentView` — NPE sinon (DecorView null)
 > ⚠️ Adaptive icons (`<adaptive-icon>`) doivent être dans `mipmap-anydpi-v26/` avec AGP 8.13+
 > ⚠️ Réinstaller proprement (`uninstall` + `install`) pour réinitialiser les SharedPreferences
-
----
-
-## 🤖 CI/CD Android — GitHub Actions
-
-Le workflow `.github/workflows/android-release.yml` compile et publie automatiquement
-l'APK chaque fois que le dossier `android/` change sur `main`. Aucun setup requis.
-
-### Lien de téléchargement permanent
-```
-https://github.com/RickDnamps/R2D2_Control/releases/latest/download/R2-D2_Control.apk
-```
-
-> Push sur `main` avec des changements dans `android/` → build automatique → APK mis à jour sur GitHub
