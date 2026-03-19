@@ -827,6 +827,9 @@ TX d'un côté = toujours sur RX de l'autre. Règle physique universelle.
 - [x] `window.R2D2_API_BASE` injecté via `AndroidBridge.getApiBase()` avant chargement app.js
 - [x] Haptic feedback désactivé par défaut, contrôlable dans Settings
 - [x] WebView plein écran (banner en overlay, ne vole plus 37dp en permanence)
+- [x] Auto-découverte réseau : mDNS `r2-master.local` → IP sauvegardée → `192.168.4.1` → scan subnet /24 (50 threads, 500ms timeout)
+- [x] Déclenchée automatiquement après 3 pings consécutifs en échec
+- [x] Dialog IP : bouton RECHERCHER intégré avec spinner + résultat
 - [ ] Test sur hotspot R2D2_Control réel avec Master en ligne
 
 > ⚠️ Assets Android à synchroniser manuellement si `master/static/` ou `master/templates/index.html` change :
