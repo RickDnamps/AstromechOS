@@ -3,6 +3,11 @@
 ## ⚙️ Instructions Claude Code
 - **Toujours committer et pusher sur GitHub après chaque modification** — `git add ... && git commit && git push`
 - Ne jamais laisser des changements non commités en fin de session
+- **Toujours terminer avec la commande de déploiement** — après chaque push, donner à l'utilisateur UNE SEULE commande à rouler sur le Master :
+  ```bash
+  cd /home/artoo/r2d2 && git pull && bash scripts/update.sh
+  ```
+  Ne jamais donner des commandes séparées (git pull, systemctl restart, rsync...) — `update.sh` fait tout.
 
 ---
 
