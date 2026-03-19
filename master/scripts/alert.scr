@@ -1,6 +1,6 @@
 # Alert — Son d'alarme + animation Teeces — rien d'autre
 # Source: alert.scr (dpoulson/r2_control) — sound,ALARM003 + rseries,220005
-sound,RANDOM,alarm
+sound,ALARM003
 teeces,random
-sleep,5
+sleep,220
 teeces,off

@@ -1,6 +1,6 @@
-# Malfunction — Son panique + panneaux affolés (22 cycles open/close)
-# Source: malfunction.scr (dpoulson/r2_control) — séquence complète fidèle
-sound,RANDOM,alarm
+# Malfunction — Son panique + Teeces + panneaux affolés (cycles open/close)
+# Source: malfunction.scr (dpoulson/r2_control) — sound,FAILURE + rseries,20000 + dome,all flutter
+sound,FAILURE
 teeces,random
 servo,all,open
 sleep,0.4
@@ -45,5 +45,4 @@ sleep,0.1
 servo,all,open
 sleep,2.0
 servo,all,close
-teeces,random
-sleep,1.0
+teeces,off
