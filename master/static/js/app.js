@@ -955,7 +955,7 @@ async function loadSettings() {
     const status = el('wifi-status');
     if (status) {
       if (data.wifi.connected) {
-        status.textContent = `Connected | SSID: ${data.wifi.connection} | IP: ${data.wifi.ip}`;
+        status.textContent = `Connected | SSID: ${data.wifi.ssid || data.wifi.connection} | IP: ${data.wifi.ip}`;
         status.className = 'settings-status ok';
       } else {
         status.textContent = 'Not connected — wlan1 absent or Master hotspot not available';
@@ -1079,9 +1079,6 @@ async function loadAudioCategories() {
 // ================================================================
 
 async function init() {
-  // Render static UI components
-  servoPanel.render();
-
   // Init speed slider gradient
   setSpeed(60);
 

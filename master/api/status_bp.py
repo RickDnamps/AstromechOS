@@ -38,15 +38,26 @@ def _uptime() -> str:
         return 'unknown'
 
 
+def _cpu_temp() -> float | None:
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+            return round(int(f.read().strip()) / 1000, 1)
+    except Exception:
+        return None
+
+
 @status_bp.get('/status')
 def get_status():
     """État complet du système R2-D2."""
-    heartbeat_ok = True  # Phase 4: brancher sur uart.last_heartbeat_age()
+    _uart_serial = getattr(reg.uart, '_serial', None)
+    uart_ready   = bool(_uart_serial and _uart_serial.is_open)
+    heartbeat_ok = bool(uart_ready and getattr(reg.uart, '_running', False))
     return jsonify({
         'version':      _read_version(),
         'uptime':       _uptime(),
+        'temperature':  _cpu_temp(),
         'heartbeat_ok': heartbeat_ok,
-        'uart_ready':   bool(reg.uart),
+        'uart_ready':   uart_ready,
         'teeces_ready': bool(reg.teeces and reg.teeces.is_ready()),
         'vesc_ready':   bool(reg.vesc   and reg.vesc.is_ready()),
         'dome_ready':   bool(reg.dome   and reg.dome.is_ready()),
