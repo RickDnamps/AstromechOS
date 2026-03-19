@@ -56,18 +56,22 @@ try:
             set_pulse(1500)
             time.sleep(1)
     else:
-        print("Servo standard — sweep 60°→120° en boucle")
-        print("Ctrl+C pour arrêter")
-        STEPS = 50
+        # SG90 : 500µs=0°  1500µs=90°  2500µs=180°
+        # Test safe : 45°→135° (±45° du centre)
+        US_MIN = 1000   # ~45°
+        US_MAX = 2000   # ~135°
+        STEPS  = 50
+        DELAY  = 0.04
+        print(f"SG90 — sweep 45°→135° en boucle (Ctrl+C pour arrêter)")
+        set_pulse(1500)  # centre d'abord
+        time.sleep(0.5)
         while True:
             for i in range(STEPS + 1):
-                us = 1166 + i * (1666 - 1166) / STEPS  # 60°→120°
-                set_pulse(us)
-                time.sleep(0.04)
+                set_pulse(US_MIN + i * (US_MAX - US_MIN) / STEPS)
+                time.sleep(DELAY)
             for i in range(STEPS, -1, -1):
-                us = 1166 + i * (1666 - 1166) / STEPS
-                set_pulse(us)
-                time.sleep(0.04)
+                set_pulse(US_MIN + i * (US_MAX - US_MIN) / STEPS)
+                time.sleep(DELAY)
 
 except KeyboardInterrupt:
     print("\nArrêt propre...")
