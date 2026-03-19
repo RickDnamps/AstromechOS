@@ -415,8 +415,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    override fun onResume()  { super.onResume();  webView.onResume() }
-    override fun onPause()   { super.onPause();   webView.onPause() }
+    override fun onResume() {
+        super.onResume()
+        webView.onResume()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        webView.onPause()
+        // Écran éteint ou app en arrière-plan → WebView figé → plus de HBs JS
+        // Envoyer un stop natif pour ne pas laisser le robot en mouvement
+        val prefs = getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+        val host  = prefs.getString(PREF_HOST, DEFAULT_HOST) ?: DEFAULT_HOST
+        Thread {
+            try {
+                val url = URL("http://$host:$DEFAULT_PORT/motion/stop")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod  = "POST"
+                conn.connectTimeout = 1000
+                conn.readTimeout    = 1000
+                conn.doOutput       = true
+                conn.outputStream.close()
+                conn.responseCode   // force send
+                conn.disconnect()
+            } catch (_: Exception) {}
+        }.start()
+    }
     override fun onDestroy() {
         pingHandler.removeCallbacksAndMessages(null)
         webView.destroy()

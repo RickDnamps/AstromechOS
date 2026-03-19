@@ -1086,6 +1086,27 @@ async function loadAudioCategories() {
 // Init
 // ================================================================
 
+// ================================================================
+// App Heartbeat — alimente l'AppWatchdog côté Master
+// ================================================================
+
+function startAppHeartbeat() {
+  // Envoi POST /heartbeat toutes les 200ms tant que la page est active
+  setInterval(() => {
+    fetch('/heartbeat', { method: 'POST' }).catch(() => {});
+  }, 200);
+
+  // Stop d'urgence si l'onglet / l'app se ferme
+  window.addEventListener('beforeunload', () => {
+    fetch('/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    fetch('/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
+  });
+}
+
+// ================================================================
+// Init
+// ================================================================
+
 async function init() {
   // Init speed slider gradient
   setSpeed(60);
@@ -1093,6 +1114,9 @@ async function init() {
   // Clock
   updateClock();
   setInterval(updateClock, 1000);
+
+  // Heartbeat applicatif vers Master (sécurité watchdog)
+  startAppHeartbeat();
 
   // Load initial data
   await Promise.all([

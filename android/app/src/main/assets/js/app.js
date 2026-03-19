@@ -1084,6 +1084,26 @@ async function loadAudioCategories() {
 // Init
 // ================================================================
 
+// ================================================================
+// App Heartbeat — alimente l'AppWatchdog côté Master
+// ================================================================
+
+function startAppHeartbeat() {
+  const base = window.R2D2_API_BASE || '';
+  setInterval(() => {
+    fetch(base + '/heartbeat', { method: 'POST' }).catch(() => {});
+  }, 200);
+
+  window.addEventListener('beforeunload', () => {
+    fetch(base + '/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    fetch(base + '/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
+  });
+}
+
+// ================================================================
+// Init
+// ================================================================
+
 async function init() {
   // Init speed slider gradient
   setSpeed(60);
@@ -1091,6 +1111,9 @@ async function init() {
   // Clock
   updateClock();
   setInterval(updateClock, 1000);
+
+  // Heartbeat applicatif vers Master (sécurité watchdog)
+  startAppHeartbeat();
 
   // Load initial data
   await Promise.all([

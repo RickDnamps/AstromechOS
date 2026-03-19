@@ -15,6 +15,7 @@ import subprocess
 import threading
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+from master.app_watchdog import app_watchdog
 
 status_bp = Blueprint('status', __name__)
 
@@ -58,6 +59,8 @@ def get_status():
         'temperature':  _cpu_temp(),
         'heartbeat_ok': heartbeat_ok,
         'uart_ready':   uart_ready,
+        'app_connected':   app_watchdog.is_connected,
+        'app_hb_age_ms':   app_watchdog.last_hb_age_ms,
         'teeces_ready': bool(reg.teeces and reg.teeces.is_ready()),
         'vesc_ready':   bool(reg.vesc   and reg.vesc.is_ready()),
         'dome_ready':   bool(reg.dome   and reg.dome.is_ready()),
@@ -99,6 +102,17 @@ def system_shutdown():
         daemon=True
     ).start()
     return jsonify({'status': 'shutting_down'})
+
+
+@status_bp.post('/heartbeat')
+def app_heartbeat():
+    """
+    Heartbeat applicatif — App → Master, toutes les 200ms.
+    Si ce heartbeat s'arrête pendant >600ms → arrêt d'urgence (AppWatchdog).
+    Endpoint ultra-léger : juste un timestamp update.
+    """
+    app_watchdog.feed()
+    return '', 204   # No Content — réponse minimale
 
 
 @status_bp.post('/system/estop')
