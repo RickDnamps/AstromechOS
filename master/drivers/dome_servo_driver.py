@@ -140,10 +140,13 @@ class DomeServoDriver(BaseDriver):
         # Réveil
         self._bus.write_byte_data(self._address, MODE1_REG, 0x00)
         time.sleep(0.005)
+        # RESTART bit (0x80) — réactive tous les canaux PWM (comme la lib adafruit)
+        self._bus.write_byte_data(self._address, MODE1_REG, 0x80)
+        time.sleep(0.005)
         # FULL OFF sur tous les canaux
         for ch in range(16):
             self._full_off(ch)
-        log.debug("PCA9685 @ 0x%02X initialisé 50Hz", self._address)
+        log.info("PCA9685 @ 0x%02X initialisé 50Hz + RESTART", self._address)
 
     def _ensure_awake(self) -> None:
         """Réveille le chip s'il est en sleep (ex: après estop.py)."""
@@ -193,7 +196,7 @@ class DomeServoDriver(BaseDriver):
 
         self._ensure_awake()
         self._set_pulse(channel, pulse_us)
-        log.debug("Dome servo %r ch%d → %dµs (%dms)", name, channel, pulse_us, duration_ms)
+        log.info("Dome servo %r ch%d → %dµs (%dms)", name, channel, pulse_us, duration_ms)
 
         if duration_ms > 0:
             threading.Thread(
