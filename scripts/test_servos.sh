@@ -29,6 +29,10 @@ python3 -c "import adafruit_pca9685" 2>/dev/null && echo "✓ adafruit-pca9685 d
 # SLAVE — vérification I2C + install + test
 # ──────────────────────────────────────────────
 echo ""
+echo "=== SLAVE — Sync code ==="
+ssh $SLAVE "cd $REPO && git pull -q" && echo "✓ Slave à jour" || echo "⚠ git pull Slave échoué — version locale"
+
+echo ""
 echo "=== SLAVE — I2C ==="
 I2C_SLAVE=$(ssh $SLAVE "sudo /usr/sbin/i2cdetect -y 1 2>&1" 2>&1)
 echo "$I2C_SLAVE" | grep -q "41" && echo "✓ PCA9685 @ 0x41 détecté" || echo "✗ 0x41 NON détecté — vérifier branchement I2C Slave"
