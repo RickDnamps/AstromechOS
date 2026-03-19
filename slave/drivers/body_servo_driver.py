@@ -76,11 +76,8 @@ class BodyServoDriver(BaseDriver):
             i2c = busio.I2C(board.SCL, board.SDA)
             self._pca = PCA9685(i2c, address=self._address)
             self._pca.frequency = PCA9685_FREQ_HZ
-
-            # Initialiser tous les canaux en position fermée
-            for name, (channel, pulse_min, pulse_max) in SERVO_MAP.items():
-                self._current_pulse[channel] = float(pulse_min)
-                self._set_pulse_raw(channel, float(pulse_min))
+            # Aucun pulse envoyé au démarrage — évite servo continu de tourner.
+            # Les canaux reçoivent un signal seulement lors d'une commande explicite.
 
             self._ready = True
             log.info(f"BodyServoDriver prêt — PCA9685 @ 0x{self._address:02X}, "
@@ -132,7 +129,8 @@ class BodyServoDriver(BaseDriver):
             self._cancel_events[channel].set()
 
         target_pulse = pulse_min + (pulse_max - pulse_min) * position
-        start_pulse  = self._current_pulse.get(channel, float(pulse_min))
+        # Si position inconnue (premier mouvement), aller directement à la cible
+        start_pulse  = self._current_pulse.get(channel, target_pulse)
         cancel_evt   = threading.Event()
         self._cancel_events[channel] = cancel_evt
 

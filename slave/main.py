@@ -30,7 +30,7 @@ from slave.drivers.audio_driver   import AudioDriver
 
 # ---- Phase 2 — Décommenter pour activer ----
 # from slave.drivers.vesc_driver        import VescDriver
-# from slave.drivers.body_servo_driver  import BodyServoDriver
+from slave.drivers.body_servo_driver  import BodyServoDriver
 # from slave.drivers.dome_motor_driver  import DomeMotorDriver  # à créer Phase 2
 
 UART_PORT = "/dev/ttyAMA0"
@@ -130,17 +130,16 @@ def main() -> None:
     display.boot_fail('BT_CTRL')  # optionnel Phase 4
 
     # ------------------------------------------------------------------
-    # Phase 2 — Servos body (PCA9685 I2C 0x41) — décommenter pour activer
+    # Phase 2 — Servos body (PCA9685 I2C 0x41)
     # ------------------------------------------------------------------
-    # display.boot_item('SERVOS')
-    # servo = BodyServoDriver()
-    # if servo.setup():
-    #     uart.register_callback('SRV', servo.handle_uart)
-    #     display.boot_ok('SERVOS')
-    # else:
-    #     log.warning("BodyServoDriver indisponible")
-    #     display.boot_fail('SERVOS')
-    display.boot_fail('SERVOS')   # Phase 2 non activée
+    display.boot_item('SERVOS')
+    servo = BodyServoDriver()
+    if servo.setup():
+        uart.register_callback('SRV', servo.handle_uart)
+        display.boot_ok('SERVOS')
+    else:
+        log.warning("BodyServoDriver indisponible")
+        display.boot_fail('SERVOS')
 
     # ------------------------------------------------------------------
     # Démarrer UART listener (thread)
@@ -171,7 +170,7 @@ def main() -> None:
         # if vesc_g.is_ready():  vesc_g.shutdown()
         # if vesc_d.is_ready():  vesc_d.shutdown()
         # if dome.is_ready():    dome.shutdown()
-        # Phase 2: if servo.is_ready(): servo.shutdown()
+        if servo.is_ready(): servo.shutdown()
         display.shutdown()
         log.info("Slave arrêté proprement")
         sys.exit(0)
