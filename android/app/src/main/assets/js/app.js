@@ -26,10 +26,9 @@ function escapeHtml(s) {
 
 async function api(endpoint, method = 'GET', body = null) {
   try {
-    const base = window.R2D2_API_BASE || '';
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(base + endpoint, opts);
+    const res = await fetch(endpoint, opts);
     const data = await res.json();
     return data;
   } catch (e) {
@@ -1054,6 +1053,7 @@ async function applyHotspot() {
 }
 
 async function saveConfig() {
+  if (!confirm('Save config? (git branch, slave host — restart required to take effect)')) return;
   const payload = {
     'github.branch':            (el('git-branch')?.value || '').trim(),
     'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
@@ -1094,15 +1094,13 @@ async function loadAudioCategories() {
 function startAppHeartbeat() {
   // Envoi POST /heartbeat toutes les 200ms tant que la page est active
   setInterval(() => {
-    const base = window.R2D2_API_BASE || '';
-    fetch(base + '/heartbeat', { method: 'POST' }).catch(() => {});
+    fetch('/heartbeat', { method: 'POST' }).catch(() => {});
   }, 200);
 
   // Stop d'urgence si l'onglet / l'app se ferme
   window.addEventListener('beforeunload', () => {
-    const base = window.R2D2_API_BASE || '';
-    fetch(base + '/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
-    fetch(base + '/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    fetch('/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    fetch('/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
   });
 }
 

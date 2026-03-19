@@ -1053,6 +1053,7 @@ async function applyHotspot() {
 }
 
 async function saveConfig() {
+  if (!confirm('Save config? (git branch, slave host — restart required to take effect)')) return;
   const payload = {
     'github.branch':            (el('git-branch')?.value || '').trim(),
     'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
