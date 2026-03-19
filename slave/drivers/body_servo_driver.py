@@ -87,11 +87,18 @@ class BodyServoDriver(BaseDriver):
 
     def shutdown(self) -> None:
         if self._pca:
-            # Remettre tous les servos en position neutre
             for name in SERVO_MAP:
-                self.move(name, 0.0, duration_ms=500)
-            time.sleep(0.6)
-            self._pca.deinit()
+                self.move(name, 0.0, duration_ms=300)
+            time.sleep(0.4)
+            # smbus2 SLEEP — seule méthode fiable pour couper l'oscillateur PCA9685
+            # pca.deinit() appelle reset() qui ne coupe PAS le PWM
+            try:
+                import smbus2
+                b = smbus2.SMBus(1)
+                b.write_byte_data(self._address, 0x00, 0x10)  # MODE1 SLEEP
+                b.close()
+            except Exception as e:
+                log.warning(f"Erreur sleep PCA9685 body: {e}")
         self._ready = False
 
     def is_ready(self) -> bool:
