@@ -88,3 +88,27 @@ def system_shutdown():
         daemon=True
     ).start()
     return jsonify({'status': 'shutting_down'})
+
+
+@status_bp.post('/system/estop')
+def system_estop():
+    """Arrêt d'urgence servos — coupe PWM PCA9685 Master (0x40) + Slave (0x41) via smbus2."""
+    # Coupe via drivers actifs si disponibles
+    if reg.dome_servo:
+        try:
+            reg.dome_servo.shutdown()
+        except Exception:
+            pass
+    if reg.servo:
+        try:
+            reg.servo.shutdown()
+        except Exception:
+            pass
+    # Fallback garanti : estop.py direct via subprocess
+    threading.Thread(
+        target=lambda: subprocess.run(
+            ['python3', '/home/artoo/r2d2/scripts/estop.py'], check=False
+        ),
+        daemon=True
+    ).start()
+    return jsonify({'status': 'estop_sent'})

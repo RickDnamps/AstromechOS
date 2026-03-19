@@ -235,6 +235,9 @@ function emergencyStop() {
   driveStop();
   domeStop();
   api('/audio/stop', 'POST');
+  api('/servo/dome/close_all', 'POST');
+  api('/servo/body/close_all', 'POST');
+  api('/system/estop', 'POST');
   toast('EMERGENCY STOP', 'error');
   audioBoard.setPlaying(false);
 }
