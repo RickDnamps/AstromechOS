@@ -26,9 +26,11 @@ function escapeHtml(s) {
 
 async function api(endpoint, method = 'GET', body = null) {
   try {
+    const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+    const url  = base + endpoint;
     const opts = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(endpoint, opts);
+    const res = await fetch(url, opts);
     const data = await res.json();
     return data;
   } catch (e) {
@@ -979,12 +981,20 @@ class StatusPoller {
   }
 
   _setOffline(offline) {
+    const wasOffline = this._offline;
+    this._offline = offline;
     const pillOffline = el('pill-offline');
     if (pillOffline) pillOffline.style.display = offline ? '' : 'none';
     ['pill-heartbeat', 'pill-uart', 'pill-bt', 'pill-version'].forEach(id => {
       const p = el(id);
       if (p) p.style.display = offline ? 'none' : '';
     });
+    // Reload data when coming back online
+    if (wasOffline && !offline) {
+      audioBoard.loadCategories();
+      scriptEngine.load();
+      loadServoSettings();
+    }
   }
 
   _setPill(id, ok, label) {
@@ -1008,6 +1018,15 @@ class StatusPoller {
 }
 
 const poller = new StatusPoller();
+
+// Called by MainActivity.kt (Android) when R2D2_API_BASE is updated
+// and the server becomes reachable — reloads all dynamic data
+function pollStatus() {
+  audioBoard.loadCategories();
+  scriptEngine.load();
+  loadServoSettings();
+  poller.poll();
+}
 
 // ================================================================
 // Clock
@@ -1166,15 +1185,17 @@ async function loadAudioCategories() {
 // ================================================================
 
 function startAppHeartbeat() {
+  const base = () => (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+
   // Envoi POST /heartbeat toutes les 200ms tant que la page est active
   setInterval(() => {
-    fetch('/heartbeat', { method: 'POST' }).catch(() => {});
+    fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
   }, 200);
 
   // Stop d'urgence si l'onglet / l'app se ferme
   window.addEventListener('beforeunload', () => {
-    fetch('/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
-    fetch('/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    fetch(base() + '/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    fetch(base() + '/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
   });
 }
 
