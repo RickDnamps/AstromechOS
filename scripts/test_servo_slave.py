@@ -1,84 +1,74 @@
 #!/usr/bin/env python3
 """
-Test servo Slave — PCA9685 @ 0x41, canal 0 (Breakout PCA9685 body)
-Tester AVANT d'activer Phase 2 dans main.py
+Test servo Slave — PCA9685 @ 0x41, canal 0
+Supporte servo STANDARD et servo CONTINU.
 
-Usage sur le Slave Pi:
-  python3 scripts/test_servo_slave.py
+Usage: python3 scripts/test_servo_slave.py [standard|continu]
+Par défaut: continu
 
-Prérequis:
-  pip install adafruit-circuitpython-pca9685
-
-Le servo sur le canal 0 va faire: Centre → Max → Min → Centre (boucle)
-Ctrl+C pour arrêter proprement.
+Servo standard  : 1000µs=0°  1500µs=90°  2000µs=180°
+Servo continu   : 1500µs=STOP  <1500=sens1  >1500=sens2
 """
 
-import sys
-import time
+import sys, time
 
 try:
-    import board
-    import busio
+    import board, busio
     from adafruit_pca9685 import PCA9685
 except ImportError:
-    print("ERREUR: librairie manquante — installer:")
-    print("  pip install adafruit-circuitpython-pca9685")
+    print("ERREUR: pip install adafruit-circuitpython-pca9685")
     sys.exit(1)
 
+MODE = sys.argv[1] if len(sys.argv) > 1 else "continu"
 
-def us_to_duty(pulse_us: float) -> int:
-    """Convertit µs en valeur 16-bit duty_cycle pour 50Hz (période 20000µs)."""
+def us_to_duty(pulse_us):
     return int((pulse_us / 20000.0) * 65535)
 
+i2c = busio.I2C(board.SCL, board.SDA)
+pca = PCA9685(i2c, address=0x41)
+pca.frequency = 50
+print(f"PCA9685 @ 0x41 OK — mode: {MODE}")
 
-def main():
-    print("=== Test Servo Slave — PCA9685 @ 0x41, canal 0 ===")
-    print()
+def set_pulse(us):
+    pca.channels[0].duty_cycle = us_to_duty(us)
 
-    try:
-        i2c = busio.I2C(board.SCL, board.SDA)
-        pca = PCA9685(i2c, address=0x41)
-        pca.frequency = 50
-        print("PCA9685 @ 0x41 détecté OK")
-    except Exception as e:
-        print(f"ERREUR: impossible d'initialiser PCA9685 @ 0x41: {e}")
-        print("Vérifier: i2cdetect -y 1  →  doit montrer '41'")
-        sys.exit(1)
+def stop():
+    set_pulse(1500)
+    time.sleep(0.3)
+    pca.deinit()
+    print("STOP")
 
-    print("Servo canal 0 — séquence: Centre → Max → Min → boucle")
-    print("Ctrl+C pour arrêter")
-    print()
-
-    # Plage sécuritaire — évite de pousser contre la butée mécanique
-    ANGLE_MIN = 60
-    ANGLE_MAX = 120
-    STEPS  = 50
-    PERIOD = 2.0
-    DELAY  = PERIOD / STEPS
-
-    def set_angle(deg: float) -> None:
-        pulse = 1000 + (deg / 180.0) * 1000
-        pca.channels[0].duty_cycle = us_to_duty(pulse)
-
-    print(f"Sweep {ANGLE_MIN}°→{ANGLE_MAX}° en boucle — Ctrl+C pour arrêter")
-
-    try:
-        set_angle(90)
-        time.sleep(0.5)
+try:
+    if MODE == "continu":
+        print("Servo continu — lent sens 1 → stop → lent sens 2 → stop (boucle)")
+        print("Ctrl+C pour arrêter")
+        while True:
+            print("  → sens horaire lent (1600µs)")
+            set_pulse(1600)
+            time.sleep(2)
+            print("  → STOP (1500µs)")
+            set_pulse(1500)
+            time.sleep(1)
+            print("  → sens anti-horaire lent (1400µs)")
+            set_pulse(1400)
+            time.sleep(2)
+            print("  → STOP (1500µs)")
+            set_pulse(1500)
+            time.sleep(1)
+    else:
+        print("Servo standard — sweep 60°→120° en boucle")
+        print("Ctrl+C pour arrêter")
+        STEPS = 50
         while True:
             for i in range(STEPS + 1):
-                set_angle(ANGLE_MIN + i * (ANGLE_MAX - ANGLE_MIN) / STEPS)
-                time.sleep(DELAY)
+                us = 1166 + i * (1666 - 1166) / STEPS  # 60°→120°
+                set_pulse(us)
+                time.sleep(0.04)
             for i in range(STEPS, -1, -1):
-                set_angle(ANGLE_MIN + i * (ANGLE_MAX - ANGLE_MIN) / STEPS)
-                time.sleep(DELAY)
-    except KeyboardInterrupt:
-        print("\nArrêt — servo en position neutre (90°)")
-        set_angle(90)
-        time.sleep(0.3)
-        pca.deinit()
-        print("OK")
+                us = 1166 + i * (1666 - 1166) / STEPS
+                set_pulse(us)
+                time.sleep(0.04)
 
-
-if __name__ == "__main__":
-    main()
+except KeyboardInterrupt:
+    print("\nArrêt propre...")
+    stop()
