@@ -5,6 +5,7 @@ Envoie les commandes DISP: au RP2040 sur /dev/ttyACM2.
 
 import logging
 import serial
+import time
 import sys
 import os
 
@@ -33,6 +34,7 @@ class DisplayDriver(BaseDriver):
                 self._serial = serial.Serial(port, self._baud, timeout=1)
                 self._port  = port
                 self._ready = True
+                time.sleep(0.5)  # laisser le USB/RP2040 stabiliser avant le premier envoi
                 log.info(f"DisplayDriver ouvert: {port}")
                 return True
             except serial.SerialException:
