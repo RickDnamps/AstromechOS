@@ -28,8 +28,8 @@ PRE_SCALE_REG    = 0xFE
 PRE_SCALE_50HZ   = 121
 
 PULSE_STOP_US    = 1500
-PULSE_OPEN_US    = 1600
-PULSE_CLOSED_US  = 1400
+PULSE_OPEN_US    = 1900
+PULSE_CLOSED_US  = 1100
 
 SERVO_MAP: dict[str, int] = {
     'body_panel_1':   0,
