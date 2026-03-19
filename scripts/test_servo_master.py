@@ -49,22 +49,25 @@ def main():
     print("Ctrl+C pour arrêter")
     print()
 
-    moves = [
-        (1500, "Centre (1500µs)"),
-        (2000, "Max ouvert (2000µs)"),
-        (1500, "Centre (1500µs)"),
-        (1000, "Min fermé (1000µs)"),
-    ]
+    STEPS = 100       # nombre de pas par sweep
+    PERIOD = 2.0      # secondes pour aller de 0° à 180°
+    DELAY  = PERIOD / STEPS
+
+    def set_angle(deg: float) -> None:
+        pulse = 1000 + (deg / 180.0) * 1000
+        pca.channels[0].duty_cycle = us_to_duty(pulse)
 
     try:
         while True:
-            for pulse, label in moves:
-                print(f"  → {label}")
-                pca.channels[0].duty_cycle = us_to_duty(pulse)
-                time.sleep(1.0)
+            for i in range(STEPS + 1):
+                set_angle(i * 180 / STEPS)
+                time.sleep(DELAY)
+            for i in range(STEPS, -1, -1):
+                set_angle(i * 180 / STEPS)
+                time.sleep(DELAY)
     except KeyboardInterrupt:
-        print("\nArrêt — servo en position neutre (1500µs)")
-        pca.channels[0].duty_cycle = us_to_duty(1500)
+        print("\nArrêt — servo en position neutre (90°)")
+        set_angle(90)
         time.sleep(0.5)
         pca.deinit()
         print("OK")
