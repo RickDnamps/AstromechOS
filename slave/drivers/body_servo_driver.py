@@ -32,9 +32,11 @@ log = logging.getLogger(__name__)
 PCA9685_ADDRESS = 0x41
 PCA9685_FREQ_HZ = 50
 
-# SG90 — plage testée et validée : 1000µs (45°) → 2000µs (135°) = 90° de débattement
-PULSE_CLOSED_US = 1000  # 45°  (position fermée)
-PULSE_OPEN_US   = 2000  # 135° (position ouverte) — validé test_servo_slave.py
+# Servo continu (SG90 ou équivalent)
+# 1500µs = STOP, < 1500 = sens fermeture, > 1500 = sens ouverture
+PULSE_STOP_US   = 1500  # arrêt absolu
+PULSE_OPEN_US   = 1600  # ouverture lente (ajuster si trop vite/lent)
+PULSE_CLOSED_US = 1400  # fermeture lente (ajuster si trop vite/lent)
 
 # 11 panneaux body, canaux 0–10
 # Mapping nom → (channel, pulse_min_us, pulse_max_us)
@@ -98,8 +100,8 @@ class BodyServoDriver(BaseDriver):
         for evt in self._cancel_events.values():
             evt.set()
         if self._pca:
-            for channel, pulse_min in [(SERVO_MAP[n][0], SERVO_MAP[n][1]) for n in SERVO_MAP]:
-                self._set_pulse_raw(channel, float(pulse_min))
+            for name in SERVO_MAP:
+                self._set_pulse_raw(SERVO_MAP[name][0], float(PULSE_STOP_US))
             time.sleep(0.3)
             try:
                 import smbus2
@@ -137,13 +139,12 @@ class BodyServoDriver(BaseDriver):
         cancel_evt   = threading.Event()
         self._cancel_events[channel] = cancel_evt
 
-        if duration_ms <= 0:
-            self._set_pulse_raw(channel, target_pulse)
-            self._current_pulse[channel] = target_pulse
-        else:
+        self._set_pulse_raw(channel, target_pulse)
+        self._current_pulse[channel] = target_pulse
+        if duration_ms > 0:
             threading.Thread(
-                target=self._smooth_move,
-                args=(channel, start_pulse, target_pulse, duration_ms, cancel_evt),
+                target=self._timed_stop,
+                args=(channel, duration_ms, cancel_evt),
                 daemon=True
             ).start()
 
@@ -167,15 +168,11 @@ class BodyServoDriver(BaseDriver):
             except Exception as e:
                 log.error(f"Erreur PWM canal {channel}: {e}")
 
-    def _smooth_move(self, channel: int, start_pulse: float, target_pulse: float,
-                     duration_ms: int, cancel_evt: threading.Event) -> None:
-        """Interpolation depuis position courante vers target — annulable."""
-        steps    = max(10, duration_ms // 20)
-        interval = duration_ms / 1000.0 / steps
-        for i in range(steps + 1):
-            if cancel_evt.is_set():
-                return  # nouvelle commande reçue — abandonner
-            pulse = start_pulse + (target_pulse - start_pulse) * (i / steps)
-            self._set_pulse_raw(channel, pulse)
-            self._current_pulse[channel] = pulse
-            time.sleep(interval)
+    def _timed_stop(self, channel: int, duration_ms: int,
+                    cancel_evt: threading.Event) -> None:
+        """Attend duration_ms puis envoie STOP (1500µs) — servo continu."""
+        time.sleep(duration_ms / 1000.0)
+        if cancel_evt.is_set():
+            return  # nouvelle commande arrivée — elle gère son propre stop
+        self._set_pulse_raw(channel, float(PULSE_STOP_US))
+        self._current_pulse[channel] = float(PULSE_STOP_US)
