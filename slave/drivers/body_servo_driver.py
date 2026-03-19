@@ -76,8 +76,11 @@ class BodyServoDriver(BaseDriver):
             i2c = busio.I2C(board.SCL, board.SDA)
             self._pca = PCA9685(i2c, address=self._address)
             self._pca.frequency = PCA9685_FREQ_HZ
-            # Aucun pulse envoyé au démarrage — évite servo continu de tourner.
-            # Les canaux reçoivent un signal seulement lors d'une commande explicite.
+            # Forcer FULL OFF sur tous les 16 canaux — efface les valeurs résiduelles
+            # du chip (le PCA9685 garde ses registres PWM en mémoire entre les restarts
+            # de service, sans power cycle). duty_cycle=0 active le bit FULL OFF.
+            for ch in range(16):
+                self._pca.channels[ch].duty_cycle = 0
 
             self._ready = True
             log.info(f"BodyServoDriver prêt — PCA9685 @ 0x{self._address:02X}, "
