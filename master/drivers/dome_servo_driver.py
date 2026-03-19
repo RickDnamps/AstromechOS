@@ -100,21 +100,21 @@ class DomeServoDriver(BaseDriver):
     # API publique
     # ------------------------------------------------------------------
 
-    def open(self, name: str, duration_ms: int = 500) -> bool:
+    def open(self, name: str, duration_ms: int = 300) -> bool:
         return self._move(name, PULSE_OPEN_US, duration_ms)
 
-    def close(self, name: str, duration_ms: int = 500) -> bool:
+    def close(self, name: str, duration_ms: int = 300) -> bool:
         return self._move(name, PULSE_CLOSED_US, duration_ms)
 
-    def open_all(self, duration_ms: int = 500) -> None:
+    def open_all(self, duration_ms: int = 300) -> None:
         for name in SERVO_MAP:
             self.open(name, duration_ms)
 
-    def close_all(self, duration_ms: int = 500) -> None:
+    def close_all(self, duration_ms: int = 300) -> None:
         for name in SERVO_MAP:
             self.close(name, duration_ms)
 
-    def move(self, name: str, position: float, duration_ms: int = 500) -> bool:
+    def move(self, name: str, position: float, duration_ms: int = 300) -> bool:
         if position >= 0.5:
             return self.open(name, duration_ms)
         return self.close(name, duration_ms)
