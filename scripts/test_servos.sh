@@ -67,10 +67,9 @@ echo ""
 cleanup() {
     echo ""
     echo "=== Arrêt ==="
-    # SIGINT pour déclencher except KeyboardInterrupt → pca.deinit() → servo s'arrête
     pkill -INT -f test_servo_master.py 2>/dev/null
     ssh $SLAVE "pkill -INT -f test_servo_slave.py" 2>/dev/null
-    sleep 1
+    sleep 2   # laisser Python faire pca.mode1|=0x10 + deinit
     kill $MASTER_PID $SLAVE_PID 2>/dev/null
     exit 0
 }

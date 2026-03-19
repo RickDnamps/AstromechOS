@@ -33,8 +33,10 @@ def set_pulse(us):
     pca.channels[0].duty_cycle = us_to_duty(us)
 
 def stop():
-    set_pulse(1500)
+    set_pulse(1500)        # centre
     time.sleep(0.3)
+    pca.channels[0].duty_cycle = 0   # coupe signal
+    pca.mode1 = pca.mode1 | 0x10     # SLEEP — arrête l'oscillateur PWM
     pca.deinit()
     print("STOP")
 
