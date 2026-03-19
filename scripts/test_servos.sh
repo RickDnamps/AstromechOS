@@ -15,8 +15,8 @@ if ! command -v i2cdetect &>/dev/null; then
     sudo apt-get install -y i2c-tools -q
 fi
 
-I2C_MASTER=$(i2cdetect -y 1 2>&1)
-echo "$I2C_MASTER" | grep -q "40:" && echo "✓ PCA9685 @ 0x40 détecté" || echo "✗ 0x40 NON détecté — vérifier branchement I2C Master"
+I2C_MASTER=$(sudo /usr/sbin/i2cdetect -y 1 2>&1)
+echo "$I2C_MASTER" | grep -q "40" && echo "✓ PCA9685 @ 0x40 détecté" || echo "✗ 0x40 NON détecté — vérifier branchement I2C Master"
 
 echo ""
 echo "=== MASTER — Dépendances Python ==="
@@ -30,8 +30,8 @@ python3 -c "import adafruit_pca9685" 2>/dev/null && echo "✓ adafruit-pca9685 d
 # ──────────────────────────────────────────────
 echo ""
 echo "=== SLAVE — I2C ==="
-I2C_SLAVE=$(ssh $SLAVE "i2cdetect -y 1 2>/dev/null || { sudo apt-get install -y i2c-tools -q && i2cdetect -y 1; }" 2>&1)
-echo "$I2C_SLAVE" | grep -q "41:" && echo "✓ PCA9685 @ 0x41 détecté" || echo "✗ 0x41 NON détecté — vérifier branchement I2C Slave"
+I2C_SLAVE=$(ssh $SLAVE "sudo /usr/sbin/i2cdetect -y 1 2>&1" 2>&1)
+echo "$I2C_SLAVE" | grep -q "41" && echo "✓ PCA9685 @ 0x41 détecté" || echo "✗ 0x41 NON détecté — vérifier branchement I2C Slave"
 
 echo ""
 echo "=== SLAVE — Dépendances Python ==="
