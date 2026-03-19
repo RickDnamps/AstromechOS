@@ -30,13 +30,14 @@ import master.registry as reg
 # ---- Phase 2 — Décommenter pour activer ----
 # from master.drivers.vesc_driver        import VescDriver
 # from master.drivers.dome_motor_driver  import DomeMotorDriver
-# from master.drivers.body_servo_driver  import BodyServoDriver
+from master.drivers.body_servo_driver  import BodyServoDriver
+from master.drivers.dome_servo_driver  import DomeServoDriver
 
 # ---- Phase 3 — Décommenter pour activer ----
 # from master.script_engine import ScriptEngine
 
 # ---- Phase 4 — Décommenter pour activer ----
-# from master.flask_app import create_app
+from master.flask_app import create_app
 
 VERSION_FILE = "/home/artoo/r2d2/VERSION"
 
@@ -122,14 +123,16 @@ def main() -> None:
 
     # ------------------------------------------------------------------
     # Phase 2 — Drivers propulsion / dôme / servos
-    # Décommenter les blocs ci-dessous pour activer
     # ------------------------------------------------------------------
-    # vesc  = VescDriver(uart)
-    # dome  = DomeMotorDriver(uart)
-    # servo = BodyServoDriver(uart)
-    # if vesc.setup():  reg.vesc  = vesc
-    # if dome.setup():  reg.dome  = dome
-    # if servo.setup(): reg.servo = servo
+    # vesc = VescDriver(uart)
+    # dome = DomeMotorDriver(uart)
+    # if vesc.setup(): reg.vesc = vesc
+    # if dome.setup(): reg.dome = dome
+
+    servo      = BodyServoDriver(uart)
+    dome_servo = DomeServoDriver()
+    if servo.setup():      reg.servo      = servo
+    if dome_servo.setup(): reg.dome_servo = dome_servo
 
     # ------------------------------------------------------------------
     # Phase 3 — Moteur de scripts
@@ -177,17 +180,16 @@ def main() -> None:
 
     # ------------------------------------------------------------------
     # Phase 4 — Serveur Flask (API REST + Web UI)
-    # Décommenter pour activer le dashboard sur http://r2-master.local:5000
     # ------------------------------------------------------------------
-    # app = create_app()
-    # flask_port = cfg.getint('master', 'flask_port', fallback=5000)
-    # flask_thread = threading.Thread(
-    #     target=lambda: app.run(host='0.0.0.0', port=flask_port,
-    #                            use_reloader=False, threaded=True),
-    #     name='flask', daemon=True
-    # )
-    # flask_thread.start()
-    # log.info(f"Flask démarré sur port {flask_port}")
+    app        = create_app()
+    flask_port = cfg.getint('master', 'flask_port', fallback=5000)
+    flask_thread = threading.Thread(
+        target=lambda: app.run(host='0.0.0.0', port=flask_port,
+                               use_reloader=False, threaded=True),
+        name='flask', daemon=True
+    )
+    flask_thread.start()
+    log.info(f"Flask démarré sur port {flask_port}")
 
     log.info("Master opérationnel")
 
@@ -199,7 +201,8 @@ def main() -> None:
         teeces.shutdown()
         # Phase 2: if reg.vesc:  reg.vesc.shutdown()
         # Phase 2: if reg.dome:  reg.dome.shutdown()
-        # Phase 2: if reg.servo: reg.servo.shutdown()
+        if reg.servo:       reg.servo.shutdown()
+        if reg.dome_servo:  reg.dome_servo.shutdown()
         # Phase 3: if reg.engine: reg.engine.stop_all()
         log.info("Master arrêté proprement")
         sys.exit(0)
