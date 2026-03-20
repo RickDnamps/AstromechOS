@@ -1,10 +1,12 @@
 """
 Pilote audio Slave.
-Joue les sons MP3 via aplay (jack 3.5mm natif Pi 4B).
+Joue les sons MP3 via mpg123 (jack 3.5mm natif Pi 4B).
 Commandes UART:
   S:Happy001          → joue le fichier spécifique
   S:RANDOM:happy      → joue un son aléatoire de la catégorie
   S:STOP              → coupe le son en cours
+
+Prérequis : sudo apt install -y mpg123
 """
 
 import json
@@ -114,18 +116,18 @@ class AudioDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def _launch(self, path: str) -> None:
-        """Lance aplay en arrière-plan, coupe le son précédent."""
+        """Lance mpg123 en arrière-plan, coupe le son précédent."""
         with self._lock:
             if self._proc and self._proc.poll() is None:
                 self._proc.terminate()
             try:
                 self._proc = subprocess.Popen(
-                    ['aplay', path],
+                    ['mpg123', '-q', path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 log.info(f"Audio: {os.path.basename(path)}")
             except FileNotFoundError:
-                log.error("aplay introuvable — installer alsa-utils sur le Slave")
+                log.error("mpg123 introuvable — sudo apt install -y mpg123")
             except Exception as e:
                 log.error(f"Erreur lancement audio: {e}")
