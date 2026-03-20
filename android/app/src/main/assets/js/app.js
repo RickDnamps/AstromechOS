@@ -76,6 +76,7 @@ function switchTab(tabId) {
   if (tabId === 'config') { loadSettings(); loadServoSettings(); }
   if (tabId === 'sequences') loadScripts();
   if (tabId === 'audio') loadAudioCategories();
+  if (tabId === 'vesc') vescPanel.refresh();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -733,6 +734,136 @@ function audioRandom() {
 }
 
 // ================================================================
+// VESC Panel
+// ================================================================
+
+class VescPanel {
+  constructor() {
+    this._scaleDebounce = null;
+  }
+
+  // Called by StatusPoller on every refresh
+  async refresh() {
+    const d = await api('/vesc/telemetry');
+    if (!d) return;
+    this._updateStatus(d);
+    this._updateCard('L', d.L);
+    this._updateCard('R', d.R);
+    this._updateScale(d.power_scale);
+  }
+
+  _updateStatus(d) {
+    const pill  = el('vesc-conn-pill');
+    const label = el('vesc-conn-label');
+    if (!pill) return;
+    if (d.connected) {
+      pill.classList.add('online');
+      label.textContent = 'ONLINE';
+    } else {
+      pill.classList.remove('online');
+      label.textContent = 'OFFLINE';
+    }
+    // Battery voltage — use whichever side is available
+    const src = d.L || d.R;
+    const vEl  = el('vesc-voltage');
+    const fill = el('vesc-battery-fill');
+    if (src && vEl) {
+      const v = src.v_in;
+      vEl.textContent = v.toFixed(1);
+      vEl.className = 'vesc-battery-value' + (v < 21 ? ' danger' : v < 22 ? ' warn' : '');
+      // 6S LiPo: 19.2V empty → 25.2V full
+      const pct = Math.max(0, Math.min(100, ((v - 19.2) / (25.2 - 19.2)) * 100));
+      if (fill) {
+        fill.style.width = pct + '%';
+        fill.style.background = v < 21 ? '#ff4455' : v < 22 ? '#ffcc00' : '#00ff88';
+      }
+    } else if (vEl) {
+      vEl.textContent = '--.-';
+    }
+  }
+
+  _updateCard(side, data) {
+    const s = side.toLowerCase();
+    const fault = el(`v${s}-fault`);
+    const card  = el(`vesc-card-${side}`);
+    if (!data) {
+      if (fault) { fault.textContent = 'OFFLINE'; fault.className = 'vesc-fault'; }
+      if (card)  card.classList.remove('fault-active');
+      ['temp','curr','rpm','duty'].forEach(k => {
+        const e = el(`v${s}-${k}`);
+        if (e) e.textContent = '--';
+      });
+      return;
+    }
+    // Metrics
+    this._setMetric(`v${s}-temp`, data.temp.toFixed(1), data.temp > 80 ? 'danger' : data.temp > 60 ? 'hot' : '');
+    this._setMetric(`v${s}-curr`, data.current.toFixed(1), '');
+    this._setMetric(`v${s}-rpm`,  Math.abs(data.rpm), '');
+    this._setMetric(`v${s}-duty`, Math.round(Math.abs(data.duty) * 100), '');
+    // Fault
+    if (fault) {
+      const isFault = data.fault !== 0;
+      fault.textContent = data.fault_str || 'NONE';
+      fault.className = 'vesc-fault ' + (isFault ? 'error' : 'ok');
+      if (card) card.classList.toggle('fault-active', isFault);
+    }
+  }
+
+  _setMetric(id, val, cls) {
+    const e = el(id);
+    if (!e) return;
+    e.textContent = val;
+    e.className = 'vesc-metric-val' + (cls ? ' ' + cls : '');
+  }
+
+  _updateScale(scale) {
+    const slider = el('vesc-scale-slider');
+    const label  = el('vesc-scale-label');
+    const info   = el('vesc-scale-pct');
+    const pct = Math.round(scale * 100);
+    if (slider && slider !== document.activeElement) slider.value = pct;
+    if (label) label.textContent = pct + '%';
+    if (info)  info.textContent  = pct;
+  }
+
+  initSlider() {
+    const slider = el('vesc-scale-slider');
+    const label  = el('vesc-scale-label');
+    const info   = el('vesc-scale-pct');
+    if (!slider) return;
+    _updateSliderBg(slider);
+    slider.addEventListener('input', () => {
+      const pct = parseInt(slider.value, 10);
+      if (label) label.textContent = pct + '%';
+      if (info)  info.textContent  = pct;
+      _updateSliderBg(slider);
+      clearTimeout(this._scaleDebounce);
+      this._scaleDebounce = setTimeout(() => {
+        api('/vesc/config', 'POST', { scale: pct / 100 });
+      }, 200);
+    });
+  }
+}
+
+const vescPanel = new VescPanel();
+
+function vescInvert(side) {
+  if (!confirm(`Invert ${side === 'L' ? 'LEFT' : 'RIGHT'} motor direction?`)) return;
+  api('/vesc/invert', 'POST', { side }).then(d => {
+    if (d) toast(`Motor ${side} direction inverted`, 'ok');
+  });
+}
+
+function vescFocDetect(side) {
+  if (!confirm(
+    `⚡ FOC AUTODETECT — ${side === 'L' ? 'LEFT' : 'RIGHT'} motor\n\n` +
+    `Motor must be FREE TO SPIN.\nDo NOT run this while R2-D2 is on the ground.\n\nContinue?`
+  )) return;
+  // FOC detect is done via VESC Tool directly — this just shows the reminder
+  toast(`FOC Detect: connect via VESC Tool on /dev/ttyACM${side === 'L' ? '0' : '1'}`, 'info');
+}
+
+// ================================================================
 // Script Engine
 // ================================================================
 
@@ -977,6 +1108,11 @@ class StatusPoller {
     // Teeces state
     if (data.teeces_mode) {
       teecesController._applyFLDMode(data.teeces_mode);
+    }
+
+    // VESC telemetry — refresh only if VESC tab is active
+    if (el('tab-vesc') && el('tab-vesc').classList.contains('active')) {
+      vescPanel.refresh();
     }
   }
 
@@ -1263,8 +1399,9 @@ async function init() {
   // Heartbeat applicatif vers Master (sécurité watchdog)
   startAppHeartbeat();
 
-  // Volume slider
+  // Volume slider + VESC scale slider
   initVolume();
+  vescPanel.initSlider();
 
   // Load initial data
   await Promise.all([

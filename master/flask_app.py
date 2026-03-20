@@ -45,6 +45,7 @@ def create_app() -> Flask:
     from master.api.status_bp   import status_bp
     from master.api.teeces_bp   import teeces_bp
     from master.api.settings_bp import settings_bp
+    from master.api.vesc_bp     import vesc_bp
 
     app.register_blueprint(audio_bp)
     app.register_blueprint(motion_bp)
@@ -53,6 +54,7 @@ def create_app() -> Flask:
     app.register_blueprint(status_bp)
     app.register_blueprint(teeces_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(vesc_bp)
 
     # ------------------------------------------------------------------
     # Route principale → dashboard web

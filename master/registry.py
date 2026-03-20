@@ -25,3 +25,8 @@ vesc:        'VescDriver | None'        = None
 dome:        'DomeMotorDriver | None'   = None
 servo:       'BodyServoDriver | None'   = None
 dome_servo:  'DomeServoDriver | None'   = None
+
+# Télémétrie VESC — mise à jour par les callbacks TL/TR du Master
+# Format: {'v_in': 23.5, 'temp': 35.2, 'current': 8.5, 'rpm': 1200, 'duty': 0.45, 'fault': 0, 'ts': 1234567890.0}
+vesc_telem: dict = {'L': None, 'R': None}
+vesc_power_scale: float = 1.0

@@ -1,25 +1,35 @@
 """
 Slave VESC Driver — Phase 2.
 Reçoit les commandes M: du Master et pilote les VESC de propulsion via pyvesc.
+Envoie la télémétrie TL:/TR: au Master toutes les 200ms.
 
-Format UART reçu: M:LEFT,RIGHT
-  LEFT, RIGHT : float [-1.0 … +1.0]
+Format UART reçu:
+  M:LEFT,RIGHT:CRC    → propulsion différentielle (float [-1.0…+1.0])
+  VCFG:scale:0.8:CRC  → power scale (0.1-1.0) — réduit le duty cycle max
+  VINV:L:CRC          → inverse le sens du moteur gauche (software)
+  VINV:R:CRC          → inverse le sens du moteur droit (software)
+
+Format UART envoyé (Slave → Master):
+  TL:v_in:temp:curr:rpm:duty:fault:CRC  → télémétrie VESC gauche
+  TR:v_in:temp:curr:rpm:duty:fault:CRC  → télémétrie VESC droit
 
 Connexion VESC:
-  VESC gauche : /dev/ttyACM0 (ou configuré dans main.cfg)
-  VESC droit  : /dev/ttyACM1
-
-Note: Les deux VESC sont connectés directement au Pi Slave 4B via USB.
-      Chaque VESC reçoit sa commande de duty cycle indépendamment.
+  Mode dual USB (défaut) :
+    VESC gauche : /dev/ttyACM0
+    VESC droit  : /dev/ttyACM1
 
 Activation Phase 2:
   1. Brancher les VESC sur USB
   2. Décommenter l'import dans slave/main.py
-  3. Appeler vesc.setup() dans main()
-  4. uart.register_callback('M', vesc.handle_uart)
+  3. Appeler vesc.setup(uart) dans main()
+  4. uart.register_callback('M',    vesc.handle_uart)
+  5. uart.register_callback('VCFG', vesc.handle_config_uart)
+  6. uart.register_callback('VINV', vesc.handle_invert_uart)
 """
 
 import logging
+import threading
+import time
 import sys
 import os
 
@@ -35,44 +45,78 @@ VESC_BAUD       = 115200
 # Limite matérielle de sécurité — ne jamais dépasser
 HARDWARE_SPEED_LIMIT = 0.85
 
+# Intervalle télémétrie (secondes)
+TELEM_INTERVAL = 0.2   # 5 Hz
+
 
 class VescDriver(BaseDriver):
     """
     Pilote VESC pour la propulsion différentielle R2-D2.
-    Utilise pyvesc pour communiquer avec les contrôleurs VESC.
+    - Contrôle moteurs gauche/droit via pyvesc
+    - Télémétrie GET_VALUES envoyée au Master via UART toutes les 200ms
+    - Power scale et invert configurables depuis le dashboard
     """
 
     def __init__(self, port_left: str = VESC_PORT_LEFT,
                  port_right: str = VESC_PORT_RIGHT):
-        self._port_left  = port_left
-        self._port_right = port_right
-        self._vesc_left  = None
-        self._vesc_right = None
-        self._ready      = False
+        self._port_left   = port_left
+        self._port_right  = port_right
+        self._serial_left  = None
+        self._serial_right = None
+        self._pyvesc       = None
+        self._ready        = False
+        self._uart         = None          # référence UARTListener pour télémétrie
+        self._lock         = threading.Lock()
 
-    def setup(self) -> bool:
+        # Config modifiable depuis le dashboard
+        self._power_scale   = 1.0          # 0.1 – 1.0 — réduit duty max
+        self._invert_left   = False
+        self._invert_right  = False
+
+        self._telem_thread: threading.Thread | None = None
+        self._running = False
+
+    # ------------------------------------------------------------------
+    # BaseDriver
+    # ------------------------------------------------------------------
+
+    def setup(self, uart=None) -> bool:
+        """
+        Initialise les connexions VESC.
+        uart : UARTListener — optionnel, active l'envoi télémétrie vers Master.
+        """
+        self._uart = uart
         try:
             import pyvesc
             import serial as _serial
 
-            self._serial_left  = _serial.Serial(self._port_left,  VESC_BAUD, timeout=0.1)
-            self._serial_right = _serial.Serial(self._port_right, VESC_BAUD, timeout=0.1)
+            self._serial_left  = _serial.Serial(self._port_left,  VESC_BAUD, timeout=0.05)
+            self._serial_right = _serial.Serial(self._port_right, VESC_BAUD, timeout=0.05)
             self._pyvesc = pyvesc
-            self._ready = True
+            self._ready  = True
             log.info(f"VescDriver prêt: L={self._port_left} R={self._port_right}")
+
+            # Démarrer la boucle télémétrie
+            self._running = True
+            self._telem_thread = threading.Thread(
+                target=self._telem_loop, name='vesc-telem', daemon=True
+            )
+            self._telem_thread.start()
             return True
+
         except ImportError:
-            log.error("pyvesc non installé — installer: pip install pyvesc")
+            log.error("pyvesc non installé — sudo pip install pyvesc")
             return False
         except Exception as e:
             log.error(f"Erreur init VESC: {e}")
             return False
 
     def shutdown(self) -> None:
+        self._running = False
         self._stop_motors()
-        if hasattr(self, '_serial_left') and self._serial_left.is_open:
+        if self._serial_left  and self._serial_left.is_open:
             self._serial_left.close()
-        if hasattr(self, '_serial_right') and self._serial_right.is_open:
+        if self._serial_right and self._serial_right.is_open:
             self._serial_right.close()
         self._ready = False
         log.info("VescDriver arrêté")
@@ -85,37 +129,118 @@ class VescDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def drive(self, left: float, right: float) -> None:
-        """Commande différentielle directe."""
+        """Commande différentielle : left/right ∈ [-1.0, +1.0]."""
         if not self._ready:
             return
-        left  = max(-HARDWARE_SPEED_LIMIT, min(HARDWARE_SPEED_LIMIT, left))
-        right = max(-HARDWARE_SPEED_LIMIT, min(HARDWARE_SPEED_LIMIT, right))
-        self._set_duty(self._serial_left,  left)
-        self._set_duty(self._serial_right, right)
+        # Appliquer power scale + limites hardware
+        lim = HARDWARE_SPEED_LIMIT * self._power_scale
+        left  = max(-lim, min(lim, left))
+        right = max(-lim, min(lim, right))
+        # Inversion software si configurée
+        if self._invert_left:  left  = -left
+        if self._invert_right: right = -right
+        with self._lock:
+            self._set_duty(self._serial_left,  left)
+            self._set_duty(self._serial_right, right)
 
     def stop(self) -> None:
         """Arrêt d'urgence — coupe les deux VESC."""
         self._stop_motors()
 
+    # ------------------------------------------------------------------
+    # Callbacks UART (appelés par uart_listener)
+    # ------------------------------------------------------------------
+
     def handle_uart(self, value: str) -> None:
-        """
-        Callback UART pour message M:LEFT,RIGHT.
-        Appelé par uart_listener quand M: est reçu.
-        """
+        """M:LEFT,RIGHT — commande propulsion."""
         try:
             parts = value.split(',')
-            left  = float(parts[0])
-            right = float(parts[1])
-            self.drive(left, right)
+            self.drive(float(parts[0]), float(parts[1]))
         except (ValueError, IndexError) as e:
             log.error(f"Message M: invalide {value!r}: {e}")
+
+    def handle_config_uart(self, value: str) -> None:
+        """
+        VCFG:param:val — configuration depuis le dashboard.
+        Paramètres supportés :
+          scale:0.8   → power scale (0.1-1.0)
+        """
+        try:
+            parts = value.split(':')
+            param, val = parts[0], parts[1]
+            if param == 'scale':
+                self._power_scale = max(0.1, min(1.0, float(val)))
+                log.info(f"VESC power scale: {self._power_scale:.2f}")
+            else:
+                log.warning(f"Paramètre VCFG inconnu: {param!r}")
+        except (ValueError, IndexError) as e:
+            log.error(f"Message VCFG invalide {value!r}: {e}")
+
+    def handle_invert_uart(self, value: str) -> None:
+        """VINV:L ou VINV:R — inverse le sens d'un moteur."""
+        side = value.strip().upper()
+        if side == 'L':
+            self._invert_left = not self._invert_left
+            log.info(f"Invert gauche: {self._invert_left}")
+        elif side == 'R':
+            self._invert_right = not self._invert_right
+            log.info(f"Invert droit: {self._invert_right}")
+        else:
+            log.warning(f"VINV: côté inconnu {value!r}")
+
+    # ------------------------------------------------------------------
+    # Télémétrie
+    # ------------------------------------------------------------------
+
+    def _get_values(self, ser) -> dict | None:
+        """Lit MC_VALUES depuis un VESC via pyvesc. Retourne dict ou None."""
+        try:
+            req = self._pyvesc.encode_request(self._pyvesc.GetValues)
+            ser.reset_input_buffer()
+            ser.write(req)
+            time.sleep(0.04)   # attendre la réponse
+            raw = ser.read(ser.in_waiting or 100)
+            if not raw:
+                return None
+            msg, _ = self._pyvesc.decode(raw)
+            if msg is None:
+                return None
+            return {
+                'v_in':    round(float(msg.v_in),              2),
+                'temp':    round(float(msg.temp_fet),          1),
+                'current': round(float(msg.avg_motor_current), 2),
+                'rpm':     int(msg.rpm),
+                'duty':    round(float(msg.duty_cycle_now),    3),
+                'fault':   int(msg.fault_code),
+            }
+        except Exception as e:
+            log.debug(f"Télémétrie VESC indisponible: {e}")
+            return None
+
+    def _telem_loop(self) -> None:
+        """Lit la télémétrie des deux VESC et l'envoie au Master via UART."""
+        while self._running:
+            if self._ready and self._uart:
+                with self._lock:
+                    vl = self._get_values(self._serial_left)
+                    vr = self._get_values(self._serial_right)
+                if vl:
+                    self._uart.send('TL',
+                        f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
+                        f":{vl['rpm']}:{vl['duty']}:{vl['fault']}"
+                    )
+                if vr:
+                    self._uart.send('TR',
+                        f"{vr['v_in']}:{vr['temp']}:{vr['current']}"
+                        f":{vr['rpm']}:{vr['duty']}:{vr['fault']}"
+                    )
+            time.sleep(TELEM_INTERVAL)
 
     # ------------------------------------------------------------------
     # Interne
     # ------------------------------------------------------------------
 
     def _set_duty(self, ser, duty: float) -> None:
-        """Envoie une commande SetDutyCycle à un VESC."""
         try:
             msg = self._pyvesc.encode(self._pyvesc.SetDutyCycle(duty))
             ser.write(msg)
@@ -126,7 +251,8 @@ class VescDriver(BaseDriver):
         if not self._ready:
             return
         try:
-            self._set_duty(self._serial_left,  0.0)
-            self._set_duty(self._serial_right, 0.0)
+            with self._lock:
+                self._set_duty(self._serial_left,  0.0)
+                self._set_duty(self._serial_right, 0.0)
         except Exception:
             pass

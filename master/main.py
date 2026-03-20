@@ -18,6 +18,7 @@ import signal
 import sys
 import os
 import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -212,8 +213,31 @@ def main() -> None:
     def on_heartbeat_ack(value: str) -> None:
         log.debug(f"Heartbeat ACK Slave: {value}")
 
-    def on_telemetry(value: str) -> None:
-        log.info(f"Télémétrie Slave: {value}")
+    def _parse_vesc_telem(value: str) -> dict | None:
+        """Parse 'v_in:temp:curr:rpm:duty:fault' → dict."""
+        try:
+            v_in, temp, curr, rpm, duty, fault = value.split(':')
+            return {
+                'v_in':    float(v_in),
+                'temp':    float(temp),
+                'current': float(curr),
+                'rpm':     int(rpm),
+                'duty':    float(duty),
+                'fault':   int(fault),
+                'ts':      time.time(),
+            }
+        except Exception:
+            return None
+
+    def on_vesc_telem_left(value: str) -> None:
+        d = _parse_vesc_telem(value)
+        if d:
+            reg.vesc_telem['L'] = d
+
+    def on_vesc_telem_right(value: str) -> None:
+        d = _parse_vesc_telem(value)
+        if d:
+            reg.vesc_telem['R'] = d
 
     def on_version(value: str) -> None:
         if value == '?':
@@ -227,9 +251,10 @@ def main() -> None:
         else:
             log.info(f"Version Slave reçue: {value}")
 
-    uart.register_callback('H', on_heartbeat_ack)
-    uart.register_callback('T', on_telemetry)
-    uart.register_callback('V', on_version)
+    uart.register_callback('H',  on_heartbeat_ack)
+    uart.register_callback('TL', on_vesc_telem_left)
+    uart.register_callback('TR', on_vesc_telem_right)
+    uart.register_callback('V',  on_version)
 
     # Démarrage hardware
     if not uart.setup():

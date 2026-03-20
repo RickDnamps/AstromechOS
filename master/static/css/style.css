@@ -850,6 +850,253 @@ body::after {
 }
 
 /* ================================================================
+   VESC TAB
+================================================================ */
+
+.vesc-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Status bar */
+.vesc-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.vesc-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+}
+.vesc-status-pill.online {
+  color: #00ff88;
+  border-color: #00ff88;
+}
+
+.vesc-battery-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.vesc-battery-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.vesc-battery-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #00ff88;
+  font-variant-numeric: tabular-nums;
+  min-width: 46px;
+}
+.vesc-battery-value.warn  { color: #ffcc00; }
+.vesc-battery-value.danger{ color: #ff4455; }
+.vesc-battery-unit {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.vesc-battery-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 60px;
+  max-width: 120px;
+}
+.vesc-battery-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #00ff88;
+  transition: width 0.5s, background 0.5s;
+  width: 0%;
+}
+
+.vesc-scale-info {
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 1px;
+}
+
+/* VESC cards */
+.vesc-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.vesc-card {
+  background: rgba(0,10,30,0.7);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vesc-card.fault-active {
+  border-color: #ff4455;
+  box-shadow: 0 0 8px rgba(255,68,85,0.3);
+}
+
+.vesc-card-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cyan);
+  letter-spacing: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vesc-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.vesc-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.vesc-metric-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.vesc-metric-unit {
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.vesc-metric-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+
+.vesc-metric-val.hot    { color: #ffcc00; }
+.vesc-metric-val.danger { color: #ff4455; }
+
+.vesc-fault {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-dim);
+  text-align: center;
+}
+.vesc-fault.ok     { color: #00ff88; background: rgba(0,255,136,0.08); }
+.vesc-fault.error  { color: #ff4455; background: rgba(255,68,85,0.12); }
+
+/* Config card */
+.vesc-config-card {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vesc-config-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.vesc-config-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 1px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vesc-config-hint {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.vesc-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+/* Actions */
+.vesc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.vesc-action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vesc-action-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.vesc-action-hint {
+  font-weight: 400;
+  color: #ffcc00;
+  font-size: 9px;
+}
+
+/* Info box */
+.vesc-info-box {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 10px 14px;
+  background: rgba(0,170,255,0.05);
+  border: 1px solid rgba(0,170,255,0.15);
+  border-radius: 8px;
+  line-height: 1.5;
+}
+.vesc-info-box svg { flex-shrink: 0; margin-top: 2px; }
+.vesc-info-box strong { color: var(--cyan); }
+
+/* ================================================================
    SEQUENCES TAB
 ================================================================ */
 .sequences-layout {
