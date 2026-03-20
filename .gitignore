@@ -33,6 +33,9 @@ build/
 # Logs
 *.log
 
+# Dossiers de debug générés automatiquement
+debug/
+
 # Environnements virtuels
 .env
 .envrc
