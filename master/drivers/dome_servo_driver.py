@@ -190,6 +190,11 @@ class DomeServoDriver(BaseDriver):
 
         if channel in self._cancel_events:
             self._cancel_events[channel].set()
+            # Stop immédiat avant de démarrer la nouvelle commande — évite la dérive
+            # (sans ça, le servo passe directement de OPEN à CLOSE sans s'arrêter,
+            # et la durée effective est asymétrique → la position finale dérive)
+            self._set_pulse(channel, PULSE_STOP_US)
+            time.sleep(0.05)
 
         cancel_evt = threading.Event()
         self._cancel_events[channel] = cancel_evt

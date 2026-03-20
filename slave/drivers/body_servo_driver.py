@@ -192,6 +192,9 @@ class BodyServoDriver(BaseDriver):
 
         if channel in self._cancel_events:
             self._cancel_events[channel].set()
+            # Stop immédiat avant nouvelle commande — évite la dérive de position
+            self._set_pulse(channel, PULSE_STOP_US)
+            time.sleep(0.05)
 
         cancel_evt = threading.Event()
         self._cancel_events[channel] = cancel_evt
