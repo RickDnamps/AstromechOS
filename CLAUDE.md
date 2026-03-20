@@ -289,9 +289,13 @@ Injection de dépendances via `master/registry.py`.
 ```
 GET  /status                    → état complet JSON (heartbeat, version, uptime, drivers)
 GET  /audio/categories          → liste catégories + nb sons
+GET  /audio/sounds?category=X   → liste sons d'une catégorie
 POST /audio/play                {"sound": "Happy001"}
 POST /audio/random              {"category": "happy"}
 POST /audio/stop
+GET  /audio/volume              → volume actuel (0-100 ALSA)
+POST /audio/volume              {"volume": 79}  → règle ALSA card 0 via UART VOL:
+POST /system/update             → git pull + rsync Slave + reboot Slave (même chose que bouton dôme)
 
 POST /motion/drive              {"left": 0.5, "right": 0.5}
 POST /motion/arcade             {"throttle": 0.5, "steering": 0.0}
@@ -389,6 +393,7 @@ git rev-parse --short HEAD > /home/artoo/r2d2/VERSION
 - Language: **MicroPython** avec LVGL ou dessin direct GC9A01
 - Reçoit commandes via USB serial depuis R2-Slave
 - Autonome — ne nécessite pas de mise à jour fréquente
+- ⚠️ **TODO** : écran mode READY jugé trop basique — améliorer UI (layout, couleurs, animations) dans `rp2040/firmware/`
 
 ---
 
@@ -407,8 +412,12 @@ git rev-parse --short HEAD > /home/artoo/r2d2/VERSION
 ### Sons R2-D2 (issus de r2_control by dpoulson + extras)
 - **317 sons MP3** stockés sur R2-Slave : `/home/artoo/r2d2/slave/sounds/`
 - **Index** : `slave/sounds/sounds_index.json` — **14 catégories**
-- Lecture : `aplay` via subprocess (jack 3.5mm natif Pi 4B)
+- Lecture : `mpg123 -q` via subprocess (jack 3.5mm natif Pi 4B) — `aplay` ne supporte pas le MP3
 - Driver : `slave/drivers/audio_driver.py`
+- Volume ALSA : `amixer -c 0 cset numid=1 <vol>%` — card 0 = jack 3.5mm, numid=1 = PCM Playback Volume
+- ⚠️ Ne pas utiliser `amixer sset 'Master'` ni `sset 'PCM Playback Volume'` — échoue sur bcm2835, utiliser `cset numid=1`
+- ⚠️ Volume ALSA linéaire ≠ perception sonore : slider UI doit utiliser une courbe racine cubique (exposant 1/3) — slider 50% → ALSA 79%, sinon le bas du slider est inaudible
+- Sons MP3 : **317 fichiers dans git** (`slave/sounds/`) — plus dans .gitignore depuis cette session
 
 | Catégorie | Nb sons | Prefix fichier |
 |-----------|---------|----------------|
@@ -809,7 +818,7 @@ pyserial          # UART Master + VESC USB + RP2040 USB
 pyvesc            # contrôle VESC (Phase 2)
 adafruit-pca9685  # PCA9685 body (I2C 0x41) (Phase 2)
 RPi.GPIO          # GPIO général
-# Audio : aplay out of the box — jack 3.5mm natif Pi 4B, pas de lib supplémentaire
+mpg123            # lecture MP3 — sudo apt install -y mpg123 (aplay ne supporte pas le MP3)
 ```
 
 ---
@@ -1162,7 +1171,7 @@ J:\R2-D2_Build\software\others\r2_control-master\
 | Catégories audio | `_Random_Sounds` list | `sounds_index.json` catégories |
 
 ### Ce qu'on adapte / remplace
-- **Pas pygame** → `aplay` subprocess (Pi 4B jack 3.5mm natif)
+- **Pas pygame** → `mpg123 -q` subprocess (Pi 4B jack 3.5mm natif) — `aplay` ne supporte que WAV/PCM
 - **Pas I2C depuis Master** → tout hardware body passe par UART → Slave
 - **Pas contrôleur PS3/Xbox** → dashboard web WASD + API REST
 - **Pas Flask URL-only** → POST JSON propre avec vrais codes HTTP
