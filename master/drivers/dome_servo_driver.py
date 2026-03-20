@@ -29,9 +29,14 @@ PRE_SCALE_REG    = 0xFE
 # Prescale 50Hz : round(25_000_000 / (4096 * 50)) - 1 = 121
 PRE_SCALE_50HZ   = 121
 
-PULSE_STOP_US    = 1700   # point d'arrêt réel de ces SG90 (calibré)
-PULSE_OPEN_US    = 2000   # pleine vitesse sens 1
-PULSE_CLOSED_US  = 1000   # pleine vitesse sens 2
+PULSE_STOP_US    = 1700   # point d'arrêt réel de ces SG90 (calibré sur bench)
+# Vitesses symétriques autour du point d'arrêt :
+#   PULSE_OPEN_US  - PULSE_STOP_US = 2000 - 1700 = 300µs
+#   PULSE_STOP_US  - PULSE_CLOSED_US = 1700 - 1400 = 300µs
+# → même vitesse dans les deux sens → même angle pour la même durée
+# ⚠️  Ne PAS utiliser 1000µs pour CLOSED (1700-1000=700µs → 2.3× plus vite → dérive)
+PULSE_OPEN_US    = 2000   # sens ouverture  (+300µs depuis stop)
+PULSE_CLOSED_US  = 1400   # sens fermeture  (-300µs depuis stop, symétrique)
 
 SERVO_MAP: dict[str, int] = {
     'dome_panel_1':   0,
