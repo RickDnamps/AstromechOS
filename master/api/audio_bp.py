@@ -101,3 +101,23 @@ def stop_audio():
     if reg.uart:
         reg.uart.send('S', 'STOP')
     return jsonify({'status': 'ok'})
+
+
+@audio_bp.get('/volume')
+def get_volume():
+    """Retourne le volume actuel (0-100)."""
+    return jsonify({'volume': getattr(reg, 'audio_volume', 80)})
+
+
+@audio_bp.post('/volume')
+def set_volume():
+    """Règle le volume. Body: {"volume": 75}  (0-100)"""
+    body = request.get_json(silent=True) or {}
+    try:
+        vol = max(0, min(100, int(body.get('volume', 80))))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'volume doit être un entier 0-100'}), 400
+    reg.audio_volume = vol
+    if reg.uart:
+        reg.uart.send('VOL', str(vol))
+    return jsonify({'status': 'ok', 'volume': vol})

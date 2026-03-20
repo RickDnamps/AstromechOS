@@ -94,6 +94,25 @@ class AudioDriver(BaseDriver):
                 log.debug("Son arrêté")
             self._proc = None
 
+    def set_volume(self, volume: int) -> None:
+        """Règle le volume ALSA (0-100) sur le jack 3.5mm (card 0)."""
+        vol = max(0, min(100, volume))
+        try:
+            subprocess.run(
+                ['amixer', '-c', '0', 'cset', 'numid=1', f'{vol}%'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            log.info(f"Volume: {vol}%")
+        except Exception as e:
+            log.error(f"Erreur set_volume: {e}")
+
+    def handle_volume(self, value: str) -> None:
+        """Callback UART VOL:75 → règle le volume."""
+        try:
+            self.set_volume(int(value))
+        except (ValueError, TypeError) as e:
+            log.error(f"Message VOL invalide {value!r}: {e}")
+
     def handle_uart(self, value: str) -> None:
         """
         Callback pour les messages UART S:.

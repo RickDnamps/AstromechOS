@@ -230,6 +230,15 @@
       </div>
     </div>
 
+    <!-- Volume control -->
+    <div class="volume-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" opacity="0.7">
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+      </svg>
+      <input type="range" id="volume-slider" min="0" max="100" value="80" class="volume-slider">
+      <span id="volume-label" class="volume-label">80%</span>
+    </div>
+
   </div>
 </div>
 
@@ -487,6 +496,9 @@
       <h2 class="card-title">SYSTEM</h2>
       <div class="settings-status" id="system-version">Loading...</div>
       <div class="btn-group-v">
+        <button class="btn btn-primary" onclick="systemUpdate()">
+          ⬆ UPDATE — git pull + sync Slave
+        </button>
         <button class="btn btn-warn"
                 onclick="confirmAction('Reboot Master?', '/system/reboot')">
           REBOOT MASTER

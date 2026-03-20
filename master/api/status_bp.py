@@ -78,6 +78,16 @@ def get_version():
     return jsonify({'master': _read_version()})
 
 
+@status_bp.post('/system/update')
+def system_update():
+    """Force git pull + rsync Slave + reboot Slave (même chose que le bouton dôme)."""
+    if not reg.deploy:
+        return jsonify({'error': 'DeployController non disponible'}), 503
+    import threading
+    threading.Thread(target=reg.deploy.update_and_deploy, daemon=True).start()
+    return jsonify({'status': 'ok', 'message': 'Update en cours...'})
+
+
 @status_bp.post('/system/reboot')
 def system_reboot():
     """Reboot le Master (Pi dôme)."""

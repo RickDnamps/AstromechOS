@@ -1168,6 +1168,49 @@ function confirmAction(msg, endpoint) {
   }
 }
 
+async function systemUpdate() {
+  if (!confirm('Force update?\n\ngit pull + rsync Slave + reboot Slave')) return;
+  toast('Update started…', 'info');
+  const d = await api('/system/update', 'POST');
+  if (d) toast('Update in progress — Slave will reboot', 'ok');
+}
+
+// ================================================================
+// Volume slider
+// ================================================================
+
+function initVolume() {
+  const slider = document.getElementById('volume-slider');
+  const label  = document.getElementById('volume-label');
+  if (!slider) return;
+
+  // Load current volume
+  api('/audio/volume').then(d => {
+    if (d && d.volume !== undefined) {
+      slider.value = d.volume;
+      label.textContent = d.volume + '%';
+      _updateSliderBg(slider);
+    }
+  });
+
+  let _debounceTimer = null;
+
+  slider.addEventListener('input', () => {
+    const v = parseInt(slider.value, 10);
+    label.textContent = v + '%';
+    _updateSliderBg(slider);
+    clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(() => {
+      api('/audio/volume', 'POST', { volume: v }).catch(() => {});
+    }, 150);
+  });
+}
+
+function _updateSliderBg(slider) {
+  const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
+  slider.style.background = `linear-gradient(to right, var(--blue) ${pct}%, var(--border) ${pct}%)`;
+}
+
 // ================================================================
 // Audio helpers exposed globally
 // ================================================================
@@ -1213,6 +1256,9 @@ async function init() {
 
   // Heartbeat applicatif vers Master (sécurité watchdog)
   startAppHeartbeat();
+
+  // Volume slider
+  initVolume();
 
   // Load initial data
   await Promise.all([

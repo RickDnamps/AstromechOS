@@ -115,7 +115,8 @@ def main() -> None:
     display.boot_item('AUDIO')
     audio = AudioDriver()
     if audio.setup():
-        uart.register_callback('S', audio.handle_uart)
+        uart.register_callback('S',   audio.handle_uart)
+        uart.register_callback('VOL', audio.handle_volume)
         display.boot_ok('AUDIO')
     else:
         log.warning("AudioDriver indisponible — son désactivé")

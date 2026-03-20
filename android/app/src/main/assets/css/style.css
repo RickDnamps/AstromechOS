@@ -803,6 +803,52 @@ body::after {
   flex-shrink: 0;
 }
 
+.volume-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: rgba(4, 8, 18, 0.8);
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.volume-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--blue) 0%, var(--blue) 80%, var(--border) 80%);
+  outline: none;
+  cursor: pointer;
+}
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--blue);
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0,170,255,0.6);
+}
+.volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--blue);
+  border: none;
+  cursor: pointer;
+}
+
+.volume-label {
+  font-size: 11px;
+  color: var(--cyan);
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
 /* ================================================================
    SEQUENCES TAB
 ================================================================ */
