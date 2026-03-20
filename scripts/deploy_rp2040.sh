@@ -46,7 +46,7 @@ log "Port RP2040 : $PORT"
 # ---------------------------------------------------------------------------
 if ! command -v ampy &>/dev/null; then
     warn "ampy non trouvé — installation (adafruit-ampy)..."
-    pip3 install --quiet adafruit-ampy
+    pip3 install --quiet --break-system-packages adafruit-ampy
 fi
 
 # ---------------------------------------------------------------------------
