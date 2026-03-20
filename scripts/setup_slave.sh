@@ -67,8 +67,8 @@ echo ""
 info "Étape 1/5 — Mise à jour système..."
 apt-get update -qq
 apt-get upgrade -y -qq
-apt-get install -y -qq python3-pip python3-serial git alsa-utils avahi-daemon
-ok "Paquets installés"
+apt-get install -y -qq python3-pip python3-serial git alsa-utils mpg123 avahi-daemon
+ok "Paquets installés (mpg123 inclus pour lecture MP3)"
 
 # =============================================================================
 # ÉTAPE 2 — Fix UART : libérer ttyAMA0 du Bluetooth
@@ -143,6 +143,28 @@ EOF
 # Appliquer immédiatement si wlan0 est déjà actif
 iw dev wlan0 set power_save off 2>/dev/null || true
 ok "WiFi power saving désactivé (règle udev permanente)"
+
+# =============================================================================
+# ÉTAPE 6 — Configuration audio ALSA (jack 3.5mm, pas HDMI)
+# =============================================================================
+info "Étape 6 — Configuration audio (jack 3.5mm)..."
+
+# Forcer la sortie audio sur le jack 3.5mm (card 0 = bcm2835 Headphones)
+# Par défaut le Pi sort sur HDMI — sans ça les sons ne sortent pas du jack
+cat > /home/"$USER"/.asoundrc << 'ASOUNDRC'
+defaults.pcm.card 0
+defaults.ctl.card 0
+ASOUNDRC
+chown "$USER:$USER" /home/"$USER"/.asoundrc
+
+# Volume à 100% + unmute (contrôles numid sur card 0)
+amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true  # PCM Playback Volume
+amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true  # PCM Playback Switch
+
+# Sauvegarder l'état ALSA pour qu'il survive aux reboots
+alsactl store 2>/dev/null || true
+
+ok "Audio configuré — jack 3.5mm actif, volume 100%"
 
 # =============================================================================
 # Résumé

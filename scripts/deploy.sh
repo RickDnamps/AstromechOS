@@ -125,18 +125,37 @@ else
 fi
 
 # ------------------------------------------------------------------
-# Premier install : services systemd sur le Slave
+# Premier install : services systemd + audio sur le Slave
 # ------------------------------------------------------------------
 if [ "$FIRST_INSTALL" = true ]; then
-    echo "[4/5] Installation services systemd sur le Slave..."
+    echo "[4/5] Installation services systemd + config audio sur le Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" bash << 'REMOTE'
+        # Services systemd
         sudo cp /home/artoo/r2d2/slave/services/r2d2-slave.service   /etc/systemd/system/
         sudo cp /home/artoo/r2d2/slave/services/r2d2-version.service /etc/systemd/system/
         sudo systemctl daemon-reload
         sudo systemctl enable r2d2-version r2d2-slave
-        echo "Services installés et activés"
+        echo "  → Services systemd installés"
+
+        # Installer mpg123 si absent (lecteur MP3)
+        if ! which mpg123 > /dev/null 2>&1; then
+            sudo apt-get install -y -qq mpg123
+            echo "  → mpg123 installé"
+        else
+            echo "  → mpg123 déjà présent"
+        fi
+
+        # Config ALSA : forcer jack 3.5mm (card 0) — par défaut Pi sort sur HDMI
+        cat > /home/artoo/.asoundrc << 'ASOUNDRC'
+defaults.pcm.card 0
+defaults.ctl.card 0
+ASOUNDRC
+        amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true
+        amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true
+        sudo alsactl store 2>/dev/null || true
+        echo "  → Audio configuré (jack 3.5mm, volume 100%)"
 REMOTE
-    echo "      Services systemd OK"
+    echo "      Services + audio OK"
 else
     echo "[4/5] Services systemd ignorés (--first-install non spécifié)"
 fi
