@@ -16,11 +16,13 @@
 
 ---
 
-> **Alpha Phase** — Software is complete and actively tested on bench hardware. Physical assembly (3D-printed parts, slip ring, final wiring) is in progress. No camera stream yet.
+> ⚠️ **Early Alpha — Work in Progress** — Software is functional and tested on bench, but this project is actively evolving. Physical assembly (3D-printed parts, slip ring, final wiring) is still in progress. Features like servo parameters, panel calibration, and the UI will change significantly. No camera stream yet. Screenshots show the current Alpha state.
 
 ---
 
 ## Screenshots
+
+> **These screenshots show the current Alpha state.** The UI, servo parameters, panel configuration, and many features are actively evolving — expect significant changes as hardware assembly progresses and real-world calibration happens.
 
 <table>
 <tr>
@@ -52,7 +54,7 @@ Dual joystick · WASD keyboard · Emergency stop · Battery gauge
 </td>
 <td align="center" width="50%">
 
-### ⚙️ Systems & Servos
+### ⚙️ Systems & Servos *(Alpha — temporary SG90 servos)*
 Teeces32 LEDs · 11 dome panels · 11 body panels · Bluetooth mapping
 
 ![Systems Interface](Screenshots/Systems_TemporaryServos_web_interface.jpg)
@@ -62,7 +64,7 @@ Teeces32 LEDs · 11 dome panels · 11 body panels · Bluetooth mapping
 <tr>
 <td align="center" colspan="2">
 
-### 🔧 Configuration
+### 🔧 Configuration *(Alpha — servo calibration will evolve with MG90S replacement)*
 Per-panel servo calibration · Wi-Fi settings · Auto-deploy · System controls
 
 ![Config Interface](Screenshots/Config_web_interface.jpg)
@@ -181,7 +183,7 @@ sudo systemctl enable r2d2-slave.service   # on Slave Pi
 
 Access the dashboard at **`http://192.168.4.1:5000`** or **`http://r2-master.local:5000`**
 
-📖 **[Full installation guide (French) →](HOWTO.md)**
+📖 **[Full installation guide (English) →](HOWTO_EN.md)** · [Guide d'installation (Français) →](HOWTO.md)
 
 ### Android App
 

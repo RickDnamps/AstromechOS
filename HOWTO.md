@@ -1,5 +1,7 @@
 # R2-D2 — Guide d'installation complet
 
+> 🇬🇧 [Read in English](HOWTO_EN.md)
+
 | Phase | Contenu | État |
 |-------|---------|------|
 | **1** | Infrastructure UART / Heartbeat / Watchdog / Version / Hotspot | ✅ Prêt |
