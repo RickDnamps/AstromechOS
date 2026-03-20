@@ -108,21 +108,50 @@ Autonomie : **~1h30** — largement suffisant pour l'usage prévu.
         │
   [SWITCH PRINCIPAL]  ← interrupteur 30A+, tout couper d'un coup
         │
-   ┌────┴────────────────────────┐
-   │                             │
-[XT90-S]                   [FUSIBLE 15A]
-[VESC ×2]                  [SWITCH ÉLECTRONIQUE]  ← allumer Pi/servos séparément
-(24V direct — propulsion)        │
-                           ┌─────┴──────────────────────┐
-                           │                            │
-                    [Corps — Slave]              [Dôme — Master]
-                    Buck 24V→5V/10A              (via slipring 24V)
-                    → Pi Slave, RP2040, audio    Buck 24V→5V/5A
-                    Buck 24V→12V                 → Pi Master, Teeces32
-                    → Motor HAT TB6612           Buck 24V→12V
-                      → Moteur dôme DC           → Servo Driver HAT PCA9685
-                                                   → Servos dôme 5V
+   ┌────┴─────────────────────────────────────────────────┐
+   │                                                      │
+[XT90-S]                                           [FUSIBLE 15A]
+[VESC ×2]                                          [SWITCH ÉLECTRONIQUE]
+(24V direct — propulsion)                                 │
+                                    ┌─────────────────────┴──────────────────────┐
+                                    │                                            │
+                             [Corps — Slave]                       [Dôme — Master]
+                                    │                           (via slipring 24V)
+                   ┌────────────────┼────────────┐                      │
+                   │                │            │              Buck 24V→5V/10A
+            Buck 24V→5V/10A  Buck 24V→12V/5A   VESCs          → Pi Master (GPIO pins 2&4)
+            → Pi Slave                →         24V direct     → Dome Servo HAT V+
+              (GPIO pins 2&4)   Motor HAT TB6612               → Teeces32 LEDs (FLD/RLD/PSI)
+            → Body Servo HAT V+   → Moteur dôme DC
+            → RP2040 (USB Pi)   Ampli audio
+                                   → HP
 ```
+
+**Détail alimentation par composant :**
+
+| Composant | Emplacement | Alimentation | Depuis |
+|-----------|-------------|--------------|--------|
+| Pi 4B Master | Dôme | 5V via GPIO pins 2&4 | Buck dôme 5V/10A |
+| Dome Servo HAT V+ | Dôme | 5V direct | Buck dôme 5V/10A |
+| Servos MG90S dôme (×11) | Dôme | 5V via HAT | Buck dôme 5V/10A |
+| Teeces32 LEDs | Dôme | 5V direct | Buck dôme 5V/10A |
+| Teeces32 ESP32 logique | Dôme | 5V via USB Pi Master | Pi Master |
+| Pi 4B Slave | Corps | 5V via GPIO pins 2&4 | Buck corps 5V/10A |
+| Body Servo HAT V+ | Corps | 5V direct | Buck corps 5V/10A |
+| Servos body (bras/panneaux) | Corps | 5V via HAT | Buck corps 5V/10A |
+| RP2040 display | Corps | 5V via USB Pi Slave | Pi Slave |
+| Motor Driver HAT (TB6612) | Corps | 12V | Buck corps 12V/5A |
+| Moteur DC rotation dôme | Corps | 12V via Motor HAT | Buck corps 12V/5A |
+| Ampli audio | Corps | 12V | Buck corps 12V/5A |
+| FSESC Mini 6.7 PRO ×2 | Corps | 24V direct | Batterie (via XT90-S) |
+
+> ✅ Pi alimenté via GPIO pins 2&4 (bypass USB-C) — normal pour robot sur batterie
+> ✅ Servo HAT V+ alimenté directement par le buck 5V — pas via le régulateur interne du HAT
+> ✅ 24V traverse le slipring (3 fils en parallèle) → bucks dans le dôme pour le Pi Master
+> ✅ Motor HAT et ampli audio dans le corps (côté Slave) sur le même buck 12V
+> ⚠️ Le HAT servo a un régulateur interne — ne pas l'utiliser, alimenter V+ directement depuis le buck
+> ⚠️ Pi NE s'alimente PAS depuis le HAT — le HAT prend sa logique du Pi (GPIO 3.3V/5V), pas l'inverse
+> ⚠️ Ne jamais alimenter les servos MG90S en 12V — max 6V
 
 ### Sécurité électrique — composants requis
 
@@ -151,12 +180,15 @@ Autonomie : **~1h30** — largement suffisant pour l'usage prévu.
 ```
 
 > ✅ XT90-S : anti-spark intégré (résistance interne charge les condensateurs avant contact complet)
-> ✅ Servo Driver HAT (PCA9685) : entrée 6-12V, régulateur intégré → sort 5V aux servos, max 3A total
-> ✅ Motor Driver HAT (TB6612) : entrée 6-12V sur VIN, passe directement au moteur (pas de régulation)
+> ✅ Motor Driver HAT (TB6612) : entrée 12V sur VIN, passe directement au moteur (pas de régulation)
+> ✅ Servos MG90S : 4.8-6V, torque métal, remplacement des SG90 360° — commandes identiques
 > ⚠️ Ne jamais connecter les VESCs sans XT90-S — risque d'arc et dommages condensateurs
 > ⚠️ Fusible 80A le plus court possible du + batterie — en cas de court-circuit le fil fond avant le fusible si trop long
 > ⚠️ Vérifier le voltage exact du moteur dôme DC avant de choisir 12V ou autre tension
-> ⚠️ Ne jamais alimenter les servos en 12V directement — max 6V pour servos standard
+> ⚠️ Ne jamais alimenter les servos MG90S en 12V directement — max 6V
+> ⚠️ SG90 360° asymétrie vitesse : stop réel ≈1700µs (non-standard) → open (2000µs) 2.3× plus lent que close (1000µs)
+>    Compenser via close_angle < open_angle dans Settings → SERVO CALIBRATION
+>    MG90S standard 180° n'auront pas ce problème — contrôle par angle direct
 
 ---
 
@@ -877,10 +909,11 @@ Un SG90 standard va de 0° à 180°. Le "SG90 360°" est un abus de nomenclature
 
 **Pour acheter les bons :** chercher "SG90 servo **180 degree**" ou "SG90 **standard**" — éviter "360°", "continuous rotation", "CR".
 
-**Projet actuel :** Les servos installés sont des SG90 360° (rotation continue).
-Le code utilise le contrôle par durée : `duration_ms = (angle / 90.0) * panel_ms_90deg`.
-Calibration **par panneau individuel** dans l'interface web → Settings → SERVO CALIBRATION.
-Remplacement par des SG90 standard prévu — le code sera simplifié à `pulse_us = 544 + (angle/180.0) * 1856`.
+**Projet actuel :** Remplacement en cours — **10× MG90S commandés** (180° standard, engrenages métal).
+- SG90 360° (rotation continue) encore en place pendant la transition
+- SG90 360° : stop réel ≈1700µs (non-standard) → vitesse close 2.3× > vitesse open → compenser via `close_angle < open_angle` dans Settings
+- MG90S 180° : contrôle par angle direct, symétrique, précis → le code passera à `pulse_us = 500 + (angle/180.0) * 2000`
+- Le code actuel (durée par angle) fonctionne pour les deux types pendant la transition
 
 **Config calibration par panneau (`master/config/main.cfg` ou `local.cfg`) :**
 ```ini
