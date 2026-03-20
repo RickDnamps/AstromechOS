@@ -14,9 +14,12 @@ ORANGE  = gc9a01.color565(255, 150, 0)
 BLUE    = gc9a01.color565(0,   120, 220)
 GRAY    = gc9a01.color565(80,  80,  80)
 DK_GRAY = gc9a01.color565(40,  40,  40)
+CYAN    = gc9a01.color565(0,   200, 200)
 
 CENTER_X = 120
 CENTER_Y = 120
+
+_spin_frame = 0   # animation frame counter — incremented each draw call
 
 # Fontes russhughes — 8x8 pour diagnostic (plus de lignes), 8x16 pour grands titres
 try:
@@ -145,6 +148,32 @@ def draw_boot(tft):
     _text_center(tft, 'BOOT...', CENTER_Y + 72, GRAY)
 
 
+def draw_booting(tft):
+    """Ecran de demarrage — spinner orange. Remplace le suivi individuel des items."""
+    global _spin_frame
+    _spin_frame = (_spin_frame + 1) % 8
+
+    tft.fill(BLACK)
+    _draw_ring(tft, CENTER_X, CENTER_Y, 115, 6, ORANGE)
+    _text_center(tft, 'STARTING UP', CENTER_Y - 20, ORANGE)
+    _text_center(tft, 'Please wait', CENTER_Y - 6,  GRAY)
+
+    # Spinner : 8 segments rayonnants, segment actif = ORANGE
+    sr = 28
+    seg_len = 12
+    for i in range(8):
+        rad = i * math.pi / 4.0
+        x1 = int(CENTER_X + math.cos(rad) * sr)
+        y1 = int(CENTER_Y + math.sin(rad) * sr)
+        x2 = int(CENTER_X + math.cos(rad) * (sr + seg_len))
+        y2 = int(CENTER_Y + math.sin(rad) * (sr + seg_len))
+        color = ORANGE if i == _spin_frame else DK_GRAY
+        tft.fill_rect(min(x1, x2), min(y1, y2),
+                      max(2, abs(x2 - x1)), max(2, abs(y2 - y1)), color)
+
+    _text_center(tft, 'R2-D2', CENTER_Y + 50, ORANGE)
+
+
 def draw_boot_progress(tft, items):
     """
     Ecran de diagnostic boot — style reference image.
@@ -226,17 +255,89 @@ def draw_operational(tft, version):
         _text_center(tft, version[:14], CENTER_Y + 42, GRAY)
 
 
-def draw_ok(tft, version):
-    """Ecran operationnel normal — bordure verte fine."""
+def draw_ok(tft, version, bus_pct=100.0):
+    """Ecran operationnel normal — bordure verte fine + barre bus health."""
     tft.fill(BLACK)
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, GREEN)
-    _text_center(tft, 'SYSTEM STATUS:', 46, GREEN)
-    _text_center(tft, 'OK',            58, GREEN)
+    _text_center(tft, 'SYSTEM STATUS:', 42, GREEN)
+    _text_center(tft, 'OK',            54, GREEN)
     tft.fill_rect(CENTER_X - 40, CENTER_Y - 14, 80, 12, GREEN)
     tft.fill_rect(CENTER_X - 40, CENTER_Y +  2, 80, 12, GREEN)
     _text_center(tft, 'READY', CENTER_Y + 24, GREEN)
     if version:
         _text_center(tft, version[:14], CENTER_Y + 38, GRAY)
+    # Barre bus health
+    bus_color = GREEN if bus_pct >= 80.0 else ORANGE
+    bus_label = 'BUS {:.0f}%'.format(bus_pct)
+    _text_center(tft, bus_label, CENTER_Y + 54, bus_color)
+    _progress_bar(tft, 34, CENTER_Y + 64, 172, 8, bus_pct / 100.0, bus_color)
+
+
+def draw_net(tft, sub_state):
+    """Ecran reseau — antenne + sous-etat (SCANNING:N, AP:N, HOME_TRY, HOME:<ip>, OK)."""
+    tft.fill(BLACK)
+    _draw_ring(tft, CENTER_X, CENTER_Y, 115, 5, CYAN)
+    _text_center(tft, 'WIFI', 30, CYAN)
+
+    # Antenne simple : 3 barres horizontales etagees
+    cx, cy = CENTER_X, CENTER_Y + 10
+    for radius, alpha in [(14, 255), (24, 180), (34, 100)]:
+        c = gc9a01.color565(0, alpha, alpha)
+        tft.fill_rect(cx - radius, cy - radius, radius * 2, 3, c)
+    # Mat de l'antenne
+    tft.fill_rect(cx - 1, cy - 34, 3, 34, CYAN)
+    tft.fill_rect(cx - 8, cy,      17,  3, CYAN)
+
+    # Sous-etat
+    parts = sub_state.split(':') if sub_state else []
+    cmd = parts[0].upper() if parts else ''
+
+    if cmd == 'SCANNING':
+        n = parts[1] if len(parts) > 1 else '?'
+        _text_center(tft, 'SCANNING...',                   CENTER_Y + 46, CYAN)
+        _text_center(tft, 'Attempt {}/{}'.format(n, 5),   CENTER_Y + 58, GRAY)
+    elif cmd == 'AP':
+        n = parts[1] if len(parts) > 1 else '?'
+        _text_center(tft, 'CONNECTING AP',                 CENTER_Y + 46, CYAN)
+        _text_center(tft, 'Attempt {}/{}'.format(n, 5),   CENTER_Y + 58, GRAY)
+    elif cmd == 'HOME_TRY':
+        _text_center(tft, 'HOME WIFI',                     CENTER_Y + 46, ORANGE)
+        _text_center(tft, 'Connecting...',                 CENTER_Y + 58, GRAY)
+    elif cmd == 'HOME':
+        ip = ':'.join(parts[1:]) if len(parts) > 1 else '?'
+        _text_center(tft, 'HOME WIFI',                     CENTER_Y + 46, ORANGE)
+        _text_center(tft, ip[:16],                         CENTER_Y + 58, GRAY)
+    elif cmd == 'OK':
+        _text_center(tft, 'RECONNECTED',                   CENTER_Y + 46, GREEN)
+    else:
+        _text_center(tft, sub_state[:16] if sub_state else 'NET EVENT', CENTER_Y + 46, CYAN)
+
+
+def draw_locked(tft):
+    """Cadenas rouge — watchdog VESC declenche. Anneau clignotant via _spin_frame."""
+    global _spin_frame
+    _spin_frame = (_spin_frame + 1) % 4
+    visible = _spin_frame < 2  # clignote ON/OFF 50%
+
+    tft.fill(BLACK)
+    ring_color = RED if visible else DK_GRAY
+    _draw_ring(tft, CENTER_X, CENTER_Y, 115, 8, ring_color)
+    _text_center(tft, 'SYSTEM STATUS:', 34, RED)
+    _text_center(tft, 'LOCKED',        46, RED)
+
+    # Corps du cadenas
+    tft.fill_rect(CENTER_X - 20, CENTER_Y - 10, 40, 32, RED)
+    tft.fill_rect(CENTER_X - 14, CENTER_Y - 4,  28, 20, BLACK)
+    # Anse du cadenas
+    arc_r = 16
+    for dy in range(-arc_r, 0):
+        r2 = arc_r * arc_r - dy * dy
+        if r2 >= 0:
+            tft.fill_rect(CENTER_X - 21, CENTER_Y - 10 + dy, 4, 1, RED)
+            tft.fill_rect(CENTER_X + 17, CENTER_Y - 10 + dy, 4, 1, RED)
+
+    _text_center(tft, 'WATCHDOG',      CENTER_Y + 36, RED)
+    _text_center(tft, 'TRIGGERED',     CENTER_Y + 48, WHITE)
 
 
 def draw_error(tft, code):
