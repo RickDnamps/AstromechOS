@@ -52,10 +52,10 @@ class BodyServoDriver:
     # API publique
     # ------------------------------------------------------------------
 
-    def open(self, name: str, angle_deg: float = DEFAULT_OPEN_DEG) -> bool:
+    def open(self, name: str, angle_deg: float = DEFAULT_OPEN_DEG, speed: int = None) -> bool:
         return self._send(name, angle_deg)
 
-    def close(self, name: str, angle_deg: float = DEFAULT_CLOSE_DEG) -> bool:
+    def close(self, name: str, angle_deg: float = DEFAULT_CLOSE_DEG, speed: int = None) -> bool:
         return self._send(name, angle_deg)
 
     def move(self, name: str, position: float,
