@@ -1126,7 +1126,7 @@ class StatusPoller {
 
     this._setPill('pill-heartbeat', data.heartbeat_ok, 'HB');
     this._setPill('pill-uart',      data.uart_ready,   'UART');
-    this._setHealthPill(data.uart_health);
+    this._setHealthPill(data.uart_health, data.uart_crc_errors ?? 0);
 
     const version = el('pill-version');
     if (version) version.textContent = 'v' + (data.version || '?');
@@ -1197,20 +1197,32 @@ class StatusPoller {
     }
   }
 
-  _setHealthPill(h) {
+  _setHealthPill(h, masterCrcErrors) {
     const p = el('pill-uart-health');
     if (!p) return;
     const dot = p.querySelector('.pulse-dot');
-    let cls, label;
+    let cls, label, tooltip;
+
     if (h == null) {
-      cls   = 'status-pill';          // gris — Slave injoignable
-      label = 'BUS ?%';
+      // Slave injoignable — gris, mais orange si Master voit déjà des erreurs CRC
+      cls     = masterCrcErrors > 0 ? 'status-pill warn' : 'status-pill';
+      label   = masterCrcErrors > 0 ? `BUS ERR` : 'BUS ?%';
+      tooltip = masterCrcErrors > 0
+        ? `Slave injoignable | Master CRC invalides: ${masterCrcErrors}`
+        : 'Slave injoignable ou pas encore pollé';
     } else {
       const pct = h.health_pct;
-      cls   = 'status-pill ' + (pct >= 80 ? 'ok' : 'warn');
-      label = 'BUS ' + pct.toFixed(1) + '%';
+      // 3 niveaux : ok ≥95% | warn 70-94% | error <70%
+      if      (pct >= 95) cls = 'status-pill ok';
+      else if (pct >= 70) cls = 'status-pill warn';
+      else                cls = 'status-pill error';
+      label   = 'BUS ' + pct.toFixed(0) + '%';
+      tooltip = `Slave UART: ${h.errors} erreurs / ${h.total} msg (${h.window_s}s)`
+              + (masterCrcErrors > 0 ? ` | Master CRC invalides: ${masterCrcErrors}` : '');
     }
+
     p.className = cls;
+    p.title     = tooltip;
     if (dot) {
       for (const node of p.childNodes) {
         if (node.nodeType === Node.TEXT_NODE) node.textContent = label;

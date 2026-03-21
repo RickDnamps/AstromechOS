@@ -82,6 +82,11 @@ class UARTController:
         """Enregistre un callback pour un type de message reçu."""
         self._callbacks.setdefault(msg_type, []).append(callback)
 
+    @property
+    def crc_errors(self) -> int:
+        """Nombre de messages CRC invalides consécutifs depuis le dernier message valide."""
+        return self._invalid_crc_count
+
     # ------------------------------------------------------------------
     # Threads internes
     # ------------------------------------------------------------------
