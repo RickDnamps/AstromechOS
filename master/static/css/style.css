@@ -1464,15 +1464,21 @@ body::after {
 }
 
 .servo-angle-in {
-  width: 38px;
-  padding: 2px 4px;
+  width: 52px;
+  padding: 2px 6px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--text);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
+.servo-angle-in::-webkit-inner-spin-button,
+.servo-angle-in::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.servo-angle-in[type=number] { -moz-appearance: textfield; }
 
 .servo-angle-in:focus {
   outline: none;
