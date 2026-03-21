@@ -117,13 +117,15 @@ class TestUARTControllerCrcErrors(unittest.TestCase):
 # Tests logique seuils UI (simulés côté Python — miroir de la logique JS)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _ui_health_state(health_pct: float | None, master_crc_errors: int = 0) -> str:
+def _ui_uart_state(uart_ready: bool, health_pct: float | None, master_crc_errors: int = 0) -> str:
     """
-    Miroir de la logique JS _setHealthPill().
+    Miroir de la logique JS _setUartPill().
     Retourne : 'ok' | 'warn' | 'error' | 'grey'
     """
+    if not uart_ready:
+        return 'error'
     if health_pct is None:
-        return 'warn' if master_crc_errors > 0 else 'grey'
+        return 'warn' if master_crc_errors > 0 else 'ok'
     if health_pct >= 95:
         return 'ok'
     if health_pct >= 70:
@@ -131,97 +133,93 @@ def _ui_health_state(health_pct: float | None, master_crc_errors: int = 0) -> st
     return 'error'
 
 
-def _ui_health_label(health_pct: float | None, master_crc_errors: int = 0) -> str:
-    """Miroir du label JS."""
+def _ui_uart_label(uart_ready: bool, health_pct: float | None, master_crc_errors: int = 0) -> str:
+    """Miroir du label JS _setUartPill()."""
+    if not uart_ready:
+        return 'UART'
     if health_pct is None:
-        return 'BUS ERR' if master_crc_errors > 0 else 'BUS ?%'
-    return f'BUS {health_pct:.0f}%'
+        return 'UART ERR' if master_crc_errors > 0 else 'UART'
+    return f'UART {health_pct:.0f}%'
 
 
 class TestUARTHealthThresholds(unittest.TestCase):
     """
-    Valide les seuils d'affichage UART health sur l'interface web.
+    Valide les seuils d'affichage de la pastille UART fusionnée.
 
-    Ces tests documentent et protègent les règles UX :
-      - Vert  (ok)    : bus propre, ≥95%
-      - Orange (warn) : interférences légères, 70-94%
-      - Rouge (error) : bus très bruité, <70%
+    Règles UX :
+      - Port fermé                    → rouge  'UART'
+      - Port ouvert, Slave pas pollé  → vert   'UART'
+      - Port ouvert + CRC errors      → orange 'UART ERR'
+      - ≥95%                          → vert   'UART 100%'
+      - 70-94%                        → orange 'UART 82%'
+      - <70%                          → rouge  'UART 45%'
     """
 
-    # --- Seuils état ok ---
+    # --- Port série fermé ---
+
+    def test_port_closed_is_error(self):
+        self.assertEqual(_ui_uart_state(False, None), 'error')
+
+    def test_port_closed_label(self):
+        self.assertEqual(_ui_uart_label(False, None), 'UART')
+
+    # --- Port ouvert, pas encore de données Slave ---
+
+    def test_port_open_no_health_is_ok(self):
+        """Port ouvert, Slave pas encore pollé → vert (on suppose OK)."""
+        self.assertEqual(_ui_uart_state(True, None, master_crc_errors=0), 'ok')
+
+    def test_port_open_with_master_crc_errors_is_warn(self):
+        """Port ouvert + CRC invalides Master → orange."""
+        self.assertEqual(_ui_uart_state(True, None, master_crc_errors=3), 'warn')
+
+    def test_port_open_no_health_label(self):
+        self.assertEqual(_ui_uart_label(True, None, 0), 'UART')
+
+    def test_port_open_crc_errors_label(self):
+        self.assertEqual(_ui_uart_label(True, None, 5), 'UART ERR')
+
+    # --- Seuils qualité bus ---
 
     def test_100pct_is_ok(self):
-        self.assertEqual(_ui_health_state(100.0), 'ok')
+        self.assertEqual(_ui_uart_state(True, 100.0), 'ok')
 
     def test_95pct_is_ok(self):
-        self.assertEqual(_ui_health_state(95.0), 'ok')
-
-    def test_label_shows_integer_percent(self):
-        self.assertEqual(_ui_health_label(98.6), 'BUS 99%')
-
-    # --- Seuil ok/warn = 95% ---
+        self.assertEqual(_ui_uart_state(True, 95.0), 'ok')
 
     def test_94pct_is_warn(self):
-        """94.9% → orange, juste sous le seuil ok."""
-        self.assertEqual(_ui_health_state(94.9), 'warn')
-
-    def test_80pct_is_warn(self):
-        self.assertEqual(_ui_health_state(80.0), 'warn')
+        self.assertEqual(_ui_uart_state(True, 94.9), 'warn')
 
     def test_70pct_is_warn(self):
-        """70% → encore orange (limite basse)."""
-        self.assertEqual(_ui_health_state(70.0), 'warn')
-
-    # --- Seuil warn/error = 70% ---
+        self.assertEqual(_ui_uart_state(True, 70.0), 'warn')
 
     def test_69pct_is_error(self):
-        """69.9% → rouge, juste sous le seuil warn."""
-        self.assertEqual(_ui_health_state(69.9), 'error')
-
-    def test_50pct_is_error(self):
-        self.assertEqual(_ui_health_state(50.0), 'error')
-
-    def test_10pct_is_error(self):
-        """Bus catastrophique → rouge."""
-        self.assertEqual(_ui_health_state(10.0), 'error')
+        self.assertEqual(_ui_uart_state(True, 69.9), 'error')
 
     def test_0pct_is_error(self):
-        self.assertEqual(_ui_health_state(0.0), 'error')
+        self.assertEqual(_ui_uart_state(True, 0.0), 'error')
 
-    # --- Slave injoignable ---
-
-    def test_slave_null_no_master_errors_is_grey(self):
-        """Slave injoignable + Master OK → gris (on ne sait pas encore)."""
-        self.assertEqual(_ui_health_state(None, master_crc_errors=0), 'grey')
-
-    def test_slave_null_with_master_errors_is_warn(self):
-        """Slave injoignable + Master voit des CRC invalides → orange (signal mauvais)."""
-        self.assertEqual(_ui_health_state(None, master_crc_errors=3), 'warn')
-
-    def test_slave_null_label_no_errors(self):
-        self.assertEqual(_ui_health_label(None, 0), 'BUS ?%')
-
-    def test_slave_null_label_with_errors(self):
-        self.assertEqual(_ui_health_label(None, 5), 'BUS ERR')
+    def test_label_shows_uart_with_percent(self):
+        self.assertEqual(_ui_uart_label(True, 98.6), 'UART 99%')
 
     # --- Progression dégradation ---
 
     def test_degradation_sequence(self):
         """
-        Séquence complète de dégradation : bus propre → interférences → critique.
-        Simule ce que l'interface afficherait pendant une course avec moteurs bruyants.
+        Séquence complète : bus propre → interférences → critique.
+        Simule une course avec moteurs 24V actifs.
         """
         sequence = [
             (100.0, 'ok'),    # démarrage — bus parfait
             (98.0,  'ok'),    # quelques parasites normaux
-            (92.0,  'warn'),  # moteurs 24V actifs — interférences
+            (92.0,  'warn'),  # moteurs 24V actifs
             (75.0,  'warn'),  # dégradation continue
-            (65.0,  'error'), # slipring mal connecté ou parasites sévères
+            (65.0,  'error'), # slipring mal connecté
             (20.0,  'error'), # bus inutilisable
         ]
         for pct, expected in sequence:
             with self.subTest(pct=pct):
-                self.assertEqual(_ui_health_state(pct), expected,
+                self.assertEqual(_ui_uart_state(True, pct), expected,
                                  f"{pct}% devrait afficher '{expected}'")
 
 
