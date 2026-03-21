@@ -93,15 +93,17 @@ for _i in range(8):
     ))
 
 # Flags pour eviter le full-redraw a chaque frame d'animation
-_booting_bg_drawn = False
-_locked_bg_drawn  = False
+_booting_bg_drawn  = False
+_locked_bg_drawn   = False
+_ok_prev_bus_color = None   # suivi couleur pour draw_ok() incremental
 
 
 def reset_animations():
     """Appeler quand on quitte un etat anime pour forcer un full redraw au retour."""
-    global _booting_bg_drawn, _locked_bg_drawn
-    _booting_bg_drawn = False
-    _locked_bg_drawn  = False
+    global _booting_bg_drawn, _locked_bg_drawn, _ok_prev_bus_color
+    _booting_bg_drawn  = False
+    _locked_bg_drawn   = False
+    _ok_prev_bus_color = None
 
 
 # ------------------------------------------------------------------
@@ -216,23 +218,40 @@ def draw_locked(tft, full=False):
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, 8, ring_color)
 
 
-def draw_ok(tft, version, bus_pct=100.0):
-    tft.fill(BLACK)
-    bus_color  = GREEN if bus_pct >= 80.0 else ORANGE
-    ring_color = GREEN if bus_pct >= 80.0 else ORANGE
-    _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, ring_color)
-    _text_center(tft, 'SYSTEM STATUS:', 50, GREEN)
-    _text_center(tft, 'OPERATIONAL',   64, GREEN)
-    tft.fill_rect(CENTER_X - 50, 78, 100, 1, DK_GRAY)
-    if version:
-        _text_center(tft, 'v' + version[:11], 88, GREEN)
-    _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
+def draw_ok(tft, version, bus_pct=100.0, full=False):
+    """Redraw complet si full=True (changement d'etat), sinon incremental (bus update)."""
+    global _ok_prev_bus_color
+    bus_color     = GREEN if bus_pct >= 80.0 else ORANGE
+    color_changed = (bus_color != _ok_prev_bus_color)
+    _ok_prev_bus_color = bus_color
+
+    if full:
+        # Redraw complet — changement d'etat (pas de flicker, appel rare)
+        tft.fill(BLACK)
+        _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
+        _text_center(tft, 'SYSTEM STATUS:', 50, GREEN)
+        _text_center(tft, 'OPERATIONAL',   64, GREEN)
+        tft.fill_rect(CENTER_X - 50, 78, 100, 1, DK_GRAY)
+        if version:
+            _text_center(tft, 'v' + version[:11], 88, GREEN)
+        _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
+        tft.fill_rect(CENTER_X - 50, 156, 100, 1, DK_GRAY)
+        _text_center(tft, '< swipe >  TELEM', 164, GRAY)
+    elif color_changed:
+        # Couleur franchit le seuil 80% : redessiner anneau + label uniquement
+        _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
+        tft.fill_rect(0, 106, 240, 9, BLACK)
+        _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
+
+    # Parties dynamiques : toujours mises a jour sans effacer tout l'ecran
     _progress_bar(tft, 34, 118, 172, 10, bus_pct / 100.0, bus_color)
+    tft.fill_rect(CENTER_X - 24, 133, 48, 9, BLACK)
     _text_center(tft, '{:.0f}%'.format(bus_pct), 133, bus_color)
     if bus_pct < 80.0:
         _text_center(tft, 'PARASITES DETECTES', 147, ORANGE)
-    tft.fill_rect(CENTER_X - 50, 156, 100, 1, DK_GRAY)
-    _text_center(tft, '< swipe >  TELEM', 164, GRAY)
+    elif not full:
+        tft.fill_rect(0, 147, 240, 9, BLACK)   # efface avertissement si recupere
+
     reset_animations()
 
 

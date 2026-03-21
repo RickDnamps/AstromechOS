@@ -86,7 +86,7 @@ def apply_state():
     if state == STATE_BOOTING:
         disp.draw_booting(tft, full=full)
     elif state == STATE_OK:
-        disp.draw_ok(tft, version, bus_health_pct)
+        disp.draw_ok(tft, version, bus_health_pct, full=full)
     elif state == STATE_NET:
         disp.draw_net(tft, net_sub_state)
     elif state == STATE_LOCKED:
