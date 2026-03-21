@@ -35,15 +35,20 @@ Calibration:
 """
 
 import configparser
+import json
 import os
+import subprocess
 
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 
 servo_bp = Blueprint('servo', __name__, url_prefix='/servo')
 
-_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+_MAIN_CFG          = '/home/artoo/r2d2/master/config/main.cfg'
+_LOCAL_CFG         = '/home/artoo/r2d2/master/config/local.cfg'
+_DOME_ANGLES_FILE  = '/home/artoo/r2d2/master/config/dome_angles.json'
+_SLAVE_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
+_SLAVE_HOST        = 'artoo@r2-slave.local'
 
 BODY_SERVOS = [f'body_panel_{i}' for i in range(1, 12)]
 DOME_SERVOS = [f'dome_panel_{i}' for i in range(1, 12)]
@@ -92,6 +97,48 @@ def _write_panels_cfg(panels: dict) -> None:
             cfg.set('servo_panels', f'{name}_close', str(_clamp(int(vals['close']))))
     with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
         cfg.write(f)
+    # Sync vers fichiers JSON dédiés
+    _sync_angles_json(panels)
+
+
+def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
+    """Met à jour un fichier JSON d'angles avec les panneaux fournis."""
+    subset = {k: v for k, v in panels.items() if k in names}
+    if not subset:
+        return
+    existing = {}
+    if os.path.exists(filepath):
+        try:
+            with open(filepath) as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    for name, vals in subset.items():
+        existing[name] = {
+            'open':  _clamp(int(vals.get('open',  existing.get(name, {}).get('open',  110)))),
+            'close': _clamp(int(vals.get('close', existing.get(name, {}).get('close',  20)))),
+        }
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, 'w') as f:
+        json.dump(existing, f, indent=2)
+
+
+def _sync_angles_json(panels: dict) -> None:
+    """Écrit dome_angles.json (Master) et servo_angles.json (Slave via scp)."""
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        _update_angles_file(_DOME_ANGLES_FILE, panels, DOME_SERVOS)
+    except Exception as e:
+        log.warning("Écriture dome_angles.json échouée: %s", e)
+    try:
+        _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
+        subprocess.run(
+            ['scp', _SLAVE_ANGLES_FILE, f'{_SLAVE_HOST}:{_SLAVE_ANGLES_FILE}'],
+            timeout=5, check=False, capture_output=True,
+        )
+    except Exception as e:
+        log.warning("Sync servo_angles.json vers Slave échoué: %s", e)
 
 
 def _panel_angle(name: str, direction: str, panels_cfg: dict) -> int:

@@ -11,6 +11,7 @@ Formule 12-bit (registres PCA9685 hardware) :
     tick = int((pulse_us / 20000.0) * 4096)
 """
 
+import json
 import logging
 import threading
 import time
@@ -21,6 +22,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.base_driver import BaseDriver
 
 log = logging.getLogger(__name__)
+
+DOME_ANGLES_FILE = '/home/artoo/r2d2/master/config/dome_angles.json'
 
 PCA9685_ADDRESS = 0x40
 PCA9685_FREQ_HZ = 50
@@ -59,6 +62,15 @@ def _pulse_to_tick(pulse_us: float) -> int:
     return max(0, min(4095, int(pulse_us / 20000.0 * 4096)))
 
 
+def _load_dome_angles() -> dict:
+    """Charge les angles calibrés depuis master/config/dome_angles.json."""
+    try:
+        with open(DOME_ANGLES_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 class DomeServoDriver(BaseDriver):
 
     def __init__(self, i2c_address: int = PCA9685_ADDRESS):
@@ -67,10 +79,16 @@ class DomeServoDriver(BaseDriver):
         self._ready       = False
         self._lock        = threading.Lock()
         self._error_count = 0
+        self._angles      = {}
+
+    def _get_close_angle(self, name: str) -> float:
+        panel = self._angles.get(name, {})
+        return float(panel.get('close', DEFAULT_CLOSE_DEG))
 
     def setup(self) -> bool:
         try:
             import smbus2
+            self._angles = _load_dome_angles()
             self._bus = smbus2.SMBus(1)
             self._init_chip()
             self._ready = True
@@ -83,20 +101,8 @@ class DomeServoDriver(BaseDriver):
 
     def shutdown(self) -> None:
         if self._bus:
-            # Fermer chaque panneau avec son angle calibré depuis la config
-            try:
-                import configparser, os
-                _MAIN  = '/home/artoo/r2d2/master/config/main.cfg'
-                _LOCAL = '/home/artoo/r2d2/master/config/local.cfg'
-                cfg = configparser.ConfigParser()
-                cfg.read([f for f in [_MAIN, _LOCAL] if os.path.exists(f)])
-                for name, ch in SERVO_MAP.items():
-                    angle = cfg.getint('servo_panels', f'{name}_close',
-                                       fallback=DEFAULT_CLOSE_DEG)
-                    angle = max(ANGLE_MIN_DEG, min(ANGLE_MAX_DEG, angle))
-                    self._set_pulse(ch, _angle_to_pulse(angle))
-            except Exception as e:
-                log.warning("shutdown: impossible de lire config servos: %s", e)
+            for name, ch in SERVO_MAP.items():
+                self._set_pulse(ch, _angle_to_pulse(self._get_close_angle(name)))
             time.sleep(0.3)
             try:
                 self._bus.write_byte_data(self._address, MODE1_REG, 0x10)  # SLEEP
@@ -158,6 +164,8 @@ class DomeServoDriver(BaseDriver):
         time.sleep(0.005)
         for ch in range(16):
             self._full_off(ch)
+        for name, ch in SERVO_MAP.items():
+            self._set_pulse(ch, _angle_to_pulse(self._get_close_angle(name)))
         log.info("PCA9685 @ 0x%02X initialisé 50Hz + RESTART", self._address)
 
     def _ensure_awake(self) -> None:

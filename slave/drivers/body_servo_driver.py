@@ -10,6 +10,7 @@ Formule 12-bit (registres PCA9685 hardware) :
     tick = int((pulse_us / 20000.0) * 4096)
 """
 
+import json
 import logging
 import threading
 import time
@@ -20,6 +21,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.base_driver import BaseDriver
 
 log = logging.getLogger(__name__)
+
+SERVO_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
 
 PCA9685_ADDRESS = 0x41
 PCA9685_FREQ_HZ = 50
@@ -58,6 +61,15 @@ def _pulse_to_tick(pulse_us: float) -> int:
     return max(0, min(4095, int(pulse_us / 20000.0 * 4096)))
 
 
+def _load_servo_angles() -> dict:
+    """Charge les angles calibrés depuis slave/config/servo_angles.json."""
+    try:
+        with open(SERVO_ANGLES_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 class BodyServoDriver(BaseDriver):
 
     def __init__(self, i2c_address: int = PCA9685_ADDRESS):
@@ -65,10 +77,16 @@ class BodyServoDriver(BaseDriver):
         self._bus     = None
         self._ready   = False
         self._lock    = threading.Lock()
+        self._angles  = {}   # angles calibrés chargés au setup()
+
+    def _get_close_angle(self, name: str) -> float:
+        panel = self._angles.get(name, {})
+        return float(panel.get('close', DEFAULT_CLOSE_DEG))
 
     def setup(self) -> bool:
         try:
             import smbus2
+            self._angles = _load_servo_angles()
             self._bus = smbus2.SMBus(1)
             self._init_chip()
             self._ready = True
@@ -81,8 +99,10 @@ class BodyServoDriver(BaseDriver):
 
     def shutdown(self) -> None:
         if self._bus:
-            # Pas de position envoyée — les angles calibrés sont sur le Master
-            # Les panneaux restent où ils sont (tenue physique par butée mécanique)
+            # Fermer chaque panneau avec son angle calibré
+            for name, ch in SERVO_MAP.items():
+                self._set_pulse(ch, _angle_to_pulse(self._get_close_angle(name)))
+            time.sleep(0.3)
             try:
                 self._bus.write_byte_data(self._address, MODE1_REG, 0x10)  # SLEEP
             except Exception:
@@ -151,6 +171,9 @@ class BodyServoDriver(BaseDriver):
         time.sleep(0.005)
         for ch in range(16):
             self._full_off(ch)
+        # Mettre tous les panneaux en position fermée calibrée dès l'init
+        for name, ch in SERVO_MAP.items():
+            self._set_pulse(ch, _angle_to_pulse(self._get_close_angle(name)))
         log.info("PCA9685 @ 0x%02X initialisé 50Hz + RESTART", self._address)
 
     def _ensure_awake(self) -> None:
