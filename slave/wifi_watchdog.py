@@ -82,6 +82,8 @@ class WiFiWatchdog:
                     log.info("WiFiWatchdog: Master joignable — CONNECTED")
                     state = CONNECTED
                     self._disp_net_ok()
+                    self._stop_evt.wait(3)   # affiche "RECONNECTED" 3s puis retour écran OK
+                    self._disp_operational()
                     continue
 
                 l1_attempt += 1
@@ -100,6 +102,8 @@ class WiFiWatchdog:
                     log.info("WiFiWatchdog: Level 1 reconnexion OK")
                     state = CONNECTED
                     self._disp_net_ok()
+                    self._stop_evt.wait(3)
+                    self._disp_operational()
                     continue
 
                 # Tentative échouée
@@ -117,6 +121,8 @@ class WiFiWatchdog:
                     if self._ping_master():
                         state = CONNECTED
                         self._disp_net_ok()
+                        self._stop_evt.wait(3)
+                        self._disp_operational()
                     else:
                         log.warning("WiFiWatchdog: retour AP échoué — reste HOME_FALLBACK")
                         self._level2_connect()  # re-tenter home
@@ -221,5 +227,13 @@ class WiFiWatchdog:
         if self._display:
             try:
                 self._display.net_ok()
+            except Exception:
+                pass
+
+    def _disp_operational(self) -> None:
+        """Retourne l'écran RP2040 en mode OPERATIONAL après un événement réseau."""
+        if self._display:
+            try:
+                self._display.ok()
             except Exception:
                 pass
