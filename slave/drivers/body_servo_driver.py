@@ -180,7 +180,9 @@ class BodyServoDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def _init_chip(self) -> None:
-        """Initialise le PCA9685 : fréquence 50Hz + zéro tous les canaux."""
+        """Initialise le PCA9685 : fréquence 50Hz.
+        Les canaux servo vont directement à close_angle calibré — pas de _full_off()
+        intermédiaire qui causerait une perte de couple et un jerk au boot."""
         self._bus.write_byte_data(self._address, MODE1_REG, 0x00)
         time.sleep(0.005)
         self._bus.write_byte_data(self._address, MODE1_REG, 0x10)
@@ -190,14 +192,17 @@ class BodyServoDriver(BaseDriver):
         time.sleep(0.005)
         self._bus.write_byte_data(self._address, MODE1_REG, 0x80)
         time.sleep(0.005)
+        # Canaux non-servo → full_off (pas de charge)
+        servo_channels = set(SERVO_MAP.values())
         for ch in range(16):
-            self._full_off(ch)
-        # Mettre tous les panneaux en position fermée calibrée dès l'init
+            if ch not in servo_channels:
+                self._full_off(ch)
+        # Canaux servo → position fermée calibrée directement, sans full_off
         for name, ch in SERVO_MAP.items():
             close_a = self._get_close_angle(name)
             self._set_pulse(ch, _angle_to_pulse(close_a))
             self._pos[name] = close_a
-        log.info("PCA9685 @ 0x%02X initialisé 50Hz + RESTART", self._address)
+        log.info("PCA9685 @ 0x%02X initialisé 50Hz — servos → close_angle calibré", self._address)
 
     def _ensure_awake(self) -> None:
         """Réveille le chip s'il est en sleep (ex: après estop.py)."""
