@@ -470,7 +470,7 @@ class ServoPanel {
               class="servo-angle-in" min="10" max="170" value="${panel.open}"></label>
             <label class="servo-calib-label">C<input type="number" id="sc-close-${name}"
               class="servo-angle-in" min="10" max="170" value="${panel.close}"></label>
-            <label class="servo-calib-label">V<input type="number" id="sc-speed-${name}"
+            <label class="servo-calib-label">S<input type="number" id="sc-speed-${name}"
               class="servo-angle-in" min="1" max="10" value="${panel.speed ?? 10}"></label>
           </div>
           <button class="btn btn-sm" onclick="${varName}.open('${name}')">OPEN</button>
