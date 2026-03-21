@@ -95,14 +95,17 @@ for _i in range(8):
 # Flags pour eviter le full-redraw a chaque frame d'animation
 _booting_bg_drawn  = False
 _locked_bg_drawn   = False
-_ok_prev_bus_color = None   # suivi couleur pour draw_ok() incremental
+_ok_bg_drawn       = False   # securite : force full redraw si ecran efface par un autre etat
+_ok_prev_bus_color = None    # suivi couleur pour draw_ok() incremental
 
 
 def reset_animations():
-    """Appeler quand on quitte un etat anime pour forcer un full redraw au retour."""
-    global _booting_bg_drawn, _locked_bg_drawn
+    """Appeler quand on quitte un etat anime pour forcer un full redraw au retour.
+    Doit etre appele par tous les ecrans qui font tft.fill(BLACK), sauf draw_ok lui-meme."""
+    global _booting_bg_drawn, _locked_bg_drawn, _ok_bg_drawn
     _booting_bg_drawn = False
     _locked_bg_drawn  = False
+    _ok_bg_drawn      = False   # l'ecran OK devra etre redessinee en entier
 
 
 # ------------------------------------------------------------------
@@ -193,6 +196,7 @@ def draw_locked(tft, full=False):
 
     if full or not _locked_bg_drawn:
         tft.fill(BLACK)
+        reset_animations()   # l'ecran OK devra etre redessinee en entier au prochain retour
         _text_center(tft, 'SYSTEM STATUS:', 36, RED)
         # Corps cadenas
         tft.fill_rect(CENTER_X - 20, CENTER_Y - 8, 40, 30, RED)
@@ -218,14 +222,15 @@ def draw_locked(tft, full=False):
 
 
 def draw_ok(tft, version, bus_pct=100.0, full=False):
-    """Redraw complet si full=True (changement d'etat), sinon incremental (bus update)."""
-    global _ok_prev_bus_color
+    """Redraw complet si full=True ou _ok_bg_drawn=False, sinon incremental (bus update).
+    NE PAS appeler reset_animations() ici — c'est le role des autres ecrans."""
+    global _ok_prev_bus_color, _ok_bg_drawn
     bus_color     = GREEN if bus_pct >= 80.0 else ORANGE
     color_changed = (bus_color != _ok_prev_bus_color)
     _ok_prev_bus_color = bus_color
 
-    if full:
-        # Redraw complet — changement d'etat (pas de flicker, appel rare)
+    if full or not _ok_bg_drawn:
+        # Redraw complet — changement d'etat OU securite si ecran efface par un autre etat
         tft.fill(BLACK)
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
         _text_center(tft, 'SYSTEM STATUS:', 50, GREEN)
@@ -236,6 +241,7 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
         _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
         tft.fill_rect(CENTER_X - 50, 156, 100, 1, DK_GRAY)
         _text_center(tft, '< swipe >  TELEM', 164, GRAY)
+        _ok_bg_drawn = True
     elif color_changed:
         # Couleur franchit le seuil 80% : redessiner anneau + label uniquement
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
@@ -250,8 +256,7 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
         _text_center(tft, 'PARASITES DETECTES', 147, ORANGE)
     elif not full:
         tft.fill_rect(0, 147, 240, 9, BLACK)   # efface avertissement si recupere
-
-    reset_animations()
+    # NOTE: PAS de reset_animations() ici — draw_ok ne doit pas reset les flags des autres ecrans
 
 
 def _draw_antenna(tft, cx, cy, color):
@@ -275,18 +280,19 @@ def _draw_antenna(tft, cx, cy, color):
 
 def draw_net(tft, sub_state):
     tft.fill(BLACK)
+    reset_animations()   # l'ecran OK devra etre redessinee en entier au prochain retour
     parts = sub_state.split(':') if sub_state else []
     cmd   = parts[0].upper() if parts else ''
-    # Couleur selon etat
-    if cmd == 'HOME':
-        net_color = BLUE
+    # Couleur selon etat : ORANGE pour HOME FALLBACK (mode degrade), BLUE pour reconnexion normale
+    if cmd in ('HOME_TRY', 'HOME'):
+        net_color = ORANGE
         ring_w    = 5
-    elif cmd in ('SCANNING', 'AP'):
+    elif cmd == 'OK':
+        net_color = GREEN
+        ring_w    = 5
+    else:   # SCANNING, AP, autre
         net_color = BLUE
         ring_w    = 6
-    else:
-        net_color = BLUE
-        ring_w    = 5
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, ring_w, net_color)
     _text_center(tft, 'NETWORK', 36, net_color)
     _draw_antenna(tft, CENTER_X, CENTER_Y + 10, net_color)
@@ -312,7 +318,6 @@ def draw_net(tft, sub_state):
         _text_center(tft, 'RECONNECTED',              CENTER_Y + 46, GREEN)
     else:
         _text_center(tft, sub_state[:16] if sub_state else 'NET EVENT', CENTER_Y + 46, net_color)
-    reset_animations()
 
 
 def draw_error(tft, code):
