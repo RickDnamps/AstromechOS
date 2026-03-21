@@ -87,11 +87,16 @@ def main() -> None:
 
     display.boot_start()   # RP2040 : reset tous les items → orange
 
-    # Redéfinir emergency_stop avec closure sur display (pour display.system_locked())
+    # Redéfinir avec closures sur display
     def emergency_stop_vesc() -> None:
         log.error("COUPURE VESC — watchdog timeout")
         display.system_locked()
         # Phase 2: vesc_g.stop() + vesc_d.stop()
+
+    def resume_vesc() -> None:
+        log.info("Réactivation VESC — heartbeat repris")
+        display.boot_start()   # reset RP2040 hors LOCKED
+        # Phase 2: vesc_g.resume() + vesc_d.resume()
 
     # ------------------------------------------------------------------
     # UART Listener — connexion au Master via slipring
