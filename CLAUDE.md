@@ -80,6 +80,8 @@ r2d2/
 │   └── uart_protocol.py         ← CRC somme mod 256, build_msg(), parse_msg()
 ├── rp2040/firmware/             ← MicroPython : GC9A01 display, écrans BOOT/OP/LOCKED
 ├── android/                     ← WebView app + APK compilé
+├── tools/
+│   └── stress_joystick.py       ← stress test joystick + monitor WiFi/CPU/latence via SSH
 └── scripts/                     ← setup_*.sh, deploy.sh, update.sh
 ```
 
@@ -141,9 +143,12 @@ POST /motion/dome/turn          {"speed": 0.3}
 POST /motion/dome/stop
 POST /motion/dome/random        {"enabled": true}
 
-POST /servo/open                {"name": "dome_panel_1"}
-POST /servo/close               {"name": "dome_panel_1"}
-POST /servo/open_all  /servo/close_all
+POST /servo/dome/open           {"name": "dome_panel_1"}
+POST /servo/dome/close          {"name": "dome_panel_1"}
+POST /servo/dome/open_all  /servo/dome/close_all
+POST /servo/body/open           {"name": "body_panel_1"}
+POST /servo/body/close          {"name": "body_panel_1"}
+POST /servo/body/open_all  /servo/body/close_all
 GET  /servo/list
 POST /servo/settings/save       {"panels": {"dome_panel_1": {"open":110,"close":20,"speed":10}}}
 
@@ -157,6 +162,8 @@ POST /teeces/psi                {"mode": 1}
 
 POST /system/update             → git pull + rsync Slave + reboot
 POST /system/reboot  /system/reboot_slave
+POST /system/estop              → coupe PWM PCA9685 Master (0x40) + Slave (0x41), _ready=False
+POST /system/estop_reset        → réarme les drivers servo (setup()) sans restart service
 ```
 
 ---
@@ -223,6 +230,13 @@ echo "dtoverlay=miniuart-bt" | sudo tee -a /boot/firmware/config.txt
 # ✅ miniuart-bt = BT reste fonctionnel   ❌ disable-bt = BT coupé (plus de manettes)
 ```
 
+**bgscan wlan1 désactivé** — le scan WiFi background causait des micro-coupures pendant le joystick.
+Désactivé via dispatcher NM : `/etc/NetworkManager/dispatcher.d/99-disable-bgscan`
+```bash
+# S'exécute automatiquement à chaque connexion wlan1 :
+wpa_cli -i wlan1 set_network 0 bgscan ""
+```
+
 **Dépendances Master :** `flask` `pyserial` `RPi.GPIO` `adafruit-pca9685` `paramiko`
 **Dépendances Slave :** `pyserial` `pyvesc` `adafruit-pca9685` `RPi.GPIO` + `mpg123` (apt)
 
@@ -239,6 +253,12 @@ echo "dtoverlay=miniuart-bt" | sudo tee -a /boot/firmware/config.txt
 | 5 | Caméra USB + suivi personne | 📋 Planifié |
 
 **3 watchdogs actifs :** `app_watchdog.py` 600ms · `motion_watchdog.py` 800ms · `slave/watchdog.py` 500ms → coupe VESCs
+
+**E-STOP :** bouton rouge dans l'UI → coupe tous les servos (PCA9685 SLEEP + `_ready=False`).
+Bouton vert **RESET E-STOP** → `POST /system/estop_reset` → réarme les drivers sans restart.
+
+**Joystick throttle :** `VirtualJoystick._move()` limité à 60 req/s (`performance.now()` throttle).
+Visuel du knob reste immédiat — seuls les POST HTTP sont throttlés.
 
 **Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic) · Amélioration UI RP2040 (`rp2040/firmware/`)
 

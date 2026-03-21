@@ -167,7 +167,7 @@ Settings are saved to two JSON files (`master/config/dome_angles.json` and `slav
 
 ---
 
-### 🛡️ Safety — Three Independent Watchdog Layers
+### 🛡️ Safety — Three Independent Watchdog Layers + E-STOP
 
 No single point of failure can leave the robot moving uncontrolled:
 
@@ -178,6 +178,8 @@ No single point of failure can leave the robot moving uncontrolled:
 | **UART watchdog** | 500 ms | Master crash, slip ring disconnected |
 
 All three trigger a **graceful decel ramp** — velocity proportional to current speed (max 400 ms at full speed), never an abrupt stop that could tip the robot.
+
+**Emergency Stop button** (always visible, Space bar shortcut) instantly cuts all servo PWM by putting both PCA9685 chips to SLEEP. A **RESET E-STOP** button re-arms the drivers without restarting the service — servos are operational again in under a second.
 
 ---
 
