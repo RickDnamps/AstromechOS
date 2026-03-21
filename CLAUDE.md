@@ -275,6 +275,8 @@ sudo systemctl start r2d2-slave
 
 **RP2040 design** — Écrans définis dans `docs/rp2040-mockup.html`. Écran OK = `SYSTEM STATUS: / OPERATIONAL` + barre bus health verte/orange (<80%). Pas de full redraw sur chaque update BUS (incremental via `full=True/False`).
 
+**VERSION file** — `update.sh` écrit toujours `git rev-parse --short HEAD` dans `VERSION` (même si "already up to date"). Si ce fichier est périmé, le Slave voit un mismatch au boot → RP2040 affiche `SYNC FAILED`.
+
 **Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic)
 
 ---

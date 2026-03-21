@@ -157,12 +157,19 @@ Settings are saved to two JSON files (`master/config/dome_angles.json` and `slav
 
 - **Teeces32** FLD / RLD / PSI LED logics — JawaLite protocol over USB
 - **Live FLD preview** in the dashboard — animated dot grid, scrolling text, PSI color swatches
-- **RP2040 round LCD** (240×240, GC9A01) — MicroPython firmware showing:
-  - `SYSTEM STATUS: OPERATIONAL` with UART bus health bar
-  - `STARTING UP` spinner during boot
-  - `MOTORS STOPPED` on watchdog lock
-  - `NETWORK` status with antenna icon
-  - Telemetry screen (battery %, temperature)
+- **RP2040 round LCD** (240×240, GC9A01) — MicroPython firmware, 6 diagnostic screens driven entirely by `DISP:` commands from the Slave Pi:
+
+| Screen | Ring | Content | Triggered by |
+|--------|------|---------|--------------|
+| **STARTING UP** | 🟠 Orange thick | Spinner + "STARTING UP" | `DISP:BOOT:START` |
+| **OPERATIONAL** | 🟢 Green thin | "SYSTEM STATUS: OPERATIONAL" · version · UART bus health bar + % | `DISP:READY:v<hash>` + `DISP:BUS:<pct>` |
+| **BUS WARNING** | 🟠 Orange thin | Same + "PARASITES DETECTES" in orange | `DISP:BUS:<pct>` when pct < 80% |
+| **NETWORK** | 🔵 Blue / 🟠 Orange | Antenna icon · SCANNING… / CONNECTING / HOME WIFI ACTIVE + IP | `DISP:NET:SCANNING:1` · `DISP:NET:AP:3` · `DISP:NET:HOME:<ip>` |
+| **SYSTEM LOCKED** | 🔴 Red flashing | Lock icon · "WATCHDOG TRIGGERED · MOTORS STOPPED" | `DISP:LOCKED` |
+| **TELEMETRY** | 🔵 Blue thin | Voltage + LiPo % bar · Temperature + bar *(swipe from OPERATIONAL)* | `DISP:TELEM:24.5V:45C` |
+
+  Swipe left/right navigates between OPERATIONAL and TELEMETRY. All other states block navigation.
+  Screen design reference: [`docs/rp2040-mockup.html`](docs/rp2040-mockup.html)
 - Dedicated **LIGHTS tab** in dashboard — separated from Systems for future light sequence programming
 
 ---
