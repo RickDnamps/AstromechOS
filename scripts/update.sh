@@ -43,13 +43,16 @@ step "1/6" "Git pull"
 if ip addr show wlan1 2>/dev/null | grep -q "inet "; then
     cd "$REPO"
     OUTPUT=$(git pull --ff-only 2>&1)
-    if echo "$OUTPUT" | grep -q "Already up to date"; then
-        ok "Déjà à jour — $(cat $VERSION_FILE 2>/dev/null || git rev-parse --short HEAD)"
-    elif echo "$OUTPUT" | grep -q "error\|fatal"; then
+    if echo "$OUTPUT" | grep -q "error\|fatal"; then
         fail "git pull échoué : $OUTPUT"
     else
+        # Toujours mettre à jour le VERSION file avec le HEAD réel
         git rev-parse --short HEAD > "$VERSION_FILE"
-        ok "Mis à jour → version: $(cat $VERSION_FILE)"
+        if echo "$OUTPUT" | grep -q "Already up to date"; then
+            ok "Déjà à jour — $(cat $VERSION_FILE)"
+        else
+            ok "Mis à jour → version: $(cat $VERSION_FILE)"
+        fi
     fi
 else
     warn "wlan1 non disponible — git pull ignoré, version locale utilisée"
