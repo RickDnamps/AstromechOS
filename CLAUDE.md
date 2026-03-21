@@ -70,7 +70,7 @@ r2d2/
 │   ├── watchdog.py              ← coupe VESC si heartbeat >500ms
 │   ├── drivers/
 │   │   ├── audio_driver.py      ← mpg123 + sounds_index.json
-│   │   ├── display_driver.py    ← RP2040 via /dev/ttyACM2
+│   │   ├── display_driver.py    ← RP2040 via /dev/ttyACM* (dynamique — ACM0/ACM1/ACM2 selon boot)
 │   │   ├── vesc_driver.py       ← pyvesc propulsion
 │   │   └── body_servo_driver.py ← PCA9685 @ 0x41
 │   ├── config/
@@ -260,7 +260,22 @@ Bouton vert **RESET E-STOP** → `POST /system/estop_reset` → réarme les driv
 **Joystick throttle :** `VirtualJoystick._move()` limité à 60 req/s (`performance.now()` throttle).
 Visuel du knob reste immédiat — seuls les POST HTTP sont throttlés.
 
-**Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic) · Amélioration UI RP2040 (`rp2040/firmware/`)
+**RP2040 firmware flash** — `update.sh` synce maintenant `rp2040/` vers le Slave. Mais flasher le RP2040 reste manuel :
+```bash
+# Sur le Slave Pi — trouver le bon port (ACM* dynamique selon boot)
+ls /dev/ttyACM*
+sudo systemctl stop r2d2-slave
+# Toujours effacer avant de copier (mpremote "Up to date" compare timestamps, pas le contenu)
+python3 -m mpremote connect /dev/ttyACM1 rm :display.py
+python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/display.py :display.py
+python3 -m mpremote connect /dev/ttyACM1 reset
+sudo systemctl start r2d2-slave
+```
+> ⚠️ `mpremote cp` dit "Up to date" si le timestamp device ≥ fichier source — TOUJOURS `rm :file` avant `cp` pour forcer la mise à jour.
+
+**RP2040 design** — Écrans définis dans `docs/rp2040-mockup.html`. Écran OK = `SYSTEM STATUS: / OPERATIONAL` + barre bus health verte/orange (<80%). Pas de full redraw sur chaque update BUS (incremental via `full=True/False`).
+
+**Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic)
 
 ---
 

@@ -6,7 +6,7 @@
 # Ce script :
 #   1. Git pull (si wlan1 dispo)
 #   2. Vérifie la connectivité Slave
-#   3. Rsync slave/ + shared/ + scripts/ vers le Slave
+#   3. Rsync slave/ + shared/ + scripts/ + rp2040/ vers le Slave
 #   4. Redémarre le service Slave
 #   5. Redémarre le service Master (watchdogs app + motion inclus)
 #   6. Vérifie que les services sont actifs
@@ -93,6 +93,13 @@ rsync -az \
     --exclude='*.pyc' \
     "$REPO/scripts/" "$SLAVE:$REPO/scripts/" 2>&1 \
     && ok "scripts/ synchronisé" || fail "rsync scripts/ échoué"
+
+rsync -az \
+    -e "$SSH" \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    "$REPO/rp2040/" "$SLAVE:$REPO/rp2040/" 2>&1 \
+    && ok "rp2040/ synchronisé" || fail "rsync rp2040/ échoué"
 
 rsync -az -e "$SSH" "$VERSION_FILE" "$SLAVE:$VERSION_FILE" 2>/dev/null
 ok "VERSION synchronisé → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
