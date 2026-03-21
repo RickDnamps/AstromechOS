@@ -168,8 +168,8 @@ def draw_booting(tft, full=False):
     if full or not _booting_bg_drawn:
         tft.fill(BLACK)
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 8, ORANGE)
-        _text_center(tft, 'SYSTEM STATUS:', CENTER_Y - 45, ORANGE)
-        _text_center(tft, 'STARTING UP',   CENTER_Y - 31, ORANGE)
+        _text_center(tft, 'SYSTEM STATUS:', CENTER_Y - 66, ORANGE)
+        _text_center(tft, 'STARTING UP',   CENTER_Y - 52, ORANGE)
         _text_center(tft, 'BOOT...',        CENTER_Y + 48, GRAY)
         for sx, sy, sw, sh in _SPIN_SEGS:
             tft.fill_rect(sx, sy, sw, sh, DK_GRAY)
