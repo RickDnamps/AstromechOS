@@ -89,8 +89,8 @@
   </button>
   <div class="tab-spacer"></div>
   <button class="tab" data-tab="systems">
-    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="6" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="2 3"/></svg>
-    SYSTEMS
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><path d="M2 7 Q2 4 5 4 L9 4 Q12 4 12 7 Q12 10 9 10 L5 10 Q2 10 2 7Z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="9" cy="7" r="1.5" fill="currentColor"/><line x1="1" y1="7" x2="2" y2="7" stroke="currentColor" stroke-width="1.5"/><line x1="12" y1="7" x2="13" y2="7" stroke="currentColor" stroke-width="1.5"/></svg>
+    SERVO
   </button>
   <button class="tab" data-tab="vesc">
     <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><path d="M2 10 L4 4 L7 8 L9 4 L12 10 Z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="7" cy="12" r="1" fill="currentColor"/></svg>
@@ -374,65 +374,6 @@
       </div>
     </section>
 
-    <!-- BT Controller -->
-    <section class="card systems-card">
-      <h2 class="card-title">BLUETOOTH CONTROLLER</h2>
-      <div class="bt-status-row">
-        <svg class="gamepad-icon" width="48" height="32" viewBox="0 0 48 32">
-          <rect x="4" y="8" width="40" height="18" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-          <rect x="0" y="14" width="12" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
-          <rect x="36" y="14" width="12" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
-          <rect x="14" y="11" width="3" height="8" rx="1" fill="currentColor" opacity="0.7"/>
-          <rect x="12" y="13" width="7" height="3" rx="1" fill="currentColor" opacity="0.7"/>
-          <circle cx="32" cy="13" r="1.5" fill="currentColor" opacity="0.7"/>
-          <circle cx="36" cy="16" r="1.5" fill="currentColor" opacity="0.7"/>
-          <circle cx="32" cy="19" r="1.5" fill="currentColor" opacity="0.7"/>
-          <circle cx="28" cy="16" r="1.5" fill="currentColor" opacity="0.7"/>
-          <circle cx="22" cy="14" r="1.5" fill="currentColor" opacity="0.5"/>
-          <circle cx="26" cy="14" r="1.5" fill="currentColor" opacity="0.5"/>
-        </svg>
-        <div class="bt-info">
-          <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
-          <div id="bt-device-name" class="bt-device-name">—</div>
-        </div>
-        <div class="bt-battery-wrap">
-          <div id="bt-battery-bar" class="bt-battery-bar">
-            <div id="bt-battery-fill" style="width:0%"></div>
-          </div>
-          <span id="bt-battery-pct">--%</span>
-        </div>
-      </div>
-
-      <table class="bt-mapping-table">
-        <thead><tr><th>ACTION</th><th>BUTTON</th></tr></thead>
-        <tbody>
-          <tr><td>Throttle</td><td><select id="bt-map-throttle" class="input-text input-sm"><option>L_STICK_Y</option><option>R2</option></select></td></tr>
-          <tr><td>Steering</td><td><select id="bt-map-steer" class="input-text input-sm"><option>L_STICK_X</option><option>L1/R1</option></select></td></tr>
-          <tr><td>Dome</td><td><select id="bt-map-dome" class="input-text input-sm"><option>R_STICK_X</option><option>D_PAD_LR</option></select></td></tr>
-          <tr><td>Panel 1</td><td><select id="bt-map-panel1" class="input-text input-sm"><option>SQUARE</option><option>Y</option><option>X</option></select></td></tr>
-          <tr><td>Panel 2</td><td><select id="bt-map-panel2" class="input-text input-sm"><option>TRIANGLE</option><option>B</option><option>A</option></select></td></tr>
-          <tr><td>Audio Random</td><td><select id="bt-map-audio" class="input-text input-sm"><option>CIRCLE</option><option>SELECT</option></select></td></tr>
-        </tbody>
-      </table>
-
-      <div class="row mt">
-        <div class="speed-wrap" style="flex:1">
-          <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">8%</span></label>
-          <input type="range" id="bt-deadzone" min="0" max="30" value="8"
-                 oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
-        </div>
-      </div>
-
-      <div class="btn-group mt">
-        <button class="btn" onclick="saveBTConfig()">SAVE MAPPING</button>
-        <div class="speed-mode-btns">
-          <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
-          <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>
-          <button class="btn speed-mode-btn" data-mode="fast" onclick="setSpeedMode('fast')">FAST</button>
-        </div>
-      </div>
-    </section>
-
   </div>
 </div>
 
@@ -594,10 +535,69 @@
 </div>
 
 <!-- ================================================================
-     TAB 6: CONFIG — WiFi + GitHub + System
+     TAB 7: CONFIG — BT Controller + WiFi + GitHub + System
 ================================================================ -->
 <div class="tab-content" id="tab-config">
   <div class="settings-grid">
+
+    <!-- BT Controller -->
+    <section class="card settings-card">
+      <h2 class="card-title">BLUETOOTH CONTROLLER</h2>
+      <div class="bt-status-row">
+        <svg class="gamepad-icon" width="48" height="32" viewBox="0 0 48 32">
+          <rect x="4" y="8" width="40" height="18" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <rect x="0" y="14" width="12" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <rect x="36" y="14" width="12" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
+          <rect x="14" y="11" width="3" height="8" rx="1" fill="currentColor" opacity="0.7"/>
+          <rect x="12" y="13" width="7" height="3" rx="1" fill="currentColor" opacity="0.7"/>
+          <circle cx="32" cy="13" r="1.5" fill="currentColor" opacity="0.7"/>
+          <circle cx="36" cy="16" r="1.5" fill="currentColor" opacity="0.7"/>
+          <circle cx="32" cy="19" r="1.5" fill="currentColor" opacity="0.7"/>
+          <circle cx="28" cy="16" r="1.5" fill="currentColor" opacity="0.7"/>
+          <circle cx="22" cy="14" r="1.5" fill="currentColor" opacity="0.5"/>
+          <circle cx="26" cy="14" r="1.5" fill="currentColor" opacity="0.5"/>
+        </svg>
+        <div class="bt-info">
+          <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
+          <div id="bt-device-name" class="bt-device-name">—</div>
+        </div>
+        <div class="bt-battery-wrap">
+          <div id="bt-battery-bar" class="bt-battery-bar">
+            <div id="bt-battery-fill" style="width:0%"></div>
+          </div>
+          <span id="bt-battery-pct">--%</span>
+        </div>
+      </div>
+
+      <table class="bt-mapping-table">
+        <thead><tr><th>ACTION</th><th>BUTTON</th></tr></thead>
+        <tbody>
+          <tr><td>Throttle</td><td><select id="bt-map-throttle" class="input-text input-sm"><option>L_STICK_Y</option><option>R2</option></select></td></tr>
+          <tr><td>Steering</td><td><select id="bt-map-steer" class="input-text input-sm"><option>L_STICK_X</option><option>L1/R1</option></select></td></tr>
+          <tr><td>Dome</td><td><select id="bt-map-dome" class="input-text input-sm"><option>R_STICK_X</option><option>D_PAD_LR</option></select></td></tr>
+          <tr><td>Panel 1</td><td><select id="bt-map-panel1" class="input-text input-sm"><option>SQUARE</option><option>Y</option><option>X</option></select></td></tr>
+          <tr><td>Panel 2</td><td><select id="bt-map-panel2" class="input-text input-sm"><option>TRIANGLE</option><option>B</option><option>A</option></select></td></tr>
+          <tr><td>Audio Random</td><td><select id="bt-map-audio" class="input-text input-sm"><option>CIRCLE</option><option>SELECT</option></select></td></tr>
+        </tbody>
+      </table>
+
+      <div class="row mt">
+        <div class="speed-wrap" style="flex:1">
+          <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">8%</span></label>
+          <input type="range" id="bt-deadzone" min="0" max="30" value="8"
+                 oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
+        </div>
+      </div>
+
+      <div class="btn-group mt">
+        <button class="btn" onclick="saveBTConfig()">SAVE MAPPING</button>
+        <div class="speed-mode-btns">
+          <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
+          <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>
+          <button class="btn speed-mode-btn" data-mode="fast" onclick="setSpeedMode('fast')">FAST</button>
+        </div>
+      </div>
+    </section>
 
     <!-- WiFi Internet (wlan1) -->
     <section class="card settings-card">
