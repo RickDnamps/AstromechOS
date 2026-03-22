@@ -2,33 +2,42 @@
 
 # 🤖 R2D2_Control
 
-**Full-scale R2-D2 replica — distributed control system on two Raspberry Pi 4B**
+**The R2-D2 control system you've been waiting for.**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%204B-C51A4A?logo=raspberry-pi&logoColor=white)](https://www.raspberrypi.com/)
-[![Phase](https://img.shields.io/badge/Phase-Alpha-orange)](ELECTRONICS.md)
 [![Android](https://img.shields.io/badge/Android-App%20included-3DDC84?logo=android&logoColor=white)](android/compiled/)
+[![Sounds](https://img.shields.io/badge/Sounds-317%20R2--D2%20audio%20files-blueviolet)](slave/sounds/)
+[![Sequences](https://img.shields.io/badge/Sequences-40%20behavioral-blue)](master/sequences/)
 
-*Master/Slave architecture · UART through slip ring · Web dashboard · Android app · 317 R2-D2 sounds · 40 expressive sequences*
+*Two Raspberry Pi 4B · UART through slip ring · Web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences*
 
 </div>
 
 ---
 
-> ⚠️ **Early Alpha — Work in Progress** — Software is fully functional and actively tested on bench. Physical assembly (3D-printed parts, slip ring, final wiring) is still in progress. No camera stream yet.
+## Why this and nothing else?
+
+Most R2-D2 builders end up with a pile of shell scripts, a half-working web interface, and a robot that does one thing at a time. **This isn't that.**
+
+This system was built from the ground up to make R2-D2 feel **alive** — not just remote-controlled. Every subsystem talks to every other subsystem. A single button press can trigger coordinated sound + dome rotation + panel choreography + light sequence simultaneously. The safety system has three independent watchdog layers so the robot *cannot* run away. And the whole thing deploys itself from a single button press on the dome.
+
+If you're building a full-scale R2-D2 and you want a control system that's actually worthy of the build — **this is it**.
+
+> ⚠️ **Work in Progress** — Software is fully functional and battle-tested on bench. Physical assembly (3D parts, slip ring, wiring) still in progress. No camera stream yet.
 
 ---
 
 ## What is this?
 
-A **complete, production-grade control system** for a 1:1 scale R2-D2 replica — not a toy project. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, and 40 expressive behavioral sequences that give R2-D2 a real personality.
+A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 40 expressive behavioral sequences that give R2-D2 a real personality.
 
-- **Master Pi** (dome, rotates) — web server, dome servos, LED logics, script engine, deploy system
-- **Slave Pi** (body, fixed) — drive motors, body servos, dome rotation motor, audio, diagnostic LCD
-- If the link drops, the drive motors **cut immediately** — no runaway robot
+- **Master Pi** (dome, rotates) — web server, dome servos, LED logics, sequence engine, deploy system, BT gamepad
+- **Slave Pi** (body, fixed) — drive motors, body servos, dome rotation motor, 317-sound audio system, diagnostic LCD
+- If the link drops for more than 500ms, drive motors **cut immediately** — no runaway robot, ever
 
-The dashboard runs on the Master and is reachable from any phone or browser on the local Wi-Fi hotspot. An Android app wraps the same interface with native offline detection and network auto-discovery.
+The dashboard runs on the Master Pi and is reachable from any phone, tablet, or browser on the local Wi-Fi hotspot. An Android app wraps the same interface with offline detection and network auto-discovery. Or just grab a Bluetooth controller and go.
 
 ---
 
@@ -135,12 +144,14 @@ Settings are saved to two JSON files (`master/config/dome_angles.json` and `slav
 
 ---
 
-### 🕹️ Control
+### 🕹️ Control — Every Way You Want
 
 - **Web dashboard** — dark blue R2-D2 theme, 6 tabs, mobile-first responsive layout
 - **Android app** — native offline banner, IP auto-discovery (mDNS → saved IP → 192.168.4.1 → subnet scan), haptic feedback
-- **WASD / arrow keys** — full keyboard driving from any browser
-- **Bluetooth controller** — configurable button/axis mapping, deadzone, three speed modes
+- **WASD / arrow keys** — full keyboard driving from any browser on any OS
+- **Bluetooth gamepad** — pair directly to the Pi (no phone middleman), configurable button/axis mapping, deadzone, three speed modes (Normal / Kids / Child Lock), inactivity timeout, fully manageable from the UI (scan · pair · unpair — no SSH needed)
+
+The gamepad connects **directly to the Master Pi via Bluetooth** and is read via Linux evdev — no lag, no browser dependency. Works with Xbox, PS4/PS5, NVIDIA Shield, 8BitDo, and any standard HID gamepad. Press and hold Y to open dome panels, release to close. X for body panels. B for a random R2-D2 sound. Home button triggers E-STOP.
 
 ---
 
@@ -338,7 +349,7 @@ motion,STOP                              # emergency stop propulsion
 | **2** | Propulsion: VESCs, dome motor, MG90S servo panels with speed ramp | 🔧 Code complete — hardware assembly in progress |
 | **3** | Script engine: 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (6 tabs) + Android app | ✅ Active |
-| **4+** | Per-panel servo calibration (O/C/S), LIGHTS tab, expressive sequences | ✅ Active |
+| **4+** | Per-panel servo calibration · LIGHTS tab · Bluetooth gamepad (evdev, Pi-native) · BT pairing UI | ✅ Active |
 | **5** | Vision: USB camera stream, person tracking | 📋 Planned |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing currently on bench with direct BCM14/15 UART wiring.
@@ -359,6 +370,10 @@ Free to use, modify and share — keep it open source.
 
 <div align="center">
 
+**Built for builders who won't settle for half-measures.**
+
 *May the Force be with you.* 🌟
+
+[⭐ Star this repo](https://github.com/RickDnamps/R2D2_Control) · [🐛 Report an issue](https://github.com/RickDnamps/R2D2_Control/issues) · [📖 Electronics →](ELECTRONICS.md)
 
 </div>

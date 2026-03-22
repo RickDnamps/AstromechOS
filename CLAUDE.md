@@ -237,8 +237,23 @@ Désactivé via dispatcher NM : `/etc/NetworkManager/dispatcher.d/99-disable-bgs
 wpa_cli -i wlan1 set_network 0 bgscan ""
 ```
 
-**Dépendances Master :** `flask` `pyserial` `RPi.GPIO` `adafruit-pca9685` `paramiko`
+**Dépendances Master :** `flask` `pyserial` `RPi.GPIO` `adafruit-pca9685` `paramiko` `python3-evdev` (apt uniquement — pas pip)
 **Dépendances Slave :** `pyserial` `pyvesc` `adafruit-pca9685` `RPi.GPIO` + `mpg123` (apt)
+
+**Manette BT (evdev) :**
+- `python3-evdev` doit être installé via `apt install python3-evdev` — PAS pip (Trixie externally-managed)
+- Config persistante dans `master/config/bt_config.json`
+- `ecodes.KEY.get(code)` / `ecodes.BTN.get(code)` retourne un **tuple** quand plusieurs alias (ex: `('BTN_B', 'BTN_EAST')`), pas une liste → toujours utiliser `isinstance(raw, (list, tuple))` pour normaliser
+- Shield controller : B=BTN_EAST(305), X=BTN_NORTH(307), Y=BTN_WEST(308), Home=BTN_MODE
+- Jumelage BT via l'UI web (scan/pair/unpair) — pas besoin de SSH
+- `bt_config.json` mappings : `audio`→BTN_EAST, `panel_dome`→BTN_WEST, `panel_body`→BTN_NORTH, `estop`→BTN_MODE
+
+**MP3 sons — attention :** Les 317 MP3 sont dans `slave/sounds/` sur le Slave Pi uniquement (gitignorés). Si le Slave est réinstallé ou les fichiers perdus, les restaurer depuis le PC de dev :
+```python
+# Tunnel SSH Master → Slave via paramiko + sftp.put()
+# Les fichiers sont dans J:/R2-D2_Build/software/slave/sounds/*.mp3
+# update.sh rsync a --exclude='sounds/*.mp3' mais les fichiers doivent exister initialement
+```
 
 ---
 
@@ -250,6 +265,7 @@ wpa_cli -i wlan1 set_network 0 bgscan ""
 | 2 | VESCs + moteur dôme + servos MG90S | 🔧 Code prêt — hardware en assemblage |
 | 3 | 40 séquences comportementales .scr | ✅ Actif |
 | 4 | API REST + dashboard web (6 onglets) + Android | ✅ Actif |
+| 4+ | Manette BT (evdev) + jumelage UI + mapping configurable | ✅ Actif |
 | 5 | Caméra USB + suivi personne | 📋 Planifié |
 
 **3 watchdogs actifs :** `app_watchdog.py` 600ms · `motion_watchdog.py` 800ms · `slave/watchdog.py` 500ms → coupe VESCs
