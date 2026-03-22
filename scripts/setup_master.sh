@@ -114,13 +114,17 @@ ok "Repo cloné — version : $(cat $REPO_PATH/VERSION)"
 # =============================================================================
 # ÉTAPE 3 — Fix UART : libérer ttyAMA0 du Bluetooth
 # =============================================================================
-info "Étape 3/8 — Fix UART (disable-bt)..."
+info "Étape 3/8 — Fix UART (miniuart-bt — BT reste fonctionnel pour la manette)..."
 CONFIG="/boot/firmware/config.txt"
-if grep -q "dtoverlay=disable-bt" "$CONFIG"; then
-    ok "dtoverlay=disable-bt déjà présent"
+if grep -q "dtoverlay=miniuart-bt" "$CONFIG"; then
+    ok "dtoverlay=miniuart-bt déjà présent"
+elif grep -q "dtoverlay=disable-bt" "$CONFIG"; then
+    # disable-bt coupe le BT → manette impossible — corriger
+    sed -i 's/dtoverlay=disable-bt/dtoverlay=miniuart-bt/' "$CONFIG"
+    ok "dtoverlay=disable-bt remplacé par miniuart-bt (BT manette préservé)"
 else
-    echo "dtoverlay=disable-bt" >> "$CONFIG"
-    ok "dtoverlay=disable-bt ajouté dans $CONFIG"
+    echo "dtoverlay=miniuart-bt" >> "$CONFIG"
+    ok "dtoverlay=miniuart-bt ajouté dans $CONFIG"
 fi
 
 # =============================================================================
