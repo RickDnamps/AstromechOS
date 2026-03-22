@@ -6,15 +6,17 @@ import gc9a01
 import math
 
 # Couleurs RGB565
-BLACK   = gc9a01.color565(0,   0,   0)
-WHITE   = gc9a01.color565(255, 255, 255)
-RED     = gc9a01.color565(220, 50,  50)
-GREEN   = gc9a01.color565(50,  200, 80)
-ORANGE  = gc9a01.color565(255, 150, 0)
-BLUE    = gc9a01.color565(0,   120, 220)
-GRAY    = gc9a01.color565(80,  80,  80)
-DK_GRAY = gc9a01.color565(40,  40,  40)
-CYAN    = gc9a01.color565(0,   200, 200)
+BLACK      = gc9a01.color565(0,   0,   0)
+WHITE      = gc9a01.color565(255, 255, 255)
+RED        = gc9a01.color565(220, 50,  50)
+GREEN      = gc9a01.color565(50,  200, 80)
+ORANGE     = gc9a01.color565(255, 150, 0)
+ORANGE_MED = gc9a01.color565(180, 90,  0)   # comete milieu
+ORANGE_DIM = gc9a01.color565(90,  45,  0)   # comete queue
+BLUE       = gc9a01.color565(0,   120, 220)
+GRAY       = gc9a01.color565(80,  80,  80)
+DK_GRAY    = gc9a01.color565(40,  40,  40)
+CYAN       = gc9a01.color565(0,   200, 200)
 
 CENTER_X = 120
 CENTER_Y = 120
@@ -76,20 +78,22 @@ STATUS_COLOR = {
 }
 
 # ------------------------------------------------------------------
-# Pre-calcul des positions du spinner (evite math.cos/sin en boucle)
+# Pre-calcul du cercle anime BOOTING — 12 points en comete
 # ------------------------------------------------------------------
-_SR      = 28
-_SEG_LEN = 12
-_SPIN_SEGS = []
-for _i in range(8):
-    _rad = _i * math.pi / 4.0
-    _x1  = int(CENTER_X + math.cos(_rad) * _SR)
-    _y1  = int(CENTER_Y + math.sin(_rad) * _SR)
-    _x2  = int(CENTER_X + math.cos(_rad) * (_SR + _SEG_LEN))
-    _y2  = int(CENTER_Y + math.sin(_rad) * (_SR + _SEG_LEN))
-    _SPIN_SEGS.append((
-        min(_x1, _x2), min(_y1, _y2),
-        max(2, abs(_x2 - _x1)), max(2, abs(_y2 - _y1))
+_N_TICKS   = 12
+_TICK_R    = 75   # rayon des points sur le cercle
+_TICK_SIZE = 8    # taille de chaque point (carré)
+
+# Couleurs de la comete : tete → queue (le dernier DK_GRAY efface la queue)
+_ARC_COLORS = [ORANGE, ORANGE_MED, ORANGE_DIM, DK_GRAY]
+
+_TICKS = []
+for _i in range(_N_TICKS):
+    _a = -math.pi / 2 + _i * 2 * math.pi / _N_TICKS   # depart haut, sens horaire
+    _TICKS.append((
+        int(CENTER_X + _TICK_R * math.cos(_a)) - _TICK_SIZE // 2,
+        int(CENTER_Y + _TICK_R * math.sin(_a)) - _TICK_SIZE // 2,
+        _TICK_SIZE, _TICK_SIZE,
     ))
 
 # Flags pour eviter le full-redraw a chaque frame d'animation
@@ -164,27 +168,24 @@ def _progress_bar(tft, x, y, w, h, pct, color):
 # ------------------------------------------------------------------
 
 def draw_booting(tft, full=False):
-    """Spinner orange — full=True force un redraw complet (changement d'etat)."""
+    """Cercle anime orange (comete 12 points) — full=True force redraw complet."""
     global _spin_frame, _booting_bg_drawn
-    prev_frame  = _spin_frame
-    _spin_frame = (_spin_frame + 1) % 8
+    _spin_frame = (_spin_frame + 1) % _N_TICKS
 
     if full or not _booting_bg_drawn:
         tft.fill(BLACK)
-        _draw_ring(tft, CENTER_X, CENTER_Y, 115, 8, ORANGE)
-        _text_center(tft, 'SYSTEM STATUS:', CENTER_Y - 66, ORANGE)
-        _text_center(tft, 'STARTING UP',   CENTER_Y - 52, ORANGE)
-        _text_center(tft, 'BOOT...',        CENTER_Y + 48, GRAY)
-        for sx, sy, sw, sh in _SPIN_SEGS:
-            tft.fill_rect(sx, sy, sw, sh, DK_GRAY)
+        _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, ORANGE)
+        _text_center(tft, 'R2-D2',       CENTER_Y - 12, ORANGE)
+        _text_center(tft, 'STARTING UP', CENTER_Y + 4,  WHITE)
+        for tx, ty, tw, th in _TICKS:
+            tft.fill_rect(tx, ty, tw, th, DK_GRAY)
         _booting_bg_drawn = True
-        sx, sy, sw, sh = _SPIN_SEGS[_spin_frame]
-        tft.fill_rect(sx, sy, sw, sh, ORANGE)
-    else:
-        px, py, pw, ph = _SPIN_SEGS[prev_frame]
-        tft.fill_rect(px, py, pw, ph, DK_GRAY)
-        sx, sy, sw, sh = _SPIN_SEGS[_spin_frame]
-        tft.fill_rect(sx, sy, sw, sh, ORANGE)
+
+    # Mise a jour incrementale — 4 fill_rect par frame
+    # Le dernier _ARC_COLORS est DK_GRAY => efface automatiquement la queue
+    for i, col in enumerate(_ARC_COLORS):
+        tx, ty, tw, th = _TICKS[(_spin_frame - i) % _N_TICKS]
+        tft.fill_rect(tx, ty, tw, th, col)
 
 
 def draw_locked(tft, full=False):
@@ -245,7 +246,8 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
     elif color_changed:
         # Couleur franchit le seuil 80% : redessiner anneau + label uniquement
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
-        tft.fill_rect(0, 106, 240, 9, BLACK)
+        # y=106 : dy=-14, inner_r=111 → dx≈110 → safe x [10, 230]
+        tft.fill_rect(10, 106, 220, 9, BLACK)
         _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
 
     # Parties dynamiques : toujours mises a jour sans effacer tout l'ecran
@@ -255,7 +257,8 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
     if bus_pct < 80.0:
         _text_center(tft, 'PARASITES DETECTES', 147, ORANGE)
     elif not full:
-        tft.fill_rect(0, 147, 240, 9, BLACK)   # efface avertissement si recupere
+        # y=147 : dy=27, inner_r=111 → dx≈108 → safe x [12, 228]
+        tft.fill_rect(12, 147, 216, 9, BLACK)   # efface avertissement si recupere
     # NOTE: PAS de reset_animations() ici — draw_ok ne doit pas reset les flags des autres ecrans
 
 
