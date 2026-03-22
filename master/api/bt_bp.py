@@ -116,38 +116,73 @@ def _btctl(*args, timeout=8) -> tuple[bool, str]:
 
 
 def _paired_devices() -> list[dict]:
-    """Retourne les devices déjà jumelés (trusted) via bluetoothctl devices Paired."""
-    _, out = _btctl('devices', 'Paired', timeout=4)
-    devices = []
-    for line in out.splitlines():
-        m = re.match(r'Device\s+([0-9A-F:]{17})\s+(.*)', line.strip())
-        if m:
-            devices.append({'address': m.group(1), 'name': m.group(2).strip() or m.group(1)})
-    return devices
+    """Retourne les devices déjà jumelés via bluetoothctl devices Paired."""
+    try:
+        r = subprocess.run(
+            ['bluetoothctl', 'devices', 'Paired'],
+            capture_output=True, text=True, timeout=4
+        )
+        out = _strip_ansi(r.stdout + r.stderr)
+        devices = []
+        for line in out.splitlines():
+            m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
+            if m:
+                addr = m.group(1).upper()
+                name = m.group(2).strip() or addr
+                devices.append({'address': addr, 'name': name})
+        return devices
+    except Exception:
+        return []
+
+
+def _strip_ansi(text: str) -> str:
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+
+def _all_devices() -> dict[str, str]:
+    """Retourne tous les appareils connus de bluetoothctl (address → name)."""
+    try:
+        r = subprocess.run(
+            ['bluetoothctl', 'devices'],
+            capture_output=True, text=True, timeout=4
+        )
+        out = _strip_ansi(r.stdout + r.stderr)
+        devices = {}
+        for line in out.splitlines():
+            m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
+            if m:
+                addr = m.group(1).upper()
+                name = m.group(2).strip()
+                devices[addr] = name if name and name != addr else addr
+        return devices
+    except Exception:
+        return {}
 
 
 def _scan_worker(duration: int):
     global _scan_active, _scan_devices
     try:
+        # Démarrer le scan via stdin pipe (sans lire stdout — bloc-buffered sans TTY)
         proc = subprocess.Popen(
             ['bluetoothctl'],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, text=True, bufsize=1
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, text=True
         )
         proc.stdin.write('scan on\n'); proc.stdin.flush()
+
+        # Poller bluetoothctl devices toutes les 2s pendant la durée du scan
         deadline = time.time() + duration
         while time.time() < deadline:
-            try:
-                line = proc.stdout.readline()
-            except Exception:
-                break
-            m = re.search(r'\[NEW\] Device\s+([0-9A-F:]{17})\s+(.*)', line)
-            if m:
-                addr, name = m.group(1), m.group(2).strip()
-                with _scan_lock:
-                    _scan_devices[addr] = name or addr
+            time.sleep(2)
+            found = _all_devices()
+            with _scan_lock:
+                _scan_devices.update(found)
+
         proc.stdin.write('scan off\n'); proc.stdin.flush()
+        time.sleep(0.5)
         proc.terminate()
+    except Exception:
+        pass
     finally:
         with _scan_lock:
             _scan_active = False
