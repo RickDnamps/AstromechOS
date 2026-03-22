@@ -8,9 +8,6 @@ on:
       - 'android/build.gradle'
       - 'android/app/build.gradle'
       - '.github/workflows/android-release.yml'
-    paths-ignore:
-      - 'android/compiled/**'
-      - 'android/feedbacks/**'
   workflow_dispatch:
 
 permissions:
