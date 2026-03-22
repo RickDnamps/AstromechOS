@@ -41,11 +41,11 @@
     <div class="status-pill" id="pill-uart" title="UART Master ↔ Slave — qualité bus (% paquets valides / 1 min)">
       <span class="pulse-dot"></span>UART
     </div>
-    <div class="status-pill" id="pill-bt">
+    <div class="status-pill" id="pill-bt" title="Manette Bluetooth">
       <svg width="10" height="10" viewBox="0 0 10 10" class="bt-icon">
         <path d="M5 1 L7 3 L5 5 L7 7 L5 9 L5 5 L3 7 L5 5 L3 3 L5 5 Z" fill="currentColor"/>
       </svg>
-      BT
+      <span id="pill-bt-label">BT</span>
     </div>
     <div class="status-pill" id="pill-version">v?</div>
   </div>
@@ -629,6 +629,8 @@
     <!-- BT Controller -->
     <section class="card settings-card">
       <h2 class="card-title">BLUETOOTH CONTROLLER</h2>
+
+      <!-- Statut + toggle ON/OFF -->
       <div class="bt-status-row">
         <svg class="gamepad-icon" width="48" height="32" viewBox="0 0 48 32">
           <rect x="4" y="8" width="40" height="18" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
@@ -647,7 +649,12 @@
           <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
           <div id="bt-device-name" class="bt-device-name">—</div>
         </div>
-        <div class="bt-battery-wrap">
+        <label class="toggle-label" style="margin-left:auto" title="Activer/désactiver la manette BT">
+          <input type="checkbox" id="bt-enable-toggle" checked onchange="btController.setEnabled(this.checked)">
+          <span class="toggle-switch"></span>
+          ON
+        </label>
+        <div class="bt-battery-wrap" style="margin-left:8px">
           <div id="bt-battery-bar" class="bt-battery-bar">
             <div id="bt-battery-fill" style="width:0%"></div>
           </div>
@@ -655,28 +662,73 @@
         </div>
       </div>
 
-      <table class="bt-mapping-table">
-        <thead><tr><th>ACTION</th><th>BUTTON</th></tr></thead>
+      <!-- Type de manette -->
+      <div class="form-group" style="margin-top:12px">
+        <label class="ctrl-label">TYPE DE MANETTE</label>
+        <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
+          <option value="ps">PlayStation (PS4 / PS5)</option>
+          <option value="xbox">Xbox (One / Series)</option>
+          <option value="nintendo">Nintendo Switch Pro</option>
+          <option value="generic">Générique / Autre</option>
+        </select>
+      </div>
+
+      <!-- Mapping boutons -->
+      <table class="bt-mapping-table" style="margin-top:10px">
+        <thead><tr><th>ACTION R2</th><th>BOUTON</th></tr></thead>
         <tbody>
-          <tr><td>Throttle</td><td><select id="bt-map-throttle" class="input-text input-sm"><option>L_STICK_Y</option><option>R2</option></select></td></tr>
-          <tr><td>Steering</td><td><select id="bt-map-steer" class="input-text input-sm"><option>L_STICK_X</option><option>L1/R1</option></select></td></tr>
-          <tr><td>Dome</td><td><select id="bt-map-dome" class="input-text input-sm"><option>R_STICK_X</option><option>D_PAD_LR</option></select></td></tr>
-          <tr><td>Panel 1</td><td><select id="bt-map-panel1" class="input-text input-sm"><option>SQUARE</option><option>Y</option><option>X</option></select></td></tr>
-          <tr><td>Panel 2</td><td><select id="bt-map-panel2" class="input-text input-sm"><option>TRIANGLE</option><option>B</option><option>A</option></select></td></tr>
-          <tr><td>Audio Random</td><td><select id="bt-map-audio" class="input-text input-sm"><option>CIRCLE</option><option>SELECT</option></select></td></tr>
+          <tr><td>Propulsion (avant/arrière)</td><td><select id="bt-map-throttle" class="input-text input-sm">
+            <option value="ABS_Y">L Stick Y</option>
+            <option value="ABS_RY">R Stick Y</option>
+          </select></td></tr>
+          <tr><td>Direction (gauche/droite)</td><td><select id="bt-map-steer" class="input-text input-sm">
+            <option value="ABS_X">L Stick X</option>
+            <option value="ABS_RX">R Stick X</option>
+          </select></td></tr>
+          <tr><td>Rotation dôme</td><td><select id="bt-map-dome" class="input-text input-sm">
+            <option value="ABS_RX">R Stick X</option>
+            <option value="ABS_X">L Stick X</option>
+          </select></td></tr>
+          <tr><td>Panneaux dôme (maintenir)</td><td><select id="bt-map-panel1" class="input-text input-sm">
+            <option value="BTN_WEST">□ / X / Y</option>
+            <option value="BTN_NORTH">△ / Y / X</option>
+            <option value="BTN_SOUTH">✕ / A / B</option>
+            <option value="BTN_TL">L1 / LB / L</option>
+          </select></td></tr>
+          <tr><td>Panneaux body (maintenir)</td><td><select id="bt-map-panel2" class="input-text input-sm">
+            <option value="BTN_NORTH">△ / Y / X</option>
+            <option value="BTN_WEST">□ / X / Y</option>
+            <option value="BTN_TR">R1 / RB / R</option>
+          </select></td></tr>
+          <tr><td>Son aléatoire</td><td><select id="bt-map-audio" class="input-text input-sm">
+            <option value="BTN_EAST">○ / B / A</option>
+            <option value="BTN_SOUTH">✕ / A / B</option>
+            <option value="BTN_SELECT">Share / View / −</option>
+          </select></td></tr>
+          <tr><td>Emergency Stop</td><td><select id="bt-map-estop" class="input-text input-sm">
+            <option value="BTN_MODE">PS / Xbox / Home</option>
+            <option value="BTN_SELECT">Share / View / −</option>
+            <option value="BTN_START">Options / Menu / +</option>
+          </select></td></tr>
         </tbody>
       </table>
 
-      <div class="row mt">
+      <!-- Deadzone + Inactivité -->
+      <div class="row mt" style="gap:16px">
         <div class="speed-wrap" style="flex:1">
-          <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">8%</span></label>
-          <input type="range" id="bt-deadzone" min="0" max="30" value="8"
+          <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">10%</span></label>
+          <input type="range" id="bt-deadzone" min="0" max="30" value="10"
                  oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
+        </div>
+        <div class="speed-wrap" style="flex:1">
+          <label class="ctrl-label">TIMEOUT INACTIVITÉ <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
+          <input type="range" id="bt-inactivity-timeout" min="0" max="120" value="30"
+                 oninput="el('bt-timeout-val').textContent=this.value+'s'" class="holo-slider">
         </div>
       </div>
 
       <div class="btn-group mt">
-        <button class="btn" onclick="saveBTConfig()">SAVE MAPPING</button>
+        <button class="btn btn-active" onclick="btController.saveFullConfig()">SAVE CONFIG</button>
         <div class="speed-mode-btns">
           <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
           <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>

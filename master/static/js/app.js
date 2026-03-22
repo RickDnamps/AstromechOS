@@ -1451,21 +1451,54 @@ class BTController {
     return (idx !== undefined && gp.buttons[idx]) ? gp.buttons[idx].pressed : false;
   }
 
+  // ── UI ─────────────────────────────────────────────────────────
   _setUI(connected, name) {
     const icon       = document.querySelector('.gamepad-icon');
     const statusText = el('bt-status-text');
     const deviceName = el('bt-device-name');
-    const pillBt     = el('pill-bt');
     if (icon)       icon.classList.toggle('connected', connected);
     if (statusText) { statusText.textContent = connected ? 'CONNECTED' : 'NOT CONNECTED'; statusText.classList.toggle('connected', connected); }
     if (deviceName) deviceName.textContent = name || '—';
-    if (pillBt)     pillBt.className = 'status-pill ' + (connected ? 'ok' : '');
+    this._updatePill();
   }
 
-  // Appelé par le poller status — le statut BT réel vient de la Gamepad API (local)
+  _updatePill() {
+    const pill  = el('pill-bt');
+    const label = el('pill-bt-label');
+    if (!pill) return;
+    const enabled   = this._piEnabled;
+    const connected = this._piConnected || this._connected;
+    let cls, txt;
+    if (!enabled) {
+      cls = 'status-pill error'; txt = 'BT OFF';
+    } else if (connected) {
+      cls = 'status-pill ok';   txt = 'BT';
+    } else {
+      cls = 'status-pill';      txt = 'BT';
+    }
+    pill.className = cls;
+    if (label) label.textContent = txt;
+  }
+
+  // Appelé par le poller status — intègre statut Pi BT + Gamepad API
   updateStatus(data) {
     if (!data) return;
-    // Batterie si le serveur la connaît (futur)
+    this._piConnected = data.bt_connected || false;
+    this._piEnabled   = data.bt_enabled !== false;  // défaut true si absent
+
+    // Sync toggle UI
+    const tog = el('bt-enable-toggle');
+    if (tog) tog.checked = this._piEnabled;
+
+    // Sync nom depuis Pi si manette Pi connectée
+    if (this._piConnected) {
+      const deviceName = el('bt-device-name');
+      if (deviceName && data.bt_name && data.bt_name !== '—') deviceName.textContent = data.bt_name;
+      const statusText = el('bt-status-text');
+      if (statusText) { statusText.textContent = 'CONNECTED (Pi)'; statusText.classList.add('connected'); }
+    }
+
+    // Batterie
     const pct = data.bt_battery || 0;
     if (pct > 0) {
       const fillEl = el('bt-battery-fill');
@@ -1474,6 +1507,78 @@ class BTController {
       if (fillEl) { fillEl.style.width = pct + '%'; fillEl.style.background = bcolor; }
       if (pctEl)  pctEl.textContent = pct + '%';
     }
+
+    this._updatePill();
+  }
+
+  // Appelé par le toggle ON/OFF
+  async setEnabled(enabled) {
+    this._piEnabled = enabled;
+    this._updatePill();
+    await api('/bt/enable', 'POST', { enabled });
+    toast(enabled ? 'Manette BT activée' : 'Manette BT désactivée', 'ok');
+  }
+
+  // Appelé au changement de type de manette
+  onTypeChange(type) {
+    // Mettre à jour les labels du tableau de mapping selon le type
+    const labels = {
+      ps:        { WEST: '□ Carré',    NORTH: '△ Triangle', EAST: '○ Rond',   SOUTH: '✕ Croix', TL: 'L1',  TR: 'R1',  MODE: 'PS'      },
+      xbox:      { WEST: 'X',          NORTH: 'Y',          EAST: 'B',        SOUTH: 'A',       TL: 'LB',  TR: 'RB',  MODE: 'Xbox'    },
+      nintendo:  { WEST: 'Y',          NORTH: 'X',          EAST: 'A',        SOUTH: 'B',       TL: 'L',   TR: 'R',   MODE: 'Home'    },
+      generic:   { WEST: 'Btn 3',      NORTH: 'Btn 4',      EAST: 'Btn 2',    SOUTH: 'Btn 1',   TL: 'L1',  TR: 'R1',  MODE: 'Home'    },
+    };
+    const l = labels[type] || labels.generic;
+    const setOpt = (id, val, text) => {
+      const e = el(id); if (!e) return;
+      for (const o of e.options) {
+        if (o.value === val) { o.text = text; break; }
+      }
+    };
+    setOpt('bt-map-panel1', 'BTN_WEST',   l.WEST);
+    setOpt('bt-map-panel2', 'BTN_NORTH',  l.NORTH);
+    setOpt('bt-map-audio',  'BTN_EAST',   l.EAST);
+    setOpt('bt-map-estop',  'BTN_MODE',   l.MODE);
+  }
+
+  // Charge la config depuis le serveur et sync l'UI
+  async loadConfig() {
+    const data = await api('/bt/status');
+    if (!data) return;
+    this.updateStatus(data);
+    // type
+    const typeEl = el('bt-gamepad-type');
+    if (typeEl && data.bt_gamepad_type) {
+      for (const o of typeEl.options) if (o.value === data.bt_gamepad_type) { o.selected = true; break; }
+      this.onTypeChange(data.bt_gamepad_type);
+    }
+  }
+
+  // Sauvegarde config complète sur le serveur
+  async saveFullConfig() {
+    const mappings = {
+      throttle:   el('bt-map-throttle')?.value         || 'ABS_Y',
+      steer:      el('bt-map-steer')?.value            || 'ABS_X',
+      dome:       el('bt-map-dome')?.value             || 'ABS_RX',
+      panel_dome: el('bt-map-panel1')?.value           || 'BTN_WEST',
+      panel_body: el('bt-map-panel2')?.value           || 'BTN_NORTH',
+      audio:      el('bt-map-audio')?.value            || 'BTN_EAST',
+      estop:      el('bt-map-estop')?.value            || 'BTN_MODE',
+    };
+    const cfg = {
+      gamepad_type:       el('bt-gamepad-type')?.value          || 'ps',
+      deadzone:           (parseInt(el('bt-deadzone')?.value)    || 10) / 100,
+      inactivity_timeout: parseInt(el('bt-inactivity-timeout')?.value) || 30,
+      mappings,
+    };
+    // Aussi sauvegarder localement pour la Gamepad API JS
+    localStorage.setItem('r2d2-bt-mappings', JSON.stringify({
+      throttle: 'L_STICK_Y', steer: 'L_STICK_X', dome: 'R_STICK_X',
+      panel1: 'SQUARE', panel2: 'TRIANGLE', audio: 'CIRCLE',
+      deadzone: el('bt-deadzone')?.value || '10',
+    }));
+    const r = await api('/bt/config', 'POST', cfg);
+    toast(r?.status === 'ok' ? 'BT config sauvegardée' : 'Erreur sauvegarde', r?.status === 'ok' ? 'ok' : 'error');
   }
 
   _getMappings() {
@@ -1484,31 +1589,22 @@ class BTController {
   _loadMappings() {
     try {
       const m = this._getMappings();
-      if (m.throttle) { const e = el('bt-map-throttle'); if (e) { for (const o of e.options) if (o.value === m.throttle) { o.selected = true; break; } } }
-      if (m.steer)    { const e = el('bt-map-steer');    if (e) { for (const o of e.options) if (o.value === m.steer)    { o.selected = true; break; } } }
-      if (m.dome)     { const e = el('bt-map-dome');     if (e) { for (const o of e.options) if (o.value === m.dome)     { o.selected = true; break; } } }
+      const sel = (id, val) => { const e = el(id); if (e && val) { for (const o of e.options) if (o.value === val) { o.selected = true; break; } } };
+      sel('bt-map-throttle', m.throttle);
+      sel('bt-map-steer',    m.steer);
+      sel('bt-map-dome',     m.dome);
       const dz = el('bt-deadzone');
       if (dz && m.deadzone) { dz.value = m.deadzone; const dzv = el('bt-deadzone-val'); if (dzv) dzv.textContent = m.deadzone + '%'; }
     } catch { /* ignore */ }
   }
 
-  saveMappings() {
-    const m = {
-      throttle: el('bt-map-throttle') ? el('bt-map-throttle').value : 'L_STICK_Y',
-      steer:    el('bt-map-steer')    ? el('bt-map-steer').value    : 'L_STICK_X',
-      dome:     el('bt-map-dome')     ? el('bt-map-dome').value     : 'R_STICK_X',
-      panel1:   el('bt-map-panel1')   ? el('bt-map-panel1').value   : 'SQUARE',
-      panel2:   el('bt-map-panel2')   ? el('bt-map-panel2').value   : 'TRIANGLE',
-      audio:    el('bt-map-audio')    ? el('bt-map-audio').value    : 'CIRCLE',
-      deadzone: el('bt-deadzone')     ? el('bt-deadzone').value     : '8',
-    };
-    localStorage.setItem('r2d2-bt-mappings', JSON.stringify(m));
-    toast('BT mapping saved', 'ok');
-  }
+  saveMappings() { this.saveFullConfig(); }
 }
 
 const btController = new BTController();
-function saveBTConfig() { btController.saveMappings(); }
+btController._piEnabled   = true;
+btController._piConnected = false;
+function saveBTConfig() { btController.saveFullConfig(); }
 
 let _currentSpeedMode = 'normal';
 function setSpeedMode(mode) {
@@ -1946,6 +2042,7 @@ async function init() {
     scriptEngine.load(),
     poller.poll(),
     loadServoSettings(),
+    btController.loadConfig(),
   ]);
 
   // Start polling
