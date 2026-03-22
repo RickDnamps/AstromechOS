@@ -1310,52 +1310,186 @@ async function loadScripts() { await scriptEngine.load(); }
 
 class BTController {
   constructor() {
-    this._connected = false;
+    this._connected   = false;
+    this._gamepadIdx  = null;
+    this._prevBtns    = {};
+    this._driveActive = false;
+    this._domeActive  = false;
+    this._lastDriveMs = 0;
+    this._lastDomeMs  = 0;
+    this._DRIVE_HZ    = 1000 / 30;   // 30 req/s
+    this._DOME_HZ     = 1000 / 20;   // 20 req/s
     this._loadMappings();
+    this._bind();
   }
 
-  updateStatus(data) {
-    if (!data) return;
-    const connected = data.bt_connected || false;
-    const name = data.bt_name || '—';
-    const pct  = data.bt_battery || 0;
+  _bind() {
+    window.addEventListener('gamepadconnected',    e => this._onConnect(e.gamepad));
+    window.addEventListener('gamepaddisconnected', e => this._onDisconnect(e.gamepad));
+    const poll = () => { this._tick(); requestAnimationFrame(poll); };
+    requestAnimationFrame(poll);
+  }
 
-    this._connected = connected;
+  _onConnect(gp) {
+    this._gamepadIdx = gp.index;
+    this._connected  = true;
+    this._prevBtns   = {};
+    this._setUI(true, gp.id.split('(')[0].trim().slice(0, 24));
+    toast('Manette BT connectée', 'ok');
+  }
 
-    const icon = document.querySelector('.gamepad-icon');
+  _onDisconnect(gp) {
+    if (gp.index !== this._gamepadIdx) return;
+    this._gamepadIdx  = null;
+    this._connected   = false;
+    this._driveActive = false;
+    this._domeActive  = false;
+    this._setUI(false, '—');
+    api('/motion/stop',      'POST');
+    api('/motion/dome/stop', 'POST');
+    toast('Manette BT déconnectée', 'error');
+  }
+
+  _tick() {
+    const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+
+    // Auto-détection si pas encore associée
+    if (this._gamepadIdx === null) {
+      for (let i = 0; i < pads.length; i++) {
+        if (pads[i]) { this._onConnect(pads[i]); break; }
+      }
+    }
+    if (this._gamepadIdx === null) return;
+
+    const gp = pads[this._gamepadIdx];
+    if (!gp) {
+      if (this._connected) this._onDisconnect({ index: this._gamepadIdx });
+      return;
+    }
+
+    const m   = this._getMappings();
+    const dz  = (parseInt(m.deadzone) || 8) / 100;
+    const now = performance.now();
+
+    // ── PROPULSION — bloquée en Child Lock (mode 2) ────────────────
+    if (!lockMgr.isDriveLocked()) {
+      const tRaw = -this._axis(gp, m.throttle || 'L_STICK_Y');
+      const sRaw =  this._axis(gp, m.steer    || 'L_STICK_X');
+      const t    = Math.abs(tRaw) > dz ? tRaw * _speedLimit : 0;
+      const s    = Math.abs(sRaw) > dz ? sRaw * _speedLimit * 0.55 : 0;
+
+      if (now - this._lastDriveMs >= this._DRIVE_HZ) {
+        this._lastDriveMs = now;
+        if (Math.abs(t) > 0.01 || Math.abs(s) > 0.01) {
+          api('/motion/arcade', 'POST', { throttle: t, steering: s });
+          this._driveActive = true;
+        } else if (this._driveActive) {
+          api('/motion/stop', 'POST');
+          this._driveActive = false;
+        }
+      }
+    } else if (this._driveActive) {
+      // Child Lock activé en cours de conduite → arrêt immédiat
+      api('/motion/stop', 'POST');
+      this._driveActive = false;
+    }
+
+    // ── DÔME ──────────────────────────────────────────────────────
+    const dRaw = this._axis(gp, m.dome || 'R_STICK_X');
+    if (now - this._lastDomeMs >= this._DOME_HZ) {
+      this._lastDomeMs = now;
+      if (Math.abs(dRaw) > dz) {
+        api('/motion/dome/turn', 'POST', { speed: dRaw * 0.85 });
+        this._domeActive = true;
+      } else if (this._domeActive) {
+        api('/motion/dome/stop', 'POST');
+        this._domeActive = false;
+      }
+    }
+
+    // ── BOUTONS — détection de front montant/descendant ───────────
+    const prev = this._prevBtns;
+
+    // Panneau dôme : ouvert tant qu'appuyé
+    const p1 = m.panel1 || 'SQUARE';
+    const p1v = this._btn(gp, p1);
+    if (p1v && !prev[p1])  api('/servo/dome/open_all',  'POST');
+    if (!p1v && prev[p1])  api('/servo/dome/close_all', 'POST');
+    prev[p1] = p1v;
+
+    // Panneau body : ouvert tant qu'appuyé
+    const p2 = m.panel2 || 'TRIANGLE';
+    const p2v = this._btn(gp, p2);
+    if (p2v && !prev[p2])  api('/servo/body/open_all',  'POST');
+    if (!p2v && prev[p2])  api('/servo/body/close_all', 'POST');
+    prev[p2] = p2v;
+
+    // Son aléatoire — front montant seulement
+    const au = m.audio || 'CIRCLE';
+    const auv = this._btn(gp, au);
+    if (auv && !prev[au])  api('/audio/random', 'POST', { category: 'happy' });
+    prev[au] = auv;
+  }
+
+  // Lecture d'axe — retourne -1..1
+  _axis(gp, name) {
+    const axisMap = { L_STICK_X: 0, L_STICK_Y: 1, R_STICK_X: 2, R_STICK_Y: 3 };
+    if (name in axisMap) return gp.axes[axisMap[name]] || 0;
+    const btnMap  = { L2: 6, R2: 7 };
+    if (name in btnMap) { const b = gp.buttons[btnMap[name]]; return b ? b.value : 0; }
+    return 0;
+  }
+
+  // Lecture bouton — retourne bool
+  _btn(gp, name) {
+    const map = {
+      CROSS: 0, CIRCLE: 1, SQUARE: 2, TRIANGLE: 3,
+      L1: 4, R1: 5, L2: 6, R2: 7, SELECT: 8, START: 9,
+      L3: 10, R3: 11, DPAD_UP: 12, DPAD_DOWN: 13, DPAD_LEFT: 14, DPAD_RIGHT: 15,
+    };
+    const idx = map[name];
+    return (idx !== undefined && gp.buttons[idx]) ? gp.buttons[idx].pressed : false;
+  }
+
+  _setUI(connected, name) {
+    const icon       = document.querySelector('.gamepad-icon');
     const statusText = el('bt-status-text');
     const deviceName = el('bt-device-name');
     const pillBt     = el('pill-bt');
-    const fillEl     = el('bt-battery-fill');
-    const pctEl      = document.querySelector('#bt-battery-pct') || el('bt-battery-pct');
-
     if (icon)       icon.classList.toggle('connected', connected);
-    if (statusText) {
-      statusText.textContent = connected ? 'CONNECTED' : 'NOT CONNECTED';
-      statusText.classList.toggle('connected', connected);
-    }
-    if (deviceName) deviceName.textContent = name;
+    if (statusText) { statusText.textContent = connected ? 'CONNECTED' : 'NOT CONNECTED'; statusText.classList.toggle('connected', connected); }
+    if (deviceName) deviceName.textContent = name || '—';
     if (pillBt)     pillBt.className = 'status-pill ' + (connected ? 'ok' : '');
+  }
 
-    if (fillEl) {
+  // Appelé par le poller status — le statut BT réel vient de la Gamepad API (local)
+  updateStatus(data) {
+    if (!data) return;
+    // Batterie si le serveur la connaît (futur)
+    const pct = data.bt_battery || 0;
+    if (pct > 0) {
+      const fillEl = el('bt-battery-fill');
+      const pctEl  = el('bt-battery-pct');
       const bcolor = pct > 50 ? '#00cc66' : pct > 25 ? '#ff8800' : '#ff2244';
-      fillEl.style.width    = pct + '%';
-      fillEl.style.background = bcolor;
+      if (fillEl) { fillEl.style.width = pct + '%'; fillEl.style.background = bcolor; }
+      if (pctEl)  pctEl.textContent = pct + '%';
     }
-    if (pctEl) pctEl.textContent = pct + '%';
+  }
+
+  _getMappings() {
+    try { const s = localStorage.getItem('r2d2-bt-mappings'); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
   }
 
   _loadMappings() {
     try {
-      const saved = localStorage.getItem('r2d2-bt-mappings');
-      if (!saved) return;
-      const m = JSON.parse(saved);
-      if (m.throttle) { const e = el('bt-map-throttle'); if (e) { for (let o of e.options) if (o.value === m.throttle) { o.selected = true; break; } } }
-      if (m.steer)    { const e = el('bt-map-steer');    if (e) { for (let o of e.options) if (o.value === m.steer)    { o.selected = true; break; } } }
-      if (m.dome)     { const e = el('bt-map-dome');     if (e) { for (let o of e.options) if (o.value === m.dome)     { o.selected = true; break; } } }
+      const m = this._getMappings();
+      if (m.throttle) { const e = el('bt-map-throttle'); if (e) { for (const o of e.options) if (o.value === m.throttle) { o.selected = true; break; } } }
+      if (m.steer)    { const e = el('bt-map-steer');    if (e) { for (const o of e.options) if (o.value === m.steer)    { o.selected = true; break; } } }
+      if (m.dome)     { const e = el('bt-map-dome');     if (e) { for (const o of e.options) if (o.value === m.dome)     { o.selected = true; break; } } }
       const dz = el('bt-deadzone');
-      if (dz && m.deadzone) { dz.value = m.deadzone; el('bt-deadzone-val').textContent = m.deadzone + '%'; }
-    } catch (e) { /* ignore */ }
+      if (dz && m.deadzone) { dz.value = m.deadzone; const dzv = el('bt-deadzone-val'); if (dzv) dzv.textContent = m.deadzone + '%'; }
+    } catch { /* ignore */ }
   }
 
   saveMappings() {
