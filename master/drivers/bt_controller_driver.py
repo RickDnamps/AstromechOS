@@ -367,16 +367,24 @@ class BTControllerDriver:
     def _handle_button(self, event) -> None:
         import master.registry as reg
 
-        code_name = ecodes.KEY.get(event.code) or ecodes.BTN.get(event.code)
-        if not code_name:
+        # ecodes.BTN peut retourner une liste d'alias pour un même code
+        # ex: BTN_EAST (305) → ['BTN_B', 'BTN_EAST'] sur Shield/Xbox
+        raw = ecodes.KEY.get(event.code) or ecodes.BTN.get(event.code)
+        if not raw:
             return
+        code_names = raw if isinstance(raw, list) else [raw]
+
+        def _is(target: str) -> bool:
+            return target in code_names
 
         pressed  = (event.value == 1)
         released = (event.value == 0)
         m        = self._cfg.get('mappings', {})
 
+        log.debug(f"BTN codes={code_names} pressed={pressed} released={released}")
+
         # E-Stop — toujours traité même si désactivé
-        if code_name == m.get('estop', 'BTN_MODE'):
+        if _is(m.get('estop', 'BTN_MODE')):
             if pressed:
                 self._trigger_estop(reg)
             return
@@ -385,29 +393,34 @@ class BTControllerDriver:
         if getattr(reg, 'estop_active', False):
             return
 
-        # Panneau dôme (maintenu = ouvert)
-        if code_name == m.get('panel_dome', 'BTN_WEST'):
-            if pressed  and reg.dome_servo:
+        # Panneau dôme (maintenu = ouvert, relâché = fermé)
+        if _is(m.get('panel_dome', 'BTN_WEST')):
+            if pressed and reg.dome_servo:
+                log.info("BT: open_all dome_servo")
                 try: reg.dome_servo.open_all()
-                except Exception: pass
+                except Exception as e: log.warning(f"dome open_all: {e}")
             if released and reg.dome_servo:
+                log.info("BT: close_all dome_servo")
                 try: reg.dome_servo.close_all()
-                except Exception: pass
+                except Exception as e: log.warning(f"dome close_all: {e}")
 
-        # Panneau body
-        elif code_name == m.get('panel_body', 'BTN_NORTH'):
-            if pressed  and reg.servo:
+        # Panneau body (maintenu = ouvert, relâché = fermé)
+        elif _is(m.get('panel_body', 'BTN_NORTH')):
+            if pressed and reg.servo:
+                log.info("BT: open_all body_servo")
                 try: reg.servo.open_all()
-                except Exception: pass
+                except Exception as e: log.warning(f"body open_all: {e}")
             if released and reg.servo:
+                log.info("BT: close_all body_servo")
                 try: reg.servo.close_all()
-                except Exception: pass
+                except Exception as e: log.warning(f"body close_all: {e}")
 
         # Son aléatoire (front montant)
-        elif code_name == m.get('audio', 'BTN_EAST'):
+        elif _is(m.get('audio', 'BTN_EAST')):
             if pressed and reg.uart:
+                log.info("BT: S:RANDOM:happy")
                 try: reg.uart.send('S', 'RANDOM:happy')
-                except Exception: pass
+                except Exception as e: log.warning(f"audio send: {e}")
 
     def _trigger_estop(self, reg) -> None:
         log.warning("E-STOP déclenché depuis manette BT")
