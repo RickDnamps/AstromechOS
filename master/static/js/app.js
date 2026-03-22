@@ -71,17 +71,19 @@ function toast(msg, type = 'info') { toastMgr.show(msg, type); }
 
 class LockManager {
   constructor() {
-    this._mode      = 0;   // 0=Normal 1=Kids 2=ChildLock
-    this._kidsSpeed = parseInt(localStorage.getItem('kidsSpeedLimit') || '20');
-    this._prevSpeed = null;
+    this._mode         = 0;   // 0=Normal 1=Kids 2=ChildLock
+    this._kidsSpeed    = parseInt(localStorage.getItem('kidsSpeedLimit') || '20');
+    this._prevSpeed    = null;
+    this._kidsTimer    = null;
+    this._kidsTimedOut = false;
+    this._KIDS_TIMEOUT = 5 * 60 * 1000;   // 5 minutes
   }
 
   get mode() { return this._mode; }
 
-  // Appelé au chargement de la page pour init le slider Kids config
   init() {
     const s = el('kids-speed-slider');
-    if (s) { s.value = this._kidsSpeed; }
+    if (s) s.value = this._kidsSpeed;
     const v = el('kids-speed-val');
     if (v) v.textContent = this._kidsSpeed + '%';
     document.body.dataset.lockMode = '0';
@@ -96,18 +98,42 @@ class LockManager {
   }
 
   onBtnClick() {
-    if (this._mode === 0)      { this._applyMode(1); }   // Normal → Kids
-    else if (this._mode === 1) { this._applyMode(2); }   // Kids → Child Lock
-    else                       { this.showModal(); }     // Child Lock → unlock
+    if (this._mode === 0) {
+      this._applyMode(1);                        // Normal → Kids (direct)
+    } else if (this._mode === 1) {
+      if (this._kidsTimedOut) {
+        this._showKidsChoiceModal();             // ≥5 min en Kids → choix
+      } else {
+        this._applyMode(2);                      // <5 min en Kids → Child Lock direct
+      }
+    } else {
+      this._showUnlockModal();                   // Child Lock → déverrouillage
+    }
   }
 
-  showModal() {
-    const titles = ['', 'KIDS MODE ACTIF', 'CHILD LOCK ACTIF'];
-    const icon = el('lock-modal-icon');
-    const title = el('lock-modal-title');
-    if (icon)  icon.style.color = this._mode === 2 ? 'var(--red)' : 'var(--orange)';
-    if (title) title.style.color = this._mode === 2 ? 'var(--red)' : 'var(--orange)';
-    el('lock-modal').classList.remove('hidden');
+  // Modal choix depuis Kids mode expiré (3 options)
+  _showKidsChoiceModal() {
+    const m = el('lock-modal');
+    m.classList.remove('hidden');
+    el('lock-modal-icon').style.color   = 'var(--orange)';
+    el('lock-modal-title').style.color  = 'var(--orange)';
+    el('lock-modal-title').textContent  = 'KIDS MODE ACTIF';
+    el('lock-modal-sub').textContent    = 'Entrez le mot de passe pour retourner au mode normal';
+    el('lock-childlock-btn').style.display = '';   // montrer bouton Child Lock
+    el('lock-pwd-input').value = '';
+    el('lock-pwd-error').classList.add('hidden');
+    setTimeout(() => el('lock-pwd-input').focus(), 80);
+  }
+
+  // Modal déverrouillage simple (Child Lock → Normal)
+  _showUnlockModal() {
+    const m = el('lock-modal');
+    m.classList.remove('hidden');
+    el('lock-modal-icon').style.color   = 'var(--red)';
+    el('lock-modal-title').style.color  = 'var(--red)';
+    el('lock-modal-title').textContent  = 'CHILD LOCK ACTIF';
+    el('lock-modal-sub').textContent    = 'Entrez le mot de passe pour retourner au mode normal';
+    el('lock-childlock-btn').style.display = 'none';   // cacher bouton Child Lock
     el('lock-pwd-input').value = '';
     el('lock-pwd-error').classList.add('hidden');
     setTimeout(() => el('lock-pwd-input').focus(), 80);
@@ -116,6 +142,12 @@ class LockManager {
   cancelModal() { el('lock-modal').classList.add('hidden'); }
 
   onOverlayClick(e) { if (e.target === el('lock-modal')) this.cancelModal(); }
+
+  // Depuis le modal : escalader en Child Lock
+  escalateToChildLock() {
+    el('lock-modal').classList.add('hidden');
+    this._applyMode(2);
+  }
 
   submitModal() {
     const pwd = el('lock-pwd-input').value;
@@ -141,22 +173,25 @@ class LockManager {
     const label = el('lock-mode-label');
     if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];
 
-    // Vitesse
+    // Timer Kids Mode
     if (mode === 1) {
-      this._prevSpeed = Math.round(_speedLimit * 100);
+      this._prevSpeed    = Math.round(_speedLimit * 100);
+      this._kidsTimedOut = false;
       this._applyKidsSpeed();
-    } else if (mode === 0 && prev !== 0) {
-      if (this._prevSpeed !== null) {
+      this._kidsTimer = setTimeout(() => { this._kidsTimedOut = true; }, this._KIDS_TIMEOUT);
+    } else {
+      clearTimeout(this._kidsTimer);
+      this._kidsTimedOut = false;
+      if (mode === 0 && prev !== 0 && this._prevSpeed !== null) {
         const s = el('speed-slider');
         if (s) { s.value = this._prevSpeed; setSpeed(this._prevSpeed); }
         this._prevSpeed = null;
       }
     }
 
-    // Notifier le serveur
     api('/lock/set', 'POST', { mode });
 
-    const msgs = ['Mode normal rétabli', 'Kids Mode activé — vitesse limitée', 'Child Lock — déplacement bloqué'];
+    const msgs  = ['Mode normal rétabli', 'Kids Mode activé — vitesse limitée', 'Child Lock — déplacement bloqué'];
     const types = ['ok', 'warn', 'error'];
     toast(msgs[mode], types[mode]);
   }
@@ -169,7 +204,6 @@ class LockManager {
   isDriveLocked() { return this._mode === 2; }
   isKidsMode()    { return this._mode === 1; }
 
-  // Sync depuis /status (pour reconnexion)
   syncFromStatus(lockMode) {
     if (lockMode !== undefined && lockMode !== this._mode) {
       this._mode = lockMode;

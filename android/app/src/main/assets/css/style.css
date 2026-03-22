@@ -2027,6 +2027,8 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 }
 .admin-pwd-error.hidden { display: none; }
 .admin-modal-btns { display: flex; gap: 10px; width: 100%; justify-content: flex-end; margin-top: 4px; }
+.lock-childlock-sep { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; margin-top: 6px; }
+.lock-sep-line { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }
 
 /* Shake animation — mauvais mot de passe */
 @keyframes shake {
