@@ -38,6 +38,9 @@ def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
 @motion_bp.post('/drive')
 def drive():
     """Propulsion différentielle. Body: {"left": float, "right": float}"""
+    if reg.lock_mode == 2:
+        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
+
     body  = request.get_json(silent=True) or {}
     left  = _clamp(float(body.get('left',  0.0)))
     right = _clamp(float(body.get('right', 0.0)))

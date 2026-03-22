@@ -45,3 +45,6 @@ slave_uart_health: dict | None = None
 # État audio — mis à jour par audio_bp à chaque play/stop
 audio_playing: bool = False
 audio_current: str  = ''
+
+# Lock mode — 0=Normal, 1=Kids, 2=ChildLock
+lock_mode: int = 0

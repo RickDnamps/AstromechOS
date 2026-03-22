@@ -1864,6 +1864,79 @@ select.input-text option { background: #0a1525; }
 .toast.toast-info  { border-color: var(--blue);   color: var(--blue);   box-shadow: 0 0 12px rgba(0,170,255,0.3); }
 
 /* ================================================================
+   LOCK MODE — Kids / Child Lock
+================================================================ */
+
+/* Bouton lock dans la topbar */
+.lock-mode-btn {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: color 0.2s, background 0.2s;
+  min-width: 44px;
+}
+.lock-mode-btn:hover { background: rgba(255,255,255,0.05); }
+
+/* SVG open/closed selon mode */
+.lock-svg { display: none; }
+body[data-lock-mode="0"] .lock-open  { display: block; }
+body[data-lock-mode="1"] .lock-closed { display: block; }
+body[data-lock-mode="2"] .lock-closed { display: block; }
+
+/* Couleurs selon mode */
+body[data-lock-mode="0"] .lock-mode-btn { color: var(--text-dim); }
+body[data-lock-mode="1"] .lock-mode-btn { color: var(--orange); border-color: var(--orange); }
+body[data-lock-mode="2"] .lock-mode-btn { color: var(--red);    border-color: var(--red);    }
+
+/* Label sous l'icône */
+.lock-mode-label {
+  font-family: var(--font);
+  font-size: 8px;
+  letter-spacing: 1px;
+  line-height: 1;
+}
+body[data-lock-mode="0"] .lock-mode-label { display: none; }
+
+/* Barre de mode en haut de l'interface */
+.lock-mode-bar {
+  height: 2px;
+  width: 100%;
+  transition: background 0.3s;
+}
+body[data-lock-mode="0"] .lock-mode-bar { background: transparent; }
+body[data-lock-mode="1"] .lock-mode-bar { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+body[data-lock-mode="2"] .lock-mode-bar { background: var(--red);    box-shadow: 0 0 8px var(--red);    }
+
+/* Joystick gauche désactivé en Child Lock */
+body[data-lock-mode="2"] #js-left-ring {
+  opacity: 0.3;
+  pointer-events: none;
+}
+body[data-lock-mode="2"] #js-left-ring::after {
+  content: '🔒';
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  pointer-events: none;
+}
+
+/* Contrôles vitesse désactivés en Kids et Child Lock */
+body[data-lock-mode="1"] .speed-mode-btn,
+body[data-lock-mode="2"] .speed-mode-btn { pointer-events: none; opacity: 0.35; }
+body[data-lock-mode="1"] #speed-slider,
+body[data-lock-mode="2"] #speed-slider   { pointer-events: none; opacity: 0.35; }
+
+/* ================================================================
    ADMIN GUARD — Onglets protégés + modal mot de passe
 ================================================================ */
 

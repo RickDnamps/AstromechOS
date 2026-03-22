@@ -73,6 +73,7 @@ def get_status():
         'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # CRC invalides consécutifs côté Master
         'audio_playing':     reg.audio_playing,
         'audio_current':     reg.audio_current,
+        'lock_mode':         reg.lock_mode,
     })
 
 
@@ -90,6 +91,17 @@ def system_update():
     import threading
     threading.Thread(target=reg.deploy.update_and_deploy, daemon=True).start()
     return jsonify({'status': 'ok', 'message': 'Update en cours...'})
+
+
+@status_bp.post('/lock/set')
+def lock_set():
+    """Définit le mode de verrouillage : 0=Normal, 1=Kids, 2=ChildLock."""
+    body = request.get_json(silent=True) or {}
+    mode = int(body.get('mode', 0))
+    if mode not in (0, 1, 2):
+        return jsonify({'error': 'mode invalide'}), 400
+    reg.lock_mode = mode
+    return jsonify({'status': 'ok', 'mode': mode})
 
 
 @status_bp.post('/system/resync_slave')

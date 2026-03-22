@@ -66,6 +66,124 @@ function toast(msg, type = 'info') { toastMgr.show(msg, type); }
 // ================================================================
 
 // ================================================================
+// Lock Manager — Kids Mode / Child Lock
+// ================================================================
+
+class LockManager {
+  constructor() {
+    this._mode      = 0;   // 0=Normal 1=Kids 2=ChildLock
+    this._kidsSpeed = parseInt(localStorage.getItem('kidsSpeedLimit') || '20');
+    this._prevSpeed = null;
+  }
+
+  get mode() { return this._mode; }
+
+  // Appelé au chargement de la page pour init le slider Kids config
+  init() {
+    const s = el('kids-speed-slider');
+    if (s) { s.value = this._kidsSpeed; }
+    const v = el('kids-speed-val');
+    if (v) v.textContent = this._kidsSpeed + '%';
+    document.body.dataset.lockMode = '0';
+  }
+
+  setKidsSpeed(val) {
+    this._kidsSpeed = val;
+    localStorage.setItem('kidsSpeedLimit', val);
+    const v = el('kids-speed-val');
+    if (v) v.textContent = val + '%';
+    if (this._mode === 1) this._applyKidsSpeed();
+  }
+
+  onBtnClick() {
+    if (this._mode === 0)      { this._applyMode(1); }   // Normal → Kids
+    else if (this._mode === 1) { this._applyMode(2); }   // Kids → Child Lock
+    else                       { this.showModal(); }     // Child Lock → unlock
+  }
+
+  showModal() {
+    const titles = ['', 'KIDS MODE ACTIF', 'CHILD LOCK ACTIF'];
+    const icon = el('lock-modal-icon');
+    const title = el('lock-modal-title');
+    if (icon)  icon.style.color = this._mode === 2 ? 'var(--red)' : 'var(--orange)';
+    if (title) title.style.color = this._mode === 2 ? 'var(--red)' : 'var(--orange)';
+    el('lock-modal').classList.remove('hidden');
+    el('lock-pwd-input').value = '';
+    el('lock-pwd-error').classList.add('hidden');
+    setTimeout(() => el('lock-pwd-input').focus(), 80);
+  }
+
+  cancelModal() { el('lock-modal').classList.add('hidden'); }
+
+  onOverlayClick(e) { if (e.target === el('lock-modal')) this.cancelModal(); }
+
+  submitModal() {
+    const pwd = el('lock-pwd-input').value;
+    if (pwd === 'deetoo') {
+      el('lock-modal').classList.add('hidden');
+      this._applyMode(0);
+    } else {
+      el('lock-pwd-error').classList.remove('hidden');
+      const inp = el('lock-pwd-input');
+      inp.value = '';
+      inp.classList.remove('shake');
+      void inp.offsetWidth;
+      inp.classList.add('shake');
+      inp.focus();
+    }
+  }
+
+  _applyMode(mode) {
+    const prev = this._mode;
+    this._mode = mode;
+    document.body.dataset.lockMode = mode;
+
+    const label = el('lock-mode-label');
+    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];
+
+    // Vitesse
+    if (mode === 1) {
+      this._prevSpeed = Math.round(_speedLimit * 100);
+      this._applyKidsSpeed();
+    } else if (mode === 0 && prev !== 0) {
+      if (this._prevSpeed !== null) {
+        const s = el('speed-slider');
+        if (s) { s.value = this._prevSpeed; setSpeed(this._prevSpeed); }
+        this._prevSpeed = null;
+      }
+    }
+
+    // Notifier le serveur
+    api('/lock/set', 'POST', { mode });
+
+    const msgs = ['Mode normal rétabli', 'Kids Mode activé — vitesse limitée', 'Child Lock — déplacement bloqué'];
+    const types = ['ok', 'warn', 'error'];
+    toast(msgs[mode], types[mode]);
+  }
+
+  _applyKidsSpeed() {
+    const s = el('speed-slider');
+    if (s) { s.value = this._kidsSpeed; setSpeed(this._kidsSpeed); }
+  }
+
+  isDriveLocked() { return this._mode === 2; }
+  isKidsMode()    { return this._mode === 1; }
+
+  // Sync depuis /status (pour reconnexion)
+  syncFromStatus(lockMode) {
+    if (lockMode !== undefined && lockMode !== this._mode) {
+      this._mode = lockMode;
+      document.body.dataset.lockMode = lockMode;
+      const label = el('lock-mode-label');
+      if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
+      if (lockMode === 1) this._applyKidsSpeed();
+    }
+  }
+}
+
+const lockMgr = new LockManager();
+
+// ================================================================
 // Admin Guard — onglets protégés (SERVO / VESC / CONFIG)
 // ================================================================
 
@@ -365,6 +483,7 @@ let _leftActive = false;
 const jsLeft = new VirtualJoystick(
   'js-left-ring', 'js-left-knob',
   (x, y) => {
+    if (lockMgr.isDriveLocked()) return;   // Child Lock : joystick gauche bloqué
     _leftActive = true;
     const throttle = -y * _speedLimit;
     const steering =  x * _speedLimit * 0.55;
@@ -1307,6 +1426,11 @@ class StatusPoller {
       scriptEngine.updateRunning(data.scripts_running);
     }
 
+    // Lock mode — sync si reconnexion ou autre client
+    if (data.lock_mode !== undefined) {
+      lockMgr.syncFromStatus(data.lock_mode);
+    }
+
     // Teeces state
     if (data.teeces_mode) {
       teecesController._applyFLDMode(data.teeces_mode);
@@ -1640,6 +1764,9 @@ async function init() {
 
   // Heartbeat applicatif vers Master (sécurité watchdog)
   startAppHeartbeat();
+
+  // Lock Manager init (kids speed slider + body data-lock-mode)
+  lockMgr.init();
 
   // Volume slider + VESC scale slider
   initVolume();

@@ -255,6 +255,15 @@ class ScriptEngine:
                 self._servo.move(name, position, duration)
 
     def _cmd_motion(self, row: list[str]) -> None:
+        # Child Lock — filtrer toutes les commandes de déplacement des séquences
+        try:
+            import master.registry as _reg
+            if getattr(_reg, 'lock_mode', 0) == 2:
+                log.debug("_cmd_motion ignoré: Child Lock actif")
+                return
+        except Exception:
+            pass
+
         if not self._vesc:
             return
         if row[1].lower() == 'stop':
