@@ -123,9 +123,9 @@ class ScriptEngine:
         return script_id
 
     def stop(self, script_id: int) -> bool:
-        """Arrête un script par ID."""
+        """Arrête un script par ID — retire immédiatement de _running."""
         with self._lock:
-            runner = self._running.get(script_id)
+            runner = self._running.pop(script_id, None)
         if runner:
             runner.stop()
             log.info(f"Script arrêté: {runner.name} (id={script_id})")
@@ -133,17 +133,24 @@ class ScriptEngine:
         return False
 
     def stop_all(self) -> None:
-        """Arrête tous les scripts en cours."""
+        """Arrête toutes les séquences en cours + coupe le son."""
         with self._lock:
-            ids = list(self._running.keys())
-        for sid in ids:
-            self.stop(sid)
+            runners = list(self._running.values())
+            self._running.clear()
+        for runner in runners:
+            runner.stop()
+        # Couper le son en cours (ex. Gangnam, Birthday)
+        if self._uart:
+            try:
+                self._uart.send('S', 'STOP')
+            except Exception as e:
+                log.warning(f"stop_all: S:STOP failed: {e}")
 
     # ------------------------------------------------------------------
     # Dispatch des commandes de script
     # ------------------------------------------------------------------
 
-    def execute_command(self, row: list[str]) -> None:
+    def execute_command(self, row: list[str], stop_event=None) -> None:
         """Exécute une ligne CSV de script."""
         if not row or row[0].startswith('#'):
             return
@@ -151,7 +158,7 @@ class ScriptEngine:
 
         try:
             if cmd == 'sleep':
-                self._cmd_sleep(row)
+                self._cmd_sleep(row, stop_event)
             elif cmd == 'sound':
                 self._cmd_sound(row)
             elif cmd == 'dome':
@@ -167,12 +174,15 @@ class ScriptEngine:
         except Exception as e:
             log.error(f"Erreur exécution commande {row}: {e}")
 
-    def _cmd_sleep(self, row: list[str]) -> None:
+    def _cmd_sleep(self, row: list[str], stop_event=None) -> None:
         if row[1] == 'random':
             t = random.uniform(float(row[2]), float(row[3]))
         else:
             t = float(row[1])
-        time.sleep(t)
+        if stop_event:
+            stop_event.wait(t)   # interruptible — retourne dès que stop est signalé
+        else:
+            time.sleep(t)
 
     def _cmd_sound(self, row: list[str]) -> None:
         if not self._uart:
@@ -306,7 +316,7 @@ class _ScriptRunner(threading.Thread):
                     for row in reader:
                         if self._stop_event.is_set():
                             break
-                        self._engine.execute_command(row)
+                        self._engine.execute_command(row, self._stop_event)
             except Exception as e:
                 log.error(f"Erreur lecture script {self.name}: {e}")
                 break
