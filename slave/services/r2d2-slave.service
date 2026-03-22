@@ -7,6 +7,7 @@ Wants=r2d2-version.service
 Type=simple
 User=artoo
 WorkingDirectory=/home/artoo/r2d2
+Environment=PYTHONPATH=/home/artoo/r2d2
 ExecStart=/usr/bin/python3 /home/artoo/r2d2/slave/main.py
 Restart=always
 RestartSec=3
