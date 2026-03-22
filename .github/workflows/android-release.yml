@@ -16,8 +16,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
@@ -30,13 +28,6 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      - name: Debug — SDK environment
-        run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls $ANDROID_HOME/build-tools/ || echo "No build-tools found"
-          ls $ANDROID_HOME/platforms/ || echo "No platforms found"
-
       - name: Setup local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 
@@ -47,7 +38,7 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --info 2>&1 | tail -100
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Copy APK to compiled/
         run: |
@@ -59,5 +50,9 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add android/compiled/R2-D2_Control.apk
-          git commit -m "ci: update R2-D2_Control.apk [skip ci]" || echo "Rien à committer"
-          git push
+          if git diff --cached --quiet; then
+            echo "APK inchangé — rien à committer"
+          else
+            git commit -m "ci: update R2-D2_Control.apk [skip ci]"
+            git push
+          fi
