@@ -989,10 +989,19 @@ class ScriptEngine {
   run(name, loop) {
     api('/scripts/run', 'POST', { name, loop }).then(d => {
       if (d) {
+        // Un seul script à la fois — effacer toutes les cartes immédiatement
+        this._running.clear();
+        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+        const count = el('running-count');
+        if (count) count.textContent = '1';
+        const list = el('running-scripts');
+        if (list) list.textContent = `${name}#${d.id}`;
+        // Marquer uniquement la nouvelle carte
+        this._running.add(name);
         const card = el(`script-card-${name}`);
         if (card) card.classList.add('running');
         toast(`${name.toUpperCase()} started${loop ? ' (loop)' : ''}`, 'ok');
-        poller.poll();  // sync running state + bottom bar from server immediately
+        poller.poll();
       }
     });
   }

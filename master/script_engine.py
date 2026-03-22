@@ -80,13 +80,29 @@ class ScriptEngine:
 
     def run(self, name: str, loop: bool = False) -> int | None:
         """
-        Lance un script.
+        Lance un script — un seul à la fois.
+        Arrête tous les scripts en cours et remet les servos en position fermée avant de démarrer.
         Retourne l'ID du script ou None si introuvable.
         """
         path = os.path.join(SCRIPTS_DIR, name + '.scr')
         if not os.path.isfile(path):
             log.error(f"Script introuvable: {path}")
             return None
+
+        # Un seul script à la fois : stopper les précédents
+        self.stop_all()
+
+        # Reset servos en position fermée avant la nouvelle séquence
+        try:
+            if self._dome_servo:
+                self._dome_servo.close_all()
+        except Exception as e:
+            log.warning(f"run: close_all dome_servo: {e}")
+        try:
+            if self._servo:
+                self._servo.close_all()
+        except Exception as e:
+            log.warning(f"run: close_all servo: {e}")
 
         with self._lock:
             script_id = self._next_id
