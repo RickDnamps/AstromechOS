@@ -1659,6 +1659,92 @@ btController._piEnabled   = true;
 btController._piConnected = false;
 function saveBTConfig() { btController.saveFullConfig(); }
 
+// ================================================================
+// BT Pairing UI
+// ================================================================
+const btPairing = {
+  _scanTimer: null,
+  _pollTimer: null,
+
+  startScan() {
+    api('/bt/scan/start', 'POST').then(r => {
+      if (!r) return;
+      el('bt-scan-btn').disabled = true;
+      el('bt-scan-label').textContent = '⏳ SCAN EN COURS...';
+      el('bt-scan-status').textContent = 'Scan actif — 15 secondes...';
+      // Countdown
+      let remaining = 15;
+      this._scanTimer = setInterval(() => {
+        remaining--;
+        el('bt-scan-status').textContent = `Scan actif — ${remaining}s restantes...`;
+        if (remaining <= 0) {
+          clearInterval(this._scanTimer);
+          el('bt-scan-btn').disabled = false;
+          el('bt-scan-label').innerHTML = '&#x1F50D; SCAN (15s)';
+          el('bt-scan-status').textContent = 'Scan terminé.';
+        }
+      }, 1000);
+      // Poll devices toutes les 2s pendant le scan
+      this._pollTimer = setInterval(() => this.refresh(), 2000);
+      setTimeout(() => { clearInterval(this._pollTimer); this.refresh(); }, 16000);
+    });
+  },
+
+  refresh() {
+    api('/bt/scan/devices').then(r => {
+      if (!r) return;
+      this._renderDiscovered(r.discovered || []);
+      this._renderPaired(r.paired || []);
+    });
+  },
+
+  _renderDiscovered(list) {
+    const el2 = el('bt-discovered-list');
+    if (!list.length) {
+      el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— Aucun appareil détecté —</div>';
+      return;
+    }
+    el2.innerHTML = list.map(d => `
+      <div class="bt-pair-row">
+        <span class="bt-pair-name">${d.name}</span>
+        <span class="bt-pair-addr">${d.address}</span>
+        <button class="btn btn-active btn-xs" onclick="btPairing.pair('${d.address}','${d.name.replace(/'/g,'&apos;')}')">PAIR</button>
+      </div>`).join('');
+  },
+
+  _renderPaired(list) {
+    const el2 = el('bt-paired-list');
+    if (!list.length) {
+      el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— Aucune manette jumelée —</div>';
+      return;
+    }
+    el2.innerHTML = list.map(d => `
+      <div class="bt-pair-row">
+        <span class="bt-pair-name">${d.name}</span>
+        <span class="bt-pair-addr">${d.address}</span>
+        <button class="btn btn-xs" onclick="btPairing.unpair('${d.address}')">REMOVE</button>
+      </div>`).join('');
+  },
+
+  pair(address, name) {
+    el('bt-scan-status').textContent = `Jumelage de ${name}...`;
+    api('/bt/pair', 'POST', { address }).then(() => {
+      toast(`Jumelage ${name} en cours...`, 'ok');
+      setTimeout(() => this.refresh(), 5000);
+    });
+  },
+
+  unpair(address) {
+    api('/bt/unpair', 'POST', { address }).then(r => {
+      if (r && r.status === 'ok') { toast('Appareil retiré', 'ok'); this.refresh(); }
+      else toast('Erreur retrait', 'error');
+    });
+  },
+};
+
+// Charger les appareils jumelés au démarrage
+window.addEventListener('DOMContentLoaded', () => setTimeout(() => btPairing.refresh(), 1500));
+
 let _currentSpeedMode = 'normal';
 function setSpeedMode(mode) {
   _currentSpeedMode = mode;

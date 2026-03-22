@@ -766,6 +766,34 @@
           <button class="btn speed-mode-btn" data-mode="fast" onclick="setSpeedMode('fast')">FAST</button>
         </div>
       </div>
+
+      <!-- Jumelage BT -->
+      <div class="section-divider" style="margin:18px 0 12px"></div>
+      <div class="section-label">JUMELAGE MANETTE</div>
+      <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 10px">
+        Mets ta manette en mode découverte (maintenir le bouton BT), puis clique SCAN.
+      </p>
+
+      <div class="btn-group">
+        <button class="btn btn-active" id="bt-scan-btn" onclick="btPairing.startScan()">
+          <span id="bt-scan-label">&#x1F50D; SCAN (15s)</span>
+        </button>
+        <button class="btn" onclick="btPairing.refresh()">&#x21BB; ACTUALISER</button>
+      </div>
+
+      <div id="bt-scan-status" style="font-size:11px;color:var(--txt-dim);margin:6px 0;min-height:16px"></div>
+
+      <!-- Appareils découverts -->
+      <div class="section-label" style="margin-top:10px;font-size:10px">APPAREILS DÉTECTÉS</div>
+      <div id="bt-discovered-list" style="min-height:36px;margin-top:4px">
+        <div style="color:var(--txt-dim);font-size:11px">— Lance un scan —</div>
+      </div>
+
+      <!-- Appareils jumelés -->
+      <div class="section-label" style="margin-top:14px;font-size:10px">APPAREILS JUMELÉS</div>
+      <div id="bt-paired-list" style="min-height:36px;margin-top:4px">
+        <div style="color:var(--txt-dim);font-size:11px">— Aucun —</div>
+      </div>
     </section>
 
     <!-- Kids Mode -->

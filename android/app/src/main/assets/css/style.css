@@ -1715,6 +1715,9 @@ body::after {
 
 .btn.btn-sm    { padding: 5px 10px; font-size: 10px; }
 .btn.btn-xs    { padding: 3px 6px;  font-size: 9px; letter-spacing: 0.5px; }
+.bt-pair-row   { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+.bt-pair-name  { flex:1; font-size:11px; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bt-pair-addr  { font-size:9px; color:var(--txt-dim); font-family:monospace; white-space:nowrap; }
 .btn.btn-active { background: rgba(0, 100, 200, 0.3); border-color: var(--blue); color: var(--blue); }
 .btn.btn-dark   { background: rgba(0, 0, 0, 0.4); }
 .btn.btn-danger { background: rgba(60, 0, 15, 0.6); border-color: var(--red); color: var(--red); }
