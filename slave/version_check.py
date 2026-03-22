@@ -96,26 +96,39 @@ class VersionChecker:
 
     def _trigger_rsync(self, expected_version: str) -> bool:
         """
-        Signale au Master qu'un rsync est nécessaire.
-        Le Master redéclenche rsync + reboot.
-        En pratique sur Pi Zero: on attend le reboot du Master.
+        Demande un resync au Master via HTTP POST /system/resync_slave.
+        Le Master exécute resync_slave.sh (rsync + service install + restart).
+        Si le resync réussit, le service est redémarré par le Master → ce process s'arrête.
         """
+        import urllib.request
+        import json
+
+        MASTER_API = "http://192.168.4.1:5000"
+
         for attempt in range(MAX_SYNC_RETRIES):
             log.info(f"Sync tentative {attempt + 1}/{MAX_SYNC_RETRIES}")
-            # Demander re-sync au Master via UART
-            self._uart.send('V', '?')
-            self._version_event.clear()
-            if not self._version_event.wait(timeout=VERSION_REQUEST_TIMEOUT_S):
-                log.warning("Pas de réponse Master pour re-sync")
-            else:
+            try:
+                req = urllib.request.Request(
+                    f"{MASTER_API}/system/resync_slave",
+                    data=json.dumps({}).encode(),
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    log.info(f"Resync demandé au Master: {resp.status}")
+                # Attendre que le Master rsync et redémarre ce service
+                # Le restart du service tuerait ce process — si on arrive ici, il a échoué
+                backoff = SYNC_RETRY_BACKOFF_S[attempt] if attempt < MAX_SYNC_RETRIES - 1 else 30
+                log.info(f"Attente {backoff}s pour le resync Master...")
+                time.sleep(backoff)
                 local = self._read_local_version()
                 if local == expected_version:
                     log.info(f"Sync réussi à la tentative {attempt + 1}")
                     return True
+            except Exception as e:
+                log.warning(f"Resync HTTP échoué: {e}")
+                if attempt < MAX_SYNC_RETRIES - 1:
+                    time.sleep(SYNC_RETRY_BACKOFF_S[attempt])
 
-            if attempt < MAX_SYNC_RETRIES - 1:
-                backoff = SYNC_RETRY_BACKOFF_S[attempt]
-                log.info(f"Prochain retry dans {backoff}s")
-                time.sleep(backoff)
-
+        log.error("Tous les resyncs ont échoué")
         return False

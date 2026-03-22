@@ -107,17 +107,28 @@ rsync -az \
 rsync -az -e "$SSH" "$VERSION_FILE" "$SLAVE:$VERSION_FILE" 2>/dev/null
 ok "VERSION synchronisé → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
 
+# Installer le service file sur le Slave (PYTHONPATH + config à jour)
+SERVICE_SRC="$REPO/slave/services/r2d2-slave.service"
+if [ -f "$SERVICE_SRC" ]; then
+    $SSH $SLAVE "sudo tee /etc/systemd/system/r2d2-slave.service > /dev/null" < "$SERVICE_SRC" \
+        && $SSH $SLAVE "sudo systemctl daemon-reload" \
+        && ok "Service file installé (PYTHONPATH OK)" \
+        || warn "Service file: échec installation sudo — vérifier sudoers"
+fi
+
 # ──────────────────────────────────────────────
 # 4. Redémarrer le Slave
 # ──────────────────────────────────────────────
 step "4/6" "Redémarrage Slave"
 if $SSH $SLAVE "sudo systemctl restart r2d2-slave.service" 2>/dev/null; then
-    sleep 2
+    sleep 4
     SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
     if [ "$SLAVE_STATUS" = "active" ]; then
         ok "r2d2-slave actif"
     else
-        warn "r2d2-slave status: $SLAVE_STATUS"
+        # Service en échec → reboot complet
+        warn "r2d2-slave en échec ($SLAVE_STATUS) — reboot Slave..."
+        $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave en reboot" || fail "Reboot Slave échoué"
     fi
 else
     warn "systemctl échoué — reboot Slave..."

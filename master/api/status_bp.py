@@ -92,6 +92,21 @@ def system_update():
     return jsonify({'status': 'ok', 'message': 'Update en cours...'})
 
 
+@status_bp.post('/system/resync_slave')
+def system_resync_slave():
+    """
+    Rsync + service install + restart Slave uniquement.
+    Appelé automatiquement par le Slave via HTTP quand il détecte un version mismatch au boot.
+    """
+    def do_resync():
+        subprocess.run(
+            ['bash', '/home/artoo/r2d2/scripts/resync_slave.sh'],
+            check=False
+        )
+    threading.Thread(target=do_resync, daemon=True).start()
+    return jsonify({'status': 'resync_triggered'})
+
+
 @status_bp.post('/system/reboot')
 def system_reboot():
     """Reboot le Master (Pi dôme)."""
