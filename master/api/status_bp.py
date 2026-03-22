@@ -71,6 +71,8 @@ def get_status():
         'scripts_running': reg.engine.list_running() if reg.engine else [],
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
         'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # CRC invalides consécutifs côté Master
+        'audio_playing':     reg.audio_playing,
+        'audio_current':     reg.audio_current,
     })
 
 

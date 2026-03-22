@@ -41,3 +41,7 @@ vesc_can_scan_event: threading.Event = threading.Event()
 # None = Slave injoignable ou pas encore pollé
 # dict: {'total': N, 'errors': E, 'health_pct': 98.1, 'window_s': 60}
 slave_uart_health: dict | None = None
+
+# État audio — mis à jour par audio_bp à chaque play/stop
+audio_playing: bool = False
+audio_current: str  = ''

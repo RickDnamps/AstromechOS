@@ -80,6 +80,8 @@ def play_sound():
         return jsonify({'error': f'Son inconnu: {sound}'}), 404
     if reg.uart:
         reg.uart.send('S', sound)
+    reg.audio_playing = True
+    reg.audio_current = sound
     return jsonify({'status': 'ok', 'sound': sound})
 
 
@@ -92,6 +94,8 @@ def play_random():
         return jsonify({'error': f'Catégorie inconnue: {category}'}), 404
     if reg.uart:
         reg.uart.send('S', f'RANDOM:{category}')
+    reg.audio_playing = True
+    reg.audio_current = f'🎲 {category}'
     return jsonify({'status': 'ok', 'category': category})
 
 
@@ -100,6 +104,8 @@ def stop_audio():
     """Coupe le son en cours."""
     if reg.uart:
         reg.uart.send('S', 'STOP')
+    reg.audio_playing = False
+    reg.audio_current = ''
     return jsonify({'status': 'ok'})
 
 

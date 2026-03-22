@@ -265,7 +265,7 @@
     <div class="sequences-header">
       <h3 class="section-title">SEQUENCE SCRIPTS</h3>
       <div class="row">
-        <button class="btn btn-danger" onclick="api('/scripts/stop_all','POST').then(()=>toast('All sequences stopped','ok'))">
+        <button class="btn btn-danger" onclick="scriptEngine.stopAll()">
           STOP ALL
         </button>
         <span class="running-label">Running: <span id="running-count">0</span></span>

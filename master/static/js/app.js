@@ -989,10 +989,10 @@ class ScriptEngine {
   run(name, loop) {
     api('/scripts/run', 'POST', { name, loop }).then(d => {
       if (d) {
-        this._running.add(name);
         const card = el(`script-card-${name}`);
         if (card) card.classList.add('running');
         toast(`${name.toUpperCase()} started${loop ? ' (loop)' : ''}`, 'ok');
+        poller.poll();  // sync running state + bottom bar from server immediately
       }
     });
   }
@@ -1003,6 +1003,24 @@ class ScriptEngine {
       if (d) {
         this._running.clear();
         document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+        const count = el('running-count');
+        if (count) count.textContent = '0';
+        const list = el('running-scripts');
+        if (list) list.textContent = '—';
+        toast('Sequences stopped', 'ok');
+      }
+    });
+  }
+
+  stopAll() {
+    api('/scripts/stop_all', 'POST').then(d => {
+      if (d) {
+        this._running.clear();
+        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+        const count = el('running-count');
+        if (count) count.textContent = '0';
+        const list = el('running-scripts');
+        if (list) list.textContent = '—';
         toast('Sequences stopped', 'ok');
       }
     });
@@ -1178,6 +1196,11 @@ class StatusPoller {
 
     // BT controller status
     btController.updateStatus(data);
+
+    // Audio state
+    if (data.audio_playing !== undefined) {
+      audioBoard.setPlaying(data.audio_playing, data.audio_current || '');
+    }
 
     // Scripts running
     if (data.scripts_running) {
