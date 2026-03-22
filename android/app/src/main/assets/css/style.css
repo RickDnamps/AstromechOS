@@ -1864,6 +1864,108 @@ select.input-text option { background: #0a1525; }
 .toast.toast-info  { border-color: var(--blue);   color: var(--blue);   box-shadow: 0 0 12px rgba(0,170,255,0.3); }
 
 /* ================================================================
+   ADMIN GUARD — Onglets protégés + modal mot de passe
+================================================================ */
+
+/* Onglets protégés : cachés par défaut, visibles quand admin déverrouillé */
+.tab.tab-protected { display: none; }
+body.admin-unlocked .tab.tab-protected { display: flex; }
+
+/* Gear icon — toujours visible à droite de la tabbar */
+.admin-gear-btn {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 14px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s, background 0.2s;
+}
+.admin-gear-btn:hover { color: var(--blue); background: rgba(0,170,255,0.06); }
+body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--orange); }
+
+/* Overlay modal */
+.admin-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 4, 12, 0.82);
+  backdrop-filter: blur(4px);
+}
+.admin-modal.hidden { display: none; }
+
+/* Carte centrale */
+.admin-modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--blue);
+  box-shadow: 0 0 32px rgba(0,170,255,0.25), inset 0 0 60px rgba(0,170,255,0.04);
+  border-radius: 6px;
+  padding: 32px 28px 24px;
+  width: 300px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.admin-modal-icon { color: var(--blue); opacity: 0.7; }
+.admin-modal-title {
+  font-family: var(--font);
+  font-size: 14px;
+  letter-spacing: 3px;
+  color: var(--blue);
+  text-shadow: 0 0 10px var(--blue);
+}
+.admin-modal-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.5;
+  letter-spacing: 0.5px;
+}
+.admin-pwd-input {
+  width: 100%;
+  background: rgba(0,170,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  letter-spacing: 3px;
+  padding: 10px 12px;
+  outline: none;
+  text-align: center;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.admin-pwd-input:focus { border-color: var(--blue); box-shadow: 0 0 8px rgba(0,170,255,0.2); }
+.admin-pwd-error {
+  font-size: 11px;
+  color: var(--red);
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px var(--red);
+}
+.admin-pwd-error.hidden { display: none; }
+.admin-modal-btns { display: flex; gap: 10px; width: 100%; justify-content: flex-end; margin-top: 4px; }
+
+/* Shake animation — mauvais mot de passe */
+@keyframes shake {
+  0%,100% { transform: translateX(0); }
+  20%      { transform: translateX(-8px); }
+  40%      { transform: translateX(8px); }
+  60%      { transform: translateX(-6px); }
+  80%      { transform: translateX(6px); }
+}
+.shake { animation: shake 0.4s ease; }
+
+/* ================================================================
    RESPONSIVE
 ================================================================ */
 @media (max-width: 768px) {

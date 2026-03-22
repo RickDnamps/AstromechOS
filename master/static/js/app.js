@@ -65,13 +65,104 @@ function toast(msg, type = 'info') { toastMgr.show(msg, type); }
 // Tab Navigation
 // ================================================================
 
+// ================================================================
+// Admin Guard — onglets protégés (SERVO / VESC / CONFIG)
+// ================================================================
+
+class AdminGuard {
+  constructor() {
+    this._unlocked = false;
+    this._timer    = null;
+    this._TIMEOUT  = 5 * 60 * 1000;   // 5 minutes
+    this._PROTECTED = new Set(['systems', 'vesc', 'config']);
+  }
+
+  get unlocked() { return this._unlocked; }
+  isProtected(tabId) { return this._PROTECTED.has(tabId); }
+
+  showModal() {
+    const m = el('admin-modal');
+    if (!m) return;
+    m.classList.remove('hidden');
+    el('admin-pwd-input').value = '';
+    el('admin-pwd-error').classList.add('hidden');
+    setTimeout(() => el('admin-pwd-input').focus(), 80);
+  }
+
+  cancel() { el('admin-modal').classList.add('hidden'); }
+
+  onOverlayClick(e) {
+    if (e.target === el('admin-modal')) this.cancel();
+  }
+
+  submit() {
+    const pwd = el('admin-pwd-input').value;
+    if (pwd === 'deetoo') {
+      this._unlock();
+    } else {
+      el('admin-pwd-error').classList.remove('hidden');
+      const inp = el('admin-pwd-input');
+      inp.value = '';
+      inp.classList.remove('shake');
+      void inp.offsetWidth;   // reflow pour relancer l'animation
+      inp.classList.add('shake');
+      inp.focus();
+    }
+  }
+
+  _unlock() {
+    this._unlocked = true;
+    document.body.classList.add('admin-unlocked');
+    el('admin-modal').classList.add('hidden');
+    toast('Accès admin activé — expire dans 5 min', 'ok');
+    this._startTimer();
+  }
+
+  lock() {
+    if (!this._unlocked) return;
+    this._unlocked = false;
+    clearTimeout(this._timer);
+    document.body.classList.remove('admin-unlocked');
+    // Si on est sur un onglet protégé → revenir à DRIVE
+    const active = document.querySelector('.tab.active');
+    if (active && this._PROTECTED.has(active.dataset.tab)) {
+      switchTab('drive');
+    }
+    toast('Accès admin expiré', 'info');
+  }
+
+  onTabSwitch(tabId) {
+    if (!this._unlocked) return;
+    if (this._PROTECTED.has(tabId)) {
+      clearTimeout(this._timer);   // sur un onglet protégé → pause le timer
+    } else {
+      this._startTimer();          // retour sur onglet normal → (re)lance le timer
+    }
+  }
+
+  _startTimer() {
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this.lock(), this._TIMEOUT);
+  }
+}
+
+const adminGuard = new AdminGuard();
+
 function switchTab(tabId) {
+  // Onglet protégé sans accès → ouvrir modal
+  if (adminGuard.isProtected(tabId) && !adminGuard.unlocked) {
+    adminGuard.showModal();
+    return;
+  }
+
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   const tabBtn = document.querySelector(`.tab[data-tab="${tabId}"]`);
   const tabContent = el(`tab-${tabId}`);
   if (tabBtn) tabBtn.classList.add('active');
   if (tabContent) tabContent.classList.add('active');
+
+  adminGuard.onTabSwitch(tabId);
 
   if (tabId === 'config') { loadSettings(); loadServoSettings(); }
   if (tabId === 'sequences') loadScripts();
