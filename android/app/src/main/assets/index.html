@@ -146,10 +146,16 @@
       </div>
 
       <!-- Emergency stop -->
-      <button class="estop-btn" id="estop-btn" onclick="emergencyStop()">
-        <span class="estop-icon">&#9632;</span>
-        <span class="estop-text">EMERGENCY STOP</span>
-      </button>
+      <div class="estop-row">
+        <button class="estop-btn" id="estop-btn" onclick="emergencyStop()">
+          <span class="estop-icon">&#9632;</span>
+          <span class="estop-text">EMERGENCY STOP</span>
+        </button>
+        <button class="estop-reset-btn" id="estop-reset-btn" onclick="estopReset()">
+          <span class="estop-icon">&#9654;</span>
+          <span class="estop-text">RESET E-STOP</span>
+        </button>
+      </div>
 
       <!-- Speed + dome controls -->
       <div class="drive-controls-row">
@@ -259,7 +265,7 @@
     <div class="sequences-header">
       <h3 class="section-title">SEQUENCE SCRIPTS</h3>
       <div class="row">
-        <button class="btn btn-danger" onclick="api('/scripts/stop_all','POST').then(()=>toast('All sequences stopped','ok'))">
+        <button class="btn btn-danger" onclick="scriptEngine.stopAll()">
           STOP ALL
         </button>
         <span class="running-label">Running: <span id="running-count">0</span></span>
