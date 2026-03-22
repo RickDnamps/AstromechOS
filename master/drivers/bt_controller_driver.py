@@ -372,7 +372,7 @@ class BTControllerDriver:
         raw = ecodes.KEY.get(event.code) or ecodes.BTN.get(event.code)
         if not raw:
             return
-        code_names = raw if isinstance(raw, list) else [raw]
+        code_names = list(raw) if isinstance(raw, (list, tuple)) else [raw]
 
         def _is(target: str) -> bool:
             return target in code_names
