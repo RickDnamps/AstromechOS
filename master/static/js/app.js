@@ -502,6 +502,18 @@ class VirtualJoystick {
     if (this._valXId) { const v = el(this._valXId); if (v) v.textContent = '0.00'; }
     if (this._valYId) { const v = el(this._valYId); if (v) v.textContent = '0.00'; }
   }
+
+  /** Déplace le knob visuellement depuis une source externe (manette BT).
+   *  x, y ∈ [-1, 1].  Ne déclenche PAS onMove ni de requête HTTP. */
+  setExternal(x, y) {
+    if (this.active) return;   // joystick tactile prioritaire
+    const maxR = this.ring.offsetWidth / 2;
+    const kx   = x * maxR;
+    const ky   = y * maxR;
+    this.knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+    if (this._valXId) { const v = el(this._valXId); if (v) v.textContent = x.toFixed(2); }
+    if (this._valYId) { const v = el(this._valYId); if (v) v.textContent = y.toFixed(2); }
+  }
 }
 
 // ================================================================
@@ -1378,6 +1390,8 @@ class BTController {
     this._setUI(false, '—');
     api('/motion/stop',      'POST');
     api('/motion/dome/stop', 'POST');
+    jsLeft.setExternal(0, 0);    // reset knobs visuels
+    jsRight.setExternal(0, 0);
     toast('Manette BT déconnectée', 'error');
   }
 
@@ -1403,12 +1417,16 @@ class BTController {
     const now = performance.now();
 
     // ── PROPULSION — bloquée en Child Lock (mode 2) ────────────────
-    if (!lockMgr.isDriveLocked()) {
-      const tRaw = -this._axis(gp, m.throttle || 'L_STICK_Y');
-      const sRaw =  this._axis(gp, m.steer    || 'L_STICK_X');
-      const t    = Math.abs(tRaw) > dz ? tRaw * _speedLimit : 0;
-      const s    = Math.abs(sRaw) > dz ? sRaw * _speedLimit * 0.55 : 0;
+    const tRaw = -this._axis(gp, m.throttle || 'L_STICK_Y');
+    const sRaw =  this._axis(gp, m.steer    || 'L_STICK_X');
+    const t    = Math.abs(tRaw) > dz ? tRaw * _speedLimit : 0;
+    const s    = Math.abs(sRaw) > dz ? sRaw * _speedLimit * 0.55 : 0;
 
+    // Sync visuel joystick gauche — toujours, même en Child Lock
+    jsLeft.setExternal(Math.abs(sRaw) > dz ? sRaw : 0,
+                       Math.abs(tRaw) > dz ? -tRaw : 0);
+
+    if (!lockMgr.isDriveLocked()) {
       if (now - this._lastDriveMs >= this._DRIVE_HZ) {
         this._lastDriveMs = now;
         if (Math.abs(t) > 0.01 || Math.abs(s) > 0.01) {
@@ -1427,6 +1445,10 @@ class BTController {
 
     // ── DÔME ──────────────────────────────────────────────────────
     const dRaw = this._axis(gp, m.dome || 'R_STICK_X');
+
+    // Sync visuel joystick droit
+    jsRight.setExternal(Math.abs(dRaw) > dz ? dRaw : 0, 0);
+
     if (now - this._lastDomeMs >= this._DOME_HZ) {
       this._lastDomeMs = now;
       if (Math.abs(dRaw) > dz) {
