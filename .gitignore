@@ -13,6 +13,17 @@ slave/config/servo_angles.json
 # Mémoire locale Claude Code
 .claude/
 
+# Outils Claude Code / superpowers (local uniquement)
+.clone/
+.superpowers/
+
+# Captures d'écran et images locales
+feedbacks/
+image/
+
+# Gradle local cache (généré automatiquement)
+android/.gradle/
+
 # Code de référence tiers (r2_control by dpoulson)
 others/
 
