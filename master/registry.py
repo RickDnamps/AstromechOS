@@ -48,3 +48,18 @@ audio_current: str  = ''
 
 # Lock mode — 0=Normal, 1=Kids, 2=ChildLock
 lock_mode: int = 0
+
+# Manette Bluetooth (evdev) — initialisé dans main.py
+bt_ctrl: 'BTControllerDriver | None' = None
+
+# E-Stop global — True quand E-Stop actif (servos coupés)
+# Mis à True par /system/estop et bouton E-Stop manette
+# Remis à False par /system/estop_reset et /bt/estop_reset
+estop_active: bool = False
+
+# Timestamp dernière commande drive/dome depuis web/Android (priorité > manette BT)
+web_last_drive_t: float = 0.0
+web_last_dome_t:  float = 0.0
+
+# Limite de vitesse Kids Mode (0.0..1.0) — synchronisé depuis JS via /lock/set
+kids_speed_limit: float = 0.5

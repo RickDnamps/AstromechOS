@@ -209,6 +209,12 @@ def main() -> None:
     )
     reg.engine = engine
 
+    from master.drivers.bt_controller_driver import BTControllerDriver
+
+    bt_ctrl = BTControllerDriver()
+    reg.bt_ctrl = bt_ctrl
+    bt_ctrl.start()
+
     # Callbacks UART entrants
     def on_heartbeat_ack(value: str) -> None:
         log.debug(f"Heartbeat ACK Slave: {value}")
@@ -335,6 +341,7 @@ def main() -> None:
         if reg.servo:      reg.servo.shutdown()
         if reg.dome_servo: reg.dome_servo.shutdown()
         if reg.engine: reg.engine.stop_all()
+        if reg.bt_ctrl: reg.bt_ctrl.stop()
         log.info("Master arrêté proprement")
         sys.exit(0)
 

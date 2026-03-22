@@ -56,6 +56,8 @@ def get_status():
     # HB  = heartbeat applicatif App ↔ Master (AppWatchdog)
     # UART = lien série Master ↔ Slave
     heartbeat_ok = app_watchdog.is_connected
+    # BT controller status
+    bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
     return jsonify({
         'version':      _read_version(),
         'uptime':       _uptime(),
@@ -74,6 +76,8 @@ def get_status():
         'audio_playing':     reg.audio_playing,
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
+        'estop_active':      reg.estop_active,
+        **bt_status,
     })
 
 
@@ -101,6 +105,8 @@ def lock_set():
     if mode not in (0, 1, 2):
         return jsonify({'error': 'mode invalide'}), 400
     reg.lock_mode = mode
+    if 'kids_speed_limit' in body:
+        reg.kids_speed_limit = max(0.0, min(1.0, float(body.get('kids_speed_limit', 0.5))))
     return jsonify({'status': 'ok', 'mode': mode})
 
 
@@ -173,6 +179,7 @@ def system_estop():
             reg.servo.shutdown()
         except Exception:
             pass
+    reg.estop_active = True
     # Fallback garanti : estop.py direct via subprocess
     threading.Thread(
         target=lambda: subprocess.run(
@@ -188,6 +195,7 @@ def system_estop_reset():
     """Réarme les drivers servo après un E-STOP — réinitialise PCA9685 sans redémarrer le service."""
     import logging
     log = logging.getLogger(__name__)
+    reg.estop_active = False
     results = {}
     if reg.dome_servo:
         ok = reg.dome_servo.setup()

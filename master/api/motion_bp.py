@@ -19,6 +19,7 @@ Si aucune commande reçue pendant 800ms alors que le robot est en mouvement
 → arrêt automatique (perte de connexion contrôleur).
 """
 
+import time
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.motion_watchdog import motion_watchdog
@@ -42,6 +43,7 @@ def drive():
         return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
 
     body  = request.get_json(silent=True) or {}
+    reg.web_last_drive_t = time.time()
     left  = _clamp(float(body.get('left',  0.0)))
     right = _clamp(float(body.get('right', 0.0)))
 
@@ -58,7 +60,11 @@ def drive():
 @motion_bp.post('/arcade')
 def arcade():
     """Arcade drive. Body: {"throttle": float, "steering": float}"""
+    if reg.lock_mode == 2:
+        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
+
     body     = request.get_json(silent=True) or {}
+    reg.web_last_drive_t = time.time()
     throttle = _clamp(float(body.get('throttle', 0.0)))
     steering = _clamp(float(body.get('steering', 0.0)))
 
@@ -98,6 +104,7 @@ def motion_state():
 def dome_turn():
     """Rotation dôme. Body: {"speed": float}"""
     body  = request.get_json(silent=True) or {}
+    reg.web_last_dome_t = time.time()
     speed = _clamp(float(body.get('speed', 0.0)))
 
     motion_watchdog.feed_dome(speed)          # alimente le watchdog
