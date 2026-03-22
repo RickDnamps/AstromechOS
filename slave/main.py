@@ -189,13 +189,20 @@ def main() -> None:
     wifi_watchdog.start()
 
     # ------------------------------------------------------------------
-    # Bus Health push — envoie le % santé UART au RP2040 toutes les 10s
+    # Bus Health push — envoie le % santé UART + état OK au RP2040 toutes les 10s
+    # Re-envoie DISP:OK périodiquement pour que le RP2040 se synchronise
+    # même s'il a manqué le DISP:READY initial (reconnexion USB, démarrage tardif).
     # ------------------------------------------------------------------
+    _display_version     = ['']   # liste pour permettre la modification dans la closure
+    _display_operational = [False]
+
     def _bus_health_push():
         while True:
             time.sleep(10)
             stats = uart.get_health_stats()
             display.bus_health(stats['health_pct'])
+            if _display_operational[0]:
+                display.ok(_display_version[0])
 
     threading.Thread(
         target=_bus_health_push,
@@ -210,8 +217,22 @@ def main() -> None:
     degraded = not checker.run()
     if degraded:
         log.warning("Mode dégradé — application démarrée avec version locale")
+        # En mode dégradé, lire la version locale pour les refreshs périodiques
+        try:
+            with open(VERSION_FILE) as f:
+                _display_version[0] = f.read().strip()
+        except Exception:
+            pass
+        _display_operational[0] = True
+        display.ok(_display_version[0])   # afficher OK même en mode dégradé
     else:
         log.info("Version validée — démarrage normal")
+        try:
+            with open(VERSION_FILE) as f:
+                _display_version[0] = f.read().strip()
+        except Exception:
+            pass
+        _display_operational[0] = True
 
     log.info("Slave opérationnel")
 
