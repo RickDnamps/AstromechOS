@@ -246,8 +246,8 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
     elif color_changed:
         # Couleur franchit le seuil 80% : redessiner anneau + label uniquement
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
-        # y=106 : dy=-14, inner_r=111 → dx≈110 → safe x [10, 230]
-        tft.fill_rect(10, 106, 220, 9, BLACK)
+        # Effacer seulement la largeur du texte "UART BUS HEALTH" (15c×8=120px, cx=120)
+        tft.fill_rect(56, 106, 128, 9, BLACK)
         _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
 
     # Parties dynamiques : toujours mises a jour sans effacer tout l'ecran
@@ -257,8 +257,8 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
     if bus_pct < 80.0:
         _text_center(tft, 'PARASITES DETECTES', 147, ORANGE)
     elif not full:
-        # y=147 : dy=27, inner_r=111 → dx≈108 → safe x [12, 228]
-        tft.fill_rect(12, 147, 216, 9, BLACK)   # efface avertissement si recupere
+        # Effacer seulement la largeur du texte "PARASITES DETECTES" (18c×8=144px, cx=120)
+        tft.fill_rect(44, 147, 152, 9, BLACK)
     # NOTE: PAS de reset_animations() ici — draw_ok ne doit pas reset les flags des autres ecrans
 
 
