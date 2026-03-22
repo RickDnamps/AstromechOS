@@ -93,7 +93,9 @@ echo ""
 info "Étape 1/8 — Mise à jour système..."
 apt-get update -qq
 apt-get upgrade -y -qq
-apt-get install -y -qq python3-pip python3-serial git rsync avahi-daemon
+apt-get install -y -qq \
+    python3-pip python3-serial python3-evdev \
+    git rsync avahi-daemon
 ok "Paquets installés"
 
 # =============================================================================

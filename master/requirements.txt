@@ -1,3 +1,7 @@
+# NOTE: python3-evdev doit être installé via apt (extension C, non pip) :
+#   sudo apt-get install -y python3-evdev
+# setup_master.sh le gère automatiquement.
+
 pyserial>=3.5
 RPi.GPIO>=0.7.1
 adafruit-circuitpython-pca9685>=2.4.0
