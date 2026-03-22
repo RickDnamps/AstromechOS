@@ -657,8 +657,8 @@
 <div class="tab-content" id="tab-config">
   <div class="settings-grid">
 
-    <!-- BT Controller -->
-    <section class="card settings-card">
+    <!-- BT Controller — pleine largeur -->
+    <section class="card settings-card settings-card-wide">
       <h2 class="card-title">BLUETOOTH CONTROLLER</h2>
 
       <!-- Statut + toggle ON/OFF -->
@@ -693,84 +693,101 @@
         </div>
       </div>
 
-      <!-- Type de manette -->
-      <div class="form-group" style="margin-top:12px">
-        <label class="ctrl-label">TYPE DE MANETTE</label>
-        <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
-          <option value="ps">PlayStation (PS4 / PS5)</option>
-          <option value="xbox">Xbox (One / Series)</option>
-          <option value="nintendo">Nintendo Switch Pro</option>
-          <option value="generic">Générique / Autre</option>
-        </select>
-      </div>
+      <!-- Contenu BT : type + mapping en 2 colonnes + sliders -->
+      <div class="bt-config-grid">
 
-      <!-- Mapping boutons -->
-      <table class="bt-mapping-table" style="margin-top:10px">
-        <thead><tr><th>ACTION R2</th><th>BOUTON</th></tr></thead>
-        <tbody>
-          <tr><td>Propulsion (avant/arrière)</td><td><select id="bt-map-throttle" class="input-text input-sm">
-            <option value="ABS_Y">L Stick Y</option>
-            <option value="ABS_RY">R Stick Y</option>
-          </select></td></tr>
-          <tr><td>Direction (gauche/droite)</td><td><select id="bt-map-steer" class="input-text input-sm">
-            <option value="ABS_X">L Stick X</option>
-            <option value="ABS_RX">R Stick X</option>
-          </select></td></tr>
-          <tr><td>Rotation dôme</td><td><select id="bt-map-dome" class="input-text input-sm">
-            <option value="ABS_RX">R Stick X</option>
-            <option value="ABS_X">L Stick X</option>
-          </select></td></tr>
-          <tr><td>Panneaux dôme (maintenir)</td><td><select id="bt-map-panel1" class="input-text input-sm">
-            <option value="BTN_WEST">□ / X / Y</option>
-            <option value="BTN_NORTH">△ / Y / X</option>
-            <option value="BTN_SOUTH">✕ / A / B</option>
-            <option value="BTN_TL">L1 / LB / L</option>
-          </select></td></tr>
-          <tr><td>Panneaux body (maintenir)</td><td><select id="bt-map-panel2" class="input-text input-sm">
-            <option value="BTN_NORTH">△ / Y / X</option>
-            <option value="BTN_WEST">□ / X / Y</option>
-            <option value="BTN_TR">R1 / RB / R</option>
-          </select></td></tr>
-          <tr><td>Son aléatoire</td><td><select id="bt-map-audio" class="input-text input-sm">
-            <option value="BTN_EAST">○ / B / A</option>
-            <option value="BTN_SOUTH">✕ / A / B</option>
-            <option value="BTN_SELECT">Share / View / −</option>
-          </select></td></tr>
-          <tr><td>Emergency Stop</td><td><select id="bt-map-estop" class="input-text input-sm">
-            <option value="BTN_MODE">PS / Xbox / Home</option>
-            <option value="BTN_SELECT">Share / View / −</option>
-            <option value="BTN_START">Options / Menu / +</option>
-          </select></td></tr>
-        </tbody>
-      </table>
+        <!-- Colonne gauche : type + mapping axes -->
+        <div>
+          <div class="form-group">
+            <label class="ctrl-label">TYPE DE MANETTE</label>
+            <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
+              <option value="ps">PlayStation (PS4 / PS5)</option>
+              <option value="xbox">Xbox (One / Series)</option>
+              <option value="nintendo">Nintendo Switch Pro</option>
+              <option value="generic">Générique / Autre</option>
+            </select>
+          </div>
+          <div class="section-label" style="font-size:10px;margin-bottom:6px">AXES</div>
+          <table class="bt-mapping-table">
+            <thead><tr><th>ACTION</th><th>AXE</th></tr></thead>
+            <tbody>
+              <tr><td>Propulsion</td><td><select id="bt-map-throttle" class="input-text input-sm">
+                <option value="ABS_Y">L Stick Y</option>
+                <option value="ABS_RY">R Stick Y</option>
+              </select></td></tr>
+              <tr><td>Direction</td><td><select id="bt-map-steer" class="input-text input-sm">
+                <option value="ABS_X">L Stick X</option>
+                <option value="ABS_RX">R Stick X</option>
+              </select></td></tr>
+              <tr><td>Rotation dôme</td><td><select id="bt-map-dome" class="input-text input-sm">
+                <option value="ABS_RX">R Stick X</option>
+                <option value="ABS_X">L Stick X</option>
+              </select></td></tr>
+            </tbody>
+          </table>
+        </div>
 
-      <!-- Deadzone + Inactivité -->
-      <div class="row mt" style="gap:16px">
-        <div class="speed-wrap" style="flex:1">
+        <!-- Colonne droite : mapping boutons + sliders -->
+        <div>
+          <div class="section-label" style="font-size:10px;margin-bottom:6px;margin-top:32px">BOUTONS</div>
+          <table class="bt-mapping-table">
+            <thead><tr><th>ACTION</th><th>BOUTON</th></tr></thead>
+            <tbody>
+              <tr><td>Panneaux dôme</td><td><select id="bt-map-panel1" class="input-text input-sm">
+                <option value="BTN_WEST">□ / X / Y</option>
+                <option value="BTN_NORTH">△ / Y / X</option>
+                <option value="BTN_SOUTH">✕ / A / B</option>
+                <option value="BTN_TL">L1 / LB / L</option>
+              </select></td></tr>
+              <tr><td>Panneaux body</td><td><select id="bt-map-panel2" class="input-text input-sm">
+                <option value="BTN_NORTH">△ / Y / X</option>
+                <option value="BTN_WEST">□ / X / Y</option>
+                <option value="BTN_TR">R1 / RB / R</option>
+              </select></td></tr>
+              <tr><td>Son aléatoire</td><td><select id="bt-map-audio" class="input-text input-sm">
+                <option value="BTN_EAST">○ / B / A</option>
+                <option value="BTN_SOUTH">✕ / A / B</option>
+                <option value="BTN_SELECT">Share / View / −</option>
+              </select></td></tr>
+              <tr><td>Emergency Stop</td><td><select id="bt-map-estop" class="input-text input-sm">
+                <option value="BTN_MODE">PS / Xbox / Home</option>
+                <option value="BTN_SELECT">Share / View / −</option>
+                <option value="BTN_START">Options / Menu / +</option>
+              </select></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div><!-- /bt-config-grid -->
+
+      <!-- Deadzone + Timeout + Save + Speed mode -->
+      <div class="row mt" style="gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <div class="speed-wrap" style="flex:1;min-width:140px">
           <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">10%</span></label>
           <input type="range" id="bt-deadzone" min="0" max="30" value="10"
                  oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
         </div>
-        <div class="speed-wrap" style="flex:1">
+        <div class="speed-wrap" style="flex:1;min-width:140px">
           <label class="ctrl-label">TIMEOUT INACTIVITÉ <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
           <input type="range" id="bt-inactivity-timeout" min="0" max="120" value="30"
                  oninput="el('bt-timeout-val').textContent=this.value+'s'" class="holo-slider">
         </div>
-      </div>
-
-      <div class="btn-group mt">
-        <button class="btn btn-active" onclick="btController.saveFullConfig()">SAVE CONFIG</button>
-        <div class="speed-mode-btns">
-          <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
-          <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>
-          <button class="btn speed-mode-btn" data-mode="fast" onclick="setSpeedMode('fast')">FAST</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-active" onclick="btController.saveFullConfig()">SAVE CONFIG</button>
+          <div class="speed-mode-btns">
+            <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
+            <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>
+            <button class="btn speed-mode-btn" data-mode="fast" onclick="setSpeedMode('fast')">FAST</button>
+          </div>
         </div>
       </div>
 
-      <!-- Jumelage BT -->
-      <div class="section-divider" style="margin:18px 0 12px"></div>
-      <div class="section-label">JUMELAGE MANETTE</div>
-      <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 10px">
+    </section>
+
+    <!-- Jumelage BT -->
+    <section class="card settings-card">
+      <h2 class="card-title">JUMELAGE MANETTE</h2>
+      <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 12px">
         Mets ta manette en mode découverte (maintenir le bouton BT), puis clique SCAN.
       </p>
 
@@ -783,15 +800,13 @@
 
       <div id="bt-scan-status" style="font-size:11px;color:var(--txt-dim);margin:6px 0;min-height:16px"></div>
 
-      <!-- Appareils découverts -->
-      <div class="section-label" style="margin-top:10px;font-size:10px">APPAREILS DÉTECTÉS</div>
-      <div id="bt-discovered-list" style="min-height:36px;margin-top:4px">
+      <div class="section-label" style="margin-top:12px;font-size:10px">APPAREILS DÉTECTÉS</div>
+      <div id="bt-discovered-list" style="min-height:40px;margin-top:4px">
         <div style="color:var(--txt-dim);font-size:11px">— Lance un scan —</div>
       </div>
 
-      <!-- Appareils jumelés -->
       <div class="section-label" style="margin-top:14px;font-size:10px">APPAREILS JUMELÉS</div>
-      <div id="bt-paired-list" style="min-height:36px;margin-top:4px">
+      <div id="bt-paired-list" style="min-height:40px;margin-top:4px">
         <div style="color:var(--txt-dim);font-size:11px">— Aucun —</div>
       </div>
     </section>
