@@ -199,6 +199,11 @@ def main() -> None:
     def _bus_health_push():
         while True:
             time.sleep(10)
+            # Reconnexion automatique si RP2040 débranché/rebranché
+            if not display.is_ready():
+                log.info("RP2040 déconnecté — tentative reconnexion")
+                if display.reconnect():
+                    log.info("RP2040 reconnecté")
             stats = uart.get_health_stats()
             display.bus_health(stats['health_pct'])
             if _display_operational[0]:

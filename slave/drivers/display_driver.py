@@ -22,6 +22,7 @@ DISPLAY_PORTS = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
 
 class DisplayDriver(BaseDriver):
     def __init__(self, port: str = "auto", baud: int = DISPLAY_BAUD):
+        self._port_config = port   # config originale pour les reconnexions
         self._port   = port
         self._baud   = baud
         self._serial: serial.Serial | None = None
@@ -42,6 +43,19 @@ class DisplayDriver(BaseDriver):
                 continue
         log.error(f"DisplayDriver: aucun port disponible parmi {ports}")
         return False
+
+    def reconnect(self) -> bool:
+        """Ferme la connexion existante et réessaie tous les ports ACM.
+        Appelé automatiquement quand le RP2040 est débranché/rebranché."""
+        if self._serial:
+            try:
+                self._serial.close()
+            except Exception:
+                pass
+            self._serial = None
+        self._ready = False
+        self._port  = self._port_config   # reset pour réessayer tous les ports
+        return self.setup()
 
     def shutdown(self) -> None:
         if self._serial and self._serial.is_open:
