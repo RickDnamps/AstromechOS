@@ -235,18 +235,24 @@ function cycleLockMode() {
 }
 
 function _applyLockMode(sendApi) {
-  const btn   = document.getElementById('lock-btn');
-  const label = document.getElementById('lock-label');
-  const LABELS = ['', 'KIDS', 'LOCK'];
+  const btn     = document.getElementById('lock-btn');
+  const banner  = document.getElementById('mode-banner');
+  const overlay = document.getElementById('joystick-lock-overlay');
   const CLASSES = ['', 'kids', 'locked'];
+  const LABELS  = ['', '⚠️  KIDS MODE  ⚠️', '🔒  CHILD LOCK  🔒'];
 
-  if (btn)   { btn.className   = 'lock-btn ' + CLASSES[lockMode]; }
-  if (label) { label.textContent = LABELS[lockMode]; label.className = CLASSES[lockMode]; }
+  if (btn) btn.className = 'lock-btn ' + CLASSES[lockMode];
+
+  if (banner) {
+    banner.textContent = LABELS[lockMode];
+    banner.className   = lockMode === 0 ? 'hidden' : CLASSES[lockMode];
+  }
+  if (overlay) overlay.classList.toggle('hidden', lockMode !== 2);
 
   if (lockMode === 0) {
     speedLimit = 1.0;
   } else if (lockMode === 1) {
-    speedLimit = 0.2;   // 20% par défaut Kids
+    speedLimit = 0.2;
   } else {
     speedLimit = 0;
     jsLeft.reset(); jsRight.reset();
@@ -292,30 +298,30 @@ function loadCategories() {
     const list = document.getElementById('cat-list');
     list.innerHTML = '';
     data.categories.forEach((cat, i) => {
-      const btn = document.createElement('button');
+      const name = cat.name ?? cat;   // API retourne {name, count}
+      const btn  = document.createElement('button');
       btn.className   = 'cat-btn';
-      btn.textContent = cat;
-      btn.onclick     = () => selectCategory(cat, btn);
+      btn.textContent = name;
+      btn.onclick     = () => selectCategory(name, btn);
       list.appendChild(btn);
-      if (i === 0) btn.click();   // auto-select first
+      if (i === 0) btn.click();
     });
   }).catch(() => {});
 }
 
-function selectCategory(cat, btn) {
+function selectCategory(name, btn) {
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  _activeCategory = cat;
-  loadSounds(cat);
+  _activeCategory = name;
+  loadSounds(name);
 }
 
 function loadSounds(cat) {
-  api('GET', `/audio/sounds?category=${cat}`).then(r => r && r.json()).then(data => {
+  api('GET', `/audio/sounds?category=${encodeURIComponent(cat)}`).then(r => r && r.json()).then(data => {
     if (!data?.sounds) return;
     const grid = document.getElementById('sound-grid');
     grid.innerHTML = '';
 
-    // Random button (full width)
     const rnd = document.createElement('button');
     rnd.className   = 'rnd-btn';
     rnd.textContent = `🎲  RANDOM  ${cat.toUpperCase()}`;

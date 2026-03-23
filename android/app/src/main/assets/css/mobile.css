@@ -96,20 +96,40 @@ body { display: flex; flex-direction: column; }
 }
 .mode-toggle input { accent-color: var(--accent); width: 14px; height: 14px; }
 
-#lock-label {
-  margin-left: auto; font-size: 10px; font-weight: bold;
-  letter-spacing: .14em; margin-right: 8px;
-}
-#lock-label.kids   { color: var(--warn); }
-#lock-label.locked { color: var(--danger); }
-
 #lock-btn {
-  background: transparent; border: 1px solid var(--border);
-  border-radius: 6px; padding: 4px 10px; font-size: 16px;
-  cursor: pointer; color: var(--text-dim); line-height: 1; flex-shrink: 0;
+  margin-left: auto; background: transparent;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 10px; font-size: 16px; cursor: pointer;
+  color: var(--text-dim); line-height: 1; flex-shrink: 0;
 }
 #lock-btn.kids   { color: var(--warn);   border-color: var(--warn); }
 #lock-btn.locked { color: var(--danger); border-color: var(--danger); }
+
+/* Mode banner */
+#mode-banner {
+  flex-shrink: 0; padding: 6px 12px;
+  text-align: center; font-size: 11px; font-weight: bold;
+  letter-spacing: .18em;
+}
+#mode-banner.kids {
+  background: rgba(255,170,0,.12); color: var(--warn);
+  border-top: 1px solid rgba(255,170,0,.35);
+  border-bottom: 1px solid rgba(255,170,0,.35);
+}
+#mode-banner.locked {
+  background: rgba(255,34,68,.14); color: var(--danger);
+  border-top: 1px solid rgba(255,34,68,.4);
+  border-bottom: 1px solid rgba(255,34,68,.4);
+}
+
+/* Joystick lock overlay */
+#joystick-lock-overlay {
+  position: absolute; inset: 0; z-index: 10;
+  background: rgba(255,34,68,.08);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: bold; letter-spacing: .14em;
+  color: var(--danger); pointer-events: none;
+}
 
 /* Child Lock modal */
 #lock-modal {
@@ -150,7 +170,7 @@ body { display: flex; flex-direction: column; }
 #joystick-zone {
   flex: 1; display: flex; align-items: center;
   justify-content: space-around;
-  padding: 8px 4px; min-height: 0;
+  padding: 8px 4px; min-height: 0; position: relative;
 }
 
 .js-wrap {

@@ -32,9 +32,11 @@
     <div class="tab-pane active" id="tab-drive">
 
       <div id="drive-top-bar">
-        <span id="lock-label"></span>
         <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
       </div>
+
+      <!-- Mode banner (Kids / ChildLock) -->
+      <div id="mode-banner" class="hidden"></div>
 
       <!-- Password modal (Child Lock) -->
       <div id="lock-modal" class="hidden" onclick="if(event.target===this)closeLockModal()">
@@ -51,6 +53,7 @@
       </div>
 
       <div id="joystick-zone">
+        <div id="joystick-lock-overlay" class="hidden">🔒 CHILD LOCK</div>
         <div class="js-wrap">
           <div class="js-label">PROPULSION</div>
           <div class="joystick" id="js-left">
