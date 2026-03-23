@@ -240,13 +240,15 @@ function updateSpeedLimit(val) {
   if (el) el.textContent = val + '%';
 }
 
-function toggleChildLock(on) {
-  childLock = on;
-  _applyChildLock(on);
+function toggleChildLock() {
+  childLock = !childLock;
+  _applyChildLock(childLock);
 }
 
 function _applyChildLock(on) {
   document.getElementById('child-lock-overlay')?.classList.toggle('hidden', !on);
+  const btn = document.getElementById('lock-btn');
+  if (btn) { btn.textContent = on ? '🔓' : '🔒'; btn.classList.toggle('locked', on); }
   if (on) { jsLeft.reset(); jsRight.reset(); api('POST', '/motion/stop'); }
 }
 

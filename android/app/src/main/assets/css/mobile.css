@@ -81,6 +81,8 @@ body { display: flex; flex-direction: column; }
 /* ─────────────────────────────────────────────────────────────
    DRIVE TAB
 ───────────────────────────────────────────────────────────── */
+#tab-drive { position: relative; }
+
 #drive-top-bar {
   display: flex; align-items: center; gap: 10px;
   padding: 0 12px; height: 40px; flex-shrink: 0;
@@ -93,6 +95,14 @@ body { display: flex; flex-direction: column; }
   cursor: pointer; white-space: nowrap;
 }
 .mode-toggle input { accent-color: var(--accent); width: 14px; height: 14px; }
+
+#lock-btn {
+  margin-left: auto; background: transparent;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 4px 10px; font-size: 16px; cursor: pointer;
+  color: var(--text-dim); line-height: 1;
+}
+#lock-btn.locked { color: var(--danger); border-color: var(--danger); }
 
 #speed-container {
   display: flex; align-items: center; gap: 6px; flex: 1;
