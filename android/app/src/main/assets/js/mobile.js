@@ -1,6 +1,7 @@
 // ============================================================
-//  R2-D2 Mobile Control — mobile.js  v2
+//  R2-D2 Mobile Control — mobile.js  v3
 //  Self-contained, no dependency on app.js
+//  v3: drawer system replaces tab system, back-button support
 // ============================================================
 'use strict';
 
@@ -61,8 +62,8 @@ setInterval(() => {
     _lastUartPct = pct;
 
     if (s.temperature != null) {
-      const tv = document.getElementById('temp-val');
-      if (tv) tv.textContent = `🌡️ ${s.temperature}°C`;
+      const tv = document.getElementById('hud-temp');
+      if (tv) tv.textContent = `${s.temperature}°C`;
     }
 
     if (s.estop_active !== _lastEstop) {
@@ -91,18 +92,63 @@ function _applyEstopUI(active) {
   if (active) { jsLeft.reset(); jsRight.reset(); }
 }
 
-// ── Tab switching ─────────────────────────────────────────────
-let _audioInit = false;
-let _seqInit   = false;
+// ── Drawer system ─────────────────────────────────────────────
+let _activeDrawer = null;
+let _audioInit    = false;
+let _seqInit      = false;
 
-function switchTab(tab, btn) {
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
-  btn.classList.add('active');
-  if (tab === 'audio'     && !_audioInit) { _audioInit = true; loadCategories(); }
-  if (tab === 'sequences' && !_seqInit)   { _seqInit   = true; loadSequences();  }
+function openDrawer(tab) {
+  if (_activeDrawer === tab) { closeDrawer(); return; }
+  _activeDrawer = tab;
+
+  // Hide all panes, show selected
+  document.querySelectorAll('.drawer-pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById('drawer-' + tab)?.classList.remove('hidden');
+
+  // Update title
+  const titles = { audio: '🔊 AUDIO', seq: '🎬 SÉQUENCES', lights: '💡 LIGHTS' };
+  document.getElementById('drawer-title').textContent = titles[tab] || tab;
+
+  // Active pill highlight
+  document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('pill-' + tab)?.classList.add('active');
+
+  // Show drawer with animation
+  const drawer = document.getElementById('bottom-drawer');
+  drawer.classList.remove('hidden');
+  requestAnimationFrame(() => drawer.classList.add('open'));
+
+  // Show backdrop
+  document.getElementById('drawer-backdrop')?.classList.remove('hidden');
+
+  // Push history entry for back button
+  history.pushState({ drawer: tab }, '');
+
+  // Lazy load on first open
+  if (tab === 'audio' && !_audioInit) { _audioInit = true; loadCategories(); }
+  if (tab === 'seq'   && !_seqInit)   { _seqInit   = true; loadSequences();  }
+
+  _haptic(20);
 }
+
+function closeDrawer() {
+  if (!_activeDrawer) return;
+  _activeDrawer = null;
+
+  const drawer = document.getElementById('bottom-drawer');
+  drawer.classList.remove('open');
+  drawer.addEventListener('transitionend', () => {
+    if (!_activeDrawer) drawer.classList.add('hidden');
+  }, { once: true });
+
+  document.getElementById('drawer-backdrop')?.classList.add('hidden');
+  document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
+}
+
+// Back button closes drawer, otherwise consume event (no accidental app exit)
+window.addEventListener('popstate', () => {
+  if (_activeDrawer) closeDrawer();
+});
 
 // ── Joystick ──────────────────────────────────────────────────
 class MobileJoystick {
@@ -238,7 +284,7 @@ function cycleLockMode() {
 function _applyLockMode(sendApi) {
   const btn   = document.getElementById('lock-btn');
   const badge = document.getElementById('mode-badge');
-  const drive = document.getElementById('tab-drive');
+  const hud   = document.getElementById('hud-drive');
 
   const CLS    = ['', 'kids', 'locked'];
   const BADGE  = ['', 'KIDS MODE', 'CHILD LOCK'];
@@ -258,7 +304,7 @@ function _applyLockMode(sendApi) {
   }
 
   // data-lock attribute → CSS driven visuals
-  if (drive) drive.dataset.lock = lockMode;
+  if (hud) hud.dataset.lock = lockMode;
 
   // Speed & stop
   if (lockMode === 0) {
