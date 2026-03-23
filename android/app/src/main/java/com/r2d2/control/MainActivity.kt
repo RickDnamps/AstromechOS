@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadDashboard() {
-        val url = if (resources.configuration.screenWidthDp < 600)
+        val url = if (resources.configuration.smallestScreenWidthDp < 600)
             "file:///android_asset/mobile.html"
         else
             "file:///android_asset/index.html"
