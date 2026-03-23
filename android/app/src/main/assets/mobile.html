@@ -32,13 +32,22 @@
     <div class="tab-pane active" id="tab-drive">
 
       <div id="drive-top-bar">
-        <div id="speed-container" class="hidden">
-          <input type="range" id="speed-slider"
-                 min="10" max="100" value="50"
-                 oninput="updateSpeedLimit(this.value)">
-          <span id="speed-pct">50%</span>
-        </div>
+        <span id="lock-label"></span>
         <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
+      </div>
+
+      <!-- Password modal (Child Lock) -->
+      <div id="lock-modal" class="hidden" onclick="if(event.target===this)closeLockModal()">
+        <div id="lock-modal-box">
+          <div id="lock-modal-title">CHILD LOCK ACTIF</div>
+          <input type="password" id="lock-pwd" placeholder="Mot de passe"
+                 onkeydown="if(event.key==='Enter')submitLockPwd()">
+          <div id="lock-pwd-err" class="hidden">Mot de passe incorrect</div>
+          <div id="lock-modal-btns">
+            <button onclick="closeLockModal()">ANNULER</button>
+            <button onclick="submitLockPwd()">UNLOCK</button>
+          </div>
+        </div>
       </div>
 
       <div id="joystick-zone">

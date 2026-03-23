@@ -226,40 +226,61 @@ function resetEstop() {
   _applyEstopUI(false);
 }
 
-function updateSpeedLimit(val) {
-  speedLimit = val / 100;
-  const el = document.getElementById('speed-pct');
-  if (el) el.textContent = val + '%';
-}
-
-// Lock cycle : Normal(0) → Kids(1) → ChildLock(2) → Normal
+// Lock cycle : Normal(0) → Kids(1) → ChildLock(2)
+// Sortie de ChildLock : modal mot de passe uniquement
 function cycleLockMode() {
-  lockMode = (lockMode + 1) % 3;
+  if (lockMode === 2) { _showLockModal(); return; }
+  lockMode = lockMode === 0 ? 1 : 2;
   _applyLockMode(true);
 }
 
 function _applyLockMode(sendApi) {
-  const btn = document.getElementById('lock-btn');
-  const sc  = document.getElementById('speed-container');
+  const btn   = document.getElementById('lock-btn');
+  const label = document.getElementById('lock-label');
+  const LABELS = ['', 'KIDS', 'LOCK'];
+  const CLASSES = ['', 'kids', 'locked'];
+
+  if (btn)   { btn.className   = 'lock-btn ' + CLASSES[lockMode]; }
+  if (label) { label.textContent = LABELS[lockMode]; label.className = CLASSES[lockMode]; }
 
   if (lockMode === 0) {
     speedLimit = 1.0;
-    if (btn) { btn.textContent = '🔒'; btn.className = 'lock-btn'; }
-    if (sc)  sc.classList.add('hidden');
   } else if (lockMode === 1) {
-    const sliderVal = document.getElementById('speed-slider')?.value || 50;
-    updateSpeedLimit(sliderVal);
-    if (btn) { btn.textContent = '🔒'; btn.className = 'lock-btn kids'; }
-    if (sc)  sc.classList.remove('hidden');
+    speedLimit = 0.2;   // 20% par défaut Kids
   } else {
     speedLimit = 0;
-    if (btn) { btn.textContent = '🔒'; btn.className = 'lock-btn locked'; }
-    if (sc)  sc.classList.add('hidden');
     jsLeft.reset(); jsRight.reset();
     api('POST', '/motion/stop');
   }
 
   if (sendApi) api('POST', '/lock/set', { mode: lockMode });
+}
+
+function _showLockModal() {
+  const m = document.getElementById('lock-modal');
+  const i = document.getElementById('lock-pwd');
+  const e = document.getElementById('lock-pwd-err');
+  if (m) m.classList.remove('hidden');
+  if (i) { i.value = ''; setTimeout(() => i.focus(), 80); }
+  if (e) e.classList.add('hidden');
+}
+
+function closeLockModal() {
+  document.getElementById('lock-modal')?.classList.add('hidden');
+}
+
+function submitLockPwd() {
+  const pwd = document.getElementById('lock-pwd')?.value || '';
+  const err = document.getElementById('lock-pwd-err');
+  if (pwd === 'deetoo') {
+    closeLockModal();
+    lockMode = 0;
+    _applyLockMode(true);
+  } else {
+    if (err) err.classList.remove('hidden');
+    const i = document.getElementById('lock-pwd');
+    if (i) { i.value = ''; i.focus(); }
+  }
 }
 
 // ── Audio ─────────────────────────────────────────────────────

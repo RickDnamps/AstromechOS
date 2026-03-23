@@ -96,22 +96,55 @@ body { display: flex; flex-direction: column; }
 }
 .mode-toggle input { accent-color: var(--accent); width: 14px; height: 14px; }
 
+#lock-label {
+  margin-left: auto; font-size: 10px; font-weight: bold;
+  letter-spacing: .14em; margin-right: 8px;
+}
+#lock-label.kids   { color: var(--warn); }
+#lock-label.locked { color: var(--danger); }
+
 #lock-btn {
-  margin-left: auto; background: transparent;
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 4px 10px; font-size: 16px; cursor: pointer;
-  color: var(--text-dim); line-height: 1; flex-shrink: 0;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; font-size: 16px;
+  cursor: pointer; color: var(--text-dim); line-height: 1; flex-shrink: 0;
 }
 #lock-btn.kids   { color: var(--warn);   border-color: var(--warn); }
 #lock-btn.locked { color: var(--danger); border-color: var(--danger); }
 
-#speed-container {
-  display: flex; align-items: center; gap: 6px; flex: 1;
+/* Child Lock modal */
+#lock-modal {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.75);
+  display: flex; align-items: center; justify-content: center;
 }
-#speed-container.hidden { display: none; }
-.spd-lbl { font-size: 9px; color: var(--text-dim); white-space: nowrap; }
-#speed-slider { flex: 1; accent-color: var(--accent); height: 4px; }
-#speed-pct { font-size: 10px; color: var(--accent); min-width: 28px; }
+#lock-modal.hidden { display: none; }
+#lock-modal-box {
+  background: var(--bg2); border: 1px solid var(--danger);
+  border-radius: 10px; padding: 24px 20px; width: 80%; max-width: 300px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+#lock-modal-title {
+  font-size: 11px; font-weight: bold; letter-spacing: .16em;
+  color: var(--danger); text-align: center;
+}
+#lock-pwd {
+  background: #060a10; border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text);
+  font-family: monospace; font-size: 14px;
+  padding: 10px; width: 100%;
+}
+#lock-pwd-err {
+  font-size: 10px; color: var(--danger); text-align: center;
+}
+#lock-modal-btns { display: flex; gap: 8px; }
+#lock-modal-btns button {
+  flex: 1; padding: 10px; border-radius: 6px;
+  font-family: monospace; font-size: 11px;
+  font-weight: bold; cursor: pointer; border: none;
+}
+#lock-modal-btns button:first-child { background: #1a2030; color: var(--text-dim); }
+#lock-modal-btns button:last-child  { background: var(--danger); color: #fff; }
+
 
 /* Joystick zone */
 #joystick-zone {
