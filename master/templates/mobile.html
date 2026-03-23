@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0,
+                 maximum-scale=1.0, user-scalable=no,
+                 viewport-fit=cover">
+  <title>R2-D2</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+</head>
+<body>
+
+  <!-- ── Status bar ─────────────────────────────────────── -->
+  <div id="status-bar">
+    <div id="status-indicators">
+      <span class="ind" id="ind-hb"   title="Heartbeat">HB</span>
+      <span class="ind" id="ind-uart" title="UART">UART</span>
+      <span class="ind" id="ind-bt"   title="Bluetooth">BT</span>
+      <span id="uart-pct"></span>
+    </div>
+    <div id="status-host" onclick="showHostDialog()">192.168.4.1</div>
+  </div>
+
+  <!-- ── Alert toast ────────────────────────────────────── -->
+  <div id="alert-toast" class="hidden"></div>
+
+  <!-- ── Tab content ────────────────────────────────────── -->
+  <div id="tab-content">
+
+    <!-- DRIVE ─────────────────────────────────────────── -->
+    <div class="tab-pane active" id="tab-drive">
+
+      <div id="drive-top-bar">
+        <label class="mode-toggle">
+          <input type="checkbox" id="kids-chk"
+                 onchange="toggleKidsMode(this.checked)">
+          <span>Kids</span>
+        </label>
+
+        <div id="speed-container" class="hidden">
+          <span class="spd-lbl">Vitesse</span>
+          <input type="range" id="speed-slider"
+                 min="10" max="100" value="50"
+                 oninput="updateSpeedLimit(this.value)">
+          <span id="speed-pct">50%</span>
+        </div>
+
+        <label class="mode-toggle" style="margin-left:auto">
+          <input type="checkbox" id="lock-chk"
+                 onchange="toggleChildLock(this.checked)">
+          <span>🔒 Lock</span>
+        </label>
+      </div>
+
+      <div id="joystick-zone">
+        <div class="js-wrap">
+          <div class="js-label">PROPULSION</div>
+          <div class="joystick" id="js-left">
+            <div class="js-ring"><div class="js-knob"></div></div>
+          </div>
+        </div>
+        <div class="js-wrap">
+          <div class="js-label">DÔME</div>
+          <div class="joystick" id="js-right">
+            <div class="js-ring"><div class="js-knob"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="drive-bottom-bar">
+        <div id="drive-telem">
+          <span id="bat-val">🔋 --</span>
+          <span id="temp-val">🌡️ --°C</span>
+        </div>
+        <button id="estop-btn"       onclick="triggerEstop()">⬡ E-STOP</button>
+        <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
+      </div>
+
+      <!-- Child lock overlay (inside drive tab) -->
+      <div id="child-lock-overlay" class="hidden">
+        <div class="lock-icon">🔒</div>
+        <div class="lock-label">VERROUILLÉ</div>
+      </div>
+    </div><!-- /tab-drive -->
+
+    <!-- AUDIO ─────────────────────────────────────────── -->
+    <div class="tab-pane" id="tab-audio">
+      <div id="volume-bar">
+        <span>🔈</span>
+        <input type="range" id="vol-slider" min="0" max="100" value="79"
+               oninput="setVolume(this.value)">
+        <span id="vol-pct">79%</span>
+        <button id="stop-audio-btn" onclick="stopAudio()" title="Stop">⏹</button>
+      </div>
+      <div id="audio-body">
+        <div id="cat-list"></div>
+        <div id="sound-grid"></div>
+      </div>
+    </div><!-- /tab-audio -->
+
+    <!-- SEQUENCES ─────────────────────────────────────── -->
+    <div class="tab-pane" id="tab-sequences">
+      <div id="seq-list"></div>
+      <button id="stop-all-fab" onclick="stopAllSeq()">⏹ STOP ALL</button>
+    </div><!-- /tab-sequences -->
+
+    <!-- LIGHTS ────────────────────────────────────────── -->
+    <div class="tab-pane" id="tab-lights">
+
+      <div class="light-card">
+        <div class="card-title">LOGICS — FLD / RLD</div>
+        <div class="btn-row">
+          <button class="btn-light" onclick="teecesMode('random')">RANDOM</button>
+          <button class="btn-light" onclick="teecesMode('leia')">LEIA</button>
+          <button class="btn-light btn-off" onclick="teecesMode('off')">OFF</button>
+        </div>
+        <div class="text-row">
+          <input type="text" id="teeces-text"
+                 placeholder="Texte FLD…" maxlength="20"
+                 autocomplete="off" autocorrect="off" spellcheck="false">
+          <button onclick="teecesText()">OK</button>
+        </div>
+      </div>
+
+      <div class="light-card">
+        <div class="card-title">PSI</div>
+        <div class="psi-swatches">
+          <button class="psi-btn"      onclick="teecesPS(0)">OFF</button>
+          <button class="psi-btn psi-rand" onclick="teecesPS(1)">RAND</button>
+          <button class="psi-btn psi-red"  onclick="teecesPS(2)">●</button>
+          <button class="psi-btn psi-blue" onclick="teecesPS(3)">●</button>
+        </div>
+      </div>
+
+    </div><!-- /tab-lights -->
+
+  </div><!-- /tab-content -->
+
+  <!-- ── Bottom nav ─────────────────────────────────────── -->
+  <nav id="bottom-nav">
+    <button class="nav-btn active" onclick="switchTab('drive', this)">
+      <span class="nav-icon">🕹️</span>
+      <span class="nav-label">Drive</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('audio', this)">
+      <span class="nav-icon">🔊</span>
+      <span class="nav-label">Audio</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('sequences', this)">
+      <span class="nav-icon">🎬</span>
+      <span class="nav-label">Séquences</span>
+    </button>
+    <button class="nav-btn" onclick="switchTab('lights', this)">
+      <span class="nav-icon">💡</span>
+      <span class="nav-label">Lights</span>
+    </button>
+  </nav>
+
+  <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+</body>
+</html>

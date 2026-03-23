@@ -88,11 +88,15 @@ def create_app() -> Flask:
     app.register_blueprint(bt_bp)
 
     # ------------------------------------------------------------------
-    # Route principale → dashboard web
+    # Routes dashboard
     # ------------------------------------------------------------------
     @app.get('/')
     def index():
         return render_template('index.html')
+
+    @app.get('/mobile')
+    def mobile():
+        return render_template('mobile.html')
 
     # ------------------------------------------------------------------
     # Gestion erreurs JSON

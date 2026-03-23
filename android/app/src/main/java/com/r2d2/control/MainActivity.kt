@@ -113,7 +113,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadDashboard() {
-        webView.loadUrl("file:///android_asset/index.html")
+        val url = if (resources.configuration.screenWidthDp < 600)
+            "file:///android_asset/mobile.html"
+        else
+            "file:///android_asset/index.html"
+        webView.loadUrl(url)
         startPingLoop()
     }
 
