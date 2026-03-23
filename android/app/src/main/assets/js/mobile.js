@@ -7,8 +7,7 @@
 // ── Config ───────────────────────────────────────────────────
 let API_BASE    = window.R2D2_API_BASE || 'http://192.168.4.1:5000';
 let speedLimit  = 1.0;
-let kidsMode    = false;
-let childLock   = false;
+let lockMode    = 0;   // 0=Normal 1=Kids 2=ChildLock
 let estopActive = false;
 let driveActive = false;
 let domeActive  = false;
@@ -80,10 +79,10 @@ setInterval(() => {
     }
     estopActive = s.estop_active;
 
-    // Sync kids mode from server lock_mode
-    if (s.lock_mode === 2 && !childLock) {
-      childLock = true;
-      _applyChildLock(true);
+    // Sync lock mode from server
+    if (s.lock_mode !== undefined && s.lock_mode !== lockMode) {
+      lockMode = s.lock_mode;
+      _applyLockMode(false);
     }
   }).catch(() => {});
 }, 1000);
@@ -183,7 +182,7 @@ class MobileJoystick {
 
 // Propulsion (left stick — throttle + steer)
 const jsLeft = new MobileJoystick('js-left', (x, y) => {
-  if (childLock || estopActive) return;
+  if (lockMode === 2 || estopActive) return;
   const now = Date.now();
   if (now - lastDriveT < DRIVE_MS) return;
   lastDriveT = now;
@@ -227,29 +226,40 @@ function resetEstop() {
   _applyEstopUI(false);
 }
 
-function toggleKidsMode(on) {
-  kidsMode = on;
-  const sc = document.getElementById('speed-container');
-  if (sc) sc.classList.toggle('hidden', !on);
-  if (!on) { speedLimit = 1.0; }
-}
-
 function updateSpeedLimit(val) {
   speedLimit = val / 100;
   const el = document.getElementById('speed-pct');
   if (el) el.textContent = val + '%';
 }
 
-function toggleChildLock() {
-  childLock = !childLock;
-  _applyChildLock(childLock);
+// Lock cycle : Normal(0) → Kids(1) → ChildLock(2) → Normal
+function cycleLockMode() {
+  lockMode = (lockMode + 1) % 3;
+  _applyLockMode(true);
 }
 
-function _applyChildLock(on) {
-  document.getElementById('child-lock-overlay')?.classList.toggle('hidden', !on);
+function _applyLockMode(sendApi) {
   const btn = document.getElementById('lock-btn');
-  if (btn) { btn.textContent = on ? '🔓' : '🔒'; btn.classList.toggle('locked', on); }
-  if (on) { jsLeft.reset(); jsRight.reset(); api('POST', '/motion/stop'); }
+  const sc  = document.getElementById('speed-container');
+
+  if (lockMode === 0) {
+    speedLimit = 1.0;
+    if (btn) { btn.textContent = '🔒'; btn.className = 'lock-btn'; }
+    if (sc)  sc.classList.add('hidden');
+  } else if (lockMode === 1) {
+    const sliderVal = document.getElementById('speed-slider')?.value || 50;
+    updateSpeedLimit(sliderVal);
+    if (btn) { btn.textContent = '🔒'; btn.className = 'lock-btn kids'; }
+    if (sc)  sc.classList.remove('hidden');
+  } else {
+    speedLimit = 0;
+    if (btn) { btn.textContent = '🔒'; btn.className = 'lock-btn locked'; }
+    if (sc)  sc.classList.add('hidden');
+    jsLeft.reset(); jsRight.reset();
+    api('POST', '/motion/stop');
+  }
+
+  if (sendApi) api('POST', '/lock/set', { mode: lockMode });
 }
 
 // ── Audio ─────────────────────────────────────────────────────
