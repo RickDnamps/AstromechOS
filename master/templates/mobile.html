@@ -19,6 +19,7 @@
       <span class="ind" id="ind-bt"   title="Bluetooth">BT</span>
       <span id="uart-pct"></span>
     </div>
+    <div id="mode-badge" class="hidden"></div>
     <div id="status-host" onclick="showHostDialog()">192.168.4.1</div>
   </div>
 
@@ -35,9 +36,6 @@
         <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
       </div>
 
-      <!-- Mode banner (Kids / ChildLock) -->
-      <div id="mode-banner" class="hidden"></div>
-
       <!-- Password modal (Child Lock) -->
       <div id="lock-modal" class="hidden" onclick="if(event.target===this)closeLockModal()">
         <div id="lock-modal-box">
@@ -53,7 +51,6 @@
       </div>
 
       <div id="joystick-zone">
-        <div id="joystick-lock-overlay" class="hidden">🔒 CHILD LOCK</div>
         <div class="js-wrap">
           <div class="js-label">PROPULSION</div>
           <div class="joystick" id="js-left">

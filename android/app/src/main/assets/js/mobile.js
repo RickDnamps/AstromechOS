@@ -1,5 +1,5 @@
 // ============================================================
-//  R2-D2 Mobile Control — mobile.js
+//  R2-D2 Mobile Control — mobile.js  v2
 //  Self-contained, no dependency on app.js
 // ============================================================
 'use strict';
@@ -7,14 +7,14 @@
 // ── Config ───────────────────────────────────────────────────
 let API_BASE    = window.R2D2_API_BASE || 'http://192.168.4.1:5000';
 let speedLimit  = 1.0;
-let lockMode    = 0;   // 0=Normal 1=Kids 2=ChildLock
+let lockMode    = 0;   // 0=Normal  1=Kids  2=ChildLock
 let estopActive = false;
 let driveActive = false;
 let domeActive  = false;
 
-const DRIVE_MS  = 50;   // max 20 req/s (mobile battery friendly)
-let lastDriveT  = 0;
-let lastDomeT   = 0;
+const DRIVE_MS = 50;   // max 20 req/s
+let lastDriveT = 0;
+let lastDomeT  = 0;
 
 // ── API helper ────────────────────────────────────────────────
 function api(method, endpoint, body) {
@@ -25,7 +25,7 @@ function api(method, endpoint, body) {
   }).catch(() => null);
 }
 
-// ── Heartbeat (200ms — keeps app_watchdog alive) ──────────────
+// ── Heartbeat ─────────────────────────────────────────────────
 setInterval(() => api('POST', '/heartbeat'), 200);
 
 // ── Toast ─────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ function showToast(msg, ms = 3000) {
   _toastTimer = setTimeout(() => el.classList.add('hidden'), ms);
 }
 
-// ── Status polling (1s) ───────────────────────────────────────
+// ── Status polling (1 s) ──────────────────────────────────────
 let _lastUartPct = 100;
 let _lastEstop   = false;
 
@@ -46,40 +46,31 @@ setInterval(() => {
   api('GET', '/status').then(r => r && r.json()).then(s => {
     if (!s) return;
 
-    // Indicators
     _setInd('ind-hb',   s.heartbeat_ok);
     _setInd('ind-uart', s.uart_ready);
     _setInd('ind-bt',   s.bt_connected);
 
-    // UART health %
     const pct = s.uart_health?.health_pct ?? 100;
-    const uartPctEl = document.getElementById('uart-pct');
-    if (uartPctEl) {
-      uartPctEl.textContent = pct < 100 ? `${Math.round(pct)}%` : '';
-      uartPctEl.style.color = pct < 80 ? 'var(--warn)' : 'var(--text-dim)';
+    const uEl = document.getElementById('uart-pct');
+    if (uEl) {
+      uEl.textContent = pct < 100 ? `${Math.round(pct)}%` : '';
+      uEl.style.color = pct < 80 ? 'var(--warn)' : 'var(--text-dim)';
     }
-    if (pct < 80 && _lastUartPct >= 80) {
-      showToast(`⚠️ UART dégradé — ${Math.round(pct)}%`);
-    }
-    if (!s.uart_ready && _lastUartPct > 0) {
-      showToast('🔴 UART déconnecté !', 5000);
-    }
+    if (pct < 80 && _lastUartPct >= 80) showToast(`⚠️ UART dégradé — ${Math.round(pct)}%`);
+    if (!s.uart_ready && _lastUartPct > 0) showToast('🔴 UART déconnecté !', 5000);
     _lastUartPct = pct;
 
-    // Temperature
     if (s.temperature != null) {
       const tv = document.getElementById('temp-val');
       if (tv) tv.textContent = `🌡️ ${s.temperature}°C`;
     }
 
-    // E-STOP sync
     if (s.estop_active !== _lastEstop) {
       _lastEstop = s.estop_active;
       _applyEstopUI(s.estop_active);
     }
     estopActive = s.estop_active;
 
-    // Sync lock mode from server
     if (s.lock_mode !== undefined && s.lock_mode !== lockMode) {
       lockMode = s.lock_mode;
       _applyLockMode(false);
@@ -115,13 +106,15 @@ function switchTab(tab, btn) {
 
 // ── Joystick ──────────────────────────────────────────────────
 class MobileJoystick {
-  constructor(id, onMove, onStop) {
-    const wrap   = document.getElementById(id);
-    this.ring    = wrap.querySelector('.js-ring');
-    this.knob    = wrap.querySelector('.js-knob');
-    this.onMove  = onMove;
-    this.onStop  = onStop;
-    this.touchId = null;
+  // canStart: optional function () => bool — returns false to block touch
+  constructor(id, onMove, onStop, canStart) {
+    const wrap     = document.getElementById(id);
+    this.ring      = wrap.querySelector('.js-ring');
+    this.knob      = wrap.querySelector('.js-knob');
+    this.onMove    = onMove;
+    this.onStop    = onStop;
+    this.canStart  = canStart || (() => true);
+    this.touchId   = null;
     this.x = 0; this.y = 0;
     this.ring.addEventListener('touchstart',  e => this._start(e), { passive: false });
     this.ring.addEventListener('touchmove',   e => this._move(e),  { passive: false });
@@ -132,8 +125,10 @@ class MobileJoystick {
   _start(e) {
     e.preventDefault();
     if (this.touchId !== null) return;
+    if (!this.canStart()) return;          // ← bloque en ChildLock / E-STOP
     const t = e.changedTouches[0];
     this.touchId = t.identifier;
+    this.ring.classList.add('touching');
     this._update(t);
   }
 
@@ -150,6 +145,7 @@ class MobileJoystick {
       this.touchId = null;
       this.x = 0; this.y = 0;
       this._setKnob(0, 0);
+      this.ring.classList.remove('touching');
       this.onStop();
       break;
     }
@@ -177,37 +173,42 @@ class MobileJoystick {
   reset() {
     this.touchId = null; this.x = 0; this.y = 0;
     this._setKnob(0, 0);
+    this.ring.classList.remove('touching');
   }
 }
 
-// Propulsion (left stick — throttle + steer)
-const jsLeft = new MobileJoystick('js-left', (x, y) => {
-  if (lockMode === 2 || estopActive) return;
-  const now = Date.now();
-  if (now - lastDriveT < DRIVE_MS) return;
-  lastDriveT = now;
-  const thr = -y * speedLimit;
-  const str =  x * speedLimit * 0.55;
-  const L = Math.max(-1, Math.min(1, thr + str));
-  const R = Math.max(-1, Math.min(1, thr - str));
-  api('POST', '/motion/drive', { left: +L.toFixed(3), right: +R.toFixed(3) });
-  driveActive = true;
-}, () => {
-  if (driveActive) { api('POST', '/motion/stop'); driveActive = false; }
-});
+// Propulsion — bloqué si ChildLock ou E-STOP
+const jsLeft = new MobileJoystick(
+  'js-left',
+  (x, y) => {
+    const now = Date.now();
+    if (now - lastDriveT < DRIVE_MS) return;
+    lastDriveT = now;
+    const thr = -y * speedLimit;
+    const str =  x * speedLimit * 0.55;
+    const L = Math.max(-1, Math.min(1, thr + str));
+    const R = Math.max(-1, Math.min(1, thr - str));
+    api('POST', '/motion/drive', { left: +L.toFixed(3), right: +R.toFixed(3) });
+    driveActive = true;
+  },
+  () => { if (driveActive) { api('POST', '/motion/stop'); driveActive = false; } },
+  () => !estopActive && lockMode !== 2   // canStart
+);
 
-// Dôme (right stick — X axis only)
-const jsRight = new MobileJoystick('js-right', (x, _y) => {
-  if (estopActive) return;
-  const now = Date.now();
-  if (now - lastDomeT < DRIVE_MS) return;
-  lastDomeT = now;
-  const speed = +(x * 0.85).toFixed(3);
-  api('POST', '/motion/dome/turn', { speed });
-  domeActive = true;
-}, () => {
-  if (domeActive) { api('POST', '/motion/dome/stop'); domeActive = false; }
-});
+// Dôme — bloqué uniquement si E-STOP (Kids mode : dôme libre)
+const jsRight = new MobileJoystick(
+  'js-right',
+  (x, _y) => {
+    const now = Date.now();
+    if (now - lastDomeT < DRIVE_MS) return;
+    lastDomeT = now;
+    const speed = +(x * 0.85).toFixed(3);
+    api('POST', '/motion/dome/turn', { speed });
+    domeActive = true;
+  },
+  () => { if (domeActive) { api('POST', '/motion/dome/stop'); domeActive = false; } },
+  () => !estopActive   // canStart
+);
 
 // ── Drive controls ────────────────────────────────────────────
 function triggerEstop() {
@@ -226,8 +227,8 @@ function resetEstop() {
   _applyEstopUI(false);
 }
 
-// Lock cycle : Normal(0) → Kids(1) → ChildLock(2)
-// Sortie de ChildLock : modal mot de passe uniquement
+// ── Lock — cycle Normal(0) → Kids(1) → ChildLock(2) ──────────
+// Sortie de ChildLock : modal mot de passe
 function cycleLockMode() {
   if (lockMode === 2) { _showLockModal(); return; }
   lockMode = lockMode === 0 ? 1 : 2;
@@ -235,20 +236,31 @@ function cycleLockMode() {
 }
 
 function _applyLockMode(sendApi) {
-  const btn     = document.getElementById('lock-btn');
-  const banner  = document.getElementById('mode-banner');
-  const overlay = document.getElementById('joystick-lock-overlay');
-  const CLASSES = ['', 'kids', 'locked'];
-  const LABELS  = ['', '⚠️  KIDS MODE  ⚠️', '🔒  CHILD LOCK  🔒'];
+  const btn   = document.getElementById('lock-btn');
+  const badge = document.getElementById('mode-badge');
+  const drive = document.getElementById('tab-drive');
 
-  if (btn) btn.className = 'lock-btn ' + CLASSES[lockMode];
+  const CLS    = ['', 'kids', 'locked'];
+  const BADGE  = ['', 'KIDS MODE', 'CHILD LOCK'];
 
-  if (banner) {
-    banner.textContent = LABELS[lockMode];
-    banner.className   = lockMode === 0 ? 'hidden' : CLASSES[lockMode];
+  // Lock button
+  if (btn) btn.className = 'lock-btn ' + CLS[lockMode];
+
+  // Status bar badge (visible tous onglets)
+  if (badge) {
+    if (lockMode === 0) {
+      badge.className = 'hidden';
+      badge.textContent = '';
+    } else {
+      badge.textContent = BADGE[lockMode];
+      badge.className   = CLS[lockMode];
+    }
   }
-  if (overlay) overlay.classList.toggle('hidden', lockMode !== 2);
 
+  // data-lock attribute → CSS driven visuals
+  if (drive) drive.dataset.lock = lockMode;
+
+  // Speed & stop
   if (lockMode === 0) {
     speedLimit = 1.0;
   } else if (lockMode === 1) {
@@ -267,8 +279,8 @@ function _showLockModal() {
   const i = document.getElementById('lock-pwd');
   const e = document.getElementById('lock-pwd-err');
   if (m) m.classList.remove('hidden');
-  if (i) { i.value = ''; setTimeout(() => i.focus(), 80); }
   if (e) e.classList.add('hidden');
+  if (i) { i.value = ''; setTimeout(() => i.focus(), 80); }
 }
 
 function closeLockModal() {
@@ -277,15 +289,16 @@ function closeLockModal() {
 
 function submitLockPwd() {
   const pwd = document.getElementById('lock-pwd')?.value || '';
-  const err = document.getElementById('lock-pwd-err');
   if (pwd === 'deetoo') {
     closeLockModal();
     lockMode = 0;
     _applyLockMode(true);
   } else {
+    const err = document.getElementById('lock-pwd-err');
     if (err) err.classList.remove('hidden');
     const i = document.getElementById('lock-pwd');
     if (i) { i.value = ''; i.focus(); }
+    if (window.AndroidBridge) AndroidBridge.vibrate(80);
   }
 }
 
@@ -298,7 +311,7 @@ function loadCategories() {
     const list = document.getElementById('cat-list');
     list.innerHTML = '';
     data.categories.forEach((cat, i) => {
-      const name = cat.name ?? cat;   // API retourne {name, count}
+      const name = cat.name ?? cat;   // API: {name, count}
       const btn  = document.createElement('button');
       btn.className   = 'cat-btn';
       btn.textContent = name;
@@ -339,14 +352,14 @@ function loadSounds(cat) {
   }).catch(() => {});
 }
 
-function stopAudio() { api('POST', '/audio/stop'); }
+function stopAudio()  { api('POST', '/audio/stop'); }
 
 function setVolume(val) {
   document.getElementById('vol-pct').textContent = val + '%';
   api('POST', '/audio/volume', { volume: parseInt(val, 10) });
 }
 
-// ── Sequences ─────────────────────────────────────────────────
+// ── Séquences ─────────────────────────────────────────────────
 function loadSequences() {
   api('GET', '/scripts/list').then(r => r && r.json()).then(data => {
     if (!data?.scripts) return;
@@ -355,7 +368,6 @@ function loadSequences() {
     data.scripts.forEach(name => {
       const row = document.createElement('div');
       row.className = 'seq-row';
-      row.id = 'seq-row-' + name;
       const label = name.replace(/_/g, ' ');
       row.innerHTML = `
         <span class="seq-name">${label}</span>
@@ -368,32 +380,22 @@ function loadSequences() {
   }).catch(() => {});
 }
 
-function runSeq(name, loop) {
-  api('POST', '/scripts/run', { name, loop });
-  _haptic(30);
-}
-
-function stopAllSeq() {
-  api('POST', '/scripts/stop_all');
-  _haptic(50);
-}
+function runSeq(name, loop) { api('POST', '/scripts/run', { name, loop }); _haptic(30); }
+function stopAllSeq()       { api('POST', '/scripts/stop_all'); _haptic(50); }
 
 // ── Lights ────────────────────────────────────────────────────
 function teecesMode(mode) { api('POST', '/teeces/' + mode); }
-
 function teecesText() {
   const t = document.getElementById('teeces-text')?.value.trim();
   if (t) api('POST', '/teeces/text', { text: t });
 }
-
 function teecesPS(mode) { api('POST', '/teeces/psi', { mode }); }
 
 // ── Host dialog ───────────────────────────────────────────────
 function showHostDialog() {
   if (window.AndroidBridge) {
-    const current = AndroidBridge.getHost();
-    const h = prompt('IP du Master R2-D2:', current);
-    if (h && h.trim()) {
+    const h = prompt('IP du Master R2-D2:', AndroidBridge.getHost());
+    if (h?.trim()) {
       AndroidBridge.setHost(h.trim());
       API_BASE = 'http://' + h.trim() + ':5000';
       _updateHostLabel();
@@ -407,13 +409,10 @@ function _updateHostLabel() {
 }
 
 // ── Haptic ────────────────────────────────────────────────────
-function _haptic(ms) {
-  if (window.AndroidBridge) AndroidBridge.vibrate(ms);
-}
+function _haptic(ms) { if (window.AndroidBridge) AndroidBridge.vibrate(ms); }
 
 // ── Init ──────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  // Resolve API base
   if (window.AndroidBridge) {
     API_BASE = 'http://' + AndroidBridge.getHost() + ':5000';
   } else if (window.R2D2_API_BASE) {
@@ -421,7 +420,9 @@ window.addEventListener('load', () => {
   }
   _updateHostLabel();
 
-  // Init volume display
   const vs = document.getElementById('vol-slider');
   if (vs) document.getElementById('vol-pct').textContent = vs.value + '%';
+
+  // Init lock visual (data-lock = 0)
+  _applyLockMode(false);
 });
