@@ -95,6 +95,7 @@ class ScriptEngine:
         self._running: dict[int, '_ScriptRunner'] = {}
         self._next_id = 1
         self._lock    = threading.Lock()
+        self.sequences_dir = SCRIPTS_DIR
 
     def list_scripts(self) -> list[str]:
         """Retourne les noms des scripts disponibles."""
@@ -104,16 +105,24 @@ class ScriptEngine:
     def list_running(self) -> list[dict]:
         """Retourne les scripts en cours d'exécution."""
         with self._lock:
-            return [{'id': sid, 'name': r.name}
-                    for sid, r in self._running.items()]
+            return [
+                {
+                    'id': sid,
+                    'name': r.name,
+                    'step_index': r.step_index,
+                    'step_total': r.step_total,
+                    'current_cmd': r.current_cmd,
+                }
+                for sid, r in self._running.items()
+            ]
 
-    def run(self, name: str, loop: bool = False) -> int | None:
+    def run(self, name: str, loop: bool = False, skip_motion: bool = False) -> int | None:
         """
         Lance un script — un seul à la fois.
         Arrête tous les scripts en cours et remet les servos en position fermée avant de démarrer.
         Retourne l'ID du script ou None si introuvable.
         """
-        path = os.path.join(SCRIPTS_DIR, name + '.scr')
+        path = os.path.join(self.sequences_dir, name + '.scr')
         if not os.path.isfile(path):
             log.error(f"Script introuvable: {path}")
             return None
@@ -144,6 +153,7 @@ class ScriptEngine:
             loop=loop,
             engine=self,
             on_done=self._on_done,
+            skip_motion=skip_motion,
         )
         with self._lock:
             self._running[script_id] = runner
@@ -179,7 +189,7 @@ class ScriptEngine:
     # Dispatch des commandes de script
     # ------------------------------------------------------------------
 
-    def execute_command(self, row: list[str], stop_event=None) -> None:
+    def execute_command(self, row: list[str], stop_event=None, skip_motion: bool = False) -> None:
         """Exécute une ligne CSV de script."""
         if not row or row[0].startswith('#'):
             return
@@ -195,7 +205,10 @@ class ScriptEngine:
             elif cmd == 'servo':
                 self._cmd_servo(row)
             elif cmd == 'motion':
-                self._cmd_motion(row)
+                if skip_motion:
+                    log.debug("motion ignoré (mode test sans propulsion)")
+                else:
+                    self._cmd_motion(row)
             elif cmd == 'teeces':
                 self._cmd_teeces(row)
             else:
@@ -336,7 +349,8 @@ class ScriptEngine:
 
 class _ScriptRunner(threading.Thread):
     def __init__(self, script_id: int, name: str, path: str,
-                 loop: bool, engine: ScriptEngine, on_done):
+                 loop: bool, engine: ScriptEngine, on_done,
+                 skip_motion: bool = False):
         super().__init__(name=f"script-{name}", daemon=True)
         self.script_id = script_id
         self.name      = name
@@ -345,23 +359,71 @@ class _ScriptRunner(threading.Thread):
         self._engine   = engine
         self._on_done  = on_done
         self._stop_event = threading.Event()
+        self._skip_motion = skip_motion
+        self.step_index   = 0
+        self.step_total   = 0
+        self.current_cmd  = ""
+
+    def _count_steps(self, path) -> int:
+        """Count non-comment, non-empty lines in a .scr file."""
+        count = 0
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('#'):
+                        count += 1
+        except Exception:
+            pass
+        return count
+
+    def _run_file(self, path, stop_event: threading.Event) -> None:
+        """Execute all commands in a .scr file. Respects stop_event.
+
+        # WARNING: script,name commands are recursive. A→B→A causes infinite
+        # recursion until stop_event is set or Python stack limit is hit.
+        # Use the STOP button to break circular sub-sequences.
+        """
+        self.step_total = self._count_steps(path)
+        self.step_index = 0
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if stop_event.is_set():
+                        return
+                    row = [c.strip() for c in line.split(',')]
+                    if not row or not row[0] or row[0].startswith('#'):
+                        continue
+                    # Handle script,name sub-sequence inline (recursive, blocking)
+                    if row[0].lower() == 'script':
+                        if len(row) < 2 or not row[1]:
+                            log.warning("script: missing name, skipping")
+                            continue
+                        sub_name = row[1]
+                        sub_path = os.path.join(self._engine.sequences_dir,
+                                                f"{sub_name}.scr")
+                        if os.path.isfile(sub_path):
+                            self._run_file(sub_path, stop_event)
+                        else:
+                            log.warning(f"script: sub-sequence '{sub_name}' not found, skipping")
+                        continue
+                    # Track step progress
+                    self.current_cmd = line.strip()
+                    self.step_index += 1
+                    self._engine.execute_command(row, stop_event,
+                                                 skip_motion=self._skip_motion)
+        except Exception as e:
+            log.error(f"Erreur lecture fichier {path}: {e}")
 
     def run(self) -> None:
         while not self._stop_event.is_set():
             try:
-                with open(self._path, 'r', encoding='utf-8') as f:
-                    reader = csv.reader(f)
-                    for row in reader:
-                        if self._stop_event.is_set():
-                            break
-                        self._engine.execute_command(row, self._stop_event)
+                self._run_file(self._path, self._stop_event)
             except Exception as e:
-                log.error(f"Erreur lecture script {self.name}: {e}")
+                log.error(f"Erreur script {self.name}: {e}")
                 break
-
             if not self._loop:
                 break
-
         self._on_done(self.script_id)
         log.debug(f"Script terminé: {self.name}")
 
