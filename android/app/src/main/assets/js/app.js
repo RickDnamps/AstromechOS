@@ -1256,7 +1256,8 @@ class ScriptEngine {
   render() {
     const grid = el('script-list');
     if (!grid) return;
-    grid.innerHTML = this._scripts.map(name => {
+    grid.innerHTML = this._scripts.map(entry => {
+      const name = (typeof entry === 'object' && entry !== null) ? entry.name : entry;
       const desc = this._DESCRIPTIONS[name] || 'Custom sequence script';
       const isRunning = this._running.has(name);
       return `
