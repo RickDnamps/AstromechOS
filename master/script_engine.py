@@ -99,7 +99,7 @@ class ScriptEngine:
 
     def list_scripts(self) -> list[str]:
         """Retourne les noms des scripts disponibles."""
-        files = glob.glob(os.path.join(SCRIPTS_DIR, '*.scr'))
+        files = glob.glob(os.path.join(self.sequences_dir, '*.scr'))
         return [os.path.splitext(os.path.basename(f))[0] for f in sorted(files)]
 
     def list_running(self) -> list[dict]:

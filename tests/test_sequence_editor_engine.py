@@ -65,10 +65,10 @@ def test_step_progress_tracked():
     time.sleep(0.02)  # let runner start
     with engine._lock:
         runners = list(engine._running.values())
-    if runners:
-        runner = runners[0]
-        assert runner.step_total == 2
-        assert runner.step_index >= 0
+    assert len(runners) == 1, "runner should still be active during 0.05s sleeps"
+    runner = runners[0]
+    assert runner.step_total == 2
+    assert runner.step_index >= 0
     engine.stop_all()
     os.unlink(scr)
 
