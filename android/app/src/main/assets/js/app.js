@@ -254,10 +254,12 @@ const lockMgr = new LockManager();
 
 class AdminGuard {
   constructor() {
-    this._unlocked = false;
-    this._timer    = null;
-    this._TIMEOUT  = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED = new Set(['systems', 'vesc', 'config']);
+    this._unlocked  = false;
+    this._timer     = null;
+    this._TIMEOUT   = 5 * 60 * 1000;   // 5 minutes
+    this._PROTECTED = new Set(['systems', 'vesc', 'config', 'editor']);
+    // Bound handler — stored to allow removeEventListener
+    this._boundActivity = () => this._onActivity();
   }
 
   get unlocked() { return this._unlocked; }
@@ -287,7 +289,7 @@ class AdminGuard {
       const inp = el('admin-pwd-input');
       inp.value = '';
       inp.classList.remove('shake');
-      void inp.offsetWidth;   // reflow pour relancer l'animation
+      void inp.offsetWidth;
       inp.classList.add('shake');
       inp.focus();
     }
@@ -298,6 +300,10 @@ class AdminGuard {
     document.body.classList.add('admin-unlocked');
     el('admin-modal').classList.add('hidden');
     toast('Accès admin activé — expire dans 5 min', 'ok');
+    // Écouter l'activité pour reset le timer quand sur un onglet admin
+    document.addEventListener('mousemove', this._boundActivity, { passive: true });
+    document.addEventListener('click',     this._boundActivity, { passive: true });
+    document.addEventListener('keydown',   this._boundActivity, { passive: true });
     this._startTimer();
   }
 
@@ -306,6 +312,9 @@ class AdminGuard {
     this._unlocked = false;
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
+    document.removeEventListener('mousemove', this._boundActivity);
+    document.removeEventListener('click',     this._boundActivity);
+    document.removeEventListener('keydown',   this._boundActivity);
     // Si on est sur un onglet protégé → revenir à DRIVE
     const active = document.querySelector('.tab.active');
     if (active && this._PROTECTED.has(active.dataset.tab)) {
@@ -316,10 +325,16 @@ class AdminGuard {
 
   onTabSwitch(tabId) {
     if (!this._unlocked) return;
-    if (this._PROTECTED.has(tabId)) {
-      clearTimeout(this._timer);   // sur un onglet protégé → pause le timer
-    } else {
-      this._startTimer();          // retour sur onglet normal → (re)lance le timer
+    // Toujours (re)lancer le timer au changement d'onglet
+    this._startTimer();
+  }
+
+  _onActivity() {
+    if (!this._unlocked) return;
+    // Reset le timer uniquement si on est sur un onglet admin
+    const active = document.querySelector('.tab.active');
+    if (active && this._PROTECTED.has(active.dataset.tab)) {
+      this._startTimer();
     }
   }
 
