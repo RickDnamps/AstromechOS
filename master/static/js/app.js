@@ -2258,6 +2258,11 @@ class SequenceEditor {
       el.addEventListener('dragstart', e => {
         e.dataTransfer.setData('editor-cmd', el.dataset.cmd);
       });
+      el.addEventListener('click', () => {
+        if (!this._openName) { alert('Créez ou ouvrez une séquence d\'abord.'); return; }
+        if (this._isBuiltin) return;
+        this._addStep(el.dataset.cmd, this._defaultArgs(el.dataset.cmd));
+      });
     });
     this._dropzone.addEventListener('dragover', e => {
       e.preventDefault();
