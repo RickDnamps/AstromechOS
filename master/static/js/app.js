@@ -2420,7 +2420,7 @@ class SequenceEditor {
     if (step.cmd === 'script' && step.args[0]) {
       const preview = document.createElement('div');
       preview.className = 'editor-subseq-preview';
-      preview.innerHTML = `<div class="editor-subseq-preview-title">▾ ${step.args[0]}.scr</div>`;
+      preview.innerHTML = `<div class="editor-subseq-preview-title">▾ ${this._esc(step.args[0])}.scr</div>`;
       this._loadSubseqPreview(step.args[0], preview);
       card.appendChild(preview);
     }
