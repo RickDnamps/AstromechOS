@@ -496,7 +496,7 @@ body { display: flex; flex-direction: column; }
 
 .drawer-pane {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 10px 12px;
   display: none;
   flex-direction: column;
@@ -541,14 +541,44 @@ body { display: flex; flex-direction: column; }
   cursor: pointer;
 }
 
-#sound-grid {
+#cat-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  max-height: 34px;
+  gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
   flex-shrink: 0;
+  padding-bottom: 2px;
+}
+
+.cat-btn {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s, color .15s;
+  flex-shrink: 0;
+}
+.cat-btn.active {
+  background: rgba(0,170,255,.15);
+  border-color: rgba(0,170,255,.6);
+  color: var(--primary);
+}
+.cat-btn:active { filter: brightness(.85); }
+
+#sound-grid {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 5px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
 .snd-btn {
@@ -589,11 +619,12 @@ body { display: flex; flex-direction: column; }
 }
 
 #seq-list {
-  max-height: 80px;
+  flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-height: 0;
 }
 
 .seq-row {
