@@ -2218,11 +2218,20 @@ class SequenceEditor {
     this._isBuiltin  = false;
     this._pollTimer  = null;
     this._editingIdx = null;
+    this._saving     = false;
 
     this._initButtons();
     this._initPalette();
     this._initSortable();
     this._startPolling();
+  }
+
+  _esc(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   _initButtons() {
@@ -2251,7 +2260,7 @@ class SequenceEditor {
     });
     this._dropzone.addEventListener('dragover', e => {
       e.preventDefault();
-      this._dropzone.style.borderColor = '#00aaff';
+      if (!this._isBuiltin) this._dropzone.style.borderColor = '#00aaff';
     });
     this._dropzone.addEventListener('dragleave', () => {
       this._dropzone.style.borderColor = '';
@@ -2305,8 +2314,8 @@ class SequenceEditor {
       const el = document.createElement('div');
       el.className = 'editor-seq-item' + (s.name === this._openName ? ' active' : '');
       el.innerHTML = s.is_builtin
-        ? `<span class="lock-icon">🔒</span><span>${s.name}</span>`
-        : `<span>${s.name}</span><span class="edit-badge">✏</span>`;
+        ? `<span class="lock-icon">🔒</span><span>${this._esc(s.name)}</span>`
+        : `<span>${this._esc(s.name)}</span><span class="edit-badge">✏</span>`;
       el.addEventListener('click', () => this.openSequence(s.name));
       this._seqList.appendChild(el);
 
@@ -2324,6 +2333,7 @@ class SequenceEditor {
   }
 
   async openSequence(name) {
+    if (this._saving) return;  // don't interrupt an in-progress save
     try {
       const resp = await fetch(`/scripts/get?name=${encodeURIComponent(name)}`);
       if (!resp.ok) { alert(`Séquence "${name}" introuvable`); return; }
@@ -2437,12 +2447,12 @@ class SequenceEditor {
       if (!resp.ok) { el.innerHTML += '<div style="color:#4a2a6a">introuvable</div>'; return; }
       const data = await resp.json();
       const lines = data.steps.slice(0, 4).map(s =>
-        `<div>${s.cmd},${s.args.join(',')}</div>`
+        `<div>${this._esc(s.cmd)},${s.args.map(a => this._esc(a)).join(',')}</div>`
       ).join('');
       const more = data.steps.length > 4
         ? `<div style="color:#4a2a6a">…${data.steps.length - 4} autres</div>`
         : '';
-      el.innerHTML = `<div class="editor-subseq-preview-title">▾ ${name}.scr</div>${lines}${more}`;
+      el.innerHTML = `<div class="editor-subseq-preview-title">▾ ${this._esc(name)}.scr</div>${lines}${more}`;
     } catch (e) { /* silent */ }
   }
 
@@ -2538,6 +2548,7 @@ class SequenceEditor {
     const name = this._nameInput.value.trim();
     if (!name || !/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) { alert('Nom invalide.'); return; }
     if (this._sequence.length === 0) { alert('La séquence est vide.'); return; }
+    this._saving = true;
     try {
       const resp = await fetch('/scripts/save', {
         method: 'POST',
@@ -2548,7 +2559,11 @@ class SequenceEditor {
       this._openName = name;
       this._canvasLabel.textContent = `ÉTAPES — ${name}`;
       await this.loadSequenceList();
-    } catch (e) { alert('Erreur réseau lors de la sauvegarde.'); }
+    } catch (e) {
+      alert('Erreur réseau lors de la sauvegarde.');
+    } finally {
+      this._saving = false;
+    }
   }
 
   async deleteSequence() {
@@ -2615,11 +2630,15 @@ class SequenceEditor {
   async testRun(skipMotion) {
     if (!this._openName) { alert("Ouvrez ou sauvegardez une séquence d'abord."); return; }
     try {
-      await fetch('/scripts/run', {
+      const resp = await fetch('/scripts/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: this._openName, loop: false, skip_motion: skipMotion }),
       });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert(`Erreur TESTER: ${err.error || resp.status}`);
+      }
     } catch (e) { console.error('testRun', e); }
   }
 
