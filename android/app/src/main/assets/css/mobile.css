@@ -247,7 +247,7 @@ body { display: flex; flex-direction: column; }
 #estop-btn {
   position: absolute;
   left: 50%;
-  top: 70px;
+  bottom: 170px;
   transform: translateX(-50%);
   z-index: 15;
   width: 64px;
@@ -274,7 +274,7 @@ body { display: flex; flex-direction: column; }
 #estop-reset-btn {
   position: absolute;
   left: 50%;
-  top: 70px;
+  bottom: 170px;
   transform: translateX(-50%);
   z-index: 15;
   width: 64px;
@@ -302,7 +302,7 @@ body { display: flex; flex-direction: column; }
 #quick-pills {
   position: absolute;
   left: 50%;
-  top: 145px;
+  bottom: 10px;
   transform: translateX(-50%);
   z-index: 15;
   display: flex;
