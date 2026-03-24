@@ -2,152 +2,148 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0,
-                 maximum-scale=1.0, user-scalable=no,
-                 viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0,
+               maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>R2-D2</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
 </head>
 <body>
 
-  <!-- ── Status bar ─────────────────────────────────────── -->
+  <!-- ── Status bar ─────────────────────────────── -->
   <div id="status-bar">
     <div id="status-indicators">
-      <span class="ind" id="ind-hb"   title="Heartbeat">HB</span>
-      <span class="ind" id="ind-uart" title="UART">UART</span>
-      <span class="ind" id="ind-bt"   title="Bluetooth">BT</span>
+      <span class="ind" id="ind-hb">HB</span>
+      <span class="ind" id="ind-uart">UART</span>
+      <span class="ind" id="ind-bt">BT</span>
       <span id="uart-pct"></span>
     </div>
     <div id="mode-badge" class="hidden"></div>
     <div id="status-host" onclick="showHostDialog()">192.168.4.1</div>
   </div>
 
-  <!-- ── Alert toast ────────────────────────────────────── -->
+  <!-- ── Alert toast ────────────────────────────── -->
   <div id="alert-toast" class="hidden"></div>
 
-  <!-- ── Tab content ────────────────────────────────────── -->
-  <div id="tab-content">
+  <!-- ── HUD ────────────────────────────────────── -->
+  <div id="hud-drive">
 
-    <!-- DRIVE ─────────────────────────────────────────── -->
-    <div class="tab-pane active" id="tab-drive">
+    <!-- Camera background (placeholder) -->
+    <!-- Future: <img id="cam-stream" src="http://192.168.4.1:8080/?action=stream"> -->
+    <div id="cam-bg"></div>
 
-      <div id="drive-top-bar">
-        <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
+    <!-- HUD corner brackets -->
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+
+    <!-- Lock button -->
+    <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
+
+    <!-- E-STOP -->
+    <button id="estop-btn" onclick="triggerEstop()">⬡ E-STOP</button>
+    <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
+
+    <!-- Quick pills (below E-STOP) -->
+    <div id="quick-pills">
+      <button class="pill-btn" id="pill-audio"  onclick="openDrawer('audio')">🔊 AUDIO</button>
+      <button class="pill-btn" id="pill-seq"    onclick="openDrawer('seq')">🎬 SEQ</button>
+      <button class="pill-btn" id="pill-lights" onclick="openDrawer('lights')">💡 LIGHTS</button>
+    </div>
+
+    <!-- Joystick — Propulsion (left thumb) -->
+    <div class="js-wrap" id="js-left-wrap">
+      <div class="js-label">PROPULSION</div>
+      <div class="joystick" id="js-left">
+        <div class="js-ring"><div class="js-knob"></div></div>
       </div>
+    </div>
 
-      <!-- Password modal (Child Lock) -->
-      <div id="lock-modal" class="hidden" onclick="if(event.target===this)closeLockModal()">
-        <div id="lock-modal-box">
-          <div id="lock-modal-title">CHILD LOCK ACTIF</div>
-          <input type="password" id="lock-pwd" placeholder="Mot de passe"
-                 onkeydown="if(event.key==='Enter')submitLockPwd()">
-          <div id="lock-pwd-err" class="hidden">Mot de passe incorrect</div>
-          <div id="lock-modal-btns">
-            <button onclick="closeLockModal()">ANNULER</button>
-            <button onclick="submitLockPwd()">UNLOCK</button>
-          </div>
+    <!-- Joystick — Dôme (right thumb) -->
+    <div class="js-wrap" id="js-right-wrap">
+      <div class="js-label">DÔME</div>
+      <div class="joystick" id="js-right">
+        <div class="js-ring"><div class="js-knob"></div></div>
+      </div>
+    </div>
+
+    <!-- Temperature (HUD overlay) -->
+    <div id="hud-temp"></div>
+
+  </div><!-- /hud-drive -->
+
+  <!-- ── Password modal (Child Lock) ───────────── -->
+  <div id="lock-modal" class="hidden" onclick="if(event.target===this)closeLockModal()">
+    <div id="lock-modal-box">
+      <div id="lock-modal-title">CHILD LOCK ACTIF</div>
+      <input type="password" id="lock-pwd" placeholder="Mot de passe"
+             onkeydown="if(event.key==='Enter')submitLockPwd()">
+      <div id="lock-pwd-err" class="hidden">Mot de passe incorrect</div>
+      <div id="lock-modal-btns">
+        <button onclick="closeLockModal()">ANNULER</button>
+        <button onclick="submitLockPwd()">UNLOCK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Drawer backdrop ────────────────────────── -->
+  <div id="drawer-backdrop" class="hidden" onclick="closeDrawer()"></div>
+
+  <!-- ── Bottom drawer ──────────────────────────── -->
+  <div id="bottom-drawer" class="hidden">
+    <div id="drawer-header">
+      <span id="drawer-title"></span>
+      <button id="drawer-close" onclick="closeDrawer()">✕</button>
+    </div>
+    <div id="drawer-body">
+
+      <!-- AUDIO content -->
+      <div id="drawer-audio" class="drawer-pane hidden">
+        <div id="volume-bar">
+          <span>🔈</span>
+          <input type="range" id="vol-slider" min="0" max="100" value="79"
+                 oninput="setVolume(this.value)">
+          <span id="vol-pct">79%</span>
+          <button onclick="stopAudio()">⏹</button>
         </div>
-      </div>
-
-      <div id="joystick-zone">
-        <div class="js-wrap">
-          <div class="js-label">PROPULSION</div>
-          <div class="joystick" id="js-left">
-            <div class="js-ring"><div class="js-knob"></div></div>
-          </div>
-        </div>
-        <div class="js-wrap">
-          <div class="js-label">DÔME</div>
-          <div class="joystick" id="js-right">
-            <div class="js-ring"><div class="js-knob"></div></div>
-          </div>
-        </div>
-      </div>
-
-      <div id="drive-bottom-bar">
-        <div id="drive-telem">
-          <span id="bat-val">🔋 --</span>
-          <span id="temp-val">🌡️ --°C</span>
-        </div>
-        <button id="estop-btn"       onclick="triggerEstop()">⬡ E-STOP</button>
-        <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
-      </div>
-
-    </div><!-- /tab-drive -->
-
-    <!-- AUDIO ─────────────────────────────────────────── -->
-    <div class="tab-pane" id="tab-audio">
-      <div id="volume-bar">
-        <span>🔈</span>
-        <input type="range" id="vol-slider" min="0" max="100" value="79"
-               oninput="setVolume(this.value)">
-        <span id="vol-pct">79%</span>
-        <button id="stop-audio-btn" onclick="stopAudio()" title="Stop">⏹</button>
-      </div>
-      <div id="audio-body">
         <div id="cat-list"></div>
         <div id="sound-grid"></div>
       </div>
-    </div><!-- /tab-audio -->
 
-    <!-- SEQUENCES ─────────────────────────────────────── -->
-    <div class="tab-pane" id="tab-sequences">
-      <div id="seq-list"></div>
-      <button id="stop-all-fab" onclick="stopAllSeq()">⏹ STOP ALL</button>
-    </div><!-- /tab-sequences -->
+      <!-- SEQ content -->
+      <div id="drawer-seq" class="drawer-pane hidden">
+        <div id="seq-list"></div>
+        <button id="stop-all-btn" onclick="stopAllSeq()">⏹ STOP ALL</button>
+      </div>
 
-    <!-- LIGHTS ────────────────────────────────────────── -->
-    <div class="tab-pane" id="tab-lights">
-
-      <div class="light-card">
-        <div class="card-title">LOGICS — FLD / RLD</div>
-        <div class="btn-row">
-          <button class="btn-light" onclick="teecesMode('random')">RANDOM</button>
-          <button class="btn-light" onclick="teecesMode('leia')">LEIA</button>
-          <button class="btn-light btn-off" onclick="teecesMode('off')">OFF</button>
+      <!-- LIGHTS content -->
+      <div id="drawer-lights" class="drawer-pane hidden">
+        <div class="light-section">
+          <div class="section-title">LOGICS — FLD / RLD</div>
+          <div class="btn-row">
+            <button class="btn-light" onclick="teecesMode('random')">RANDOM</button>
+            <button class="btn-light" onclick="teecesMode('leia')">LEIA</button>
+            <button class="btn-light btn-off" onclick="teecesMode('off')">OFF</button>
+          </div>
+          <div class="text-row">
+            <input type="text" id="teeces-text" placeholder="Texte FLD…" maxlength="20"
+                   autocomplete="off" autocorrect="off" spellcheck="false">
+            <button onclick="teecesText()">OK</button>
+          </div>
         </div>
-        <div class="text-row">
-          <input type="text" id="teeces-text"
-                 placeholder="Texte FLD…" maxlength="20"
-                 autocomplete="off" autocorrect="off" spellcheck="false">
-          <button onclick="teecesText()">OK</button>
+        <div class="light-section">
+          <div class="section-title">PSI</div>
+          <div class="psi-swatches">
+            <button class="psi-btn"          onclick="teecesPS(0)">OFF</button>
+            <button class="psi-btn psi-rand" onclick="teecesPS(1)">RAND</button>
+            <button class="psi-btn psi-red"  onclick="teecesPS(2)">●</button>
+            <button class="psi-btn psi-blue" onclick="teecesPS(3)">●</button>
+          </div>
         </div>
       </div>
 
-      <div class="light-card">
-        <div class="card-title">PSI</div>
-        <div class="psi-swatches">
-          <button class="psi-btn"      onclick="teecesPS(0)">OFF</button>
-          <button class="psi-btn psi-rand" onclick="teecesPS(1)">RAND</button>
-          <button class="psi-btn psi-red"  onclick="teecesPS(2)">●</button>
-          <button class="psi-btn psi-blue" onclick="teecesPS(3)">●</button>
-        </div>
-      </div>
-
-    </div><!-- /tab-lights -->
-
-  </div><!-- /tab-content -->
-
-  <!-- ── Bottom nav ─────────────────────────────────────── -->
-  <nav id="bottom-nav">
-    <button class="nav-btn active" onclick="switchTab('drive', this)">
-      <span class="nav-icon">🕹️</span>
-      <span class="nav-label">Drive</span>
-    </button>
-    <button class="nav-btn" onclick="switchTab('audio', this)">
-      <span class="nav-icon">🔊</span>
-      <span class="nav-label">Audio</span>
-    </button>
-    <button class="nav-btn" onclick="switchTab('sequences', this)">
-      <span class="nav-icon">🎬</span>
-      <span class="nav-label">Séquences</span>
-    </button>
-    <button class="nav-btn" onclick="switchTab('lights', this)">
-      <span class="nav-icon">💡</span>
-      <span class="nav-label">Lights</span>
-    </button>
-  </nav>
+    </div><!-- /drawer-body -->
+  </div><!-- /bottom-drawer -->
 
   <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
 </body>
