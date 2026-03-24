@@ -43,12 +43,15 @@ Endpoints:
   POST /scripts/rename            {"old": str, "new": str}
 """
 
+import logging
 import re
 import subprocess
 from pathlib import Path
 
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+
+log = logging.getLogger(__name__)
 
 script_bp = Blueprint('scripts', __name__, url_prefix='/scripts')
 
@@ -63,13 +66,37 @@ def _is_valid_name(name: str) -> bool:
 def _is_builtin(name: str) -> bool:
     """True if the .scr file is tracked by git (i.e. a built-in sequence)."""
     rel = f"master/sequences/{name}.scr"
-    repo_root = Path(__file__).parent.parent.parent.parent  # r2d2/
-    result = subprocess.run(
-        ['git', 'ls-files', '--error-unmatch', rel],
-        capture_output=True,
-        cwd=str(repo_root),
-    )
-    return result.returncode == 0
+    repo_root = Path(__file__).parent.parent.parent  # software/ (git repo root)
+    try:
+        result = subprocess.run(
+            ['git', 'ls-files', '--error-unmatch', rel],
+            capture_output=True,
+            cwd=str(repo_root),
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, OSError):
+        log.warning("_is_builtin: git not available, treating as non-builtin")
+        return False
+
+
+def _get_builtin_set() -> set[str]:
+    """Return a set of all built-in sequence names (single git ls-files call)."""
+    repo_root = Path(__file__).parent.parent.parent  # software/ (git repo root)
+    try:
+        result = subprocess.run(
+            ['git', 'ls-files', 'master/sequences/'],
+            capture_output=True, text=True,
+            cwd=str(repo_root),
+        )
+        names = set()
+        for line in result.stdout.splitlines():
+            line = line.strip()
+            if line.endswith('.scr'):
+                names.add(Path(line).stem)
+        return names
+    except (FileNotFoundError, OSError):
+        log.warning("_get_builtin_set: git not available, returning empty set")
+        return set()
 
 
 def _parse_scr(path: Path) -> list[dict]:
@@ -98,9 +125,10 @@ def _is_running(name: str) -> bool:
 def script_list():
     """Liste des scripts .scr disponibles avec flag is_builtin."""
     scripts = reg.engine.list_scripts() if reg.engine else []
+    builtin_set = _get_builtin_set()
     return jsonify({
         'scripts': [
-            {'name': s, 'is_builtin': _is_builtin(s)}
+            {'name': s, 'is_builtin': s in builtin_set}
             for s in scripts
         ]
     })
@@ -159,6 +187,8 @@ def script_get():
     name = request.args.get('name', '').strip()
     if not name:
         return jsonify({'error': 'Paramètre "name" requis'}), 400
+    if not _is_valid_name(name):
+        return jsonify({'error': 'invalid name'}), 400
     path = SEQUENCES_DIR / f"{name}.scr"
     if not path.is_file():
         return jsonify({'error': 'not found'}), 404
@@ -197,6 +227,8 @@ def script_delete():
     """Supprime une séquence. Body: {"name": str}"""
     body = request.get_json(silent=True) or {}
     name = body.get('name', '').strip()
+    if not _is_valid_name(name):
+        return jsonify({'error': 'invalid name'}), 400
     path = SEQUENCES_DIR / f"{name}.scr"
     if not path.is_file():
         return jsonify({'error': 'not found'}), 404
