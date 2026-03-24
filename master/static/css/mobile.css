@@ -154,7 +154,18 @@ body { display: flex; flex-direction: column; }
   overflow: hidden;
 }
 
-/* ── Camera background  z-0 ──────────────────────────────── */
+/* ── Camera stream  z-0 ─────────────────────────────────── */
+
+#cam-stream {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+}
+
+/* ── Camera background (fallback)  z-0 ──────────────────── */
 
 #cam-bg {
   position: absolute;
