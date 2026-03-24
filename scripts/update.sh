@@ -66,9 +66,22 @@ echo -e "         UPDATE SYSTEM${NC}"
 echo "  ────────────────────────────────────"
 
 # ──────────────────────────────────────────────
+# 0. Backup custom sequences avant git pull
+# ──────────────────────────────────────────────
+SEQUENCES_DIR="$REPO/master/sequences"
+SEQUENCES_BACKUP="/home/artoo/sequences_backup"
+step "0/7" "Backup séquences custom"
+mkdir -p "$SEQUENCES_BACKUP"
+if rsync -a "$SEQUENCES_DIR/" "$SEQUENCES_BACKUP/" 2>/dev/null; then
+    ok "Séquences sauvegardées → $SEQUENCES_BACKUP"
+else
+    warn "Backup séquences impossible — dossier inexistant?"
+fi
+
+# ──────────────────────────────────────────────
 # 1. Git pull
 # ──────────────────────────────────────────────
-step "1/6" "Git pull"
+step "1/7" "Git pull"
 if ip addr show wlan1 2>/dev/null | grep -q "inet "; then
     cd "$REPO"
     OUTPUT=$(git pull --ff-only 2>&1)
@@ -88,9 +101,25 @@ else
 fi
 
 # ──────────────────────────────────────────────
+# 1b. Restore custom sequences after git pull
+# ──────────────────────────────────────────────
+step "1b/7" "Restauration séquences custom"
+if [ -d "$SEQUENCES_BACKUP" ]; then
+    # --ignore-existing: built-ins updated from git; custom sequences preserved
+    # Conflict rule: if git introduces same name as custom, custom wins
+    if rsync -a --ignore-existing "$SEQUENCES_BACKUP/" "$SEQUENCES_DIR/" 2>/dev/null; then
+        ok "Séquences custom restaurées (custom wins si conflit nom)"
+    else
+        warn "Restauration séquences impossible"
+    fi
+else
+    ok "Pas de backup à restaurer"
+fi
+
+# ──────────────────────────────────────────────
 # 2. Vérifier le Slave
 # ──────────────────────────────────────────────
-step "2/6" "Connexion Slave"
+step "2/7" "Connexion Slave"
 if ! $SSH $SLAVE "echo ok" > /dev/null 2>&1; then
     fail "Slave inaccessible — vérifier le Wi-Fi hotspot"
     echo -e "\n${RED}Arrêt — Slave requis pour continuer.${NC}"
@@ -101,7 +130,7 @@ ok "Slave joignable ($SLAVE)"
 # ──────────────────────────────────────────────
 # 3. Rsync vers le Slave
 # ──────────────────────────────────────────────
-step "3/6" "Sync code vers Slave"
+step "3/7" "Sync code vers Slave"
 
 rsync -az --delete \
     -e "$SSH" \
@@ -148,7 +177,7 @@ fi
 # ──────────────────────────────────────────────
 # 4. Redémarrer le Slave
 # ──────────────────────────────────────────────
-step "4/6" "Redémarrage Slave"
+step "4/7" "Redémarrage Slave"
 if $SSH $SLAVE "sudo systemctl restart r2d2-slave.service" 2>/dev/null; then
     sleep 4
     SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
@@ -167,7 +196,7 @@ fi
 # ──────────────────────────────────────────────
 # 5. Redémarrer le Master
 # ──────────────────────────────────────────────
-step "5/6" "Redémarrage Master"
+step "5/7" "Redémarrage Master"
 
 VERSION=$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")
 
@@ -192,7 +221,7 @@ sudo systemctl restart r2d2-master.service r2d2-monitor.service 2>/dev/null || \
 # ──────────────────────────────────────────────
 # 6. Vérification post-démarrage
 # ──────────────────────────────────────────────
-step "6/6" "Vérification services"
+step "6/7" "Vérification services"
 sleep 3   # laisser le temps au Master de démarrer Flask
 
 MASTER_STATUS=$(systemctl is-active r2d2-master.service 2>/dev/null)
