@@ -350,6 +350,7 @@ function switchTab(tabId) {
   if (tabId === 'config') { loadSettings(); loadServoSettings(); }
   if (tabId === 'sequences') loadScripts();
   if (tabId === 'audio') loadAudioCategories();
+  if (tabId === 'editor' && typeof seqEditor !== 'undefined') seqEditor.loadSequenceList();
   if (tabId === 'vesc') vescPanel.refresh();
 }
 
@@ -2189,6 +2190,538 @@ async function init() {
 
   // Refresh scripts periodically
   setInterval(() => scriptEngine.load(), 15000);
+
+  // Sequence Editor
+  window.seqEditor = new SequenceEditor();
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ─── SequenceEditor ────────────────────────────────────────────────────────
+class SequenceEditor {
+  constructor() {
+    // DOM refs
+    this._nameInput     = document.getElementById('editor-name');
+    this._steps         = document.getElementById('editor-steps');
+    this._dropzone      = document.getElementById('editor-dropzone');
+    this._seqList       = document.getElementById('editor-seq-list');
+    this._subseqList    = document.getElementById('editor-subseq-list');
+    this._statusDot     = document.getElementById('editor-status-dot');
+    this._statusText    = document.getElementById('editor-status-text');
+    this._statusCmd     = document.getElementById('editor-status-cmd');
+    this._roBanner      = document.getElementById('editor-read-only-banner');
+    this._canvasLabel   = document.getElementById('editor-canvas-label');
+
+    // State
+    this._sequence   = [];
+    this._openName   = null;
+    this._isBuiltin  = false;
+    this._pollTimer  = null;
+    this._editingIdx = null;
+
+    this._initButtons();
+    this._initPalette();
+    this._initSortable();
+    this._startPolling();
+  }
+
+  _initButtons() {
+    document.getElementById('editor-btn-new')
+      .addEventListener('click', () => this._newSequence());
+    document.getElementById('editor-btn-save')
+      .addEventListener('click', () => this.saveSequence());
+    document.getElementById('editor-btn-delete')
+      .addEventListener('click', () => this.deleteSequence());
+    document.getElementById('editor-btn-duplicate')
+      .addEventListener('click', () => this.duplicateSequence());
+    document.getElementById('editor-btn-test')
+      .addEventListener('click', () => this.testRun(true));
+    document.getElementById('editor-btn-test-motion')
+      .addEventListener('click', () => this.testRun(false));
+    document.getElementById('editor-btn-stop')
+      .addEventListener('click', () => this.stop());
+    this._nameInput.addEventListener('blur', () => this._onNameBlur());
+  }
+
+  _initPalette() {
+    document.querySelectorAll('.editor-palette-item').forEach(el => {
+      el.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('editor-cmd', el.dataset.cmd);
+      });
+    });
+    this._dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      this._dropzone.style.borderColor = '#00aaff';
+    });
+    this._dropzone.addEventListener('dragleave', () => {
+      this._dropzone.style.borderColor = '';
+    });
+    this._dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      this._dropzone.style.borderColor = '';
+      const cmd     = e.dataTransfer.getData('editor-cmd');
+      const subName = e.dataTransfer.getData('editor-subseq');
+      if (subName) {
+        this._addStep('script', [subName]);
+      } else if (cmd) {
+        this._addStep(cmd, this._defaultArgs(cmd));
+      }
+    });
+  }
+
+  _initSortable() {
+    if (typeof Sortable === 'undefined') return;
+    Sortable.create(this._steps, {
+      handle: '.editor-step-handle',
+      animation: 150,
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      onEnd: (evt) => {
+        const [moved] = this._sequence.splice(evt.oldIndex, 1);
+        this._sequence.splice(evt.newIndex, 0, moved);
+        this._renderSteps();
+      },
+    });
+  }
+
+  _startPolling() {
+    this._pollTimer = setInterval(() => this._pollStatus(), 500);
+  }
+
+  async loadSequenceList() {
+    try {
+      const resp = await fetch('/scripts/list');
+      const data = await resp.json();
+      this._renderSeqList(data.scripts || []);
+    } catch (e) {
+      console.error('SequenceEditor: loadSequenceList', e);
+    }
+  }
+
+  _renderSeqList(scripts) {
+    this._seqList.innerHTML = '';
+    this._subseqList.innerHTML = '';
+    scripts.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'editor-seq-item' + (s.name === this._openName ? ' active' : '');
+      el.innerHTML = s.is_builtin
+        ? `<span class="lock-icon">🔒</span><span>${s.name}</span>`
+        : `<span>${s.name}</span><span class="edit-badge">✏</span>`;
+      el.addEventListener('click', () => this.openSequence(s.name));
+      this._seqList.appendChild(el);
+
+      if (s.name !== this._openName) {
+        const sub = document.createElement('div');
+        sub.className = 'editor-subseq-item';
+        sub.draggable = true;
+        sub.textContent = `📋 ${s.name}`;
+        sub.addEventListener('dragstart', e => {
+          e.dataTransfer.setData('editor-subseq', s.name);
+        });
+        this._subseqList.appendChild(sub);
+      }
+    });
+  }
+
+  async openSequence(name) {
+    try {
+      const resp = await fetch(`/scripts/get?name=${encodeURIComponent(name)}`);
+      if (!resp.ok) { alert(`Séquence "${name}" introuvable`); return; }
+      const data = await resp.json();
+      this._openName  = data.name;
+      this._isBuiltin = data.is_builtin;
+      this._sequence  = data.steps.map(s => ({ cmd: s.cmd, args: [...s.args] }));
+      this._editingIdx = null;
+      this._nameInput.value    = data.name;
+      this._nameInput.readOnly = data.is_builtin;
+      this._nameInput.style.borderColor = data.is_builtin ? '#4a6a8a' : '#00aaff';
+      this._roBanner.style.display = data.is_builtin ? 'block' : 'none';
+      this._canvasLabel.textContent = `ÉTAPES — ${data.name}`;
+      this._renderSteps();
+      await this.loadSequenceList();
+    } catch (e) {
+      console.error('SequenceEditor: openSequence', e);
+    }
+  }
+
+  _renderSteps() {
+    this._steps.innerHTML = '';
+    this._sequence.forEach((step, idx) => {
+      this._steps.appendChild(this._renderStep(step, idx));
+    });
+  }
+
+  _renderStep(step, idx) {
+    const row = document.createElement('div');
+    row.className = 'editor-step-row';
+
+    const num = document.createElement('div');
+    num.className = 'editor-step-num';
+    num.textContent = idx + 1;
+
+    const card = document.createElement('div');
+    card.className = 'editor-step-card';
+    card.dataset.cmd = step.cmd;
+
+    const summary = document.createElement('div');
+    summary.style.cssText = 'display:flex;align-items:center;gap:8px';
+
+    const badge = document.createElement('span');
+    badge.style.cssText = 'font-size:9px;padding:2px 7px;border-radius:10px;white-space:nowrap';
+    badge.textContent = `${this._cmdIcon(step.cmd)} ${step.cmd}`;
+    badge.style.color      = this._cmdColor(step.cmd);
+    badge.style.background = this._cmdBg(step.cmd);
+
+    const desc = document.createElement('span');
+    desc.style.cssText = 'font-size:10px;color:#a0c0e0;flex:1';
+    desc.textContent = step.args.join(' ');
+
+    const actions = document.createElement('span');
+    actions.style.cssText = 'font-size:9px;color:#4a6a8a;margin-left:auto;display:flex;align-items:center;gap:6px';
+
+    if (!this._isBuiltin) {
+      const btnEdit = document.createElement('span');
+      btnEdit.textContent = '✏️';
+      btnEdit.style.cssText = 'cursor:pointer';
+      btnEdit.title = 'Modifier';
+      btnEdit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._toggleEdit(idx);
+      });
+
+      const btnDel = document.createElement('span');
+      btnDel.textContent = '🗑';
+      btnDel.style.cssText = 'cursor:pointer';
+      btnDel.title = 'Supprimer';
+      btnDel.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._removeStep(idx);
+      });
+
+      actions.appendChild(btnEdit);
+      actions.appendChild(btnDel);
+    }
+
+    summary.appendChild(badge);
+    summary.appendChild(desc);
+    summary.appendChild(actions);
+    card.appendChild(summary);
+
+    if (step.cmd === 'script' && step.args[0]) {
+      const preview = document.createElement('div');
+      preview.className = 'editor-subseq-preview';
+      preview.innerHTML = `<div class="editor-subseq-preview-title">▾ ${step.args[0]}.scr</div>`;
+      this._loadSubseqPreview(step.args[0], preview);
+      card.appendChild(preview);
+    }
+
+    if (this._editingIdx === idx && !this._isBuiltin) {
+      card.appendChild(this._renderStepForm(step, idx));
+    }
+
+    const handle = document.createElement('div');
+    handle.className = 'editor-step-handle';
+    handle.textContent = '⋮⋮';
+    if (this._isBuiltin) handle.style.cursor = 'default';
+
+    row.appendChild(num);
+    row.appendChild(card);
+    if (!this._isBuiltin) row.appendChild(handle);
+
+    return row;
+  }
+
+  async _loadSubseqPreview(name, el) {
+    try {
+      const resp = await fetch(`/scripts/get?name=${encodeURIComponent(name)}`);
+      if (!resp.ok) { el.innerHTML += '<div style="color:#4a2a6a">introuvable</div>'; return; }
+      const data = await resp.json();
+      const lines = data.steps.slice(0, 4).map(s =>
+        `<div>${s.cmd},${s.args.join(',')}</div>`
+      ).join('');
+      const more = data.steps.length > 4
+        ? `<div style="color:#4a2a6a">…${data.steps.length - 4} autres</div>`
+        : '';
+      el.innerHTML = `<div class="editor-subseq-preview-title">▾ ${name}.scr</div>${lines}${more}`;
+    } catch (e) { /* silent */ }
+  }
+
+  _renderStepForm(step, idx) {
+    const form = document.createElement('div');
+    form.className = 'editor-step-form';
+
+    const fields = this._stepFields(step.cmd, step.args);
+    const inputs = [];
+
+    fields.forEach(f => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
+      const lbl = document.createElement('label');
+      lbl.textContent = f.label;
+      let inp;
+      if (f.options) {
+        inp = document.createElement('select');
+        f.options.forEach(o => {
+          const opt = document.createElement('option');
+          opt.value = o; opt.textContent = o;
+          if (o === f.value) opt.selected = true;
+          inp.appendChild(opt);
+        });
+      } else {
+        inp = document.createElement('input');
+        inp.type = f.type || 'text';
+        inp.value = f.value !== undefined ? f.value : '';
+        inp.placeholder = f.placeholder || '';
+      }
+      inputs.push(inp);
+      wrap.appendChild(lbl);
+      wrap.appendChild(inp);
+      form.appendChild(wrap);
+    });
+
+    const ok = document.createElement('button');
+    ok.textContent = '✓ OK';
+    ok.className = 'btn-editor-action';
+    ok.dataset.color = 'green';
+    ok.style.marginTop = '4px';
+    ok.addEventListener('click', () => {
+      const newArgs = inputs.map(inp => inp.value.trim()).filter(Boolean);
+      this._sequence[idx].args = newArgs;
+      this._editingIdx = null;
+      this._renderSteps();
+    });
+    form.appendChild(ok);
+
+    return form;
+  }
+
+  _addStep(cmd, args) {
+    if (this._isBuiltin) return;
+    this._sequence.push({ cmd, args: [...args] });
+    this._editingIdx = this._sequence.length - 1;
+    this._renderSteps();
+  }
+
+  _removeStep(idx) {
+    if (this._isBuiltin) return;
+    this._sequence.splice(idx, 1);
+    if (this._editingIdx === idx) this._editingIdx = null;
+    this._renderSteps();
+  }
+
+  _toggleEdit(idx) {
+    this._editingIdx = this._editingIdx === idx ? null : idx;
+    this._renderSteps();
+  }
+
+  _newSequence() {
+    const name = prompt('Nom de la nouvelle séquence (lettres, chiffres, - et _ uniquement) :');
+    if (!name) return;
+    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) {
+      alert('Nom invalide. Utilisez lettres, chiffres, - et _ uniquement (max 64 caractères).');
+      return;
+    }
+    this._openName  = name;
+    this._isBuiltin = false;
+    this._sequence  = [];
+    this._editingIdx = null;
+    this._nameInput.value    = name;
+    this._nameInput.readOnly = false;
+    this._nameInput.style.borderColor = '#00aaff';
+    this._roBanner.style.display = 'none';
+    this._canvasLabel.textContent = `ÉTAPES — ${name} (nouveau)`;
+    this._renderSteps();
+  }
+
+  async saveSequence() {
+    if (this._isBuiltin) { alert('Séquence intégrée — dupliquez-la pour modifier.'); return; }
+    const name = this._nameInput.value.trim();
+    if (!name || !/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) { alert('Nom invalide.'); return; }
+    if (this._sequence.length === 0) { alert('La séquence est vide.'); return; }
+    try {
+      const resp = await fetch('/scripts/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, steps: this._sequence }),
+      });
+      if (!resp.ok) { const err = await resp.json(); alert(`Erreur: ${err.error}`); return; }
+      this._openName = name;
+      this._canvasLabel.textContent = `ÉTAPES — ${name}`;
+      await this.loadSequenceList();
+    } catch (e) { alert('Erreur réseau lors de la sauvegarde.'); }
+  }
+
+  async deleteSequence() {
+    if (this._isBuiltin) { alert('Séquence intégrée — impossible de supprimer.'); return; }
+    if (!this._openName) return;
+    if (!confirm(`Supprimer "${this._openName}" ? Cette action est irréversible.`)) return;
+    try {
+      const resp = await fetch('/scripts/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this._openName }),
+      });
+      if (!resp.ok) { const err = await resp.json(); alert(`Erreur: ${err.error}`); return; }
+      this._openName  = null;
+      this._sequence  = [];
+      this._isBuiltin = false;
+      this._nameInput.value = '';
+      this._canvasLabel.textContent = 'ÉTAPES';
+      this._renderSteps();
+      await this.loadSequenceList();
+    } catch (e) { alert('Erreur réseau.'); }
+  }
+
+  async duplicateSequence() {
+    const newName = prompt('Nom pour la copie :');
+    if (!newName) return;
+    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(newName)) { alert('Nom invalide.'); return; }
+    try {
+      const resp = await fetch('/scripts/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, steps: this._sequence }),
+      });
+      if (!resp.ok) { alert('Erreur lors de la duplication.'); return; }
+      await this.openSequence(newName);
+    } catch (e) { alert('Erreur réseau.'); }
+  }
+
+  async _onNameBlur() {
+    const newName = this._nameInput.value.trim();
+    if (!newName || newName === this._openName || this._isBuiltin) return;
+    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(newName)) {
+      alert('Nom invalide.'); this._nameInput.value = this._openName || ''; return;
+    }
+    if (!this._openName) return;
+    try {
+      const resp = await fetch('/scripts/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old: this._openName, new: newName }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json();
+        alert(`Renommage impossible: ${err.error}`);
+        this._nameInput.value = this._openName;
+        return;
+      }
+      this._openName = newName;
+      this._canvasLabel.textContent = `ÉTAPES — ${newName}`;
+      await this.loadSequenceList();
+    } catch (e) { alert('Erreur réseau.'); }
+  }
+
+  async testRun(skipMotion) {
+    if (!this._openName) { alert("Ouvrez ou sauvegardez une séquence d'abord."); return; }
+    try {
+      await fetch('/scripts/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this._openName, loop: false, skip_motion: skipMotion }),
+      });
+    } catch (e) { console.error('testRun', e); }
+  }
+
+  async stop() {
+    try {
+      await fetch('/scripts/stop_all', { method: 'POST' });
+    } catch (e) { console.error('stop', e); }
+  }
+
+  async _pollStatus() {
+    const editorTab = document.getElementById('tab-editor');
+    if (!editorTab || !editorTab.classList.contains('active')) return;
+    try {
+      const resp = await fetch('/scripts/running');
+      const data = await resp.json();
+      const running = (data.running || []).find(r => r.name === this._openName);
+      if (running) {
+        this._statusDot.style.background = '#00cc55';
+        this._statusDot.style.boxShadow  = '0 0 6px #00cc55';
+        this._statusText.style.color = '#00cc55';
+        this._statusText.textContent = `EN COURS — ${running.name} (étape ${running.step_index}/${running.step_total})`;
+        this._statusCmd.textContent  = running.current_cmd || '';
+        this._statusCmd.style.color  = '#2a4a6a';
+      } else {
+        this._statusDot.style.background = '#2a4a6a';
+        this._statusDot.style.boxShadow  = 'none';
+        this._statusText.style.color = '#2a4a6a';
+        this._statusText.textContent = '—';
+        this._statusCmd.textContent  = '';
+      }
+    } catch (e) { /* silent */ }
+  }
+
+  _cmdIcon(cmd) {
+    return { sound:'🔊', sleep:'⏱', servo:'🦾', motion:'🚗',
+             teeces:'💡', dome:'🔁', script:'📋' }[cmd] || '•';
+  }
+
+  _cmdColor(cmd) {
+    return { sound:'#00cc55', sleep:'#ffaa00', servo:'#00aaff',
+             motion:'#ff6633', teeces:'#aa44ff', dome:'#44ffaa',
+             script:'#cc88ff' }[cmd] || '#a0c0e0';
+  }
+
+  _cmdBg(cmd) {
+    return { sound:'#0a2a10', sleep:'#2a1a00', servo:'#001a2a',
+             motion:'#1a1000', teeces:'#1a0028', dome:'#0a1a10',
+             script:'#1a1030' }[cmd] || '#0d1a2e';
+  }
+
+  _defaultArgs(cmd) {
+    return {
+      sound:   ['RANDOM', 'happy'],
+      sleep:   ['1.0'],
+      servo:   ['body_panel_1', 'open'],
+      motion:  ['0.0', '0.0', '1000'],
+      teeces:  ['random'],
+      dome:    ['stop'],
+      script:  [''],
+    }[cmd] || [];
+  }
+
+  _stepFields(cmd, args) {
+    switch (cmd) {
+      case 'sound': return [
+        { label: 'Mode', value: args[0]||'RANDOM', options: ['RANDOM', 'FILE'] },
+        { label: 'Catégorie / Fichier', value: args[1]||'happy',
+          options: ['happy','sad','chat','whistle','scream','process','utility','random','special'] },
+      ];
+      case 'sleep': return [
+        { label: 'Mode', value: args[0]==='random'?'random':'fixed', options: ['fixed','random'] },
+        { label: 'Durée (s) / Min', value: args[0]==='random'?(args[1]||'1'):(args[0]||'1'), type:'number', placeholder:'1.0' },
+        ...(args[0]==='random' ? [{ label:'Max (s)', value: args[2]||'3', type:'number', placeholder:'3.0' }] : []),
+      ];
+      case 'servo': return [
+        { label: 'Panneau', value: args[0]||'body_panel_1',
+          options: ['body_panel_1','body_panel_2','body_panel_3','body_panel_4',
+                    'dome_panel_1','dome_panel_2','dome_panel_3','dome_panel_4',
+                    'dome_panel_5','dome_panel_6','all'] },
+        { label: 'Action', value: args[1]||'open', options: ['open','close'] },
+        { label: 'Angle (optionnel)', value: args[2]||'', type:'number', placeholder:'—' },
+        { label: 'Vitesse (1-10)',    value: args[3]||'', type:'number', placeholder:'—' },
+      ];
+      case 'motion': return [
+        { label: 'Gauche (-1..1)', value: args[0]||'0.0', type:'number', placeholder:'0.0' },
+        { label: 'Droite (-1..1)', value: args[1]||'0.0', type:'number', placeholder:'0.0' },
+        { label: 'Durée ms',       value: args[2]||'1000', type:'number', placeholder:'1000' },
+      ];
+      case 'teeces': return [
+        { label: 'Mode', value: args[0]||'random', options: ['random','leia','off','text','psi'] },
+        ...(args[0]==='text' ? [{ label:'Texte', value: args[1]||'', placeholder:'HELLO' }] : []),
+        ...(args[0]==='psi'  ? [{ label:'Mode PSI', value: args[1]||'0', type:'number' }] : []),
+      ];
+      case 'dome': return [
+        { label: 'Action', value: args[0]||'stop', options: ['turn','stop','random','center'] },
+        ...(args[0]==='turn'   ? [{ label:'Vitesse (-1..1)', value: args[1]||'0.3', type:'number' }] : []),
+        ...(args[0]==='random' ? [{ label:'On/Off', value: args[1]||'on', options: ['on','off'] }] : []),
+      ];
+      case 'script': return [
+        { label: 'Sous-séquence', value: args[0]||'', placeholder: 'nom-sequence' },
+      ];
+      default: return args.map((a, i) => ({ label: `arg${i+1}`, value: a }));
+    }
+  }
+}
