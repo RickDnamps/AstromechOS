@@ -17,8 +17,14 @@
       <span class="ind" id="ind-bt">BT</span>
       <span id="uart-pct"></span>
     </div>
-    <div id="mode-badge" class="hidden"></div>
-    <div id="status-host" onclick="showHostDialog()">192.168.4.1</div>
+    <div id="status-center">
+      <div id="mode-badge" class="hidden"></div>
+      <button id="estop-btn"       onclick="triggerEstop()">⬡ E-STOP</button>
+      <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
+    </div>
+    <div id="status-right">
+      <div id="status-host" onclick="showHostDialog()">192.168.4.1</div>
+    </div>
   </div>
 
   <!-- ── Alert toast ────────────────────────────── -->
@@ -40,10 +46,8 @@
     <!-- Lock button -->
     <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
 
-    <!-- Bottom bar: E-STOP + quick pills -->
+    <!-- Bottom bar: quick pills -->
     <div id="quick-pills">
-      <button id="estop-btn"       onclick="triggerEstop()">⬡ E-STOP</button>
-      <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
       <button class="pill-btn" id="pill-audio"  onclick="openDrawer('audio')">🔊 AUDIO</button>
       <button class="pill-btn" id="pill-seq"    onclick="openDrawer('seq')">🎬 SEQ</button>
       <button class="pill-btn" id="pill-lights" onclick="openDrawer('lights')">💡 LIGHTS</button>

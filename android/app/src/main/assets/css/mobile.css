@@ -69,8 +69,7 @@ body { display: flex; flex-direction: column; }
   border-bottom: 1px solid rgba(0,170,255,.12);
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  gap: 6px;
+  padding: 0 8px;
   z-index: 40;
 }
 
@@ -79,6 +78,21 @@ body { display: flex; flex-direction: column; }
   align-items: center;
   gap: 5px;
   flex: 1;
+}
+
+/* center column: mode badge + e-stop/reset */
+#status-center {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* right column: IP */
+#status-right {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .ind {
@@ -96,15 +110,12 @@ body { display: flex; flex-direction: column; }
 
 #uart-pct { font-size: 8px; color: var(--text-dim); }
 
-/* Mode badge — centred in status bar */
+/* Mode badge — in center column */
 #mode-badge {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
   font-size: 8px;
   font-weight: bold;
   letter-spacing: .18em;
-  padding: 2px 12px;
+  padding: 2px 8px;
   border-radius: 20px;
   white-space: nowrap;
   pointer-events: none;
@@ -242,40 +253,36 @@ body { display: flex; flex-direction: column; }
   box-shadow: 0 0 8px rgba(255,40,60,.3);
 }
 
-/* ── E-STOP button — inline in bottom bar ────────────────── */
+/* ── E-STOP / RESET — compact in status bar ──────────────── */
+
+#estop-btn, #estop-reset-btn {
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: .07em;
+  cursor: pointer;
+  white-space: nowrap;
+  height: 20px;
+  line-height: 1;
+}
 
 #estop-btn {
-  flex-shrink: 0;
-  padding: 5px 14px;
-  border-radius: 16px;
-  background: rgba(180,0,20,.75);
-  border: 1.5px solid rgba(255,60,70,.6);
+  background: rgba(180,0,20,.8);
+  border: 1.5px solid rgba(255,60,70,.7);
   color: #fff;
-  font-family: 'Courier New', monospace;
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: .08em;
-  cursor: pointer;
   animation: pulse-estop 2.5s ease-in-out infinite;
   transition: filter .1s;
-  white-space: nowrap;
 }
 #estop-btn:active { filter: brightness(.75); }
 
 #estop-reset-btn {
-  flex-shrink: 0;
-  padding: 5px 14px;
-  border-radius: 16px;
-  background: rgba(0,140,50,.75);
-  border: 1.5px solid rgba(0,200,80,.5);
+  background: rgba(0,140,50,.8);
+  border: 1.5px solid rgba(0,200,80,.6);
   color: #fff;
-  font-family: 'Courier New', monospace;
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: .08em;
-  cursor: pointer;
   transition: filter .1s;
-  white-space: nowrap;
 }
 #estop-reset-btn:active { filter: brightness(.85); }
 
