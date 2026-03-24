@@ -242,58 +242,40 @@ body { display: flex; flex-direction: column; }
   box-shadow: 0 0 8px rgba(255,40,60,.3);
 }
 
-/* ── E-STOP button  z-15 ─────────────────────────────────── */
+/* ── E-STOP button — inline in bottom bar ────────────────── */
 
 #estop-btn {
-  position: absolute;
-  left: 50%;
-  bottom: 170px;
-  transform: translateX(-50%);
-  z-index: 15;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--danger);
-  border: 2px solid rgba(255,80,90,.7);
+  flex-shrink: 0;
+  padding: 5px 14px;
+  border-radius: 16px;
+  background: rgba(180,0,20,.75);
+  border: 1.5px solid rgba(255,60,70,.6);
   color: #fff;
   font-family: 'Courier New', monospace;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: bold;
-  letter-spacing: .06em;
+  letter-spacing: .08em;
   cursor: pointer;
   animation: pulse-estop 2.5s ease-in-out infinite;
   transition: filter .1s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  line-height: 1.2;
+  white-space: nowrap;
 }
 #estop-btn:active { filter: brightness(.75); }
 
 #estop-reset-btn {
-  position: absolute;
-  left: 50%;
-  bottom: 170px;
-  transform: translateX(-50%);
-  z-index: 15;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  background: var(--ok);
-  border: 2px solid rgba(0,200,80,.7);
-  color: #000;
+  flex-shrink: 0;
+  padding: 5px 14px;
+  border-radius: 16px;
+  background: rgba(0,140,50,.75);
+  border: 1.5px solid rgba(0,200,80,.5);
+  color: #fff;
   font-family: 'Courier New', monospace;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: bold;
-  letter-spacing: .03em;
+  letter-spacing: .08em;
   cursor: pointer;
   transition: filter .1s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  line-height: 1.2;
+  white-space: nowrap;
 }
 #estop-reset-btn:active { filter: brightness(.85); }
 
@@ -338,7 +320,6 @@ body { display: flex; flex-direction: column; }
   top: calc(55% - 65px);
   z-index: 10;
   width: 130px;
-  height: 130px;
 }
 
 #js-right-wrap {
@@ -347,7 +328,15 @@ body { display: flex; flex-direction: column; }
   top: calc(55% - 65px);
   z-index: 10;
   width: 130px;
-  height: 130px;
+}
+
+.js-label {
+  text-align: center;
+  font-size: 8px;
+  letter-spacing: .12em;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  pointer-events: none;
 }
 
 .joystick {
@@ -439,12 +428,70 @@ body { display: flex; flex-direction: column; }
   background: var(--panel-bg);
   border-top: 1px solid rgba(0,170,255,.2);
   transform: translateY(100%);
-  transition: transform 250ms ease-out;
+  transition: transform 250ms ease-out, height 300ms ease;
   display: flex;
   flex-direction: column;
 }
 #bottom-drawer.open {
   transform: translateY(0);
+}
+#bottom-drawer.expanded {
+  height: calc(100% - var(--status-h));
+}
+
+/* ── Drawer header (handle + title + close) ──────────────── */
+
+#drawer-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 10px 6px;
+  gap: 8px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0,170,255,.1);
+  position: relative;
+  cursor: grab;
+}
+
+#drawer-handle {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 4px;
+  background: rgba(0,170,255,.35);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+#drawer-title {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: .16em;
+  color: var(--primary);
+}
+
+#drawer-close {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  transition: color .15s;
+  flex-shrink: 0;
+}
+#drawer-close:active { color: var(--danger); }
+
+#drawer-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .drawer-pane {
@@ -454,21 +501,10 @@ body { display: flex; flex-direction: column; }
   display: none;
   flex-direction: column;
   gap: 8px;
+  min-height: 0;
 }
 .drawer-pane.active {
   display: flex;
-}
-
-/* drawer handle bar */
-#bottom-drawer::before {
-  content: '';
-  display: block;
-  width: 36px;
-  height: 3px;
-  background: rgba(0,170,255,.3);
-  border-radius: 3px;
-  margin: 6px auto 2px;
-  flex-shrink: 0;
 }
 
 /* ── Drawer — Audio pane ─────────────────────────────────── */

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0,
                maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>R2-D2</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+  <link rel="stylesheet" href="css/mobile.css">
 </head>
 <body>
 
@@ -40,12 +40,10 @@
     <!-- Lock button -->
     <button id="lock-btn" onclick="cycleLockMode()">🔒</button>
 
-    <!-- E-STOP -->
-    <button id="estop-btn" onclick="triggerEstop()">⬡ E-STOP</button>
-    <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
-
-    <!-- Quick pills (below E-STOP) -->
+    <!-- Bottom bar: E-STOP + quick pills -->
     <div id="quick-pills">
+      <button id="estop-btn"       onclick="triggerEstop()">⬡ E-STOP</button>
+      <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
       <button class="pill-btn" id="pill-audio"  onclick="openDrawer('audio')">🔊 AUDIO</button>
       <button class="pill-btn" id="pill-seq"    onclick="openDrawer('seq')">🎬 SEQ</button>
       <button class="pill-btn" id="pill-lights" onclick="openDrawer('lights')">💡 LIGHTS</button>
@@ -92,32 +90,33 @@
   <!-- ── Bottom drawer ──────────────────────────── -->
   <div id="bottom-drawer" class="hidden">
     <div id="drawer-header">
+      <div id="drawer-handle"></div>
       <span id="drawer-title"></span>
       <button id="drawer-close" onclick="closeDrawer()">✕</button>
     </div>
     <div id="drawer-body">
 
       <!-- AUDIO content -->
-      <div id="drawer-audio" class="drawer-pane hidden">
-        <div id="volume-bar">
+      <div id="drawer-audio" class="drawer-pane">
+        <div class="vol-row">
           <span>🔈</span>
           <input type="range" id="vol-slider" min="0" max="100" value="79"
                  oninput="setVolume(this.value)">
           <span id="vol-pct">79%</span>
-          <button onclick="stopAudio()">⏹</button>
+          <button id="stop-audio-btn" onclick="stopAudio()">⏹</button>
         </div>
         <div id="cat-list"></div>
         <div id="sound-grid"></div>
       </div>
 
       <!-- SEQ content -->
-      <div id="drawer-seq" class="drawer-pane hidden">
+      <div id="drawer-seq" class="drawer-pane">
         <div id="seq-list"></div>
         <button id="stop-all-btn" onclick="stopAllSeq()">⏹ STOP ALL</button>
       </div>
 
       <!-- LIGHTS content -->
-      <div id="drawer-lights" class="drawer-pane hidden">
+      <div id="drawer-lights" class="drawer-pane">
         <div class="light-section">
           <div class="section-title">LOGICS — FLD / RLD</div>
           <div class="btn-row">
@@ -145,6 +144,6 @@
     </div><!-- /drawer-body -->
   </div><!-- /bottom-drawer -->
 
-  <script src="{{ url_for('static', filename='js/mobile.js') }}"></script>
+  <script src="js/mobile.js"></script>
 </body>
 </html>

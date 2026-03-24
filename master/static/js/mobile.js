@@ -93,17 +93,18 @@ function _applyEstopUI(active) {
 }
 
 // ── Drawer system ─────────────────────────────────────────────
-let _activeDrawer = null;
-let _audioInit    = false;
-let _seqInit      = false;
+let _activeDrawer  = null;
+let _drawerExpanded = false;
+let _audioInit     = false;
+let _seqInit       = false;
 
 function openDrawer(tab) {
   if (_activeDrawer === tab) { closeDrawer(); return; }
   _activeDrawer = tab;
 
   // Hide all panes, show selected
-  document.querySelectorAll('.drawer-pane').forEach(p => p.classList.add('hidden'));
-  document.getElementById('drawer-' + tab)?.classList.remove('hidden');
+  document.querySelectorAll('.drawer-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('drawer-' + tab)?.classList.add('active');
 
   // Update title
   const titles = { audio: '🔊 AUDIO', seq: '🎬 SÉQUENCES', lights: '💡 LIGHTS' };
@@ -113,8 +114,10 @@ function openDrawer(tab) {
   document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('pill-' + tab)?.classList.add('active');
 
-  // Show drawer with animation
+  // Show drawer with animation (reset expanded on new open)
   const drawer = document.getElementById('bottom-drawer');
+  drawer.classList.remove('expanded');
+  _drawerExpanded = false;
   drawer.classList.remove('hidden');
   requestAnimationFrame(() => drawer.classList.add('open'));
 
@@ -134,9 +137,10 @@ function openDrawer(tab) {
 function closeDrawer() {
   if (!_activeDrawer) return;
   _activeDrawer = null;
+  _drawerExpanded = false;
 
   const drawer = document.getElementById('bottom-drawer');
-  drawer.classList.remove('open');
+  drawer.classList.remove('open', 'expanded');
   drawer.addEventListener('transitionend', () => {
     if (!_activeDrawer) drawer.classList.add('hidden');
   }, { once: true });
@@ -145,9 +149,71 @@ function closeDrawer() {
   document.querySelectorAll('.pill-btn').forEach(b => b.classList.remove('active'));
 }
 
-// Back button closes drawer, otherwise consume event (no accidental app exit)
+function _expandDrawer() {
+  _drawerExpanded = true;
+  document.getElementById('bottom-drawer')?.classList.add('expanded');
+  _haptic(15);
+}
+
+function _collapseDrawer() {
+  _drawerExpanded = false;
+  document.getElementById('bottom-drawer')?.classList.remove('expanded');
+  _haptic(15);
+}
+
+// ── Drawer swipe gesture (header swipe up = expand, down = collapse/close) ──
+(function () {
+  let _swipeStartY = null;
+  let _swipeStartX = null;
+  const SWIPE_THRESH = 40;  // px
+
+  function _onTouchStart(e) {
+    const t = e.touches[0];
+    _swipeStartY = t.clientY;
+    _swipeStartX = t.clientX;
+  }
+
+  function _onTouchEnd(e) {
+    if (_swipeStartY === null) return;
+    const t = e.changedTouches[0];
+    const dy = t.clientY - _swipeStartY;
+    const dx = t.clientX - _swipeStartX;
+    _swipeStartY = null;
+    _swipeStartX = null;
+
+    // Ignore if horizontal swipe dominates
+    if (Math.abs(dx) > Math.abs(dy)) return;
+
+    if (dy < -SWIPE_THRESH) {
+      // Swipe UP → expand
+      if (!_drawerExpanded && _activeDrawer) _expandDrawer();
+    } else if (dy > SWIPE_THRESH) {
+      // Swipe DOWN → collapse if expanded, close if not
+      if (_drawerExpanded) {
+        _collapseDrawer();
+      } else if (_activeDrawer) {
+        closeDrawer();
+      }
+    }
+  }
+
+  window.addEventListener('load', () => {
+    const header = document.getElementById('drawer-header');
+    if (header) {
+      header.addEventListener('touchstart', _onTouchStart, { passive: true });
+      header.addEventListener('touchend',   _onTouchEnd,   { passive: true });
+    }
+  });
+})();
+
+// Back button: collapse expanded drawer first, then close, otherwise consume
 window.addEventListener('popstate', () => {
-  if (_activeDrawer) closeDrawer();
+  if (_drawerExpanded) {
+    _collapseDrawer();
+    history.pushState({ drawer: _activeDrawer }, '');  // keep the entry
+  } else if (_activeDrawer) {
+    closeDrawer();
+  }
 });
 
 // ── Joystick ──────────────────────────────────────────────────
