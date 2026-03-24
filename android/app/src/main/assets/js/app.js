@@ -2205,6 +2205,7 @@ class SequenceEditor {
     this._nameInput     = document.getElementById('editor-name');
     this._steps         = document.getElementById('editor-steps');
     this._dropzone      = document.getElementById('editor-dropzone');
+    this._canvasWrap    = document.getElementById('editor-canvas-wrap');
     this._seqList       = document.getElementById('editor-seq-list');
     this._subseqList    = document.getElementById('editor-subseq-list');
     this._statusDot     = document.getElementById('editor-status-dot');
@@ -2264,14 +2265,12 @@ class SequenceEditor {
         this._addStep(el.dataset.cmd, this._defaultArgs(el.dataset.cmd));
       });
     });
-    this._dropzone.addEventListener('dragover', e => {
+    const onDragOver = e => {
       e.preventDefault();
       if (!this._isBuiltin) this._dropzone.style.borderColor = '#00aaff';
-    });
-    this._dropzone.addEventListener('dragleave', () => {
-      this._dropzone.style.borderColor = '';
-    });
-    this._dropzone.addEventListener('drop', e => {
+    };
+    const onDragLeave = () => { this._dropzone.style.borderColor = ''; };
+    const onDrop = e => {
       e.preventDefault();
       this._dropzone.style.borderColor = '';
       const cmd     = e.dataTransfer.getData('editor-cmd');
@@ -2281,7 +2280,13 @@ class SequenceEditor {
       } else if (cmd) {
         this._addStep(cmd, this._defaultArgs(cmd));
       }
-    });
+    };
+    this._dropzone.addEventListener('dragover', onDragOver);
+    this._dropzone.addEventListener('dragleave', onDragLeave);
+    this._dropzone.addEventListener('drop', onDrop);
+    this._canvasWrap.addEventListener('dragover', onDragOver);
+    this._canvasWrap.addEventListener('dragleave', onDragLeave);
+    this._canvasWrap.addEventListener('drop', onDrop);
   }
 
   _initSortable() {
@@ -2370,6 +2375,7 @@ class SequenceEditor {
   _renderStep(step, idx) {
     const row = document.createElement('div');
     row.className = 'editor-step-row';
+    row.id = 'editor-step-row-' + idx;
 
     const num = document.createElement('div');
     num.className = 'editor-step-num';
@@ -2668,14 +2674,27 @@ class SequenceEditor {
         this._statusText.textContent = `EN COURS — ${running.name} (étape ${running.step_index}/${running.step_total})`;
         this._statusCmd.textContent  = running.current_cmd || '';
         this._statusCmd.style.color  = '#2a4a6a';
+        this._highlightStep(running.step_index - 1);
       } else {
         this._statusDot.style.background = '#2a4a6a';
         this._statusDot.style.boxShadow  = 'none';
         this._statusText.style.color = '#2a4a6a';
         this._statusText.textContent = '—';
         this._statusCmd.textContent  = '';
+        this._highlightStep(-1);
       }
     } catch (e) { /* silent */ }
+  }
+
+  _highlightStep(idx) {
+    this._steps.querySelectorAll('.editor-step-row').forEach(r => r.classList.remove('step-active'));
+    if (idx >= 0) {
+      const row = document.getElementById('editor-step-row-' + idx);
+      if (row) {
+        row.classList.add('step-active');
+        row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
   }
 
   _cmdIcon(cmd) {

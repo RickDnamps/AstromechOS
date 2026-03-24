@@ -2247,6 +2247,15 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 }
 .editor-subseq-preview-title { color: #6a3a9a; letter-spacing: .1em; margin-bottom: 4px; }
 
+/* Active step during test run */
+.editor-step-row.step-active .editor-step-card {
+  box-shadow: 0 0 0 2px #00cc55, 0 0 12px #00cc5544;
+  background: #001a0d;
+}
+.editor-step-row.step-active .editor-step-num {
+  color: #00cc55;
+}
+
 /* Sortable drag ghost */
 .sortable-ghost { opacity: 0.3; }
 .sortable-chosen { box-shadow: 0 0 0 2px #00aaff55; }
