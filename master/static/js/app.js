@@ -2222,7 +2222,6 @@ class SequenceEditor {
     this._dropzone      = document.getElementById('editor-dropzone');
     this._canvasWrap    = document.getElementById('editor-canvas-wrap');
     this._seqList       = document.getElementById('editor-seq-list');
-    this._subseqList    = document.getElementById('editor-subseq-list');
     this._statusDot     = document.getElementById('editor-status-dot');
     this._statusText    = document.getElementById('editor-status-text');
     this._statusCmd     = document.getElementById('editor-status-cmd');
@@ -2236,6 +2235,7 @@ class SequenceEditor {
     this._pollTimer  = null;
     this._editingIdx = null;
     this._saving     = false;
+    this._seqNames   = [];   // noms de toutes les séquences (pour dropdown sous-seq)
 
     this._initButtons();
     this._initPalette();
@@ -2287,28 +2287,22 @@ class SequenceEditor {
         this._addStep(el.dataset.cmd, this._defaultArgs(el.dataset.cmd));
       });
     });
-    const onDragOver = e => {
+    // Un seul listener sur canvas-wrap — evite le double-fire par bubbling
+    // (editor-dropzone est enfant de editor-canvas-wrap)
+    this._canvasWrap.addEventListener('dragover', e => {
       e.preventDefault();
       if (!this._isBuiltin) this._dropzone.style.borderColor = '#00aaff';
-    };
-    const onDragLeave = () => { this._dropzone.style.borderColor = ''; };
-    const onDrop = e => {
+    });
+    this._canvasWrap.addEventListener('dragleave', e => {
+      if (!this._canvasWrap.contains(e.relatedTarget))
+        this._dropzone.style.borderColor = '';
+    });
+    this._canvasWrap.addEventListener('drop', e => {
       e.preventDefault();
       this._dropzone.style.borderColor = '';
-      const cmd     = e.dataTransfer.getData('editor-cmd');
-      const subName = e.dataTransfer.getData('editor-subseq');
-      if (subName) {
-        this._addStep('script', [subName]);
-      } else if (cmd) {
-        this._addStep(cmd, this._defaultArgs(cmd));
-      }
-    };
-    this._dropzone.addEventListener('dragover', onDragOver);
-    this._dropzone.addEventListener('dragleave', onDragLeave);
-    this._dropzone.addEventListener('drop', onDrop);
-    this._canvasWrap.addEventListener('dragover', onDragOver);
-    this._canvasWrap.addEventListener('dragleave', onDragLeave);
-    this._canvasWrap.addEventListener('drop', onDrop);
+      const cmd = e.dataTransfer.getData('editor-cmd');
+      if (cmd) this._addStep(cmd, this._defaultArgs(cmd));
+    });
   }
 
   _initSortable() {
@@ -2341,8 +2335,8 @@ class SequenceEditor {
   }
 
   _renderSeqList(scripts) {
+    this._seqNames = scripts.map(s => s.name);
     this._seqList.innerHTML = '';
-    this._subseqList.innerHTML = '';
     scripts.forEach(s => {
       const el = document.createElement('div');
       el.className = 'editor-seq-item' + (s.name === this._openName ? ' active' : '');
@@ -2351,17 +2345,6 @@ class SequenceEditor {
         : `<span>${this._esc(s.name)}</span><span class="edit-badge">✏</span>`;
       el.addEventListener('click', () => this.openSequence(s.name));
       this._seqList.appendChild(el);
-
-      if (s.name !== this._openName) {
-        const sub = document.createElement('div');
-        sub.className = 'editor-subseq-item';
-        sub.draggable = true;
-        sub.textContent = `📋 ${s.name}`;
-        sub.addEventListener('dragstart', e => {
-          e.dataTransfer.setData('editor-subseq', s.name);
-        });
-        this._subseqList.appendChild(sub);
-      }
     });
   }
 
@@ -2784,9 +2767,12 @@ class SequenceEditor {
         ...(args[0]==='turn'   ? [{ label:'Vitesse (-1..1)', value: args[1]||'0.3', type:'number' }] : []),
         ...(args[0]==='random' ? [{ label:'On/Off', value: args[1]||'on', options: ['on','off'] }] : []),
       ];
-      case 'script': return [
-        { label: 'Sous-séquence', value: args[0]||'', placeholder: 'nom-sequence' },
-      ];
+      case 'script': {
+        const opts = this._seqNames.filter(n => n !== this._openName);
+        return opts.length > 0
+          ? [{ label: 'Sous-séquence', value: args[0] || opts[0], options: opts }]
+          : [{ label: 'Sous-séquence', value: args[0] || '', placeholder: 'nom-sequence' }];
+      }
       default: return args.map((a, i) => ({ label: `arg${i+1}`, value: a }));
     }
   }
