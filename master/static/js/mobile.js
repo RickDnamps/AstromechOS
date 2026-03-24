@@ -216,38 +216,55 @@ window.addEventListener('popstate', () => {
   }
 });
 
-// ── Joystick ──────────────────────────────────────────────────
+// ── Joystick — floating Roblox-style ──────────────────────────
+// Ring appears at finger touch point, disappears on release.
 class MobileJoystick {
-  // canStart: optional function () => bool — returns false to block touch
-  constructor(id, onMove, onStop, canStart) {
-    const wrap     = document.getElementById(id);
-    this.ring      = wrap.querySelector('.js-ring');
-    this.knob      = wrap.querySelector('.js-knob');
-    this.onMove    = onMove;
-    this.onStop    = onStop;
-    this.canStart  = canStart || (() => true);
-    this.touchId   = null;
-    this.x = 0; this.y = 0;
-    this.ring.addEventListener('touchstart',  e => this._start(e), { passive: false });
-    this.ring.addEventListener('touchmove',   e => this._move(e),  { passive: false });
-    this.ring.addEventListener('touchend',    e => this._end(e),   { passive: false });
-    this.ring.addEventListener('touchcancel', e => this._end(e),   { passive: false });
+  // zoneId  : touch zone element id (covers half-screen)
+  // wrapId  : floating ring wrapper id
+  // canStart: optional () => bool — returns false to block
+  constructor(zoneId, wrapId, onMove, onStop, canStart) {
+    this.zone     = document.getElementById(zoneId);
+    this.wrap     = document.getElementById(wrapId);
+    this.ring     = this.wrap.querySelector('.js-ring');
+    this.knob     = this.wrap.querySelector('.js-knob');
+    this.onMove   = onMove;
+    this.onStop   = onStop;
+    this.canStart = canStart || (() => true);
+    this.touchId  = null;
+    this.cx = 0; this.cy = 0;   // ring center (viewport coords)
+    this.mr = 0;                 // max knob travel (px)
+    this.x  = 0; this.y = 0;
+
+    this.zone.addEventListener('touchstart',  e => this._start(e), { passive: false });
+    this.zone.addEventListener('touchmove',   e => this._move(e),  { passive: false });
+    this.zone.addEventListener('touchend',    e => this._end(e),   { passive: false });
+    this.zone.addEventListener('touchcancel', e => this._end(e),   { passive: false });
   }
 
   _start(e) {
     e.preventDefault();
     if (this.touchId !== null) return;
-    if (!this.canStart()) return;          // ← bloque en ChildLock / E-STOP
+    if (!this.canStart()) return;
     const t = e.changedTouches[0];
     this.touchId = t.identifier;
+
+    const HALF = 65;            // half of 130px ring
+    this.cx = t.clientX;
+    this.cy = t.clientY;
+    this.mr = HALF * 0.75;      // ~49px max knob travel
+
+    // Place ring centered at finger position (fixed = viewport coords)
+    this.wrap.style.left    = (t.clientX - HALF) + 'px';
+    this.wrap.style.top     = (t.clientY - HALF) + 'px';
+    this.wrap.style.display = 'block';
     this.ring.classList.add('touching');
-    this._update(t);
+    this._updateKnob(t);
   }
 
   _move(e) {
     e.preventDefault();
     for (const t of e.changedTouches) {
-      if (t.identifier === this.touchId) { this._update(t); break; }
+      if (t.identifier === this.touchId) { this._updateKnob(t); break; }
     }
   }
 
@@ -258,40 +275,40 @@ class MobileJoystick {
       this.x = 0; this.y = 0;
       this._setKnob(0, 0);
       this.ring.classList.remove('touching');
+      this.wrap.style.display = 'none';   // ← disappears on release
       this.onStop();
       break;
     }
   }
 
-  _update(touch) {
-    const r  = this.ring.getBoundingClientRect();
-    const cx = r.left + r.width  / 2;
-    const cy = r.top  + r.height / 2;
-    const mr = r.width / 2 * 0.72;
-    let dx = touch.clientX - cx;
-    let dy = touch.clientY - cy;
+  _updateKnob(touch) {
+    let dx = touch.clientX - this.cx;
+    let dy = touch.clientY - this.cy;
     const d = Math.hypot(dx, dy);
-    if (d > mr) { dx = dx / d * mr; dy = dy / d * mr; }
-    this.x = dx / mr;
-    this.y = dy / mr;
+    if (d > this.mr) { dx = dx / d * this.mr; dy = dy / d * this.mr; }
+    this.x =  dx / this.mr;
+    this.y =  dy / this.mr;
     this._setKnob(dx, dy);
     this.onMove(this.x, this.y);
   }
 
   _setKnob(dx, dy) {
-    this.knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    this.knob.style.transform =
+      `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
   }
 
   reset() {
     this.touchId = null; this.x = 0; this.y = 0;
     this._setKnob(0, 0);
     this.ring.classList.remove('touching');
+    this.wrap.style.display = 'none';
   }
 }
 
 // Propulsion — bloqué si ChildLock ou E-STOP
 const jsLeft = new MobileJoystick(
-  'js-left',
+  'js-zone-left',
+  'js-left-wrap',
   (x, y) => {
     const now = Date.now();
     if (now - lastDriveT < DRIVE_MS) return;
@@ -304,12 +321,13 @@ const jsLeft = new MobileJoystick(
     driveActive = true;
   },
   () => { if (driveActive) { api('POST', '/motion/stop'); driveActive = false; } },
-  () => !estopActive && lockMode !== 2   // canStart
+  () => !estopActive && lockMode !== 2
 );
 
 // Dôme — bloqué uniquement si E-STOP (Kids mode : dôme libre)
 const jsRight = new MobileJoystick(
-  'js-right',
+  'js-zone-right',
+  'js-right-wrap',
   (x, _y) => {
     const now = Date.now();
     if (now - lastDomeT < DRIVE_MS) return;
@@ -319,7 +337,7 @@ const jsRight = new MobileJoystick(
     domeActive = true;
   },
   () => { if (domeActive) { api('POST', '/motion/dome/stop'); domeActive = false; } },
-  () => !estopActive   // canStart
+  () => !estopActive
 );
 
 // ── Drive controls ────────────────────────────────────────────

@@ -319,51 +319,56 @@ body { display: flex; flex-direction: column; }
   box-shadow: 0 0 10px rgba(0,170,255,.3);
 }
 
-/* ── Joystick wrappers  z-10 ─────────────────────────────── */
+/* ── Joystick touch zones  z-10 ──────────────────────────── */
 
-#js-left-wrap {
+.js-zone {
   position: absolute;
-  left: calc(22% - 65px);
-  top: calc(55% - 65px);
+  top: 0; bottom: 0;
+  width: 46%;
   z-index: 10;
-  width: 130px;
+  touch-action: none;
 }
+#js-zone-left  { left: 0; }
+#js-zone-right { right: 0; }
 
-#js-right-wrap {
+.js-hint {
   position: absolute;
-  right: calc(22% - 65px);
-  top: calc(55% - 65px);
-  z-index: 10;
-  width: 130px;
-}
-
-.js-label {
-  text-align: center;
-  font-size: 8px;
-  letter-spacing: .12em;
-  color: var(--text-dim);
-  margin-bottom: 4px;
+  bottom: 46px;         /* above pills */
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 7px;
+  letter-spacing: .14em;
+  color: rgba(74,106,138,.35);
   pointer-events: none;
+  white-space: nowrap;
 }
 
-.joystick {
+/* ── Floating joystick rings (appear at touch point) ─────── */
+
+.js-float {
+  position: fixed;       /* JS sets left/top from clientX/Y */
   width: 130px;
   height: 130px;
+  display: none;         /* shown by JS on touchstart */
+  z-index: 11;
+  pointer-events: none;  /* zones handle input */
 }
 
 .js-ring {
-  width: 100%;
-  height: 100%;
+  width: 130px;
+  height: 130px;
   border-radius: 50%;
-  border: 2px solid rgba(0,80,150,.55);
-  background: radial-gradient(circle at 40% 35%, #0d1e38, #060c18);
+  border: 1.5px solid rgba(0,100,200,.22);
+  background: radial-gradient(circle at 40% 35%,
+    rgba(13,30,56,.22), rgba(6,12,24,.18));
   position: relative;
-  touch-action: none;
-  transition: border-color .3s, box-shadow .3s;
+  transition: border-color .15s, box-shadow .15s;
 }
 
 .js-ring.touching {
-  box-shadow: inset 0 0 20px rgba(0,30,80,.4), 0 0 22px rgba(0,120,255,.5);
+  border-color: rgba(0,140,255,.45);
+  box-shadow: inset 0 0 18px rgba(0,30,80,.25),
+              0 0 28px rgba(0,120,255,.3);
 }
 
 .js-knob {
@@ -371,26 +376,27 @@ body { display: flex; flex-direction: column; }
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 34%;
-  height: 34%;
+  width: 32%;
+  height: 32%;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #2277ff, #0033aa);
-  box-shadow: 0 0 16px rgba(0,120,255,.5), 0 2px 4px rgba(0,0,0,.4);
+  background: radial-gradient(circle at 35% 30%,
+    rgba(34,119,255,.7), rgba(0,51,170,.55));
+  box-shadow: 0 0 12px rgba(0,120,255,.35), 0 2px 4px rgba(0,0,0,.3);
   pointer-events: none;
-  transition: background .4s, box-shadow .4s;
 }
 
 /* ── Lock-mode visual overrides on #hud-drive ─────────────── */
 
 #hud-drive[data-lock="1"] .js-ring {
-  border-color: rgba(255,150,0,.3);
+  border-color: rgba(255,150,0,.25);
 }
 #hud-drive[data-lock="2"] .js-ring {
-  border-color: rgba(255,40,60,.4);
+  border-color: rgba(255,40,60,.3);
 }
 #hud-drive[data-lock="2"] .js-knob {
-  background: radial-gradient(circle at 35% 30%, #882233, #3a0010);
-  box-shadow: 0 0 14px rgba(255,51,68,.35), 0 2px 4px rgba(0,0,0,.4);
+  background: radial-gradient(circle at 35% 30%,
+    rgba(136,34,51,.7), rgba(58,0,16,.55));
+  box-shadow: 0 0 10px rgba(255,51,68,.3), 0 2px 4px rgba(0,0,0,.3);
 }
 
 /* ── HUD temp display  z-10 ──────────────────────────────── */

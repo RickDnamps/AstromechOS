@@ -53,21 +53,13 @@
       <button class="pill-btn" id="pill-lights" onclick="openDrawer('lights')">💡 LIGHTS</button>
     </div>
 
-    <!-- Joystick — Propulsion (left thumb) -->
-    <div class="js-wrap" id="js-left-wrap">
-      <div class="js-label">PROPULSION</div>
-      <div class="joystick" id="js-left">
-        <div class="js-ring"><div class="js-knob"></div></div>
-      </div>
-    </div>
+    <!-- Touch zones — left half (propulsion) / right half (dome) -->
+    <div id="js-zone-left"  class="js-zone"><span class="js-hint">PROPULSION</span></div>
+    <div id="js-zone-right" class="js-zone"><span class="js-hint">DÔME</span></div>
 
-    <!-- Joystick — Dôme (right thumb) -->
-    <div class="js-wrap" id="js-right-wrap">
-      <div class="js-label">DÔME</div>
-      <div class="joystick" id="js-right">
-        <div class="js-ring"><div class="js-knob"></div></div>
-      </div>
-    </div>
+    <!-- Floating joystick rings — hidden until finger touches zone -->
+    <div id="js-left-wrap"  class="js-float"><div class="js-ring"><div class="js-knob"></div></div></div>
+    <div id="js-right-wrap" class="js-float"><div class="js-ring"><div class="js-knob"></div></div></div>
 
     <!-- Temperature (HUD overlay) -->
     <div id="hud-temp"></div>
