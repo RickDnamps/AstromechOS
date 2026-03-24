@@ -105,10 +105,11 @@ fi
 # ──────────────────────────────────────────────
 step "1b/7" "Restauration séquences custom"
 if [ -d "$SEQUENCES_BACKUP" ]; then
-    # --ignore-existing: built-ins updated from git; custom sequences preserved
-    # Conflict rule: if git introduces same name as custom, custom wins
+    # --ignore-existing: skip files that already exist in dest (git-updated built-ins stay)
+    # git pull --ff-only never deletes untracked files, so custom sequences are always safe
+    # This restore is a safety net in case git ever adds a file that shadows a custom one
     if rsync -a --ignore-existing "$SEQUENCES_BACKUP/" "$SEQUENCES_DIR/" 2>/dev/null; then
-        ok "Séquences custom restaurées (custom wins si conflit nom)"
+        ok "Séquences custom restaurées"
     else
         warn "Restauration séquences impossible"
     fi
