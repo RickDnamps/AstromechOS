@@ -2271,10 +2271,17 @@ class SequenceEditor {
 
   _initPalette() {
     document.querySelectorAll('.editor-palette-item').forEach(el => {
+      el._wasDragged = false;
       el.addEventListener('dragstart', e => {
         e.dataTransfer.setData('editor-cmd', el.dataset.cmd);
+        el._wasDragged = true;
+      });
+      el.addEventListener('dragend', () => {
+        // Le click se déclenche juste après dragend — laisser passer, puis reset
+        setTimeout(() => { el._wasDragged = false; }, 200);
       });
       el.addEventListener('click', () => {
+        if (el._wasDragged) return;   // drag vient d'être utilisé, ignorer le click
         if (!this._openName) { alert('Créez ou ouvrez une séquence d\'abord.'); return; }
         if (this._isBuiltin) return;
         this._addStep(el.dataset.cmd, this._defaultArgs(el.dataset.cmd));

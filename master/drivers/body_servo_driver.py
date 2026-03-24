@@ -40,12 +40,30 @@ Le Slave applique : pulse_us = 500 + (angle_deg / 180.0) * 2000
 Le servo MG90S maintient la position — pas de timer d'arrêt.
 """
 
+import configparser
 import logging
+import os
 
 log = logging.getLogger(__name__)
 
 DEFAULT_OPEN_DEG  = 110
 DEFAULT_CLOSE_DEG =  20
+
+_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
+_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+
+
+def _calibrated_angle(name: str, action: str) -> float:
+    """Lit l'angle calibré depuis local.cfg [servo_panels]. Fallback sur DEFAULT."""
+    cfg = configparser.ConfigParser()
+    for path in (_MAIN_CFG, _LOCAL_CFG):
+        if os.path.exists(path):
+            cfg.read(path)
+    default = DEFAULT_OPEN_DEG if action == 'open' else DEFAULT_CLOSE_DEG
+    try:
+        return float(cfg.getint('servo_panels', f'{name}_{action}', fallback=int(default)))
+    except Exception:
+        return default
 
 KNOWN_SERVOS = {
     'body_panel_1',  'body_panel_2',  'body_panel_3',
@@ -81,10 +99,14 @@ class BodyServoDriver:
     # API publique
     # ------------------------------------------------------------------
 
-    def open(self, name: str, angle_deg: float = DEFAULT_OPEN_DEG, speed: int = None) -> bool:
+    def open(self, name: str, angle_deg: float = None, speed: int = None) -> bool:
+        if angle_deg is None:
+            angle_deg = _calibrated_angle(name, 'open')
         return self._send(name, angle_deg)
 
-    def close(self, name: str, angle_deg: float = DEFAULT_CLOSE_DEG, speed: int = None) -> bool:
+    def close(self, name: str, angle_deg: float = None, speed: int = None) -> bool:
+        if angle_deg is None:
+            angle_deg = _calibrated_angle(name, 'close')
         return self._send(name, angle_deg)
 
     def move(self, name: str, position: float,
