@@ -33,10 +33,9 @@
   <!-- ── HUD ────────────────────────────────────── -->
   <div id="hud-drive">
 
-    <!-- Camera stream -->
-    <img id="cam-stream" src="http://192.168.4.1:8080/?action=stream"
-         onerror="this.style.display='none';document.getElementById('cam-bg').style.display='block'">
-    <div id="cam-bg" style="display:none"></div>
+    <!-- Camera stream (src set by JS using the configured host) -->
+    <img id="cam-stream" style="display:none">
+    <div id="cam-bg"></div>
 
     <!-- HUD corner brackets -->
     <div class="hud-corner tl"></div>

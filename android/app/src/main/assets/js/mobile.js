@@ -541,6 +541,29 @@ function _updateHostLabel() {
 // ── Haptic ────────────────────────────────────────────────────
 function _haptic(ms) { if (window.AndroidBridge) AndroidBridge.vibrate(ms); }
 
+// ── Camera stream ─────────────────────────────────────────────
+function _initCameraStream() {
+  const img   = document.getElementById('cam-stream');
+  const bg    = document.getElementById('cam-bg');
+  if (!img) return;
+
+  const host  = API_BASE.replace('http://', '').replace(':5000', '');
+  const url   = `http://${host}:8080/?action=stream`;
+
+  img.onerror = () => {
+    img.style.display = 'none';
+    if (bg) bg.style.display = 'block';
+  };
+  img.onload = () => {
+    img.style.display  = 'block';
+    if (bg) bg.style.display = 'none';
+  };
+  img.src = url;
+  // Show immediately — MJPEG streams don't fire onload until first frame
+  img.style.display  = 'block';
+  if (bg) bg.style.display = 'none';
+}
+
 // ── Init ──────────────────────────────────────────────────────
 window.addEventListener('load', () => {
   if (window.AndroidBridge) {
@@ -555,4 +578,7 @@ window.addEventListener('load', () => {
 
   // Init lock visual (data-lock = 0)
   _applyLockMode(false);
+
+  // Start camera stream
+  _initCameraStream();
 });
