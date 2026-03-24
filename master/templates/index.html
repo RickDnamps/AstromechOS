@@ -130,6 +130,14 @@
     <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="8" height="2" rx="1" fill="currentColor"/><rect x="1" y="10" width="10" height="2" rx="1" fill="currentColor"/></svg>
     SEQUENCES
   </button>
+  <button class="tab" data-tab="editor">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon">
+      <rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/>
+      <rect x="1" y="6" width="5" height="2" rx="1" fill="currentColor"/>
+      <path d="M8 8 L13 5 L13 9 Z" fill="currentColor"/>
+    </svg>
+    ÉDITEUR
+  </button>
   <button class="tab" data-tab="lights">
     <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 8 L7 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5.5 11 L8.5 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="7" y1="1" x2="7" y2="2.5" stroke="currentColor" stroke-width="1.3"/><line x1="3" y1="2" x2="4" y2="3" stroke="currentColor" stroke-width="1.3"/><line x1="11" y1="2" x2="10" y2="3" stroke="currentColor" stroke-width="1.3"/><line x1="1.5" y1="5" x2="3" y2="5" stroke="currentColor" stroke-width="1.3"/><line x1="12.5" y1="5" x2="11" y2="5" stroke="currentColor" stroke-width="1.3"/></svg>
     LIGHTS
@@ -389,6 +397,90 @@
       <strong class="section-title-sm">ACTIVE:</strong>
       <span id="running-scripts" class="running-list">—</span>
     </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     TAB: ÉDITEUR — Sequence Editor
+================================================================ -->
+<div class="tab-content" id="tab-editor">
+
+  <!-- Top bar: name + test controls + save actions -->
+  <div id="editor-topbar" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#091220;border-bottom:1px solid #1e3a5f;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:7px">
+      <span style="font-size:8px;color:#4a6a8a;letter-spacing:.1em">NOM</span>
+      <input id="editor-name" type="text"
+             style="background:#0d1a2e;border:1px solid #00aaff;border-radius:5px;color:#00aaff;font-family:monospace;font-size:12px;padding:4px 10px;width:200px"
+             placeholder="nom-sequence" maxlength="64">
+    </div>
+    <div style="width:1px;height:22px;background:#1e3a5f;margin:0 4px"></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button id="editor-btn-test" class="btn-editor-action" data-color="green">▶ TESTER</button>
+      <button id="editor-btn-test-motion" class="btn-editor-action" data-color="orange">▶ TESTER + 🚗</button>
+    </div>
+    <div style="width:1px;height:22px;background:#1e3a5f;margin:0 4px"></div>
+    <button id="editor-btn-stop" class="btn-editor-action" data-color="red">⏹ STOP</button>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button id="editor-btn-delete" class="btn-editor-action" data-color="dim">🗑 SUPPRIMER</button>
+      <button id="editor-btn-duplicate" class="btn-editor-action" data-color="blue">📋 DUPLIQUER</button>
+      <button id="editor-btn-save" class="btn-editor-action" data-color="solid-blue">💾 SAUVEGARDER</button>
+    </div>
+  </div>
+
+  <!-- Status strip -->
+  <div id="editor-status" style="padding:5px 14px;background:#060e1a;border-bottom:1px solid #0d1e35;display:flex;align-items:center;gap:8px;min-height:24px">
+    <span id="editor-status-dot" style="width:7px;height:7px;border-radius:50%;background:#2a4a6a;display:inline-block"></span>
+    <span id="editor-status-text" style="font-size:8px;color:#2a4a6a;letter-spacing:.1em">—</span>
+    <span id="editor-status-cmd" style="font-size:8px;color:#2a4a6a;margin-left:auto"></span>
+  </div>
+
+  <!-- Main two-column layout -->
+  <div style="display:grid;grid-template-columns:190px 1fr;min-height:calc(100vh - 180px)">
+
+    <!-- Left panel: sequence list + command palette + sub-sequences -->
+    <div id="editor-left" style="background:#070f1c;border-right:1px solid #1e3a5f;overflow-y:auto">
+
+      <!-- Sequence list -->
+      <div style="padding:10px 8px">
+        <div class="editor-section-label">SÉQUENCES</div>
+        <button id="editor-btn-new" class="btn-editor-new">+ Nouvelle</button>
+        <div id="editor-seq-list" style="display:flex;flex-direction:column;gap:3px;margin-top:6px"></div>
+      </div>
+
+      <!-- Command palette -->
+      <div style="padding:0 8px 10px">
+        <div class="editor-section-label" style="border-top:1px solid #1e3a5f;padding-top:10px">COMMANDES</div>
+        <div id="editor-palette" style="display:flex;flex-direction:column;gap:5px">
+          <div class="editor-palette-item" data-cmd="sound" draggable="true">🔊 Son</div>
+          <div class="editor-palette-item" data-cmd="sleep" draggable="true">⏱ Pause</div>
+          <div class="editor-palette-item" data-cmd="servo" draggable="true">🦾 Servo</div>
+          <div class="editor-palette-item" data-cmd="motion" draggable="true">🚗 Propulsion</div>
+          <div class="editor-palette-item" data-cmd="teeces" draggable="true">💡 Lumières</div>
+          <div class="editor-palette-item" data-cmd="dome" draggable="true">🔁 Dôme</div>
+        </div>
+      </div>
+
+      <!-- Sub-sequences list -->
+      <div style="padding:0 8px 10px">
+        <div class="editor-section-label" style="border-top:1px solid #1e3a5f;padding-top:10px">SOUS-SÉQUENCES</div>
+        <div id="editor-subseq-list" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+    </div>
+
+    <!-- Right panel: step canvas -->
+    <div id="editor-canvas-wrap" style="padding:12px 14px;overflow-y:auto">
+      <div id="editor-canvas-label" style="font-size:8px;color:#4a6a8a;letter-spacing:.12em;margin-bottom:10px">ÉTAPES</div>
+      <div id="editor-read-only-banner" style="display:none;background:#1a1000;border:1px solid #ffaa0066;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:9px;color:#ffaa00;letter-spacing:.08em">
+        🔒 SÉQUENCE INTÉGRÉE — DUPLIQUER POUR MODIFIER
+      </div>
+      <div id="editor-steps" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div id="editor-dropzone" style="margin-top:8px;border:2px dashed #1e3a5f;border-radius:5px;padding:12px;text-align:center;color:#2a4a6a;font-size:9px;letter-spacing:.1em">
+        ↓ GLISSER UNE COMMANDE OU SOUS-SÉQUENCE ICI
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -918,6 +1010,7 @@
 <!-- Toast notifications -->
 <div id="toast" class="toast"></div>
 
+<script src="/static/vendor/sortable.min.js"></script>
 <script src="/static/js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
