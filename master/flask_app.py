@@ -76,6 +76,7 @@ def create_app() -> Flask:
     from master.api.settings_bp import settings_bp
     from master.api.vesc_bp     import vesc_bp
     from master.api.bt_bp       import bt_bp
+    from master.api.light_bp    import light_bp
 
     app.register_blueprint(audio_bp)
     app.register_blueprint(motion_bp)
@@ -86,6 +87,7 @@ def create_app() -> Flask:
     app.register_blueprint(settings_bp)
     app.register_blueprint(vesc_bp)
     app.register_blueprint(bt_bp)
+    app.register_blueprint(light_bp)
 
     # ------------------------------------------------------------------
     # Routes dashboard
