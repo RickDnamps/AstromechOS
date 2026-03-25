@@ -2899,9 +2899,14 @@ class SequenceEditor {
 
   async loadSequenceList() {
     try {
-      const resp = await fetch('/scripts/list');
-      const data = await resp.json();
-      this._renderSeqList(data.scripts || []);
+      const [seqResp, lseqResp] = await Promise.all([
+        fetch('/scripts/list'),
+        fetch('/light/list'),
+      ]);
+      const seqData  = await seqResp.json();
+      const lseqData = await lseqResp.json();
+      this._renderSeqList(seqData.scripts || []);
+      this._lseqNames = lseqData.sequences || [];
     } catch (e) {
       console.error('SequenceEditor: loadSequenceList', e);
     }
