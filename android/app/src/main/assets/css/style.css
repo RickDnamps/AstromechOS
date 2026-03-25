@@ -2217,7 +2217,13 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
+  align-items: flex-end;
+}
+.editor-step-form input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: #00aaff;
 }
 .editor-step-form label { font-size: 8px; color: #4a6a8a; letter-spacing: .08em; }
 .editor-step-form select,

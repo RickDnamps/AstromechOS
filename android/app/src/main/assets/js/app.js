@@ -2500,12 +2500,12 @@ class SequenceEditor {
       lbl.textContent = f.label;
       let inp;
       if (f.type === 'checkbox') {
-        wrap.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:6px';
+        wrap.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:6px;flex-basis:100%';
         inp = document.createElement('input');
         inp.type = 'checkbox';
         inp.checked = !!f.value;
       } else if (f.options) {
-        wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px';
         inp = document.createElement('select');
         f.options.forEach(o => {
           const opt = document.createElement('option');
@@ -2514,7 +2514,7 @@ class SequenceEditor {
           inp.appendChild(opt);
         });
       } else {
-        wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px';
         inp = document.createElement('input');
         inp.type = f.type || 'text';
         inp.value = f.value !== undefined ? f.value : '';
@@ -2565,7 +2565,7 @@ class SequenceEditor {
     ok.textContent = '✓ OK';
     ok.className = 'btn-editor-action';
     ok.dataset.color = 'green';
-    ok.style.marginTop = '4px';
+    ok.style.cssText = 'margin-top:4px;flex-basis:100%';
     ok.addEventListener('click', () => {
       let newArgs = inputs.map(inp => inp.value.trim()).filter(Boolean);
       // Normaliser sound via checkbox Aléatoire (inputs[0])
