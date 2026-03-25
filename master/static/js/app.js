@@ -2491,10 +2491,12 @@ class SequenceEditor {
 
     const fields = this._stepFields(step.cmd, step.args);
     const inputs = [];
+    const wraps = [];
 
     fields.forEach(f => {
       const wrap = document.createElement('div');
       wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
+      if (f.hidden) wrap.style.display = 'none';
       const lbl = document.createElement('label');
       lbl.textContent = f.label;
       let inp;
@@ -2513,22 +2515,31 @@ class SequenceEditor {
         inp.placeholder = f.placeholder || '';
       }
       inputs.push(inp);
+      wraps.push(wrap);
       wrap.appendChild(lbl);
       wrap.appendChild(inp);
       form.appendChild(wrap);
     });
 
-    // Pour sound FILE : quand la catégorie change, recharger la liste de sons
+    // Pour sound : mode change → show/hide Son ; catégorie change → reload Son list
     if (step.cmd === 'sound' && inputs[0] && inputs[1] && inputs[2]) {
-      inputs[1].addEventListener('change', () => {
-        const cat = inputs[1].value;
-        const snds = this._soundIndex[cat] || [];
+      const sonWrap = wraps[2];
+      const reloadSounds = () => {
+        const snds = this._soundIndex[inputs[1].value] || [];
         inputs[2].innerHTML = '';
         snds.forEach(s => {
           const o = document.createElement('option');
           o.value = s; o.textContent = s;
           inputs[2].appendChild(o);
         });
+      };
+      inputs[0].addEventListener('change', () => {
+        const isFile = inputs[0].value === 'FILE';
+        sonWrap.style.display = isFile ? '' : 'none';
+        if (isFile) reloadSounds();
+      });
+      inputs[1].addEventListener('change', () => {
+        if (inputs[0].value === 'FILE') reloadSounds();
       });
     }
 
@@ -2775,30 +2786,23 @@ class SequenceEditor {
     switch (cmd) {
       case 'sound': {
         const cats = Object.keys(this._soundIndex);
-        // args[0] peut être 'RANDOM', 'FILE' (legacy form) ou directement un nom de son
+        const fallbackCats = ['happy','sad','chat','whistle','scream','process','utility','special'];
+        const catList = cats.length ? cats : fallbackCats;
         const isRandom = !args[0] || args[0] === 'RANDOM';
-        const mode = isRandom ? 'RANDOM' : 'FILE';
-        if (mode === 'RANDOM') {
-          return [
-            { label: 'Mode', value: 'RANDOM', options: ['RANDOM', 'FILE'] },
-            { label: 'Catégorie', value: args[1]||'happy',
-              options: cats.length ? cats : ['happy','sad','chat','whistle','scream','process','utility','special'] },
-          ];
-        } else {
-          // FILE : args[0] = nom du son (ex Happy001), détecter sa catégorie
-          const currentSound = (args[0] !== 'FILE' ? args[0] : '') || '';
-          let detectedCat = cats[0] || 'happy';
+        const currentSound = (!isRandom && args[0] !== 'FILE') ? args[0] : '';
+        let currentCat = isRandom ? (args[1] || catList[0] || 'happy') : (catList[0] || 'happy');
+        if (!isRandom && currentSound) {
           for (const [cat, snds] of Object.entries(this._soundIndex)) {
-            if (snds.includes(currentSound)) { detectedCat = cat; break; }
+            if (snds.includes(currentSound)) { currentCat = cat; break; }
           }
-          const sounds = this._soundIndex[detectedCat] || this._soundIndex[cats[0]] || [];
-          return [
-            { label: 'Mode', value: 'FILE', options: ['RANDOM', 'FILE'] },
-            { label: 'Catégorie', value: detectedCat,
-              options: cats.length ? cats : ['happy','sad','chat','whistle','scream','process','utility','special'] },
-            { label: 'Son', value: currentSound || sounds[0] || '', options: sounds },
-          ];
         }
+        const sounds = this._soundIndex[currentCat] || this._soundIndex[catList[0]] || [];
+        return [
+          { label: 'Mode',      value: isRandom ? 'RANDOM' : 'FILE', options: ['RANDOM', 'FILE'] },
+          { label: 'Catégorie', value: currentCat, options: catList },
+          { label: 'Son',       value: currentSound || sounds[0] || '', options: sounds,
+            hidden: isRandom },
+        ];
       }
       case 'sleep': return [
         { label: 'Mode', value: args[0]==='random'?'random':'fixed', options: ['fixed','random'] },
