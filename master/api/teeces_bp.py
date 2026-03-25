@@ -37,6 +37,9 @@ Endpoints:
   POST /teeces/off              → tout éteindre
   POST /teeces/text             {"text": "HELLO"}
   POST /teeces/psi              {"mode": 1}
+  GET  /teeces/animations       → liste tous les T-codes connus
+  POST /teeces/animation        {"mode": 11}
+  POST /teeces/raw              {"cmd": "0T5"}
   GET  /teeces/state
 """
 
@@ -96,6 +99,45 @@ def teeces_psi():
     if reg.teeces:
         reg.teeces.psi_mode(mode)
     return jsonify({'status': 'ok', 'mode': mode})
+
+
+@teeces_bp.get('/animations')
+def teeces_animations():
+    """List all known T-code animations."""
+    from master.teeces_controller import TeecesController
+    return jsonify({
+        'animations': [
+            {'mode': k, 'name': v}
+            for k, v in TeecesController.ANIMATIONS.items()
+        ]
+    })
+
+
+@teeces_bp.post('/animation')
+def teeces_animation():
+    """Trigger a T-code animation. Body: {"mode": 11}"""
+    body = request.get_json(silent=True) or {}
+    try:
+        mode = int(body.get('mode', 1))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'mode must be an integer'}), 400
+    if reg.teeces:
+        reg.teeces.animation(mode)
+    from master.teeces_controller import TeecesController
+    name = TeecesController.ANIMATIONS.get(mode, f'T{mode}')
+    return jsonify({'status': 'ok', 'mode': mode, 'name': name})
+
+
+@teeces_bp.post('/raw')
+def teeces_raw():
+    """Send raw JawaLite command. Body: {"cmd": "0T5"}"""
+    body = request.get_json(silent=True) or {}
+    cmd = body.get('cmd', '').strip()
+    if not cmd:
+        return jsonify({'error': 'field "cmd" required'}), 400
+    if reg.teeces:
+        reg.teeces.send_raw(cmd)
+    return jsonify({'status': 'ok', 'cmd': cmd})
 
 
 @teeces_bp.get('/state')

@@ -46,6 +46,8 @@ Format .scr (inspiré de r2_control ScriptThread):
   teeces,random                → Teeces mode aléatoire
   teeces,leia                  → Teeces mode Leia
   teeces,off                   → Teeces éteint
+  teeces,anim,11               → trigger T-code animation (Imperial March)
+  teeces,raw,0T5               → send raw JawaLite command
   sleep,1.5                    → pause 1.5 secondes
   sleep,random,2,5             → pause aléatoire entre 2 et 5 secondes
 
@@ -339,6 +341,11 @@ class ScriptEngine:
                 self._teeces.psi_random()
             else:
                 self._teeces.psi_mode(mode)
+        elif action == 'anim':
+            mode = int(row[2]) if len(row) > 2 else 1
+            self._teeces.animation(mode)
+        elif action == 'raw':
+            self._teeces.send_raw(row[2] if len(row) > 2 else '')
 
     def _on_done(self, script_id: int) -> None:
         with self._lock:

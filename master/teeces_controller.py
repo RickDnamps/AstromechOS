@@ -45,6 +45,32 @@ log = logging.getLogger(__name__)
 
 
 class TeecesController(BaseDriver):
+    # All known JawaLite T-code animations
+    ANIMATIONS: dict[int, str] = {
+        1:  'Random',
+        2:  'Flash',
+        3:  'Alarm',
+        4:  'Short Circuit',
+        5:  'Scream',
+        6:  'Leia Message',
+        7:  'I Heart U',
+        8:  'Panel Sweep',
+        9:  'Pulse Monitor',
+        10: 'Star Wars Scroll',
+        11: 'Imperial March',
+        12: 'Disco (timed)',
+        13: 'Disco',
+        14: 'Rebel Symbol',
+        15: 'Knight Rider',
+        16: 'Test White',
+        17: 'Red On',
+        18: 'Green On',
+        19: 'Lightsaber',
+        20: 'Off',
+        21: 'VU Meter (timed)',
+        92: 'VU Meter',
+    }
+
     def __init__(self, cfg: configparser.ConfigParser):
         self._port = cfg.get('teeces', 'port')
         self._baud = cfg.getint('teeces', 'baud')
@@ -128,3 +154,13 @@ class TeecesController(BaseDriver):
     def show_version(self, version: str) -> bool:
         """Affiche la version courante sur FLD."""
         return self.fld_text(f"VER {version}")
+
+    def animation(self, mode: int) -> bool:
+        """Trigger a named animation by T-code. Ex: animation(11) → Imperial March."""
+        return self.send_command(f"0T{int(mode)}\r")
+
+    def send_raw(self, cmd: str) -> bool:
+        """Send a raw JawaLite command string. Ex: '1MHELLO\\r'"""
+        if not cmd.endswith('\r'):
+            cmd = cmd + '\r'
+        return self.send_command(cmd)
