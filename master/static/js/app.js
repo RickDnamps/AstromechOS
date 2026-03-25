@@ -365,7 +365,10 @@ function switchTab(tabId) {
   if (tabId === 'config') { loadSettings(); loadServoSettings(); }
   if (tabId === 'sequences') loadScripts();
   if (tabId === 'audio') loadAudioCategories();
-  if (tabId === 'editor' && typeof seqEditor !== 'undefined') seqEditor.loadSequenceList();
+  if (tabId === 'editor') {
+    if (typeof seqEditor !== 'undefined') seqEditor.loadSequenceList();
+    if (typeof lightEditor !== 'undefined') lightEditor.loadSequenceList();
+  }
   if (tabId === 'vesc') vescPanel.refresh();
 }
 
@@ -2209,9 +2212,554 @@ async function init() {
 
   // Sequence Editor
   window.seqEditor = new SequenceEditor();
+  window.lightEditor = new LightEditor();
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ─── Light animations registry ───────────────────────────────────────────────
+const LIGHT_ANIMATIONS = [
+  { mode:  1, label: 'Random',           icon: '✨', dur: '∞' },
+  { mode:  2, label: 'Flash',            icon: '⚡', dur: '4s' },
+  { mode:  3, label: 'Alarm',            icon: '🚨', dur: '4s' },
+  { mode:  4, label: 'Short Circuit',    icon: '💥', dur: '10s' },
+  { mode:  5, label: 'Scream',           icon: '😱', dur: '4s' },
+  { mode:  6, label: 'Leia',             icon: '🌀', dur: '34s' },
+  { mode:  7, label: 'I ♥ U',           icon: '❤️', dur: '10s' },
+  { mode:  8, label: 'Panel Sweep',      icon: '↔️', dur: '7s' },
+  { mode:  9, label: 'Pulse Monitor',    icon: '💓', dur: '∞' },
+  { mode: 10, label: 'Star Wars Scroll', icon: '⭐', dur: '15s' },
+  { mode: 11, label: 'Imperial March',   icon: '🎵', dur: '47s' },
+  { mode: 12, label: 'Disco (timed)',    icon: '🪩', dur: '4s' },
+  { mode: 13, label: 'Disco',            icon: '🪩', dur: '∞' },
+  { mode: 14, label: 'Rebel Symbol',     icon: '✊', dur: '5s' },
+  { mode: 15, label: 'Knight Rider',     icon: '🚗', dur: '20s' },
+  { mode: 16, label: 'Test White',       icon: '⬜', dur: '∞' },
+  { mode: 17, label: 'Red On',           icon: '🔴', dur: '∞' },
+  { mode: 18, label: 'Green On',         icon: '🟢', dur: '∞' },
+  { mode: 19, label: 'Lightsaber',       icon: '⚔️', dur: '∞' },
+  { mode: 20, label: 'Off',              icon: '⬛', dur: '—' },
+  { mode: 21, label: 'VU Meter (timed)', icon: '📊', dur: '4s' },
+  { mode: 92, label: 'VU Meter',         icon: '📊', dur: '∞' },
+];
+
+// ─── LightEditor ─────────────────────────────────────────────────────────────
+class LightEditor {
+  constructor() {
+    this._sequence   = [];       // [{cmd, args}]
+    this._openName   = null;
+    this._editingIdx = null;
+    this._seqNames   = [];
+    this._runId      = null;     // currently running sequence id
+
+    this._nameInput   = el('light-name-input');
+    this._canvasLabel = el('light-canvas-label');
+    this._steps       = el('light-steps');
+    this._dropzone    = el('light-dropzone');
+    this._canvasWrap  = el('light-canvas-wrap');
+
+    this._initPalette();
+    this._initDrop();
+  }
+
+  // ── Palette ────────────────────────────────────────────────────────────────
+
+  _initPalette() {
+    const palette = el('light-palette');
+    if (!palette) return;
+    palette.innerHTML = '';
+
+    // Animation items
+    LIGHT_ANIMATIONS.forEach(anim => {
+      const item = document.createElement('div');
+      item.className = 'editor-palette-item light-palette-item';
+      item.draggable = true;
+      item.dataset.cmd  = 'teeces';
+      item.dataset.args = JSON.stringify(['anim', String(anim.mode)]);
+      item.innerHTML = `${anim.icon} <span style="flex:1">${anim.label}</span><span style="font-size:8px;color:#4a6a8a">${anim.dur}</span>`;
+      item.style.display = 'flex';
+      item.style.alignItems = 'center';
+      item.style.gap = '4px';
+
+      let _dragged = false;
+      item.addEventListener('dragstart', () => { _dragged = true; });
+      item.addEventListener('dragend',   () => { setTimeout(() => { _dragged = false; }, 50); });
+      item.addEventListener('click', () => {
+        if (_dragged) return;
+        if (!this._openName) { alert('Create or open a sequence first.'); return; }
+        this._addStep('teeces', ['anim', String(anim.mode)]);
+      });
+      palette.appendChild(item);
+    });
+
+    // FLD Text
+    const txtItem = document.createElement('div');
+    txtItem.className = 'editor-palette-item light-palette-item';
+    txtItem.draggable = true;
+    txtItem.dataset.cmd  = 'teeces';
+    txtItem.dataset.args = JSON.stringify(['text', 'HELLO']);
+    txtItem.textContent = '💬 FLD Text';
+    let _txtDragged = false;
+    txtItem.addEventListener('dragstart', () => { _txtDragged = true; });
+    txtItem.addEventListener('dragend',   () => { setTimeout(() => { _txtDragged = false; }, 50); });
+    txtItem.addEventListener('click', () => {
+      if (_txtDragged) return;
+      if (!this._openName) { alert('Create or open a sequence first.'); return; }
+      this._addStep('teeces', ['text', 'HELLO']);
+    });
+    palette.appendChild(txtItem);
+
+    // PSI
+    const psiItem = document.createElement('div');
+    psiItem.className = 'editor-palette-item light-palette-item';
+    psiItem.draggable = true;
+    psiItem.dataset.cmd  = 'teeces';
+    psiItem.dataset.args = JSON.stringify(['psi', '1']);
+    psiItem.textContent = '💠 PSI';
+    let _psiDragged = false;
+    psiItem.addEventListener('dragstart', () => { _psiDragged = true; });
+    psiItem.addEventListener('dragend',   () => { setTimeout(() => { _psiDragged = false; }, 50); });
+    psiItem.addEventListener('click', () => {
+      if (_psiDragged) return;
+      if (!this._openName) { alert('Create or open a sequence first.'); return; }
+      this._addStep('teeces', ['psi', '1']);
+    });
+    palette.appendChild(psiItem);
+
+    // Raw JawaLite
+    const rawItem = document.createElement('div');
+    rawItem.className = 'editor-palette-item light-palette-item';
+    rawItem.draggable = true;
+    rawItem.dataset.cmd  = 'teeces';
+    rawItem.dataset.args = JSON.stringify(['raw', '0T1']);
+    rawItem.textContent = '⚙️ Raw JawaLite';
+    let _rawDragged = false;
+    rawItem.addEventListener('dragstart', () => { _rawDragged = true; });
+    rawItem.addEventListener('dragend',   () => { setTimeout(() => { _rawDragged = false; }, 50); });
+    rawItem.addEventListener('click', () => {
+      if (_rawDragged) return;
+      if (!this._openName) { alert('Create or open a sequence first.'); return; }
+      this._addStep('teeces', ['raw', '0T1']);
+    });
+    palette.appendChild(rawItem);
+
+    // Wait (sleep)
+    const waitItem = document.createElement('div');
+    waitItem.className = 'editor-palette-item light-palette-item';
+    waitItem.draggable = true;
+    waitItem.dataset.cmd  = 'sleep';
+    waitItem.dataset.args = JSON.stringify(['fixed', '1.0']);
+    waitItem.textContent = '⏱ Wait';
+    let _waitDragged = false;
+    waitItem.addEventListener('dragstart', () => { _waitDragged = true; });
+    waitItem.addEventListener('dragend',   () => { setTimeout(() => { _waitDragged = false; }, 50); });
+    waitItem.addEventListener('click', () => {
+      if (_waitDragged) return;
+      if (!this._openName) { alert('Create or open a sequence first.'); return; }
+      this._addStep('sleep', ['fixed', '1.0']);
+    });
+    palette.appendChild(waitItem);
+  }
+
+  // ── Drag & drop ────────────────────────────────────────────────────────────
+
+  _initDrop() {
+    if (!this._canvasWrap) return;
+    this._canvasWrap.addEventListener('dragover', e => {
+      e.preventDefault();
+      this._dropzone.style.borderColor = '#00aaff';
+    });
+    this._canvasWrap.addEventListener('dragleave', e => {
+      if (!this._canvasWrap.contains(e.relatedTarget))
+        this._dropzone.style.borderColor = '';
+    });
+    this._canvasWrap.addEventListener('drop', e => {
+      e.preventDefault();
+      this._dropzone.style.borderColor = '';
+      const cmd  = e.dataTransfer.getData('text/cmd');
+      const args = JSON.parse(e.dataTransfer.getData('text/args') || '[]');
+      if (cmd) this._addStep(cmd, args);
+    });
+
+    // Make palette items provide drag data
+    const palette = el('light-palette');
+    if (palette) {
+      palette.addEventListener('dragstart', e => {
+        const item = e.target.closest('[data-cmd]');
+        if (!item) return;
+        e.dataTransfer.setData('text/cmd',  item.dataset.cmd);
+        e.dataTransfer.setData('text/args', item.dataset.args || '[]');
+      });
+    }
+
+    // SortableJS for reordering steps
+    if (typeof Sortable !== 'undefined' && this._steps) {
+      Sortable.create(this._steps, {
+        animation: 150,
+        handle: '.editor-step-handle',
+        onEnd: evt => {
+          const [moved] = this._sequence.splice(evt.oldIndex, 1);
+          this._sequence.splice(evt.newIndex, 0, moved);
+        },
+      });
+    }
+  }
+
+  // ── Sequence list ──────────────────────────────────────────────────────────
+
+  async loadSequenceList() {
+    try {
+      const resp = await fetch('/light/list');
+      const data = await resp.json();
+      this._renderSeqList(data.sequences || []);
+    } catch (e) { console.error('LightEditor: loadSequenceList', e); }
+  }
+
+  _renderSeqList(names) {
+    this._seqNames = names;
+    const list = el('light-seq-list');
+    if (!list) return;
+    list.innerHTML = '';
+    names.forEach(name => {
+      const item = document.createElement('div');
+      item.className = 'editor-seq-item' + (name === this._openName ? ' active' : '');
+      item.textContent = name;
+      item.addEventListener('click', () => this.openSequence(name));
+      list.appendChild(item);
+    });
+  }
+
+  async openSequence(name) {
+    try {
+      const resp = await fetch(`/light/get?name=${encodeURIComponent(name)}`);
+      if (!resp.ok) { alert(`Sequence "${name}" not found`); return; }
+      const data = await resp.json();
+      this._openName   = data.name;
+      this._sequence   = data.steps;
+      this._editingIdx = null;
+      this._nameInput.value    = data.name;
+      this._nameInput.readOnly = true;
+      this._canvasLabel.textContent = `STEPS — ${data.name}`;
+      this._renderSteps();
+      await this.loadSequenceList();
+    } catch (e) { console.error('LightEditor: openSequence', e); }
+  }
+
+  // ── Steps rendering ────────────────────────────────────────────────────────
+
+  _renderSteps() {
+    this._steps.innerHTML = '';
+    this._sequence.forEach((step, idx) => {
+      this._steps.appendChild(this._renderStep(step, idx));
+    });
+  }
+
+  _stepLabel(step) {
+    if (step.cmd === 'sleep') return `⏱ ${step.args[1] || step.args[0] || '1'}s`;
+    if (step.cmd !== 'teeces') return step.cmd;
+    const action = (step.args[0] || '').toLowerCase();
+    if (action === 'anim') {
+      const mode = parseInt(step.args[1]);
+      const a = LIGHT_ANIMATIONS.find(x => x.mode === mode);
+      return a ? `${a.icon} ${a.label}` : `T${mode}`;
+    }
+    if (action === 'text')  return `💬 "${step.args[1] || ''}"`;
+    if (action === 'psi')   return `💠 PSI ${step.args[1] || ''}`;
+    if (action === 'raw')   return `⚙️ ${step.args[1] || ''}`;
+    if (action === 'random') return '✨ Random';
+    if (action === 'leia')   return '🌀 Leia';
+    if (action === 'off')    return '⬛ Off';
+    return `💡 ${step.args.join(' ')}`;
+  }
+
+  _renderStep(step, idx) {
+    const row  = document.createElement('div');
+    row.className = 'editor-step-row';
+    row.id = 'light-step-row-' + idx;
+
+    const num = document.createElement('div');
+    num.className = 'editor-step-num';
+    num.textContent = idx + 1;
+
+    const card = document.createElement('div');
+    card.className = 'editor-step-card';
+    card.style.borderLeftColor = step.cmd === 'sleep' ? '#ffaa00' : '#aa44ff';
+
+    const summary = document.createElement('div');
+    summary.style.cssText = 'display:flex;align-items:center;gap:8px';
+
+    const label = document.createElement('span');
+    label.style.cssText = 'font-size:10px;color:#c0a0e0;flex:1';
+    label.textContent = this._stepLabel(step);
+
+    const actions = document.createElement('span');
+    actions.style.cssText = 'font-size:9px;color:#4a6a8a;margin-left:auto;display:flex;align-items:center;gap:6px';
+
+    const btnEdit = document.createElement('span');
+    btnEdit.textContent = '✏️'; btnEdit.style.cursor = 'pointer'; btnEdit.title = 'Edit';
+    btnEdit.addEventListener('click', e => { e.stopPropagation(); this._toggleEdit(idx); });
+
+    const btnDel = document.createElement('span');
+    btnDel.textContent = '🗑'; btnDel.style.cursor = 'pointer'; btnDel.title = 'Delete';
+    btnDel.addEventListener('click', e => { e.stopPropagation(); this._removeStep(idx); });
+
+    actions.appendChild(btnEdit);
+    actions.appendChild(btnDel);
+    summary.appendChild(label);
+    summary.appendChild(actions);
+    card.appendChild(summary);
+
+    if (this._editingIdx === idx) card.appendChild(this._renderStepForm(step, idx));
+
+    const handle = document.createElement('div');
+    handle.className = 'editor-step-handle';
+    handle.textContent = '⋮⋮';
+
+    row.appendChild(num);
+    row.appendChild(card);
+    row.appendChild(handle);
+    return row;
+  }
+
+  _renderStepForm(step, idx) {
+    const form = document.createElement('div');
+    form.className = 'editor-step-form';
+    form.style.marginTop = '6px';
+
+    let fields = [];
+    const args = step.args;
+    const action = args[0] ? args[0].toLowerCase() : '';
+
+    if (step.cmd === 'sleep') {
+      const isRand = action === 'random';
+      fields = [
+        { label:'Mode', value: isRand ? 'random':'fixed', options:['fixed','random'] },
+        { label:'Duration (s)', value: isRand?(args[1]||'1'):(action==='fixed'?(args[1]||'1'):(action||'1')), type:'number', placeholder:'1.0' },
+        { label:'Max (s)', value: args[2]||'3', type:'number', placeholder:'3.0', hidden: !isRand },
+      ];
+    } else if (step.cmd === 'teeces') {
+      if (action === 'anim') {
+        fields = [{ label:'Animation', value: args[1]||'1',
+          options: LIGHT_ANIMATIONS.map(a => `${a.mode}:${a.icon} ${a.label}`) }];
+      } else if (action === 'text') {
+        fields = [{ label:'FLD Text (max 20)', value: args[1]||'', type:'text', placeholder:'HELLO' }];
+      } else if (action === 'psi') {
+        fields = [{ label:'PSI Mode', value: args[1]||'1', options:['0','1','2','3','4','5','6','7','8','9'] }];
+      } else if (action === 'raw') {
+        fields = [{ label:'JawaLite command', value: args[1]||'', type:'text', placeholder:'0T5' }];
+      } else {
+        fields = [{ label:'Action', value: action, options:['random','leia','off','anim','text','psi','raw'] }];
+      }
+    }
+
+    const inputs = [];
+    const wraps  = [];
+    fields.forEach(f => {
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px;flex:1;min-width:80px';
+      if (f.hidden) wrap.style.display = 'none';
+      const lbl = document.createElement('label');
+      lbl.textContent = f.label;
+      let inp;
+      if (f.options) {
+        inp = document.createElement('select');
+        f.options.forEach(o => {
+          const opt = document.createElement('option');
+          // Support "N:label" format for animation dropdown
+          const [val, ...rest] = o.split(':');
+          opt.value = val; opt.textContent = rest.length ? rest.join(':') : val;
+          if (val === f.value) opt.selected = true;
+          inp.appendChild(opt);
+        });
+      } else {
+        inp = document.createElement('input');
+        inp.type = f.type || 'text';
+        inp.value = f.value !== undefined ? f.value : '';
+        inp.placeholder = f.placeholder || '';
+      }
+      inputs.push(inp);
+      wraps.push(wrap);
+      wrap.appendChild(lbl);
+      wrap.appendChild(inp);
+      form.appendChild(wrap);
+    });
+
+    // Sleep mode toggle
+    if (step.cmd === 'sleep' && inputs[0] && wraps[2]) {
+      inputs[0].addEventListener('change', () => {
+        wraps[2].style.display = inputs[0].value === 'random' ? '' : 'none';
+      });
+    }
+
+    const ok = document.createElement('button');
+    ok.textContent = '✓ OK';
+    ok.className = 'btn-editor-action';
+    ok.dataset.color = 'green';
+    ok.style.cssText = 'margin-top:4px;flex-basis:100%';
+    ok.addEventListener('click', () => {
+      let newArgs;
+      if (step.cmd === 'sleep') {
+        if (inputs[0].value === 'fixed') {
+          newArgs = ['fixed', inputs[1].value || '1'];
+        } else {
+          newArgs = ['random', inputs[1].value || '1', inputs[2]?.value || '3'];
+        }
+      } else if (step.cmd === 'teeces') {
+        const a = action || 'anim';
+        if (a === 'anim')  newArgs = ['anim',  inputs[0].value];
+        else if (a === 'text') newArgs = ['text', inputs[0].value.substring(0, 20).toUpperCase()];
+        else if (a === 'psi')  newArgs = ['psi',  inputs[0].value];
+        else if (a === 'raw')  newArgs = ['raw',  inputs[0].value];
+        else newArgs = [inputs[0].value];
+      } else {
+        newArgs = inputs.map(i => i.value.trim()).filter(Boolean);
+      }
+      this._sequence[idx].args = newArgs;
+      this._editingIdx = null;
+      this._renderSteps();
+    });
+    form.appendChild(ok);
+    return form;
+  }
+
+  _toggleEdit(idx) {
+    this._editingIdx = this._editingIdx === idx ? null : idx;
+    this._renderSteps();
+  }
+
+  _addStep(cmd, args) {
+    if (!this._openName) { alert('Create or open a sequence first.'); return; }
+    this._sequence.push({ cmd, args: [...args] });
+    this._editingIdx = this._sequence.length - 1;
+    this._renderSteps();
+  }
+
+  _removeStep(idx) {
+    this._sequence.splice(idx, 1);
+    if (this._editingIdx === idx) this._editingIdx = null;
+    this._renderSteps();
+  }
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
+
+  newSequence() {
+    const name = prompt('New light sequence name (letters, digits, - and _ only):');
+    if (!name) return;
+    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) {
+      alert('Invalid name. Use letters, digits, - and _ only (max 64 chars).');
+      return;
+    }
+    this._openName   = name;
+    this._sequence   = [];
+    this._editingIdx = null;
+    this._nameInput.value    = name;
+    this._nameInput.readOnly = false;
+    this._nameInput.style.borderColor = '#00aaff';
+    this._canvasLabel.textContent = `STEPS — ${name} (new)`;
+    this._renderSteps();
+  }
+
+  async saveSequence() {
+    const name = this._nameInput.value.trim();
+    if (!name || !/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) { alert('Invalid name.'); return; }
+    if (this._sequence.length === 0) { alert('Sequence is empty.'); return; }
+    try {
+      const resp = await fetch('/light/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, steps: this._sequence }),
+      });
+      if (!resp.ok) { const e = await resp.json(); alert(`Error: ${e.error}`); return; }
+      this._openName = name;
+      this._nameInput.readOnly = true;
+      this._nameInput.style.borderColor = '';
+      this._canvasLabel.textContent = `STEPS — ${name}`;
+      await this.loadSequenceList();
+      toast('Light sequence saved', 'success');
+    } catch (e) { alert('Network error while saving.'); }
+  }
+
+  async deleteSequence() {
+    if (!this._openName) return;
+    if (!confirm(`Delete "${this._openName}"? This cannot be undone.`)) return;
+    try {
+      const resp = await fetch('/light/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this._openName }),
+      });
+      if (!resp.ok) { const e = await resp.json(); alert(`Error: ${e.error}`); return; }
+      this._openName   = null;
+      this._sequence   = [];
+      this._nameInput.value = '';
+      this._canvasLabel.textContent = 'STEPS';
+      this._renderSteps();
+      await this.loadSequenceList();
+    } catch (e) { alert('Network error.'); }
+  }
+
+  async duplicateSequence() {
+    const newName = prompt('Name for the copy:');
+    if (!newName) return;
+    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(newName)) { alert('Invalid name.'); return; }
+    try {
+      const resp = await fetch('/light/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName, steps: this._sequence }),
+      });
+      if (!resp.ok) { alert('Error while duplicating.'); return; }
+      await this.openSequence(newName);
+    } catch (e) { alert('Network error.'); }
+  }
+
+  async runTest() {
+    if (!this._openName) { alert('Create or open a sequence first.'); return; }
+    await this.saveSequence();
+    try {
+      const resp = await fetch('/light/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this._openName }),
+      });
+      const data = await resp.json();
+      if (resp.ok) { this._runId = data.id; this._updateStatus('running'); }
+      else alert(`Error: ${data.error}`);
+    } catch (e) { alert('Network error.'); }
+  }
+
+  async stopAll() {
+    this._runId = null;
+    this._updateStatus('stopped');
+    try { await fetch('/light/stop_all', { method: 'POST' }); } catch (e) {}
+  }
+
+  _updateStatus(state) {
+    const dot  = el('light-status-dot');
+    const text = el('light-status-text');
+    if (!dot || !text) return;
+    if (state === 'running') {
+      dot.style.background  = '#00cc55';
+      text.style.color      = '#00cc55';
+      text.textContent      = `▶ RUNNING — ${this._openName}`;
+    } else {
+      dot.style.background  = '#2a4a6a';
+      text.style.color      = '#2a4a6a';
+      text.textContent      = '—';
+    }
+  }
+}
+
+// ─── Editor type switcher ─────────────────────────────────────────────────────
+function editorSwitchType(type) {
+  el('editor-panel-sequence').style.display = type === 'sequence' ? '' : 'none';
+  el('editor-panel-light').style.display    = type === 'light'    ? '' : 'none';
+  document.querySelectorAll('.editor-type-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.type === type);
+  });
+  if (type === 'light') lightEditor.loadSequenceList();
+  if (type === 'sequence') seqEditor.loadSequenceList();
+}
 
 // ─── SequenceEditor ────────────────────────────────────────────────────────
 class SequenceEditor {
@@ -2237,7 +2785,9 @@ class SequenceEditor {
     this._saving     = false;
     this._seqNames   = [];   // noms de toutes les séquences (pour dropdown sous-seq)
     this._soundIndex = {};   // {category: [sounds]} chargé depuis /audio/index
+    this._lseqNames  = [];   // light sequence names for lseq dropdown
     this._loadSoundIndex();
+    this._loadLightSeqNames();
 
     this._initButtons();
     this._initPalette();
@@ -2334,6 +2884,14 @@ class SequenceEditor {
         this._soundIndex = data.categories || {};
       }
     } catch (e) { /* silent — sons désactivés ou Slave absent */ }
+  }
+
+  async _loadLightSeqNames() {
+    try {
+      const resp = await fetch('/light/list');
+      const data = await resp.json();
+      this._lseqNames = data.sequences || [];
+    } catch (e) {}
   }
 
   async loadSequenceList() {
@@ -2780,19 +3338,19 @@ class SequenceEditor {
 
   _cmdIcon(cmd) {
     return { sound:'🔊', sleep:'⏱', servo:'🦾', motion:'🚗',
-             teeces:'💡', dome:'🔁', script:'📋' }[cmd] || '•';
+             teeces:'💡', dome:'🔁', script:'📋', lseq:'💡' }[cmd] || '•';
   }
 
   _cmdColor(cmd) {
     return { sound:'#00cc55', sleep:'#ffaa00', servo:'#00aaff',
              motion:'#ff6633', teeces:'#aa44ff', dome:'#44ffaa',
-             script:'#cc88ff' }[cmd] || '#a0c0e0';
+             script:'#cc88ff', lseq:'#ffdd44' }[cmd] || '#a0c0e0';
   }
 
   _cmdBg(cmd) {
     return { sound:'#0a2a10', sleep:'#2a1a00', servo:'#001a2a',
              motion:'#1a1000', teeces:'#1a0028', dome:'#0a1a10',
-             script:'#1a1030' }[cmd] || '#0d1a2e';
+             script:'#1a1030', lseq:'#1a1a00' }[cmd] || '#0d1a2e';
   }
 
   _defaultArgs(cmd) {
@@ -2804,6 +3362,7 @@ class SequenceEditor {
       teeces:  ['random'],
       dome:    ['stop'],
       script:  [''],
+      lseq:    [''],
     }[cmd] || [];
   }
 
@@ -2870,6 +3429,10 @@ class SequenceEditor {
           ? [{ label: 'Sub-sequence', value: args[0] || opts[0], options: opts }]
           : [{ label: 'Sub-sequence', value: args[0] || '', placeholder: 'sequence-name' }];
       }
+      case 'lseq':
+        return this._lseqNames.length
+          ? [{ label: 'Light Sequence', value: args[0] || this._lseqNames[0] || '', options: this._lseqNames }]
+          : [{ label: 'Light Sequence', value: args[0] || '', type: 'text', placeholder: 'name' }];
       default: return args.map((a, i) => ({ label: `arg${i+1}`, value: a }));
     }
   }
