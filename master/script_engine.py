@@ -256,6 +256,8 @@ class ScriptEngine:
                 self._cmd_teeces(row)
             elif cmd == 'lseq':
                 self._cmd_lseq(row)
+            elif cmd == 'wait_light':
+                self._cmd_wait_light(row, stop_event)
             else:
                 log.debug(f"Commande script inconnue: {cmd!r}")
         except Exception as e:
@@ -405,6 +407,17 @@ class ScriptEngine:
         )
         t.start()
         log.debug('lseq: launched %s in background', name)
+
+    def _cmd_wait_light(self, row: list[str], stop_event=None) -> None:
+        """Block until all running light sequences finish (or stop_event is set)."""
+        log.debug('wait_light: waiting for light sequences to finish')
+        while True:
+            with self._lock:
+                if not self._light_ids:
+                    return
+            if stop_event and stop_event.is_set():
+                return
+            time.sleep(0.1)
 
     def _on_done(self, script_id: int) -> None:
         with self._lock:

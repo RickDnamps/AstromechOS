@@ -3355,19 +3355,19 @@ class SequenceEditor {
 
   _cmdIcon(cmd) {
     return { sound:'🔊', sleep:'⏱', servo:'🦾', motion:'🚗',
-             teeces:'💡', dome:'🔁', script:'📋', lseq:'💡' }[cmd] || '•';
+             teeces:'💡', dome:'🔁', script:'📋', lseq:'💡', wait_light:'⏳' }[cmd] || '•';
   }
 
   _cmdColor(cmd) {
     return { sound:'#00cc55', sleep:'#ffaa00', servo:'#00aaff',
              motion:'#ff6633', teeces:'#aa44ff', dome:'#44ffaa',
-             script:'#cc88ff', lseq:'#ffdd44' }[cmd] || '#a0c0e0';
+             script:'#cc88ff', lseq:'#ffdd44', wait_light:'#aa44ff' }[cmd] || '#a0c0e0';
   }
 
   _cmdBg(cmd) {
     return { sound:'#0a2a10', sleep:'#2a1a00', servo:'#001a2a',
              motion:'#1a1000', teeces:'#1a0028', dome:'#0a1a10',
-             script:'#1a1030', lseq:'#1a1a00' }[cmd] || '#0d1a2e';
+             script:'#1a1030', lseq:'#1a1a00', wait_light:'#1a0028' }[cmd] || '#0d1a2e';
   }
 
   _defaultArgs(cmd) {
@@ -3379,7 +3379,8 @@ class SequenceEditor {
       teeces:  ['random'],
       dome:    ['stop'],
       script:  [''],
-      lseq:    [''],
+      lseq:       [''],
+      wait_light: [],
     }[cmd] || [];
   }
 
@@ -3450,6 +3451,8 @@ class SequenceEditor {
         return this._lseqNames.length
           ? [{ label: 'Light Sequence', value: args[0] || this._lseqNames[0] || '', options: this._lseqNames }]
           : [{ label: 'Light Sequence', value: args[0] || '', type: 'text', placeholder: 'name' }];
+      case 'wait_light':
+        return [];   // no args — just blocks until light sequences finish
       default: return args.map((a, i) => ({ label: `arg${i+1}`, value: a }));
     }
   }
