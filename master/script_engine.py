@@ -68,6 +68,7 @@ import time
 log = logging.getLogger(__name__)
 
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), 'sequences')
+LIGHT_DIR   = os.path.join(os.path.dirname(__file__), 'light_sequences')
 
 
 class ScriptEngine:
@@ -95,6 +96,7 @@ class ScriptEngine:
         self._servo      = servo
         self._dome_servo = dome_servo
         self._running: dict[int, '_ScriptRunner'] = {}
+        self._light_ids: set[int] = set()
         self._next_id = 1
         self._lock    = threading.Lock()
         self.sequences_dir = SCRIPTS_DIR
@@ -163,6 +165,45 @@ class ScriptEngine:
         log.info(f"Script lancé: {name} (id={script_id}, loop={loop})")
         return script_id
 
+    def run_light(self, name: str, loop: bool = False) -> int | None:
+        """
+        Run a .lseq light sequence in parallel (does NOT stop other sequences,
+        does NOT reset servos — light runs alongside regular sequences).
+        """
+        path = os.path.join(LIGHT_DIR, f'{name}.lseq')
+        if not os.path.isfile(path):
+            log.warning('run_light: not found: %s', path)
+            return None
+        with self._lock:
+            script_id     = self._next_id
+            self._next_id += 1
+        runner = _ScriptRunner(
+            script_id=script_id,
+            name=name,
+            path=path,
+            loop=loop,
+            engine=self,
+            on_done=self._on_done,
+            skip_motion=True,   # light sequences never drive motors
+        )
+        with self._lock:
+            self._running[script_id] = runner
+            self._light_ids.add(script_id)
+        runner.start()
+        log.info('Light sequence started: %s (id=%d)', name, script_id)
+        return script_id
+
+    def stop_light_all(self) -> None:
+        """Stop only light sequences — leaves regular sequences and audio untouched."""
+        with self._lock:
+            ids_to_stop = list(self._light_ids)
+            self._light_ids.clear()
+            runners = [self._running.pop(sid, None) for sid in ids_to_stop]
+        for runner in runners:
+            if runner:
+                runner.stop()
+        log.info('All light sequences stopped')
+
     def stop(self, script_id: int) -> bool:
         """Arrête un script par ID — retire immédiatement de _running."""
         with self._lock:
@@ -213,6 +254,8 @@ class ScriptEngine:
                     self._cmd_motion(row)
             elif cmd == 'teeces':
                 self._cmd_teeces(row)
+            elif cmd == 'lseq':
+                self._cmd_lseq(row)
             else:
                 log.debug(f"Commande script inconnue: {cmd!r}")
         except Exception as e:
@@ -347,9 +390,26 @@ class ScriptEngine:
         elif action == 'raw':
             self._teeces.send_raw(row[2] if len(row) > 2 else '')
 
+    def _cmd_lseq(self, row: list[str]) -> None:
+        """Fire-and-forget: start a light sequence in background (parallel like sound)."""
+        if len(row) < 2 or not row[1]:
+            log.warning('lseq: missing name')
+            return
+        name = row[1].strip()
+        # Run in a daemon thread so the main sequence continues immediately
+        t = threading.Thread(
+            target=self.run_light,
+            args=(name,),
+            daemon=True,
+            name=f'lseq-{name}',
+        )
+        t.start()
+        log.debug('lseq: launched %s in background', name)
+
     def _on_done(self, script_id: int) -> None:
         with self._lock:
             self._running.pop(script_id, None)
+            self._light_ids.discard(script_id)
 
 
 # ------------------------------------------------------------------
