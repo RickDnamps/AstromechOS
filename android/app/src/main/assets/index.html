@@ -30,7 +30,7 @@
  ============================================================
 -->
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -69,10 +69,10 @@
     <div class="status-pill" id="pill-heartbeat" title="Heartbeat App ↔ Master">
       <span class="pulse-dot"></span>HB
     </div>
-    <div class="status-pill" id="pill-uart" title="UART Master ↔ Slave — qualité bus (% paquets valides / 1 min)">
+    <div class="status-pill" id="pill-uart" title="UART Master ↔ Slave — bus quality (% valid packets / 1 min)">
       <span class="pulse-dot"></span>UART
     </div>
-    <div class="status-pill" id="pill-bt" title="Manette Bluetooth">
+    <div class="status-pill" id="pill-bt" title="Bluetooth Controller">
       <svg width="10" height="10" viewBox="0 0 10 10" class="bt-icon">
         <path d="M5 1 L7 3 L5 5 L7 7 L5 9 L5 5 L3 7 L5 5 L3 3 L5 5 Z" fill="currentColor"/>
       </svg>
@@ -83,7 +83,7 @@
 
   <div class="topbar-right">
     <!-- Lock Mode Button -->
-    <button id="lock-mode-btn" class="lock-mode-btn" onclick="lockMgr.onBtnClick()" title="Mode verrouillage (Kids / Child Lock)">
+    <button id="lock-mode-btn" class="lock-mode-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
       <svg class="lock-svg lock-open" width="14" height="16" viewBox="0 0 14 16">
         <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
         <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
@@ -130,6 +130,14 @@
     <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="8" height="2" rx="1" fill="currentColor"/><rect x="1" y="10" width="10" height="2" rx="1" fill="currentColor"/></svg>
     SEQUENCES
   </button>
+  <button class="tab tab-protected" data-tab="editor">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon">
+      <rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/>
+      <rect x="1" y="6" width="5" height="2" rx="1" fill="currentColor"/>
+      <path d="M8 8 L13 5 L13 9 Z" fill="currentColor"/>
+    </svg>
+    EDITOR
+  </button>
   <button class="tab" data-tab="lights">
     <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 8 L7 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5.5 11 L8.5 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="7" y1="1" x2="7" y2="2.5" stroke="currentColor" stroke-width="1.3"/><line x1="3" y1="2" x2="4" y2="3" stroke="currentColor" stroke-width="1.3"/><line x1="11" y1="2" x2="10" y2="3" stroke="currentColor" stroke-width="1.3"/><line x1="1.5" y1="5" x2="3" y2="5" stroke="currentColor" stroke-width="1.3"/><line x1="12.5" y1="5" x2="11" y2="5" stroke="currentColor" stroke-width="1.3"/></svg>
     LIGHTS
@@ -147,7 +155,7 @@
     <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="7" r="2" fill="currentColor"/><path d="M7 1 L8 3 L10 2 L11 4 L9 5 L10 7 L8 7 L8 9 L6 9 L6 7 L4 7 L5 5 L3 4 L4 2 L6 3 Z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
     CONFIG
   </button>
-  <button id="admin-gear-btn" class="admin-gear-btn" onclick="adminGuard.showModal()" title="Accès admin">
+  <button id="admin-gear-btn" class="admin-gear-btn" onclick="adminGuard.showModal()" title="Admin access">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
       <circle cx="8" cy="8" r="2.5"/>
       <path d="M8 1.5 L9.2 3.5 L11.5 2.5 L12.5 4.8 L10.5 6 L11.5 8 L9.5 8 L9.5 10 L6.5 10 L6.5 8 L4.5 8 L5.5 6 L3.5 4.8 L4.5 2.5 L6.8 3.5 Z"/>
@@ -167,13 +175,13 @@
         <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
       </svg>
     </div>
-    <div class="admin-modal-title" id="lock-modal-title">DÉVERROUILLER</div>
-    <div class="admin-modal-sub" id="lock-modal-sub">Entrez le mot de passe pour retourner au mode normal</div>
-    <input type="password" id="lock-pwd-input" class="admin-pwd-input" placeholder="Mot de passe"
+    <div class="admin-modal-title" id="lock-modal-title">UNLOCK</div>
+    <div class="admin-modal-sub" id="lock-modal-sub">Enter password to return to normal mode</div>
+    <input type="password" id="lock-pwd-input" class="admin-pwd-input" placeholder="Password"
            onkeydown="if(event.key==='Enter') lockMgr.submitModal(); if(event.key==='Escape') lockMgr.cancelModal()">
-    <div id="lock-pwd-error" class="admin-pwd-error hidden">Mot de passe incorrect</div>
+    <div id="lock-pwd-error" class="admin-pwd-error hidden">Incorrect password</div>
     <div class="admin-modal-btns">
-      <button class="btn" onclick="lockMgr.cancelModal()">ANNULER</button>
+      <button class="btn" onclick="lockMgr.cancelModal()">CANCEL</button>
       <button class="btn btn-active" onclick="lockMgr.submitModal()">UNLOCK</button>
     </div>
     <!-- Séparateur + bouton Child Lock (affiché uniquement depuis Kids mode expiré) -->
@@ -184,7 +192,7 @@
           <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
           <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4"/>
         </svg>
-        PASSER EN CHILD LOCK
+        ENABLE CHILD LOCK
       </button>
     </div>
   </div>
@@ -202,13 +210,13 @@
       </svg>
     </div>
     <div class="admin-modal-title">ADMIN ACCESS</div>
-    <div class="admin-modal-sub">Entrez le mot de passe pour accéder aux onglets SERVO / VESC / CONFIG</div>
-    <input type="password" id="admin-pwd-input" class="admin-pwd-input" placeholder="Mot de passe"
+    <div class="admin-modal-sub">Enter password to access SERVO / VESC / CONFIG / EDITOR tabs</div>
+    <input type="password" id="admin-pwd-input" class="admin-pwd-input" placeholder="Password"
            onkeydown="if(event.key==='Enter') adminGuard.submit(); if(event.key==='Escape') adminGuard.cancel()">
-    <div id="admin-pwd-error" class="admin-pwd-error hidden">Mot de passe incorrect</div>
+    <div id="admin-pwd-error" class="admin-pwd-error hidden">Incorrect password</div>
     <div class="admin-modal-btns">
-      <button class="btn" onclick="adminGuard.cancel()">ANNULER</button>
-      <button class="btn btn-active" onclick="adminGuard.submit()">ACCÈS</button>
+      <button class="btn" onclick="adminGuard.cancel()">CANCEL</button>
+      <button class="btn btn-active" onclick="adminGuard.submit()">ACCESS</button>
     </div>
   </div>
 </div>
@@ -393,6 +401,147 @@
 </div>
 
 <!-- ================================================================
+     TAB: EDITOR — Sequence Editor
+================================================================ -->
+<div class="tab-content" id="tab-editor">
+
+  <!-- Editor type switcher -->
+  <div id="editor-type-bar" style="display:flex;align-items:center;gap:4px;padding:6px 14px 0;background:#060e1a;border-bottom:1px solid #0d1e35">
+    <button class="editor-type-btn active" data-type="sequence" onclick="editorSwitchType('sequence')">📋 SEQUENCES</button>
+    <button class="editor-type-btn" data-type="light" onclick="editorSwitchType('light')">💡 LIGHT</button>
+  </div>
+
+  <!-- Sequence editor panel -->
+  <div id="editor-panel-sequence">
+
+  <!-- Top bar: name + test controls + save actions -->
+  <div id="editor-topbar" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#091220;border-bottom:1px solid #1e3a5f;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:7px">
+      <span style="font-size:8px;color:#4a6a8a;letter-spacing:.1em">NAME</span>
+      <input id="editor-name" type="text"
+             style="background:#0d1a2e;border:1px solid #00aaff;border-radius:5px;color:#00aaff;font-family:monospace;font-size:12px;padding:4px 10px;width:200px"
+             placeholder="nom-sequence" maxlength="64">
+    </div>
+    <div style="width:1px;height:22px;background:#1e3a5f;margin:0 4px"></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button id="editor-btn-test" class="btn-editor-action" data-color="green">▶ TEST</button>
+      <button id="editor-btn-test-motion" class="btn-editor-action" data-color="orange">▶ TEST + 🚗</button>
+    </div>
+    <div style="width:1px;height:22px;background:#1e3a5f;margin:0 4px"></div>
+    <button id="editor-btn-stop" class="btn-editor-action" data-color="red">⏹ STOP</button>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <button id="editor-btn-delete" class="btn-editor-action" data-color="dim">🗑 DELETE</button>
+      <button id="editor-btn-duplicate" class="btn-editor-action" data-color="blue">📋 DUPLICATE</button>
+      <button id="editor-btn-save" class="btn-editor-action" data-color="solid-blue">💾 SAVE</button>
+    </div>
+  </div>
+
+  <!-- Status strip -->
+  <div id="editor-status" style="padding:5px 14px;background:#060e1a;border-bottom:1px solid #0d1e35;display:flex;align-items:center;gap:8px;min-height:24px">
+    <span id="editor-status-dot" style="width:7px;height:7px;border-radius:50%;background:#2a4a6a;display:inline-block"></span>
+    <span id="editor-status-text" style="font-size:8px;color:#2a4a6a;letter-spacing:.1em">—</span>
+    <span id="editor-status-cmd" style="font-size:8px;color:#2a4a6a;margin-left:auto"></span>
+  </div>
+
+  <!-- Main two-column layout -->
+  <div style="display:grid;grid-template-columns:190px 1fr;min-height:calc(100vh - 180px)">
+
+    <!-- Left panel: command palette + sub-sequences + sequence list -->
+    <div id="editor-left" style="background:#070f1c;border-right:1px solid #1e3a5f;overflow-y:auto">
+
+      <!-- Command palette — TOP -->
+      <div style="padding:10px 8px">
+        <div class="editor-section-label">COMMANDS</div>
+        <div id="editor-palette" style="display:flex;flex-direction:column;gap:5px">
+          <div class="editor-palette-item" data-cmd="sound" draggable="true">🔊 Sound</div>
+          <div class="editor-palette-item" data-cmd="sleep" draggable="true">⏱ Wait</div>
+          <div class="editor-palette-item" data-cmd="servo" draggable="true">🦾 Servo</div>
+          <div class="editor-palette-item" data-cmd="motion" draggable="true">🚗 Propulsion</div>
+          <div class="editor-palette-item" data-cmd="teeces" draggable="true">💡 Lights</div>
+          <div class="editor-palette-item" data-cmd="dome" draggable="true">🔁 Dome</div>
+          <div class="editor-palette-item" data-cmd="script" draggable="true">📋 Sub-sequence</div>
+          <div class="editor-palette-item" data-cmd="lseq" draggable="true">💡 Light Seq</div>
+        </div>
+      </div>
+
+      <!-- Sequence list — BOTTOM -->
+      <div style="padding:0 8px 10px">
+        <div class="editor-section-label" style="border-top:1px solid #1e3a5f;padding-top:10px">SEQUENCES</div>
+        <button id="editor-btn-new" class="btn-editor-new">+ New</button>
+        <div id="editor-seq-list" style="display:flex;flex-direction:column;gap:3px;margin-top:6px"></div>
+      </div>
+
+    </div>
+
+    <!-- Right panel: step canvas (drop zone étendue à toute la zone) -->
+    <div id="editor-canvas-wrap" style="padding:12px 14px;overflow-y:auto;min-height:100%">
+      <div id="editor-canvas-label" style="font-size:8px;color:#4a6a8a;letter-spacing:.12em;margin-bottom:10px">STEPS</div>
+      <div id="editor-read-only-banner" style="display:none;background:#1a1000;border:1px solid #ffaa0066;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:9px;color:#ffaa00;letter-spacing:.08em">
+        🔒 BUILT-IN SEQUENCE — DUPLICATE TO EDIT
+      </div>
+      <div id="editor-steps" style="display:flex;flex-direction:column;gap:6px"></div>
+      <div id="editor-dropzone" style="margin-top:8px;border:2px dashed #1e3a5f;border-radius:5px;padding:12px;text-align:center;color:#2a4a6a;font-size:9px;letter-spacing:.1em">
+        ↓ DRAG A COMMAND HERE
+      </div>
+    </div>
+
+  </div>
+  </div><!-- /editor-panel-sequence -->
+
+  <!-- Light editor panel -->
+  <div id="editor-panel-light" style="display:none">
+    <!-- toolbar -->
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:#060e1a;border-bottom:1px solid #0d1e35;flex-wrap:wrap">
+      <input type="text" id="light-name-input" class="editor-name-input" placeholder="light sequence name…" readonly>
+      <div style="width:1px;height:22px;background:#1e3a5f;margin:0 4px"></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button id="light-btn-test" class="btn-editor-action" data-color="green" onclick="lightEditor.runTest()">▶ TEST</button>
+      </div>
+      <div style="width:1px;height:22px;background:#1e3a5f;margin:0 4px"></div>
+      <button id="light-btn-stop" class="btn-editor-action" data-color="red" onclick="lightEditor.stopAll()">⏹ STOP</button>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <button id="light-btn-delete" class="btn-editor-action" data-color="dim" onclick="lightEditor.deleteSequence()">🗑 DELETE</button>
+        <button id="light-btn-duplicate" class="btn-editor-action" data-color="blue" onclick="lightEditor.duplicateSequence()">📋 DUPLICATE</button>
+        <button id="light-btn-save" class="btn-editor-action" data-color="solid-blue" onclick="lightEditor.saveSequence()">💾 SAVE</button>
+      </div>
+    </div>
+    <!-- status strip -->
+    <div style="padding:5px 14px;background:#060e1a;border-bottom:1px solid #0d1e35;display:flex;align-items:center;gap:8px;min-height:24px">
+      <span id="light-status-dot" style="width:7px;height:7px;border-radius:50%;background:#2a4a6a;display:inline-block"></span>
+      <span id="light-status-text" style="font-size:8px;color:#2a4a6a;letter-spacing:.1em">—</span>
+    </div>
+    <!-- two-column layout -->
+    <div style="display:grid;grid-template-columns:190px 1fr;min-height:calc(100vh - 210px)">
+      <!-- Left: animation palette + sequence list -->
+      <div id="light-left" style="background:#070f1c;border-right:1px solid #1e3a5f;overflow-y:auto">
+        <div style="padding:10px 8px">
+          <div class="editor-section-label">ANIMATIONS</div>
+          <div id="light-palette" style="display:flex;flex-direction:column;gap:5px">
+            <!-- populated by LightEditor._initPalette() -->
+          </div>
+        </div>
+        <div style="padding:0 8px 10px">
+          <div class="editor-section-label" style="border-top:1px solid #1e3a5f;padding-top:10px">LIGHT SEQUENCES</div>
+          <button id="light-btn-new" class="btn-editor-new" onclick="lightEditor.newSequence()">+ New</button>
+          <div id="light-seq-list" style="display:flex;flex-direction:column;gap:3px;margin-top:6px"></div>
+        </div>
+      </div>
+      <!-- Right: canvas -->
+      <div id="light-canvas-wrap" style="padding:12px 14px;overflow-y:auto;min-height:100%">
+        <div id="light-canvas-label" style="font-size:8px;color:#4a6a8a;letter-spacing:.12em;margin-bottom:10px">STEPS</div>
+        <div id="light-steps" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div id="light-dropzone" style="margin-top:8px;border:2px dashed #1e3a5f;border-radius:5px;padding:12px;text-align:center;color:#2a4a6a;font-size:9px;letter-spacing:.1em">
+          ↓ DRAG AN ANIMATION HERE
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================================================================
      TAB 4: LIGHTS — Teeces Logic Display + Light Sequences
 ================================================================ -->
 <div class="tab-content" id="tab-lights">
@@ -438,7 +587,6 @@
     <!-- Light Sequences (future) -->
     <section class="card systems-card">
       <h2 class="card-title">LIGHT SEQUENCES</h2>
-      <div class="settings-note" style="margin-bottom:10px;">Séquences lumineuses programmées — à venir.</div>
       <div style="text-align:center; padding:24px 0; color:var(--col-dim); font-size:11px; letter-spacing:1px;">
         <svg width="32" height="32" viewBox="0 0 32 32" style="display:block;margin:0 auto 10px;opacity:0.3">
           <circle cx="16" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="1.5"/>
@@ -680,7 +828,7 @@
           <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
           <div id="bt-device-name" class="bt-device-name">—</div>
         </div>
-        <label class="toggle-label" style="margin-left:auto" title="Activer/désactiver la manette BT">
+        <label class="toggle-label" style="margin-left:auto" title="Enable/disable BT controller">
           <input type="checkbox" id="bt-enable-toggle" checked onchange="btController.setEnabled(this.checked)">
           <span class="toggle-switch"></span>
           ON
@@ -699,27 +847,27 @@
         <!-- Colonne gauche : type + mapping axes -->
         <div>
           <div class="form-group">
-            <label class="ctrl-label">TYPE DE MANETTE</label>
+            <label class="ctrl-label">CONTROLLER TYPE</label>
             <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
               <option value="ps">PlayStation (PS4 / PS5)</option>
               <option value="xbox">Xbox (One / Series)</option>
               <option value="nintendo">Nintendo Switch Pro</option>
-              <option value="generic">Générique / Autre</option>
+              <option value="generic">Generic / Other</option>
             </select>
           </div>
           <div class="section-label" style="font-size:10px;margin-bottom:6px">AXES</div>
           <table class="bt-mapping-table">
             <thead><tr><th>ACTION</th><th>AXE</th></tr></thead>
             <tbody>
-              <tr><td>Propulsion</td><td><select id="bt-map-throttle" class="input-text input-sm">
+              <tr><td>Throttle</td><td><select id="bt-map-throttle" class="input-text input-sm">
                 <option value="ABS_Y">L Stick Y</option>
                 <option value="ABS_RY">R Stick Y</option>
               </select></td></tr>
-              <tr><td>Direction</td><td><select id="bt-map-steer" class="input-text input-sm">
+              <tr><td>Steering</td><td><select id="bt-map-steer" class="input-text input-sm">
                 <option value="ABS_X">L Stick X</option>
                 <option value="ABS_RX">R Stick X</option>
               </select></td></tr>
-              <tr><td>Rotation dôme</td><td><select id="bt-map-dome" class="input-text input-sm">
+              <tr><td>Dome rotation</td><td><select id="bt-map-dome" class="input-text input-sm">
                 <option value="ABS_RX">R Stick X</option>
                 <option value="ABS_X">L Stick X</option>
               </select></td></tr>
@@ -729,22 +877,22 @@
 
         <!-- Colonne droite : mapping boutons + sliders -->
         <div>
-          <div class="section-label" style="font-size:10px;margin-bottom:6px;margin-top:32px">BOUTONS</div>
+          <div class="section-label" style="font-size:10px;margin-bottom:6px;margin-top:32px">BUTTONS</div>
           <table class="bt-mapping-table">
             <thead><tr><th>ACTION</th><th>BOUTON</th></tr></thead>
             <tbody>
-              <tr><td>Panneaux dôme</td><td><select id="bt-map-panel1" class="input-text input-sm">
+              <tr><td>Dome panels</td><td><select id="bt-map-panel1" class="input-text input-sm">
                 <option value="BTN_WEST">□ / X / Y</option>
                 <option value="BTN_NORTH">△ / Y / X</option>
                 <option value="BTN_SOUTH">✕ / A / B</option>
                 <option value="BTN_TL">L1 / LB / L</option>
               </select></td></tr>
-              <tr><td>Panneaux body</td><td><select id="bt-map-panel2" class="input-text input-sm">
+              <tr><td>Body panels</td><td><select id="bt-map-panel2" class="input-text input-sm">
                 <option value="BTN_NORTH">△ / Y / X</option>
                 <option value="BTN_WEST">□ / X / Y</option>
                 <option value="BTN_TR">R1 / RB / R</option>
               </select></td></tr>
-              <tr><td>Son aléatoire</td><td><select id="bt-map-audio" class="input-text input-sm">
+              <tr><td>Random sound</td><td><select id="bt-map-audio" class="input-text input-sm">
                 <option value="BTN_EAST">○ / B / A</option>
                 <option value="BTN_SOUTH">✕ / A / B</option>
                 <option value="BTN_SELECT">Share / View / −</option>
@@ -768,7 +916,7 @@
                  oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
         </div>
         <div class="speed-wrap" style="flex:1;min-width:140px">
-          <label class="ctrl-label">TIMEOUT INACTIVITÉ <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
+          <label class="ctrl-label">INACTIVITY TIMEOUT <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
           <input type="range" id="bt-inactivity-timeout" min="0" max="120" value="30"
                  oninput="el('bt-timeout-val').textContent=this.value+'s'" class="holo-slider">
         </div>
@@ -786,41 +934,41 @@
 
     <!-- Jumelage BT -->
     <section class="card settings-card">
-      <h2 class="card-title">JUMELAGE MANETTE</h2>
+      <h2 class="card-title">CONTROLLER PAIRING</h2>
       <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 12px">
-        Mets ta manette en mode découverte (maintenir le bouton BT), puis clique SCAN.
+        Put your controller in discovery mode (hold BT button), then click SCAN.
       </p>
 
       <div class="btn-group">
         <button class="btn btn-active" id="bt-scan-btn" onclick="btPairing.startScan()">
           <span id="bt-scan-label">&#x1F50D; SCAN (15s)</span>
         </button>
-        <button class="btn" onclick="btPairing.refresh()">&#x21BB; ACTUALISER</button>
+        <button class="btn" onclick="btPairing.refresh()">&#x21BB; REFRESH</button>
       </div>
 
       <div id="bt-scan-status" style="font-size:11px;color:var(--txt-dim);margin:6px 0;min-height:16px"></div>
 
-      <div class="section-label" style="margin-top:12px;font-size:10px">APPAREILS DÉTECTÉS</div>
+      <div class="section-label" style="margin-top:12px;font-size:10px">DISCOVERED DEVICES</div>
       <div id="bt-discovered-list" style="min-height:40px;margin-top:4px">
-        <div style="color:var(--txt-dim);font-size:11px">— Lance un scan —</div>
+        <div style="color:var(--txt-dim);font-size:11px">— Run a scan —</div>
       </div>
 
-      <div class="section-label" style="margin-top:14px;font-size:10px">APPAREILS JUMELÉS</div>
+      <div class="section-label" style="margin-top:14px;font-size:10px">PAIRED DEVICES</div>
       <div id="bt-paired-list" style="min-height:40px;margin-top:4px">
-        <div style="color:var(--txt-dim);font-size:11px">— Aucun —</div>
+        <div style="color:var(--txt-dim);font-size:11px">— None —</div>
       </div>
     </section>
 
     <!-- Kids Mode -->
     <section class="card settings-card">
       <h2 class="card-title">KIDS MODE</h2>
-      <p class="settings-note">Vitesse maximale appliquée en mode Kids (icône 🔒 orange).<br>Le Child Lock (🔒 rouge) bloque toute propulsion.</p>
+      <p class="settings-note">Maximum speed applied in Kids mode (🔒 orange icon).<br>Child Lock (🔒 red) blocks all propulsion.</p>
       <div class="speed-wrap" style="margin-top:12px">
         <label class="ctrl-label">KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
         <input type="range" id="kids-speed-slider" min="5" max="60" value="20" class="holo-slider"
                oninput="lockMgr.setKidsSpeed(+this.value)">
       </div>
-      <p class="settings-note" style="margin-top:10px">Cycle : Normal → <span style="color:var(--orange)">KIDS</span> → <span style="color:var(--red)">CHILD LOCK</span> → (mot de passe) → Normal</p>
+      <p class="settings-note" style="margin-top:10px">Cycle: Normal → <span style="color:var(--orange)">KIDS</span> → <span style="color:var(--red)">CHILD LOCK</span> → (password) → Normal</p>
     </section>
 
     <!-- WiFi Internet (wlan1) -->
@@ -918,6 +1066,7 @@
 <!-- Toast notifications -->
 <div id="toast" class="toast"></div>
 
+<script src="vendor/sortable.min.js"></script>
 <script src="js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
