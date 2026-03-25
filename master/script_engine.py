@@ -219,8 +219,10 @@ class ScriptEngine:
     def _cmd_sleep(self, row: list[str], stop_event=None) -> None:
         if row[1] == 'random':
             t = random.uniform(float(row[2]), float(row[3]))
+        elif row[1] == 'fixed':
+            t = float(row[2])
         else:
-            t = float(row[1])
+            t = float(row[1])  # legacy: sleep,1.0
         if stop_event:
             stop_event.wait(t)   # interruptible — retourne dès que stop est signalé
         else:

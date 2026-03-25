@@ -2543,6 +2543,13 @@ class SequenceEditor {
       });
     }
 
+    // Pour sleep : mode change → show/hide Max
+    if (step.cmd === 'sleep' && inputs[0] && wraps[2]) {
+      inputs[0].addEventListener('change', () => {
+        wraps[2].style.display = inputs[0].value === 'random' ? '' : 'none';
+      });
+    }
+
     const ok = document.createElement('button');
     ok.textContent = '✓ OK';
     ok.className = 'btn-editor-action';
@@ -2550,12 +2557,18 @@ class SequenceEditor {
     ok.style.marginTop = '4px';
     ok.addEventListener('click', () => {
       let newArgs = inputs.map(inp => inp.value.trim()).filter(Boolean);
-      // Normaliser le format sound : FILE,cat,son → son  |  RANDOM,cat → RANDOM,cat
+      // Normaliser sound : FILE,cat,son → son  |  RANDOM,cat → RANDOM,cat
       if (this._sequence[idx].cmd === 'sound') {
         if (newArgs[0] === 'FILE' && newArgs[2]) {
-          newArgs = [newArgs[2]];          // sound,HappyFile → juste le nom du son
+          newArgs = [newArgs[2]];
         } else if (newArgs[0] === 'RANDOM') {
           newArgs = ['RANDOM', newArgs[1] || 'happy'];
+        }
+      }
+      // Normaliser sleep : fixed,dur → ['fixed','dur']  |  random,min,max → inchangé
+      if (this._sequence[idx].cmd === 'sleep') {
+        if (newArgs[0] === 'fixed') {
+          newArgs = ['fixed', newArgs[1] || '1'];
         }
       }
       this._sequence[idx].args = newArgs;
@@ -2804,11 +2817,16 @@ class SequenceEditor {
             hidden: isRandom },
         ];
       }
-      case 'sleep': return [
-        { label: 'Mode', value: args[0]==='random'?'random':'fixed', options: ['fixed','random'] },
-        { label: 'Durée (s) / Min', value: args[0]==='random'?(args[1]||'1'):(args[0]||'1'), type:'number', placeholder:'1.0' },
-        ...(args[0]==='random' ? [{ label:'Max (s)', value: args[2]||'3', type:'number', placeholder:'3.0' }] : []),
-      ];
+      case 'sleep': {
+        const isRand = args[0] === 'random';
+        const dur = isRand ? (args[1]||'1') : (args[0]==='fixed' ? (args[1]||'1') : (args[0]||'1'));
+        return [
+          { label: 'Mode',            value: isRand ? 'random' : 'fixed', options: ['fixed','random'] },
+          { label: 'Durée (s) / Min', value: dur, type:'number', placeholder:'1.0' },
+          { label: 'Max (s)',         value: args[2]||'3', type:'number', placeholder:'3.0',
+            hidden: !isRand },
+        ];
+      }
       case 'servo': return [
         { label: 'Panneau', value: args[0]||'body_panel_1',
           options: ['body_panel_1','body_panel_2','body_panel_3','body_panel_4',
