@@ -2524,7 +2524,13 @@ class SequenceEditor {
 
   _addStep(cmd, args) {
     if (this._isBuiltin) return;
-    this._sequence.push({ cmd, args: [...args] });
+    let resolvedArgs = [...args];
+    // Pour script,'' : pré-remplir avec la première sous-séquence disponible
+    if (cmd === 'script' && (!resolvedArgs[0] || resolvedArgs[0] === '')) {
+      const opts = this._seqNames.filter(n => n !== this._openName);
+      if (opts.length > 0) resolvedArgs = [opts[0]];
+    }
+    this._sequence.push({ cmd, args: resolvedArgs });
     this._editingIdx = this._sequence.length - 1;
     this._renderSteps();
   }
