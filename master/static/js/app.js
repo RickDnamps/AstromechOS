@@ -2530,12 +2530,15 @@ class SequenceEditor {
     // Pour sound : checkbox Aléatoire → show/hide Son ; catégorie change → reload Son
     if (step.cmd === 'sound' && inputs[0] && inputs[1] && inputs[2]) {
       const sonWrap = wraps[2];
-      const reloadSounds = () => {
+      const prevSound = inputs[2].value;
+      const reloadSounds = async () => {
+        if (!Object.keys(this._soundIndex).length) await this._loadSoundIndex();
         const snds = this._soundIndex[inputs[1].value] || [];
         inputs[2].innerHTML = '';
         snds.forEach(s => {
           const o = document.createElement('option');
           o.value = s; o.textContent = s;
+          if (s === prevSound) o.selected = true;
           inputs[2].appendChild(o);
         });
       };
@@ -2547,6 +2550,8 @@ class SequenceEditor {
       inputs[1].addEventListener('change', () => {  // catégorie
         if (!inputs[0].checked) reloadSounds();
       });
+      // Si mode FILE dès l'ouverture, peupler immédiatement
+      if (!inputs[0].checked) reloadSounds();
     }
 
     // Pour sleep : mode change → show/hide Max
