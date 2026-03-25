@@ -2236,6 +2236,8 @@ class SequenceEditor {
     this._editingIdx = null;
     this._saving     = false;
     this._seqNames   = [];   // noms de toutes les séquences (pour dropdown sous-seq)
+    this._soundIndex = {};   // {category: [sounds]} chargé depuis /audio/index
+    this._loadSoundIndex();
 
     this._initButtons();
     this._initPalette();
@@ -2322,6 +2324,16 @@ class SequenceEditor {
 
   _startPolling() {
     this._pollTimer = setInterval(() => this._pollStatus(), 500);
+  }
+
+  async _loadSoundIndex() {
+    try {
+      const resp = await fetch('/audio/index');
+      if (resp.ok) {
+        const data = await resp.json();
+        this._soundIndex = data.categories || {};
+      }
+    } catch (e) { /* silent — sons désactivés ou Slave absent */ }
   }
 
   async loadSequenceList() {
@@ -2506,13 +2518,35 @@ class SequenceEditor {
       form.appendChild(wrap);
     });
 
+    // Pour sound FILE : quand la catégorie change, recharger la liste de sons
+    if (step.cmd === 'sound' && inputs[0] && inputs[1] && inputs[2]) {
+      inputs[1].addEventListener('change', () => {
+        const cat = inputs[1].value;
+        const snds = this._soundIndex[cat] || [];
+        inputs[2].innerHTML = '';
+        snds.forEach(s => {
+          const o = document.createElement('option');
+          o.value = s; o.textContent = s;
+          inputs[2].appendChild(o);
+        });
+      });
+    }
+
     const ok = document.createElement('button');
     ok.textContent = '✓ OK';
     ok.className = 'btn-editor-action';
     ok.dataset.color = 'green';
     ok.style.marginTop = '4px';
     ok.addEventListener('click', () => {
-      const newArgs = inputs.map(inp => inp.value.trim()).filter(Boolean);
+      let newArgs = inputs.map(inp => inp.value.trim()).filter(Boolean);
+      // Normaliser le format sound : FILE,cat,son → son  |  RANDOM,cat → RANDOM,cat
+      if (this._sequence[idx].cmd === 'sound') {
+        if (newArgs[0] === 'FILE' && newArgs[2]) {
+          newArgs = [newArgs[2]];          // sound,HappyFile → juste le nom du son
+        } else if (newArgs[0] === 'RANDOM') {
+          newArgs = ['RANDOM', newArgs[1] || 'happy'];
+        }
+      }
       this._sequence[idx].args = newArgs;
       this._editingIdx = null;
       this._renderSteps();
@@ -2739,11 +2773,33 @@ class SequenceEditor {
 
   _stepFields(cmd, args) {
     switch (cmd) {
-      case 'sound': return [
-        { label: 'Mode', value: args[0]||'RANDOM', options: ['RANDOM', 'FILE'] },
-        { label: 'Catégorie / Fichier', value: args[1]||'happy',
-          options: ['happy','sad','chat','whistle','scream','process','utility','random','special'] },
-      ];
+      case 'sound': {
+        const cats = Object.keys(this._soundIndex);
+        // args[0] peut être 'RANDOM', 'FILE' (legacy form) ou directement un nom de son
+        const isRandom = !args[0] || args[0] === 'RANDOM';
+        const mode = isRandom ? 'RANDOM' : 'FILE';
+        if (mode === 'RANDOM') {
+          return [
+            { label: 'Mode', value: 'RANDOM', options: ['RANDOM', 'FILE'] },
+            { label: 'Catégorie', value: args[1]||'happy',
+              options: cats.length ? cats : ['happy','sad','chat','whistle','scream','process','utility','special'] },
+          ];
+        } else {
+          // FILE : args[0] = nom du son (ex Happy001), détecter sa catégorie
+          const currentSound = (args[0] !== 'FILE' ? args[0] : '') || '';
+          let detectedCat = cats[0] || 'happy';
+          for (const [cat, snds] of Object.entries(this._soundIndex)) {
+            if (snds.includes(currentSound)) { detectedCat = cat; break; }
+          }
+          const sounds = this._soundIndex[detectedCat] || this._soundIndex[cats[0]] || [];
+          return [
+            { label: 'Mode', value: 'FILE', options: ['RANDOM', 'FILE'] },
+            { label: 'Catégorie', value: detectedCat,
+              options: cats.length ? cats : ['happy','sad','chat','whistle','scream','process','utility','special'] },
+            { label: 'Son', value: currentSound || sounds[0] || '', options: sounds },
+          ];
+        }
+      }
       case 'sleep': return [
         { label: 'Mode', value: args[0]==='random'?'random':'fixed', options: ['fixed','random'] },
         { label: 'Durée (s) / Min', value: args[0]==='random'?(args[1]||'1'):(args[0]||'1'), type:'number', placeholder:'1.0' },

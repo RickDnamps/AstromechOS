@@ -86,6 +86,12 @@ def get_categories():
         return jsonify({'error': str(e)}), 500
 
 
+@audio_bp.get('/index')
+def get_index():
+    """Retourne l'index complet {categories: {cat: [sounds]}}."""
+    return jsonify({'categories': _get_index().get('categories', {})})
+
+
 @audio_bp.get('/sounds')
 def get_sounds():
     """Liste des sons d'une catégorie. Query: ?category=happy"""
