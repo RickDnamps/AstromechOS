@@ -2495,12 +2495,17 @@ class SequenceEditor {
 
     fields.forEach(f => {
       const wrap = document.createElement('div');
-      wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
       if (f.hidden) wrap.style.display = 'none';
       const lbl = document.createElement('label');
       lbl.textContent = f.label;
       let inp;
-      if (f.options) {
+      if (f.type === 'checkbox') {
+        wrap.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:6px';
+        inp = document.createElement('input');
+        inp.type = 'checkbox';
+        inp.checked = !!f.value;
+      } else if (f.options) {
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
         inp = document.createElement('select');
         f.options.forEach(o => {
           const opt = document.createElement('option');
@@ -2509,6 +2514,7 @@ class SequenceEditor {
           inp.appendChild(opt);
         });
       } else {
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:3px';
         inp = document.createElement('input');
         inp.type = f.type || 'text';
         inp.value = f.value !== undefined ? f.value : '';
@@ -2521,7 +2527,7 @@ class SequenceEditor {
       form.appendChild(wrap);
     });
 
-    // Pour sound : mode change → show/hide Son ; catégorie change → reload Son list
+    // Pour sound : checkbox Aléatoire → show/hide Son ; catégorie change → reload Son
     if (step.cmd === 'sound' && inputs[0] && inputs[1] && inputs[2]) {
       const sonWrap = wraps[2];
       const reloadSounds = () => {
@@ -2533,13 +2539,13 @@ class SequenceEditor {
           inputs[2].appendChild(o);
         });
       };
-      inputs[0].addEventListener('change', () => {
-        const isFile = inputs[0].value === 'FILE';
-        sonWrap.style.display = isFile ? '' : 'none';
-        if (isFile) reloadSounds();
+      inputs[0].addEventListener('change', () => {  // checkbox Aléatoire
+        const isRandom = inputs[0].checked;
+        sonWrap.style.display = isRandom ? 'none' : '';
+        if (!isRandom) reloadSounds();
       });
-      inputs[1].addEventListener('change', () => {
-        if (inputs[0].value === 'FILE') reloadSounds();
+      inputs[1].addEventListener('change', () => {  // catégorie
+        if (!inputs[0].checked) reloadSounds();
       });
     }
 
@@ -2557,12 +2563,13 @@ class SequenceEditor {
     ok.style.marginTop = '4px';
     ok.addEventListener('click', () => {
       let newArgs = inputs.map(inp => inp.value.trim()).filter(Boolean);
-      // Normaliser sound : FILE,cat,son → son  |  RANDOM,cat → RANDOM,cat
+      // Normaliser sound via checkbox Aléatoire (inputs[0])
       if (this._sequence[idx].cmd === 'sound') {
-        if (newArgs[0] === 'FILE' && newArgs[2]) {
-          newArgs = [newArgs[2]];
-        } else if (newArgs[0] === 'RANDOM') {
-          newArgs = ['RANDOM', newArgs[1] || 'happy'];
+        if (inputs[0].checked) {
+          newArgs = ['RANDOM', inputs[1].value || 'happy'];
+        } else {
+          newArgs = [inputs[2].value].filter(Boolean);
+          if (!newArgs.length) newArgs = ['RANDOM', inputs[1].value || 'happy'];
         }
       }
       // Normaliser sleep : fixed,dur → ['fixed','dur']  |  random,min,max → inchangé
@@ -2799,7 +2806,8 @@ class SequenceEditor {
     switch (cmd) {
       case 'sound': {
         const cats = Object.keys(this._soundIndex);
-        const fallbackCats = ['happy','sad','chat','whistle','scream','process','utility','special'];
+        const fallbackCats = ['alarm','extra','happy','hum','misc','ooh','proc','quote',
+                              'razz','sad','scream','sent','special','whistle'];
         const catList = cats.length ? cats : fallbackCats;
         const isRandom = !args[0] || args[0] === 'RANDOM';
         const currentSound = (!isRandom && args[0] !== 'FILE') ? args[0] : '';
@@ -2809,9 +2817,9 @@ class SequenceEditor {
             if (snds.includes(currentSound)) { currentCat = cat; break; }
           }
         }
-        const sounds = this._soundIndex[currentCat] || this._soundIndex[catList[0]] || [];
+        const sounds = this._soundIndex[currentCat] || [];
         return [
-          { label: 'Mode',      value: isRandom ? 'RANDOM' : 'FILE', options: ['RANDOM', 'FILE'] },
+          { label: 'Aléatoire', value: isRandom, type: 'checkbox' },
           { label: 'Catégorie', value: currentCat, options: catList },
           { label: 'Son',       value: currentSound || sounds[0] || '', options: sounds,
             hidden: isRandom },
