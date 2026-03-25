@@ -2544,7 +2544,10 @@ class LightEditor {
       } else if (action === 'text') {
         fields = [{ label:'FLD Text (max 20)', value: args[1]||'', type:'text', placeholder:'HELLO' }];
       } else if (action === 'psi') {
-        fields = [{ label:'PSI Mode', value: args[1]||'1', options:['0','1','2','3','4','5','6','7','8','9'] }];
+        fields = [{ label:'PSI Mode', value: args[1]||'1', options:[
+          '0:Off', '1:Random', '2:Red', '3:Yellow', '4:Green',
+          '5:Cyan', '6:Blue', '7:Magenta', '8:White', '9:Inverse Random'
+        ] }];
       } else if (action === 'raw') {
         fields = [{ label:'JawaLite command', value: args[1]||'', type:'text', placeholder:'0T5' }];
       } else {
