@@ -3153,13 +3153,18 @@ class SequenceEditor {
     return form;
   }
 
-  _addStep(cmd, args) {
+  async _addStep(cmd, args) {
     if (this._isBuiltin) return;
     let resolvedArgs = [...args];
-    // Pour script,'' : pré-remplir avec la première sous-séquence disponible
+    // Pre-fill sub-sequence with first available option
     if (cmd === 'script' && (!resolvedArgs[0] || resolvedArgs[0] === '')) {
       const opts = this._seqNames.filter(n => n !== this._openName);
       if (opts.length > 0) resolvedArgs = [opts[0]];
+    }
+    // Pre-fill lseq with fresh list
+    if (cmd === 'lseq') {
+      await this._loadLightSeqNames();
+      if (!resolvedArgs[0] && this._lseqNames.length > 0) resolvedArgs = [this._lseqNames[0]];
     }
     this._sequence.push({ cmd, args: resolvedArgs });
     this._editingIdx = this._sequence.length - 1;
@@ -3173,8 +3178,12 @@ class SequenceEditor {
     this._renderSteps();
   }
 
-  _toggleEdit(idx) {
+  async _toggleEdit(idx) {
     this._editingIdx = this._editingIdx === idx ? null : idx;
+    // Refresh light sequence names before showing lseq form
+    if (this._editingIdx !== null && this._sequence[idx]?.cmd === 'lseq') {
+      await this._loadLightSeqNames();
+    }
     this._renderSteps();
   }
 
