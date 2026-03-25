@@ -148,8 +148,8 @@ class LockManager {
     m.classList.remove('hidden');
     el('lock-modal-icon').style.color   = 'var(--orange)';
     el('lock-modal-title').style.color  = 'var(--orange)';
-    el('lock-modal-title').textContent  = 'KIDS MODE ACTIF';
-    el('lock-modal-sub').textContent    = 'Entrez le mot de passe pour retourner au mode normal';
+    el('lock-modal-title').textContent  = 'KIDS MODE ACTIVE';
+    el('lock-modal-sub').textContent    = 'Enter password to return to normal mode';
     el('lock-childlock-btn').style.display = '';   // montrer bouton Child Lock
     el('lock-pwd-input').value = '';
     el('lock-pwd-error').classList.add('hidden');
@@ -162,8 +162,8 @@ class LockManager {
     m.classList.remove('hidden');
     el('lock-modal-icon').style.color   = 'var(--red)';
     el('lock-modal-title').style.color  = 'var(--red)';
-    el('lock-modal-title').textContent  = 'CHILD LOCK ACTIF';
-    el('lock-modal-sub').textContent    = 'Entrez le mot de passe pour retourner au mode normal';
+    el('lock-modal-title').textContent  = 'CHILD LOCK ACTIVE';
+    el('lock-modal-sub').textContent    = 'Enter password to return to normal mode';
     el('lock-childlock-btn').style.display = 'none';   // cacher bouton Child Lock
     el('lock-pwd-input').value = '';
     el('lock-pwd-error').classList.add('hidden');
@@ -222,7 +222,7 @@ class LockManager {
 
     api('/lock/set', 'POST', { mode });
 
-    const msgs  = ['Mode normal rétabli', 'Kids Mode activé — vitesse limitée', 'Child Lock — déplacement bloqué'];
+    const msgs  = ['Normal mode restored', 'Kids Mode — speed limited', 'Child Lock — movement blocked'];
     const types = ['ok', 'warn', 'error'];
     toast(msgs[mode], types[mode]);
   }
@@ -299,7 +299,7 @@ class AdminGuard {
     this._unlocked = true;
     document.body.classList.add('admin-unlocked');
     el('admin-modal').classList.add('hidden');
-    toast('Accès admin activé — expire dans 5 min', 'ok');
+    toast('Admin access granted — expires in 5 min', 'ok');
     // Écouter l'activité pour reset le timer quand sur un onglet admin
     document.addEventListener('mousemove', this._boundActivity, { passive: true });
     document.addEventListener('click',     this._boundActivity, { passive: true });
@@ -320,7 +320,7 @@ class AdminGuard {
     if (active && this._PROTECTED.has(active.dataset.tab)) {
       switchTab('drive');
     }
-    toast('Accès admin expiré', 'info');
+    toast('Admin access expired', 'info');
   }
 
   onTabSwitch(tabId) {
@@ -564,11 +564,11 @@ function emergencyStop() {
 function estopReset() {
   api('/system/estop_reset', 'POST').then(r => {
     if (r && r.status === 'reset') {
-      toast('E-STOP RESET — servos réarmés', 'ok');
+      toast('E-STOP RESET — servos re-armed', 'ok');
     } else {
-      toast('Reset échoué', 'error');
+      toast('Reset failed', 'error');
     }
-  }).catch(() => toast('Reset échoué', 'error'));
+  }).catch(() => toast('Reset failed', 'error'));
 }
 
 // Left joystick — Propulsion (arcade drive)
@@ -845,10 +845,10 @@ class ServoPanel {
       }
     });
     const data = await api('/servo/settings', 'POST', { panels });
-    if (!data) { toast('Erreur réseau', 'error'); return; }
+    if (!data) { toast('Network error', 'error'); return; }
     _servoCfg = data;
     this.updateInputs();
-    toast('Angles sauvegardés', 'ok');
+    toast('Angles saved', 'ok');
   }
 
   _setFill(name, pct) {
@@ -876,18 +876,18 @@ function updateServoDurationPreview() {
   if (isNaN(ms90)) return;
   const dur  = Math.max(50, Math.round(70 / 90 * ms90));
   const prev = el('servo-duration-preview');
-  if (prev) prev.textContent = `Exemple 70° = ${dur} ms`;
+  if (prev) prev.textContent = `Example 70° = ${dur} ms`;
 }
 
 async function saveServoMs90() {
   const ms90 = parseInt(el('servo-ms90')?.value ?? 150);
   const data = await api('/servo/settings', 'POST', { ms_90deg: ms90, panels: {} });
-  if (!data) { toast('Erreur réseau', 'error'); return; }
+  if (!data) { toast('Network error', 'error'); return; }
   _servoCfg = data;
   updateServoDurationPreview();
   domeServoPanel.updateInputs();
   bodyServoPanel.updateInputs();
-  toast(`ms_90deg sauvegardé: ${ms90} ms`, 'ok');
+  toast(`ms_90deg saved: ${ms90} ms`, 'ok');
 }
 
 async function testServoSettings(dir) {
@@ -989,7 +989,7 @@ class AudioBoard {
     // Afficher le spinner pendant le chargement
     const grid = el('audio-sounds-grid');
     if (!grid) return;
-    grid.innerHTML = '<div class="sounds-loading">Chargement...</div>';
+    grid.innerHTML = '<div class="sounds-loading">Loading...</div>';
 
     const data = await api(`/audio/sounds?category=${cat}`);
 
@@ -998,7 +998,7 @@ class AudioBoard {
       const randomBtn = `
         <button class="sound-btn sound-btn-random"
                 onclick="audioBoard.playRandom('${cat}')"
-                title="Son aléatoire de ${label}">
+                title="Random sound from ${label}">
           🎲 RANDOM
         </button>`;
 
@@ -1395,7 +1395,7 @@ class BTController {
     this._connected  = true;
     this._prevBtns   = {};
     this._setUI(true, gp.id.split('(')[0].trim().slice(0, 24));
-    toast('Manette BT connectée', 'ok');
+    toast('BT controller connected', 'ok');
   }
 
   _onDisconnect(gp) {
@@ -1409,7 +1409,7 @@ class BTController {
     api('/motion/dome/stop', 'POST');
     jsLeft.setExternal(0, 0);    // reset knobs visuels
     jsRight.setExternal(0, 0);
-    toast('Manette BT déconnectée', 'error');
+    toast('BT controller disconnected', 'error');
   }
 
   _tick() {
@@ -1586,14 +1586,14 @@ class BTController {
     this._piEnabled = enabled;
     this._updatePill();
     await api('/bt/enable', 'POST', { enabled });
-    toast(enabled ? 'Manette BT activée' : 'Manette BT désactivée', 'ok');
+    toast(enabled ? 'BT controller enabled' : 'BT controller disabled', 'ok');
   }
 
   // Appelé au changement de type de manette
   onTypeChange(type) {
     // Mettre à jour les labels du tableau de mapping selon le type
     const labels = {
-      ps:        { WEST: '□ Carré',    NORTH: '△ Triangle', EAST: '○ Rond',   SOUTH: '✕ Croix', TL: 'L1',  TR: 'R1',  MODE: 'PS'      },
+      ps:        { WEST: '□ Square',   NORTH: '△ Triangle', EAST: '○ Circle', SOUTH: '✕ Cross', TL: 'L1',  TR: 'R1',  MODE: 'PS'      },
       xbox:      { WEST: 'X',          NORTH: 'Y',          EAST: 'B',        SOUTH: 'A',       TL: 'LB',  TR: 'RB',  MODE: 'Xbox'    },
       nintendo:  { WEST: 'Y',          NORTH: 'X',          EAST: 'A',        SOUTH: 'B',       TL: 'L',   TR: 'R',   MODE: 'Home'    },
       generic:   { WEST: 'Btn 3',      NORTH: 'Btn 4',      EAST: 'Btn 2',    SOUTH: 'Btn 1',   TL: 'L1',  TR: 'R1',  MODE: 'Home'    },
@@ -1648,7 +1648,7 @@ class BTController {
       deadzone: el('bt-deadzone')?.value || '10',
     }));
     const r = await api('/bt/config', 'POST', cfg);
-    toast(r?.status === 'ok' ? 'BT config sauvegardée' : 'Erreur sauvegarde', r?.status === 'ok' ? 'ok' : 'error');
+    toast(r?.status === 'ok' ? 'BT config saved' : 'Save error', r?.status === 'ok' ? 'ok' : 'error');
   }
 
   _getMappings() {
@@ -1687,18 +1687,18 @@ const btPairing = {
     api('/bt/scan/start', 'POST').then(r => {
       if (!r) return;
       el('bt-scan-btn').disabled = true;
-      el('bt-scan-label').textContent = '⏳ SCAN EN COURS...';
-      el('bt-scan-status').textContent = 'Scan actif — 15 secondes...';
+      el('bt-scan-label').textContent = '⏳ SCANNING...';
+      el('bt-scan-status').textContent = 'Scan active — 15 seconds...';
       // Countdown
       let remaining = 15;
       this._scanTimer = setInterval(() => {
         remaining--;
-        el('bt-scan-status').textContent = `Scan actif — ${remaining}s restantes...`;
+        el('bt-scan-status').textContent = `Scan active — ${remaining}s remaining...`;
         if (remaining <= 0) {
           clearInterval(this._scanTimer);
           el('bt-scan-btn').disabled = false;
           el('bt-scan-label').innerHTML = '&#x1F50D; SCAN (15s)';
-          el('bt-scan-status').textContent = 'Scan terminé.';
+          el('bt-scan-status').textContent = 'Scan complete.';
         }
       }, 1000);
       // Poll devices toutes les 2s pendant le scan
@@ -1718,7 +1718,7 @@ const btPairing = {
   _renderDiscovered(list) {
     const el2 = el('bt-discovered-list');
     if (!list.length) {
-      el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— Aucun appareil détecté —</div>';
+      el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— No devices detected —</div>';
       return;
     }
     el2.innerHTML = list.map(d => `
@@ -1732,7 +1732,7 @@ const btPairing = {
   _renderPaired(list) {
     const el2 = el('bt-paired-list');
     if (!list.length) {
-      el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— Aucune manette jumelée —</div>';
+      el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— No paired controller —</div>';
       return;
     }
     el2.innerHTML = list.map(d => `
@@ -1744,17 +1744,17 @@ const btPairing = {
   },
 
   pair(address, name) {
-    el('bt-scan-status').textContent = `Jumelage de ${name}...`;
+    el('bt-scan-status').textContent = `Pairing with ${name}...`;
     api('/bt/pair', 'POST', { address }).then(() => {
-      toast(`Jumelage ${name} en cours...`, 'ok');
+      toast(`Pairing ${name} in progress...`, 'ok');
       setTimeout(() => this.refresh(), 5000);
     });
   },
 
   unpair(address) {
     api('/bt/unpair', 'POST', { address }).then(r => {
-      if (r && r.status === 'ok') { toast('Appareil retiré', 'ok'); this.refresh(); }
-      else toast('Erreur retrait', 'error');
+      if (r && r.status === 'ok') { toast('Device removed', 'ok'); this.refresh(); }
+      else toast('Remove error', 'error');
     });
   },
 };
@@ -1889,14 +1889,14 @@ class StatusPoller {
       // Port série pas ouvert — erreur niveau OS
       cls     = 'status-pill error';
       label   = 'UART';
-      tooltip = 'Port série non ouvert';
+      tooltip = 'Serial port not open';
     } else if (health == null) {
       // Port ouvert mais Slave pas encore pollé / injoignable
       cls     = masterCrcErrors > 0 ? 'status-pill warn' : 'status-pill ok';
       label   = masterCrcErrors > 0 ? 'UART ERR' : 'UART';
       tooltip = masterCrcErrors > 0
-        ? `Slave injoignable | Master CRC invalides: ${masterCrcErrors}`
-        : 'Slave pas encore pollé';
+        ? `Slave unreachable | Master invalid CRC: ${masterCrcErrors}`
+        : 'Slave not yet polled';
     } else {
       // Port ouvert + données qualité disponibles — 3 niveaux
       const pct = health.health_pct;
@@ -1904,8 +1904,8 @@ class StatusPoller {
       else if (pct >= 70) cls = 'status-pill warn';
       else                cls = 'status-pill error';
       label   = 'UART ' + pct.toFixed(0) + '%';
-      tooltip = `${health.errors} erreurs / ${health.total} msg (${health.window_s}s)`
-              + (masterCrcErrors > 0 ? ` | Master CRC invalides: ${masterCrcErrors}` : '');
+      tooltip = `${health.errors} errors / ${health.total} msg (${health.window_s}s)`
+              + (masterCrcErrors > 0 ? ` | Master invalid CRC: ${masterCrcErrors}` : '');
     }
 
     p.className = cls;
@@ -2284,7 +2284,7 @@ class SequenceEditor {
       });
       el.addEventListener('click', () => {
         if (el._wasDragged) return;   // drag vient d'être utilisé, ignorer le click
-        if (!this._openName) { alert('Créez ou ouvrez une séquence d\'abord.'); return; }
+        if (!this._openName) { alert('Create or open a sequence first.'); return; }
         if (this._isBuiltin) return;
         this._addStep(el.dataset.cmd, this._defaultArgs(el.dataset.cmd));
       });
@@ -2364,7 +2364,7 @@ class SequenceEditor {
     if (this._saving) return;  // don't interrupt an in-progress save
     try {
       const resp = await fetch(`/scripts/get?name=${encodeURIComponent(name)}`);
-      if (!resp.ok) { alert(`Séquence "${name}" introuvable`); return; }
+      if (!resp.ok) { alert(`Sequence "${name}" not found`); return; }
       const data = await resp.json();
       this._openName  = data.name;
       this._isBuiltin = data.is_builtin;
@@ -2374,7 +2374,7 @@ class SequenceEditor {
       this._nameInput.readOnly = data.is_builtin;
       this._nameInput.style.borderColor = data.is_builtin ? '#4a6a8a' : '#00aaff';
       this._roBanner.style.display = data.is_builtin ? 'block' : 'none';
-      this._canvasLabel.textContent = `ÉTAPES — ${data.name}`;
+      this._canvasLabel.textContent = `STEPS — ${data.name}`;
       this._renderSteps();
       await this.loadSequenceList();
     } catch (e) {
@@ -2422,7 +2422,7 @@ class SequenceEditor {
       const btnEdit = document.createElement('span');
       btnEdit.textContent = '✏️';
       btnEdit.style.cssText = 'cursor:pointer';
-      btnEdit.title = 'Modifier';
+      btnEdit.title = 'Edit';
       btnEdit.addEventListener('click', (e) => {
         e.stopPropagation();
         this._toggleEdit(idx);
@@ -2431,7 +2431,7 @@ class SequenceEditor {
       const btnDel = document.createElement('span');
       btnDel.textContent = '🗑';
       btnDel.style.cssText = 'cursor:pointer';
-      btnDel.title = 'Supprimer';
+      btnDel.title = 'Delete';
       btnDel.addEventListener('click', (e) => {
         e.stopPropagation();
         this._removeStep(idx);
@@ -2473,13 +2473,13 @@ class SequenceEditor {
   async _loadSubseqPreview(name, el) {
     try {
       const resp = await fetch(`/scripts/get?name=${encodeURIComponent(name)}`);
-      if (!resp.ok) { el.innerHTML += '<div style="color:#4a2a6a">introuvable</div>'; return; }
+      if (!resp.ok) { el.innerHTML += '<div style="color:#4a2a6a">not found</div>'; return; }
       const data = await resp.json();
       const lines = data.steps.slice(0, 4).map(s =>
         `<div>${this._esc(s.cmd)},${s.args.map(a => this._esc(a)).join(',')}</div>`
       ).join('');
       const more = data.steps.length > 4
-        ? `<div style="color:#4a2a6a">…${data.steps.length - 4} autres</div>`
+        ? `<div style="color:#4a2a6a">…${data.steps.length - 4} more</div>`
         : '';
       el.innerHTML = `<div class="editor-subseq-preview-title">▾ ${this._esc(name)}.scr</div>${lines}${more}`;
     } catch (e) { /* silent */ }
@@ -2618,10 +2618,10 @@ class SequenceEditor {
   }
 
   _newSequence() {
-    const name = prompt('Nom de la nouvelle séquence (lettres, chiffres, - et _ uniquement) :');
+    const name = prompt('New sequence name (letters, digits, - and _ only):');
     if (!name) return;
     if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) {
-      alert('Nom invalide. Utilisez lettres, chiffres, - et _ uniquement (max 64 caractères).');
+      alert('Invalid name. Use letters, digits, - and _ only (max 64 chars).');
       return;
     }
     this._openName  = name;
@@ -2632,15 +2632,15 @@ class SequenceEditor {
     this._nameInput.readOnly = false;
     this._nameInput.style.borderColor = '#00aaff';
     this._roBanner.style.display = 'none';
-    this._canvasLabel.textContent = `ÉTAPES — ${name} (nouveau)`;
+    this._canvasLabel.textContent = `STEPS — ${name} (new)`;
     this._renderSteps();
   }
 
   async saveSequence() {
-    if (this._isBuiltin) { alert('Séquence intégrée — dupliquez-la pour modifier.'); return; }
+    if (this._isBuiltin) { alert('Built-in sequence — duplicate to edit.'); return; }
     const name = this._nameInput.value.trim();
-    if (!name || !/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) { alert('Nom invalide.'); return; }
-    if (this._sequence.length === 0) { alert('La séquence est vide.'); return; }
+    if (!name || !/^[a-zA-Z0-9_\-]{1,64}$/.test(name)) { alert('Invalid name.'); return; }
+    if (this._sequence.length === 0) { alert('Sequence is empty.'); return; }
     this._saving = true;
     try {
       const resp = await fetch('/scripts/save', {
@@ -2648,58 +2648,58 @@ class SequenceEditor {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, steps: this._sequence }),
       });
-      if (!resp.ok) { const err = await resp.json(); alert(`Erreur: ${err.error}`); return; }
+      if (!resp.ok) { const err = await resp.json(); alert(`Error: ${err.error}`); return; }
       this._openName = name;
-      this._canvasLabel.textContent = `ÉTAPES — ${name}`;
+      this._canvasLabel.textContent = `STEPS — ${name}`;
       await this.loadSequenceList();
     } catch (e) {
-      alert('Erreur réseau lors de la sauvegarde.');
+      alert('Network error while saving.');
     } finally {
       this._saving = false;
     }
   }
 
   async deleteSequence() {
-    if (this._isBuiltin) { alert('Séquence intégrée — impossible de supprimer.'); return; }
+    if (this._isBuiltin) { alert('Built-in sequence — cannot delete.'); return; }
     if (!this._openName) return;
-    if (!confirm(`Supprimer "${this._openName}" ? Cette action est irréversible.`)) return;
+    if (!confirm(`Delete "${this._openName}"? This cannot be undone.`)) return;
     try {
       const resp = await fetch('/scripts/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: this._openName }),
       });
-      if (!resp.ok) { const err = await resp.json(); alert(`Erreur: ${err.error}`); return; }
+      if (!resp.ok) { const err = await resp.json(); alert(`Error: ${err.error}`); return; }
       this._openName  = null;
       this._sequence  = [];
       this._isBuiltin = false;
       this._nameInput.value = '';
-      this._canvasLabel.textContent = 'ÉTAPES';
+      this._canvasLabel.textContent = 'STEPS';
       this._renderSteps();
       await this.loadSequenceList();
-    } catch (e) { alert('Erreur réseau.'); }
+    } catch (e) { alert('Network error.'); }
   }
 
   async duplicateSequence() {
-    const newName = prompt('Nom pour la copie :');
+    const newName = prompt('Name for the copy:');
     if (!newName) return;
-    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(newName)) { alert('Nom invalide.'); return; }
+    if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(newName)) { alert('Invalid name.'); return; }
     try {
       const resp = await fetch('/scripts/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, steps: this._sequence }),
       });
-      if (!resp.ok) { alert('Erreur lors de la duplication.'); return; }
+      if (!resp.ok) { alert('Error while duplicating.'); return; }
       await this.openSequence(newName);
-    } catch (e) { alert('Erreur réseau.'); }
+    } catch (e) { alert('Network error.'); }
   }
 
   async _onNameBlur() {
     const newName = this._nameInput.value.trim();
     if (!newName || newName === this._openName || this._isBuiltin) return;
     if (!/^[a-zA-Z0-9_\-]{1,64}$/.test(newName)) {
-      alert('Nom invalide.'); this._nameInput.value = this._openName || ''; return;
+      alert('Invalid name.'); this._nameInput.value = this._openName || ''; return;
     }
     if (!this._openName) return;
     try {
@@ -2710,18 +2710,18 @@ class SequenceEditor {
       });
       if (!resp.ok) {
         const err = await resp.json();
-        alert(`Renommage impossible: ${err.error}`);
+        alert(`Cannot rename: ${err.error}`);
         this._nameInput.value = this._openName;
         return;
       }
       this._openName = newName;
-      this._canvasLabel.textContent = `ÉTAPES — ${newName}`;
+      this._canvasLabel.textContent = `STEPS — ${newName}`;
       await this.loadSequenceList();
-    } catch (e) { alert('Erreur réseau.'); }
+    } catch (e) { alert('Network error.'); }
   }
 
   async testRun(skipMotion) {
-    if (!this._openName) { alert("Ouvrez ou sauvegardez une séquence d'abord."); return; }
+    if (!this._openName) { alert("Open or save a sequence first."); return; }
     try {
       const resp = await fetch('/scripts/run', {
         method: 'POST',
@@ -2730,7 +2730,7 @@ class SequenceEditor {
       });
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
-        alert(`Erreur TESTER: ${err.error || resp.status}`);
+        alert(`Error TEST: ${err.error || resp.status}`);
       }
     } catch (e) { console.error('testRun', e); }
   }
@@ -2752,7 +2752,7 @@ class SequenceEditor {
         this._statusDot.style.background = '#00cc55';
         this._statusDot.style.boxShadow  = '0 0 6px #00cc55';
         this._statusText.style.color = '#00cc55';
-        this._statusText.textContent = `EN COURS — ${running.name} (étape ${running.step_index}/${running.step_total})`;
+        this._statusText.textContent = `RUNNING — ${running.name} (step ${running.step_index}/${running.step_total})`;
         this._statusCmd.textContent  = running.current_cmd || '';
         this._statusCmd.style.color  = '#2a4a6a';
         this._highlightStep(running.step_index - 1);
@@ -2824,9 +2824,9 @@ class SequenceEditor {
         }
         const sounds = this._soundIndex[currentCat] || [];
         return [
-          { label: 'Aléatoire', value: isRandom, type: 'checkbox' },
-          { label: 'Catégorie', value: currentCat, options: catList },
-          { label: 'Son',       value: currentSound || sounds[0] || '', options: sounds,
+          { label: 'Random',   value: isRandom, type: 'checkbox' },
+          { label: 'Category', value: currentCat, options: catList },
+          { label: 'Sound',    value: currentSound || sounds[0] || '', options: sounds,
             hidden: isRandom },
         ];
       }
@@ -2835,24 +2835,24 @@ class SequenceEditor {
         const dur = isRand ? (args[1]||'1') : (args[0]==='fixed' ? (args[1]||'1') : (args[0]||'1'));
         return [
           { label: 'Mode',            value: isRand ? 'random' : 'fixed', options: ['fixed','random'] },
-          { label: 'Durée (s) / Min', value: dur, type:'number', placeholder:'1.0' },
+          { label: 'Duration (s) / Min', value: dur, type:'number', placeholder:'1.0' },
           { label: 'Max (s)',         value: args[2]||'3', type:'number', placeholder:'3.0',
             hidden: !isRand },
         ];
       }
       case 'servo': return [
-        { label: 'Panneau', value: args[0]||'body_panel_1',
+        { label: 'Panel', value: args[0]||'body_panel_1',
           options: ['body_panel_1','body_panel_2','body_panel_3','body_panel_4',
                     'dome_panel_1','dome_panel_2','dome_panel_3','dome_panel_4',
                     'dome_panel_5','dome_panel_6','all'] },
         { label: 'Action', value: args[1]||'open', options: ['open','close'] },
-        { label: 'Angle (optionnel)', value: args[2]||'', type:'number', placeholder:'—' },
-        { label: 'Vitesse (1-10)',    value: args[3]||'', type:'number', placeholder:'—' },
+        { label: 'Angle (optional)', value: args[2]||'', type:'number', placeholder:'—' },
+        { label: 'Speed (1-10)',     value: args[3]||'', type:'number', placeholder:'—' },
       ];
       case 'motion': return [
-        { label: 'Gauche (-1..1)', value: args[0]||'0.0', type:'number', placeholder:'0.0' },
-        { label: 'Droite (-1..1)', value: args[1]||'0.0', type:'number', placeholder:'0.0' },
-        { label: 'Durée ms',       value: args[2]||'1000', type:'number', placeholder:'1000' },
+        { label: 'Left (-1..1)',  value: args[0]||'0.0', type:'number', placeholder:'0.0' },
+        { label: 'Right (-1..1)', value: args[1]||'0.0', type:'number', placeholder:'0.0' },
+        { label: 'Duration ms',   value: args[2]||'1000', type:'number', placeholder:'1000' },
       ];
       case 'teeces': return [
         { label: 'Mode', value: args[0]||'random', options: ['random','leia','off','text','psi'] },
@@ -2867,8 +2867,8 @@ class SequenceEditor {
       case 'script': {
         const opts = this._seqNames.filter(n => n !== this._openName);
         return opts.length > 0
-          ? [{ label: 'Sous-séquence', value: args[0] || opts[0], options: opts }]
-          : [{ label: 'Sous-séquence', value: args[0] || '', placeholder: 'nom-sequence' }];
+          ? [{ label: 'Sub-sequence', value: args[0] || opts[0], options: opts }]
+          : [{ label: 'Sub-sequence', value: args[0] || '', placeholder: 'sequence-name' }];
       }
       default: return args.map((a, i) => ({ label: `arg${i+1}`, value: a }));
     }
