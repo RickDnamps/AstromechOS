@@ -2013,6 +2013,26 @@ async function loadSettings() {
     const host = el('slave-host');
     if (host) host.value = data.slave.host || 'r2-slave.local';
   }
+
+  if (data.lights) {
+    const sel = el('lights-backend');
+    if (sel) sel.value = data.lights.backend || 'teeces';
+  }
+}
+
+async function saveLightsBackend() {
+  const backend = el('lights-backend')?.value;
+  if (!backend) return;
+  const status = el('lights-status');
+  if (status) { status.textContent = 'Applying...'; status.className = 'settings-status'; }
+  const data = await api('/settings/lights', 'POST', { backend });
+  if (data && data.status === 'ok') {
+    toast(data.message || `Lights driver: ${backend}`, 'ok');
+    if (status) { status.textContent = `Driver: ${backend}`; status.className = 'settings-status ok'; }
+  } else {
+    toast(data?.error || 'Hot-reload failed', 'error');
+    if (status) { status.textContent = data?.error || 'Error'; status.className = 'settings-status error'; }
+  }
 }
 
 async function scanWifi() {

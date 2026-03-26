@@ -1019,6 +1019,20 @@
       <button class="btn btn-warn" onclick="applyHotspot()">APPLY + RESTART HOTSPOT</button>
     </section>
 
+    <!-- Lights Backend -->
+    <section class="card settings-card">
+      <h2 class="card-title">LIGHTS BACKEND</h2>
+      <div class="settings-status" id="lights-status"></div>
+      <div class="form-group">
+        <label>Driver</label>
+        <select id="lights-backend" class="input-text">
+          <option value="teeces">Teeces32 (JawaLite)</option>
+          <option value="astropixels">AstroPixels+</option>
+        </select>
+      </div>
+      <button class="btn" onclick="saveLightsBackend()">APPLY (hot-reload)</button>
+    </section>
+
     <!-- GitHub / Deploy -->
     <section class="card settings-card">
       <h2 class="card-title">GITHUB / DEPLOY</h2>
