@@ -1318,6 +1318,18 @@ body::after {
   letter-spacing: 0.5px;
 }
 
+.script-badge-light {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #00ffcc;
+  border: 1px solid #00ffcc44;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
 .script-btns {
   display: flex;
   gap: 6px;

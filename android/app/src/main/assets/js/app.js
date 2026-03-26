@@ -1265,9 +1265,17 @@ class ScriptEngine {
   }
 
   async load() {
-    const data = await api('/scripts/list');
-    if (!data || !data.scripts) return;
-    this._scripts = data.scripts;
+    const [seqData, lightData] = await Promise.all([
+      api('/scripts/list'),
+      api('/light/list'),
+    ]);
+    this._scripts = (seqData?.scripts || []).map(e => ({
+      name: typeof e === 'object' ? e.name : e,
+      type: 'seq',
+    }));
+    (lightData?.sequences || []).forEach(name => {
+      this._scripts.push({ name, type: 'light' });
+    });
     this.render();
   }
 
@@ -1275,26 +1283,28 @@ class ScriptEngine {
     const grid = el('script-list');
     if (!grid) return;
     grid.innerHTML = this._scripts.map(entry => {
-      const name = (typeof entry === 'object' && entry !== null) ? entry.name : entry;
-      const desc = this._DESCRIPTIONS[name] || 'Custom sequence script';
+      const { name, type } = entry;
+      const desc = this._DESCRIPTIONS[name] || (type === 'light' ? 'Light sequence' : 'Custom sequence script');
       const isRunning = this._running.has(name);
+      const badge = type === 'light' ? '<span class="script-badge-light">LIGHT</span>' : '';
       return `
         <div class="script-card${isRunning ? ' running' : ''}" id="script-card-${name}">
-          <div class="script-name">${name.toUpperCase()}</div>
+          <div class="script-name">${name.toUpperCase()}${badge}</div>
           <div class="script-desc">${desc}</div>
           <div class="script-btns">
             <div class="running-indicator"></div>
-            <button class="btn btn-sm btn-active" onclick="scriptEngine.run('${name}', false)">RUN</button>
-            <button class="btn btn-sm" onclick="scriptEngine.run('${name}', true)">LOOP</button>
-            <button class="btn btn-sm btn-danger" onclick="scriptEngine.stopName('${name}')">STOP</button>
+            <button class="btn btn-sm btn-active" onclick="scriptEngine.run('${name}', false, '${type}')">RUN</button>
+            <button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>
+            <button class="btn btn-sm btn-danger" onclick="scriptEngine.stopName('${name}', '${type}')">STOP</button>
           </div>
         </div>
       `;
     }).join('');
   }
 
-  run(name, loop) {
-    api('/scripts/run', 'POST', { name, loop }).then(d => {
+  run(name, loop, type = 'seq') {
+    const endpoint = type === 'light' ? '/light/run' : '/scripts/run';
+    api(endpoint, 'POST', { name, loop }).then(d => {
       if (d) {
         // Un seul script à la fois — effacer toutes les cartes immédiatement
         this._running.clear();
@@ -1313,9 +1323,9 @@ class ScriptEngine {
     });
   }
 
-  stopName(name) {
-    // We'd need the script ID — stop_all as fallback
-    api('/scripts/stop_all', 'POST').then(d => {
+  stopName(name, type = 'seq') {
+    const endpoint = type === 'light' ? '/light/stop_all' : '/scripts/stop_all';
+    api(endpoint, 'POST').then(d => {
       if (d) {
         this._running.clear();
         document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
