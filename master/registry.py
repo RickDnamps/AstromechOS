@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from master.uart_controller      import UARTController
-    from master.teeces_controller    import TeecesController
+    from master.lights.base_controller import BaseLightsController
     from master.deploy_controller    import DeployController
     from master.script_engine        import ScriptEngine
     from master.drivers.vesc_driver  import VescDriver
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 # Ces variables sont assignées dans main.py avant app.run()
 uart:        'UARTController | None'    = None
-teeces:      'TeecesController | None'  = None
+teeces:      'BaseLightsController | None' = None
 deploy:      'DeployController | None'  = None
 engine:      'ScriptEngine | None'      = None
 vesc:        'VescDriver | None'        = None

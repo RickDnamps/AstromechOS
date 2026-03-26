@@ -52,7 +52,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from master.uart_controller import UARTController
-from master.teeces_controller import TeecesController
+from master.lights import load_driver
 from master.deploy_controller import DeployController
 from master.config.config_loader import load, is_auto_pull_enabled
 import master.registry as reg
@@ -207,7 +207,7 @@ def main() -> None:
 
     # Init composants Phase 1
     uart   = UARTController(cfg)
-    teeces = TeecesController(cfg)
+    teeces = load_driver(cfg)
     deploy = DeployController(cfg, uart, teeces)
 
     # Registre partagé (accessible par Flask blueprints)
