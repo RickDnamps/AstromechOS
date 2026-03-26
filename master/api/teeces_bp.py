@@ -83,12 +83,19 @@ def teeces_off():
 
 @teeces_bp.post('/text')
 def teeces_text():
-    """Affiche un texte sur le FLD. Body: {"text": "HELLO"}"""
-    body = request.get_json(silent=True) or {}
-    text = body.get('text', '').strip()[:20]  # max 20 chars
+    """Affiche un texte sur FLD, RLD, ou les deux. Body: {"text": "HELLO", "display": "fld"}"""
+    body    = request.get_json(silent=True) or {}
+    text    = body.get('text', '').strip()[:20]
+    display = body.get('display', 'fld').lower()
     if reg.teeces:
-        reg.teeces.fld_text(text)
-    return jsonify({'status': 'ok', 'text': text})
+        if display == 'rld':
+            reg.teeces.rld_text(text)
+        elif display == 'both':
+            reg.teeces.fld_text(text)
+            reg.teeces.rld_text(text)
+        else:
+            reg.teeces.fld_text(text)
+    return jsonify({'status': 'ok', 'text': text, 'display': display})
 
 
 @teeces_bp.post('/psi')

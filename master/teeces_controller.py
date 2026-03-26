@@ -142,6 +142,11 @@ class TeecesController(BaseDriver):
         text = text[:20].upper()
         return self.send_command(f"1M{text}\r")
 
+    def rld_text(self, text: str) -> bool:
+        """Texte défilant sur Rear Logic Display. Max ~20 chars."""
+        text = text[:20].upper()
+        return self.send_command(f"2M{text}\r")
+
     def alert_master_offline(self) -> bool:
         """Alerte visuelle Master hors ligne."""
         return self.send_command("1MMASTER OFFLINE\r")

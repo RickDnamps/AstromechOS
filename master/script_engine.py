@@ -379,7 +379,15 @@ class ScriptEngine:
         elif action == 'off':
             self._teeces.all_off()
         elif action == 'text':
-            self._teeces.fld_text(row[2] if len(row) > 2 else '')
+            text    = row[2] if len(row) > 2 else ''
+            display = row[3].lower() if len(row) > 3 else 'fld'
+            if display == 'rld':
+                self._teeces.rld_text(text)
+            elif display == 'both':
+                self._teeces.fld_text(text)
+                self._teeces.rld_text(text)
+            else:
+                self._teeces.fld_text(text)
         elif action == 'psi':
             mode = int(row[2]) if len(row) > 2 else 0
             if mode == 0:
