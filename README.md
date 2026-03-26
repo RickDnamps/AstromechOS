@@ -84,7 +84,7 @@ MG90S 180° servos · Per-panel O° / C° / S calibration · BT controller mappi
 <td align="center" width="50%">
 
 ### 💡 Lights
-Teeces32 FLD/RLD/PSI · Live preview · Scrolling text · PSI color picker · *(light sequences coming)*
+Teeces32 or AstroPixels+ · FLD/RLD/BOTH text · PSI color picker · Light sequences
 
 </td>
 <td align="center" width="50%">
@@ -126,6 +126,8 @@ servo,dome_panel_1,close,20,9   # snap shut at speed 9
 servo,dome_panel_2,open         # use calibrated angle + speed from settings
 ```
 
+Custom sequences and light sequences can be created directly from the **in-browser editor** — drag-and-drop steps, no file editing required.
+
 ---
 
 ### 🦾 Per-Panel Servo Calibration with Speed Ramp
@@ -166,8 +168,11 @@ The gamepad connects **directly to the Master Pi via Bluetooth** and is read via
 
 ### 💡 Lights
 
-- **Teeces32** FLD / RLD / PSI LED logics — JawaLite protocol over USB
-- **Live FLD preview** in the dashboard — animated dot grid, scrolling text, PSI color swatches
+- **Plugin driver architecture** — swap between **Teeces32** (JawaLite protocol) and **AstroPixels+** (@ commands) without rebooting, from the Config tab
+- **Live FLD preview** in the dashboard — animated dot grid, card title adapts to active driver
+- **Text on FLD / RLD / BOTH** — inline selector in the Lights tab, same as in the sequence editor
+- **PSI color swatches** — 8 colors, live preview dots
+- **Light sequences** — create choreographed light shows in the visual editor (drag-and-drop, same interface as behavioral sequences), run them from the Lights tab or the Sequences tab
 - **RP2040 round LCD** (240×240, GC9A01) — MicroPython firmware, 6 diagnostic screens driven entirely by `DISP:` commands from the Slave Pi:
 
 | Screen | Ring | Content | Triggered by |
@@ -181,7 +186,6 @@ The gamepad connects **directly to the Master Pi via Bluetooth** and is read via
 
   Swipe left/right navigates between OPERATIONAL and TELEMETRY. All other states block navigation.
   Screen design reference: [`docs/rp2040-mockup.html`](docs/rp2040-mockup.html)
-- Dedicated **LIGHTS tab** in dashboard — separated from Systems for future light sequence programming
 
 ---
 
@@ -223,7 +227,7 @@ On boot, the Slave requests the Master's git hash over UART and re-syncs if ther
 │  ├─ Flask REST API :5000             ├─ UART listener            │
 │  ├─ Script engine (40 sequences)     ├─ Watchdog 500ms → VESCs  │
 │  ├─ Dome servos   I2C 0x40          ├─ Body servos  I2C 0x41   │
-│  ├─ Teeces32 LEDs USB               ├─ Dome motor   I2C 0x40   │
+│  ├─ Lights plugin (Teeces/AstroP.)  ├─ Dome motor   I2C 0x40   │
 │  └─ Deploy controller               ├─ Drive VESCs  USB ×2     │
 │                                     ├─ Audio        3.5mm jack  │
 │         UART 115200 baud            └─ RP2040 LCD   USB        │
@@ -239,7 +243,7 @@ On boot, the Slave requests the Master's git hash over UART and re-syncs if ther
 | **Servos** | 11 dome panels — MG90S 180° — PCA9685 @ 0x40 | 11 body panels — MG90S 180° — PCA9685 @ 0x41 |
 | **Motors** | — | 2× 250W hub motors via 2× FSESC Mini 6.7 PRO |
 | **Dome motor** | — | DC motor via TB6612 HAT @ I2C 0x40 |
-| **LEDs** | Teeces32 FLD/RLD/PSI via USB | — |
+| **LEDs** | Teeces32 or AstroPixels+ via USB | — |
 | **Audio** | — | 317 sounds, 3.5mm jack, mpg123 |
 | **Diagnostic display** | — | RP2040 Waveshare 1.28" 240×240 round LCD |
 | **Power** | 5V/10A Tobsun buck → GPIO 2&4 | 5V/10A + 12V/10A Tobsun bucks |
@@ -252,31 +256,81 @@ On boot, the Slave requests the Master's git hash over UART and re-syncs if ther
 ## Quick Start
 
 ### Prerequisites
+
 - 2× Raspberry Pi 4B (username: `artoo` — configure in Raspberry Pi Imager)
 - Both running **Raspberry Pi OS Trixie** (64-bit)
-- USB Wi-Fi dongle for the Master Pi (internet while hosting hotspot)
+- USB Wi-Fi dongle on the Master Pi (internet on wlan1 while hosting hotspot on wlan0)
+- Both Pis connected to your home Wi-Fi for initial setup
 
 ### Installation
 
+The entire setup is automated. Two scripts, each run once per Pi.
+
+#### Step 1 — Master Pi
+
+Connect the Master Pi to your home Wi-Fi, then run:
+
 ```bash
-# On Master Pi — configure hotspot + internet Wi-Fi
-bash scripts/setup_master_network.sh
-
-# On Slave Pi — connect to Master's hotspot
-bash scripts/setup_slave_network.sh
-
-# On Master Pi — set up passwordless SSH (required for auto-deploy)
-bash scripts/setup_ssh_keys.sh
-
-# Enable systemd services
-sudo systemctl enable r2d2-master.service r2d2-monitor.service
-# On Slave Pi:
-sudo systemctl enable r2d2-slave.service
+curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_master.sh | sudo bash
 ```
 
-Access the dashboard at **`http://192.168.4.1:5000`** or **`http://r2-master.local:5000`**
+This script handles everything automatically:
+- System update + package installation
+- Git clone of this repo to `/home/artoo/r2d2`
+- UART fix (`dtoverlay=miniuart-bt` — keeps BT working for the gamepad)
+- Hardware UART + I2C activation via `raspi-config`
+- Python dependencies (`master/requirements.txt`)
+- Hotspot configuration (wlan0 = `R2D2_Control` @ 192.168.4.1, wlan1 = home internet)
+- SSH key generation for passwordless Slave deploy
+- systemd services (`r2d2-master`, `r2d2-monitor`) enabled and ready
+- Reboot
+
+#### Step 2 — Slave Pi
+
+Connect the Slave Pi to your home Wi-Fi (or to the Master's hotspot after step 1), then run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_slave.sh | sudo bash
+```
+
+This script handles:
+- System update + package installation (`mpg123` for MP3 playback)
+- UART fix (`dtoverlay=disable-bt`)
+- Hardware UART + I2C activation
+- Network setup (wlan0 connects to `R2D2_Control` hotspot)
+- ALSA audio config (3.5mm jack, volume 100%)
+- Reboot
+
+#### Step 3 — First Deploy (from Master)
+
+Once the Slave has rebooted and connected to the hotspot, run this once from the Master:
+
+```bash
+# Copy SSH key to Slave (passwordless deploy)
+ssh-copy-id artoo@192.168.4.171
+
+# First deployment: rsync code + install Python deps + install systemd services
+bash /home/artoo/r2d2/scripts/deploy.sh --first-install
+```
+
+This rsync's all the code to the Slave, installs Python dependencies offline (from a local vendor cache pre-built on the Master), installs and starts `r2d2-slave.service`.
+
+#### Done
+
+Access the dashboard at **`http://192.168.4.1:5000`** from any device connected to the `R2D2_Control` hotspot.
 
 📖 **[Full installation guide (English) →](HOWTO_EN.md)** · [Guide d'installation (Français) →](HOWTO.md)
+
+### Updates
+
+To update both Pis to the latest version:
+
+```bash
+# On the Master — git pull + rsync Slave + restart everything
+bash /home/artoo/r2d2/scripts/update.sh
+```
+
+Or press the physical dome button (short press). The system updates itself over-the-air without any SSH.
 
 ### Android App
 
@@ -291,9 +345,14 @@ r2d2/
 ├── master/
 │   ├── main.py              — Boot sequence + service init
 │   ├── script_engine.py     — Sequence runner (background threads)
+│   ├── lights/              — Plugin driver system
+│   │   ├── base_controller.py — Abstract interface (BaseLightsController)
+│   │   ├── teeces.py          — Teeces32 JawaLite driver
+│   │   └── astropixels.py     — AstroPixels+ @ command driver
 │   ├── drivers/             — DomeServoDriver, DomeMotorDriver (speed ramp, I2C smbus2)
 │   ├── api/                 — Flask blueprints: audio, motion, servo, sequences, lights, status
 │   ├── sequences/           — 40 behavioral sequences (.scr CSV format)
+│   ├── light_sequences/     — Custom light show sequences (.lseq CSV format)
 │   ├── config/
 │   │   ├── dome_angles.json — Per-panel open/close/speed — read at boot, written by web UI
 │   │   └── main.cfg / local.cfg
@@ -312,14 +371,18 @@ r2d2/
 ├── android/
 │   ├── app/src/main/assets/ — Bundled web assets (works offline from file://)
 │   └── compiled/            — R2-D2_Control.apk ← ready to install
-└── scripts/                 — setup_*.sh, deploy.sh, update.sh
+└── scripts/
+    ├── setup_master.sh      — Full Master installation (one command)
+    ├── setup_slave.sh       — Full Slave installation (one command)
+    ├── deploy.sh            — First Slave deploy (rsync + deps + services)
+    └── update.sh            — Ongoing updates (git pull + rsync + restart)
 ```
 
 ---
 
 ## Sequence Format
 
-Sequences are plain `.scr` CSV files in `master/sequences/` — easy to read, write, and share:
+Sequences are plain `.scr` CSV files in `master/sequences/` — easy to read, write, and share. Light sequences use `.lseq` files in `master/light_sequences/` (same format, lights-only commands):
 
 ```
 # This is a comment
@@ -331,13 +394,16 @@ servo,dome_panel_1,close,20,9           # close to 20° at speed 9
 servo,all,open                           # all panels simultaneously (parallel)
 dome,turn,0.5                            # dome rotation -1.0…+1.0
 dome,random,on                           # autonomous dome wander
-teeces,random                            # Teeces32 random animations
-teeces,text,HELLO WORLD                  # FLD scrolling text
+teeces,random                            # lights: random animations
+teeces,text,HELLO WORLD,fld             # text on FLD (or rld / both)
 teeces,psi,1                             # PSI mode
+teeces,anim,11                           # specific T-code animation
 sleep,1.5                                # pause (seconds, float)
 sleep,random,0.5,2.0                     # random pause between min and max
 motion,STOP                              # emergency stop propulsion
 ```
+
+Both sequence types can be **created and edited visually** in the Editor tab — drag-and-drop command palette, no file editing required.
 
 ---
 
@@ -349,7 +415,7 @@ motion,STOP                              # emergency stop propulsion
 | **2** | Propulsion: VESCs, dome motor, MG90S servo panels with speed ramp | 🔧 Code complete — hardware assembly in progress |
 | **3** | Script engine: 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (6 tabs) + Android app | ✅ Active |
-| **4+** | Per-panel servo calibration · LIGHTS tab · Bluetooth gamepad (evdev, Pi-native) · BT pairing UI | ✅ Active |
+| **4+** | Servo calibration UI · Sequence editor · Light editor · Lights plugin (Teeces/AstroPixels+) · Bluetooth gamepad (evdev) · BT pairing UI | ✅ Active |
 | **5** | Vision: USB camera stream, person tracking | 📋 Planned |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing currently on bench with direct BCM14/15 UART wiring.
