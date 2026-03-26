@@ -4,6 +4,13 @@
 
 ---
 
+## 🔧 Workflow preferences
+- No confirmation prompts for standard code changes
+- Make changes directly and summarize after
+- Only ask if genuinely ambiguous or destructive (delete entire module, force-push, etc.)
+
+---
+
 ## ⚙️ Instructions Claude Code
 - **Toujours committer et pusher sur GitHub après chaque modification**
 - Ne jamais laisser des changements non commités en fin de session
