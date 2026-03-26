@@ -2991,7 +2991,7 @@ class SequenceEditor {
       else if (_a === 'random') _descText = '✨ Random';
       else if (_a === 'leia')   _descText = '🌀 Leia';
       else if (_a === 'off')    _descText = '⬛ Off';
-      else if (_a === 'text')   _descText = `💬 "${step.args[1] || ''}"`;
+      else if (_a === 'text') { const _d = (step.args[2]||'fld').toUpperCase(); _descText = `💬 [${_d}] "${step.args[1]||''}"`; }
       else if (_a === 'psi')    _descText = `💠 PSI ${step.args[1] || ''}`;
     } else if (step.cmd === 'lseq') _descText = `▶ ${step.args[0] || ''}`;
     desc.textContent = _descText;
@@ -3153,6 +3153,7 @@ class SequenceEditor {
         const v = inputs[0].value;
         wraps[1].style.display = (v === 'teeces:text' || v === 'teeces:raw') ? '' : 'none';
         wraps[2].style.display = v === 'teeces:psi' ? '' : 'none';
+        if (wraps[3]) wraps[3].style.display = v === 'teeces:text' ? '' : 'none';
       };
       inputs[0].addEventListener('change', updateLightSubs);
       updateLightSubs();
@@ -3191,7 +3192,8 @@ class SequenceEditor {
           this._sequence[idx].args = ['anim', v.slice(12)];
         } else if (v === 'teeces:text') {
           this._sequence[idx].cmd  = 'teeces';
-          this._sequence[idx].args = ['text', (inputs[1].value||'').toUpperCase().slice(0,20)];
+          const _disp = inputs[3]?.value || 'fld';
+          this._sequence[idx].args = ['text', (inputs[1].value||'').toUpperCase().slice(0,20), _disp];
         } else if (v === 'teeces:psi') {
           this._sequence[idx].cmd  = 'teeces';
           this._sequence[idx].args = ['psi', (inputs[2].value||'1:Random').split(':')[0]];
@@ -3499,13 +3501,13 @@ class SequenceEditor {
         LIGHT_ANIMATIONS.forEach(a => {
           if (![1, 6, 20].includes(a.mode)) lightOpts.push({ val: `teeces:anim:${a.mode}`, lbl: `${a.icon} ${a.label}` });
         });
-        lightOpts.push({ val: 'teeces:text', lbl: '💬 FLD Text…' });
+        lightOpts.push({ val: 'teeces:text', lbl: '💬 Text…' });
         lightOpts.push({ val: 'teeces:psi',  lbl: '💠 PSI Mode…' });
         lightOpts.push({ val: 'teeces:raw',  lbl: '⚙️ Raw JawaLite…' });
         this._lseqNames.forEach(n => lightOpts.push({ val: `lseq:${n}`, lbl: `▶ ${n}` }));
 
         // Determine current encoded value + sub-field values
-        let curVal = 'teeces:random', subText = '', curPsi = '1';
+        let curVal = 'teeces:random', subText = '', curPsi = '1', curDisplay = 'fld';
         if (cmd === 'lseq') {
           const n = args[0] || '';
           curVal = n ? `lseq:${n}` : 'teeces:random';
@@ -3516,7 +3518,7 @@ class SequenceEditor {
           else if (a0 === 'leia') curVal = 'teeces:leia';
           else if (a0 === 'off')  curVal = 'teeces:off';
           else if (a0 === 'anim') curVal = `teeces:anim:${args[1]||'2'}`;
-          else if (a0 === 'text') { curVal = 'teeces:text'; subText = args[1]||''; }
+          else if (a0 === 'text') { curVal = 'teeces:text'; subText = args[1]||''; curDisplay = args[2]||'fld'; }
           else if (a0 === 'psi')  { curVal = 'teeces:psi';  curPsi  = args[1]||'1'; }
           else if (a0 === 'raw')  { curVal = 'teeces:raw';  subText = args[1]||''; }
         }
@@ -3529,6 +3531,9 @@ class SequenceEditor {
             hidden: curVal !== 'teeces:text' && curVal !== 'teeces:raw' },
           { label: 'PSI Mode', value: curPsiOpt, options: psiOpts,
             hidden: curVal !== 'teeces:psi' },
+          { label: 'Display', value: curDisplay,
+            options: ['fld:FLD (Front)', 'rld:RLD (Rear)', 'both:FLD + RLD'],
+            hidden: curVal !== 'teeces:text' },
         ];
       }
       case 'dome': return [
