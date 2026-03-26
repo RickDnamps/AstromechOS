@@ -542,6 +542,16 @@ class VirtualJoystick {
 
 let _speedLimit = 0.6;
 
+// Lights backend — tracked globally so palette + editor use correct raw label
+let _lightsBackend = 'teeces';
+function _rawLabel() {
+  return _lightsBackend === 'astropixels' ? '⚙️ Raw @-command' : '⚙️ Raw JawaLite';
+}
+function _updateRawPaletteItem() {
+  const item = el('light-palette-raw');
+  if (item) item.textContent = _rawLabel();
+}
+
 function setSpeed(val) {
   _speedLimit = val / 100;
   el('speed-val').textContent = val + '%';
@@ -782,13 +792,22 @@ async function loadLightSequences() {
     api('/teeces/state'),
   ]);
 
-  // Animations grid
+  // Animations grid — use LIGHT_ANIMATIONS for icons, fallback to API name
   const animGrid = el('anim-grid');
   if (animGrid && animData?.animations) {
-    animGrid.innerHTML = animData.animations.map(a => `
-      <button class="anim-btn" id="anim-btn-${a.mode}"
-              onclick="playAnimation(${a.mode})">${a.name.toUpperCase()}</button>
-    `).join('');
+    animGrid.innerHTML = animData.animations.map(a => {
+      const meta = LIGHT_ANIMATIONS.find(x => x.mode === a.mode);
+      const icon = meta ? meta.icon : '';
+      const label = (meta ? meta.label : a.name).toUpperCase();
+      return `<button class="anim-btn" id="anim-btn-${a.mode}"
+              onclick="playAnimation(${a.mode})">${icon ? icon + ' ' : ''}${label}</button>`;
+    }).join('');
+  }
+
+  // Update global backend + raw palette label
+  if (state?.backend) {
+    _lightsBackend = state.backend;
+    _updateRawPaletteItem();
   }
 
   // Saved light sequences
@@ -1940,6 +1959,10 @@ class StatusPoller {
     }
     if (data.lights_backend) {
       teecesController.updateCardTitle(data.lights_backend);
+      if (_lightsBackend !== data.lights_backend) {
+        _lightsBackend = data.lights_backend;
+        _updateRawPaletteItem();
+      }
     }
 
     // VESC telemetry — refresh only if VESC tab is active
@@ -2429,13 +2452,14 @@ class LightEditor {
     });
     palette.appendChild(psiItem);
 
-    // Raw JawaLite
+    // Raw command (JawaLite or AstroPixels @-command depending on backend)
     const rawItem = document.createElement('div');
+    rawItem.id = 'light-palette-raw';
     rawItem.className = 'editor-palette-item light-palette-item';
     rawItem.draggable = true;
     rawItem.dataset.cmd  = 'teeces';
     rawItem.dataset.args = JSON.stringify(['raw', '0T1']);
-    rawItem.textContent = '⚙️ Raw JawaLite';
+    rawItem.textContent = _rawLabel();
     let _rawDragged = false;
     rawItem.addEventListener('dragstart', () => { _rawDragged = true; });
     rawItem.addEventListener('dragend',   () => { setTimeout(() => { _rawDragged = false; }, 50); });
@@ -2520,7 +2544,7 @@ class LightEditor {
 
   _renderSeqList(names) {
     this._seqNames = names;
-    const list = el('light-seq-list');
+    const list = el('light-editor-seq-list');
     if (!list) return;
     list.innerHTML = '';
     names.forEach(name => {
@@ -2657,7 +2681,8 @@ class LightEditor {
           '5:Cyan', '6:Blue', '7:Magenta', '8:White', '9:Inverse Random'
         ] }];
       } else if (action === 'raw') {
-        fields = [{ label:'JawaLite command', value: args[1]||'', type:'text', placeholder:'0T5' }];
+        const rawFieldLabel = _lightsBackend === 'astropixels' ? '@-command' : 'JawaLite command';
+        fields = [{ label: rawFieldLabel, value: args[1]||'', type:'text', placeholder: _lightsBackend === 'astropixels' ? '@0000000000' : '0T5' }];
       } else {
         fields = [{ label:'Action', value: action, options:['random','leia','off','anim','text','psi','raw'] }];
       }
@@ -3606,7 +3631,7 @@ class SequenceEditor {
         });
         lightOpts.push({ val: 'teeces:text', lbl: '💬 Text…' });
         lightOpts.push({ val: 'teeces:psi',  lbl: '💠 PSI Mode…' });
-        lightOpts.push({ val: 'teeces:raw',  lbl: '⚙️ Raw JawaLite…' });
+        lightOpts.push({ val: 'teeces:raw',  lbl: _rawLabel() + '…' });
         this._lseqNames.forEach(n => lightOpts.push({ val: `lseq:${n}`, lbl: `▶ ${n}` }));
 
         // Determine current encoded value + sub-field values
