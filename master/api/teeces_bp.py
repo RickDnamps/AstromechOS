@@ -67,7 +67,7 @@ def teeces_leia():
     global _mode
     _mode = 'leia'
     if reg.teeces:
-        reg.teeces.leia_mode()
+        reg.teeces.leia()
     return jsonify({'status': 'ok', 'mode': 'leia'})
 
 
@@ -77,7 +77,7 @@ def teeces_off():
     global _mode
     _mode = 'off'
     if reg.teeces:
-        reg.teeces.all_off()
+        reg.teeces.off()
     return jsonify({'status': 'ok', 'mode': 'off'})
 
 
@@ -88,13 +88,7 @@ def teeces_text():
     text    = body.get('text', '').strip()[:20]
     display = body.get('display', 'fld').lower()
     if reg.teeces:
-        if display == 'rld':
-            reg.teeces.rld_text(text)
-        elif display == 'both':
-            reg.teeces.fld_text(text)
-            reg.teeces.rld_text(text)
-        else:
-            reg.teeces.fld_text(text)
+        reg.teeces.text(text, display)
     return jsonify({'status': 'ok', 'text': text, 'display': display})
 
 
@@ -104,18 +98,18 @@ def teeces_psi():
     body = request.get_json(silent=True) or {}
     mode = int(body.get('mode', 1))
     if reg.teeces:
-        reg.teeces.psi_mode(mode)
+        reg.teeces.psi(mode)
     return jsonify({'status': 'ok', 'mode': mode})
 
 
 @teeces_bp.get('/animations')
 def teeces_animations():
     """List all known T-code animations."""
-    from master.teeces_controller import TeecesController
+    from master.lights.base_controller import BaseLightsController
     return jsonify({
         'animations': [
             {'mode': k, 'name': v}
-            for k, v in TeecesController.ANIMATIONS.items()
+            for k, v in BaseLightsController.ANIMATIONS.items()
         ]
     })
 
@@ -130,8 +124,8 @@ def teeces_animation():
         return jsonify({'error': 'mode must be an integer'}), 400
     if reg.teeces:
         reg.teeces.animation(mode)
-    from master.teeces_controller import TeecesController
-    name = TeecesController.ANIMATIONS.get(mode, f'T{mode}')
+    from master.lights.base_controller import BaseLightsController
+    name = BaseLightsController.ANIMATIONS.get(mode, f'T{mode}')
     return jsonify({'status': 'ok', 'mode': mode, 'name': name})
 
 
@@ -143,7 +137,7 @@ def teeces_raw():
     if not cmd:
         return jsonify({'error': 'field "cmd" required'}), 400
     if reg.teeces:
-        reg.teeces.send_raw(cmd)
+        reg.teeces.raw(cmd)
     return jsonify({'status': 'ok', 'cmd': cmd})
 
 

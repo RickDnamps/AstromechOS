@@ -375,30 +375,22 @@ class ScriptEngine:
         if action == 'random':
             self._teeces.random_mode()
         elif action == 'leia':
-            self._teeces.leia_mode()
+            self._teeces.leia()
         elif action == 'off':
-            self._teeces.all_off()
+            self._teeces.off()
         elif action == 'text':
             text    = row[2] if len(row) > 2 else ''
             display = row[3].lower() if len(row) > 3 else 'fld'
-            if display == 'rld':
-                self._teeces.rld_text(text)
-            elif display == 'both':
-                self._teeces.fld_text(text)
-                self._teeces.rld_text(text)
-            else:
-                self._teeces.fld_text(text)
+            self._teeces.text(text, display)
         elif action == 'psi':
             mode = int(row[2]) if len(row) > 2 else 0
-            if mode == 0:
-                self._teeces.psi_random()
-            else:
-                self._teeces.psi_mode(mode)
+            # mode=0 dans .scr signifie "random" (héritage de psi_random)
+            self._teeces.psi(1 if mode == 0 else mode)
         elif action == 'anim':
             mode = int(row[2]) if len(row) > 2 else 1
             self._teeces.animation(mode)
         elif action == 'raw':
-            self._teeces.send_raw(row[2] if len(row) > 2 else '')
+            self._teeces.raw(row[2] if len(row) > 2 else '')
 
     def _cmd_lseq(self, row: list[str]) -> None:
         """Fire-and-forget: start a light sequence in background (parallel like sound)."""

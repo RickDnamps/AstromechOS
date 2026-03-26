@@ -241,7 +241,7 @@ class DeployController:
 
         log.error("rsync échoué après toutes les tentatives")
         if self._teeces:
-            self._teeces.alert_error("SYNC")
+            self._teeces.system_error("SYNC")
         return False
 
     def reboot_slave(self) -> None:
