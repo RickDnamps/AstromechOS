@@ -2297,15 +2297,15 @@ class LightEditor {
     txtItem.className = 'editor-palette-item light-palette-item';
     txtItem.draggable = true;
     txtItem.dataset.cmd  = 'teeces';
-    txtItem.dataset.args = JSON.stringify(['text', 'HELLO']);
-    txtItem.textContent = '💬 FLD Text';
+    txtItem.dataset.args = JSON.stringify(['text', 'HELLO', 'fld']);
+    txtItem.textContent = '💬 Text';
     let _txtDragged = false;
     txtItem.addEventListener('dragstart', () => { _txtDragged = true; });
     txtItem.addEventListener('dragend',   () => { setTimeout(() => { _txtDragged = false; }, 50); });
     txtItem.addEventListener('click', () => {
       if (_txtDragged) return;
       if (!this._openName) { alert('Create or open a sequence first.'); return; }
-      this._addStep('teeces', ['text', 'HELLO']);
+      this._addStep('teeces', ['text', 'HELLO', 'fld']);
     });
     palette.appendChild(txtItem);
 
@@ -2463,7 +2463,7 @@ class LightEditor {
       const a = LIGHT_ANIMATIONS.find(x => x.mode === mode);
       return a ? `${a.icon} ${a.label}` : `T${mode}`;
     }
-    if (action === 'text')  return `💬 "${step.args[1] || ''}"`;
+    if (action === 'text') { const disp = (step.args[2] || 'fld').toUpperCase(); return `💬 [${disp}] "${step.args[1] || ''}"` ; }
     if (action === 'psi')   return `💠 PSI ${step.args[1] || ''}`;
     if (action === 'raw')   return `⚙️ ${step.args[1] || ''}`;
     if (action === 'random') return '✨ Random';
@@ -2542,7 +2542,12 @@ class LightEditor {
         fields = [{ label:'Animation', value: args[1]||'1',
           options: LIGHT_ANIMATIONS.map(a => `${a.mode}:${a.icon} ${a.label}`) }];
       } else if (action === 'text') {
-        fields = [{ label:'FLD Text (max 20)', value: args[1]||'', type:'text', placeholder:'HELLO' }];
+        const curDisp = args[2] || 'fld';
+        fields = [
+          { label: 'Display', value: curDisp,
+            options: ['fld:FLD (Front)', 'rld:RLD (Rear)', 'both:FLD + RLD'] },
+          { label: 'Text (max 20)', value: args[1]||'', type:'text', placeholder:'HELLO' },
+        ];
       } else if (action === 'psi') {
         fields = [{ label:'PSI Mode', value: args[1]||'1', options:[
           '0:Off', '1:Random', '2:Red', '3:Yellow', '4:Green',
@@ -2610,7 +2615,7 @@ class LightEditor {
       } else if (step.cmd === 'teeces') {
         const a = action || 'anim';
         if (a === 'anim')  newArgs = ['anim',  inputs[0].value];
-        else if (a === 'text') newArgs = ['text', inputs[0].value.substring(0, 20).toUpperCase()];
+        else if (a === 'text') newArgs = ['text', inputs[1].value.substring(0, 20).toUpperCase(), inputs[0].value];
         else if (a === 'psi')  newArgs = ['psi',  inputs[0].value];
         else if (a === 'raw')  newArgs = ['raw',  inputs[0].value];
         else newArgs = [inputs[0].value];
@@ -2986,7 +2991,7 @@ class SequenceEditor {
       else if (_a === 'random') _descText = '✨ Random';
       else if (_a === 'leia')   _descText = '🌀 Leia';
       else if (_a === 'off')    _descText = '⬛ Off';
-      else if (_a === 'text')   _descText = `💬 "${step.args[1] || ''}"`;
+      else if (_a === 'text') { const _d = (step.args[2]||'fld').toUpperCase(); _descText = `💬 [${_d}] "${step.args[1]||''}"`; }
       else if (_a === 'psi')    _descText = `💠 PSI ${step.args[1] || ''}`;
     } else if (step.cmd === 'lseq') _descText = `▶ ${step.args[0] || ''}`;
     desc.textContent = _descText;
@@ -3148,6 +3153,7 @@ class SequenceEditor {
         const v = inputs[0].value;
         wraps[1].style.display = (v === 'teeces:text' || v === 'teeces:raw') ? '' : 'none';
         wraps[2].style.display = v === 'teeces:psi' ? '' : 'none';
+        if (wraps[3]) wraps[3].style.display = v === 'teeces:text' ? '' : 'none';
       };
       inputs[0].addEventListener('change', updateLightSubs);
       updateLightSubs();
@@ -3186,7 +3192,8 @@ class SequenceEditor {
           this._sequence[idx].args = ['anim', v.slice(12)];
         } else if (v === 'teeces:text') {
           this._sequence[idx].cmd  = 'teeces';
-          this._sequence[idx].args = ['text', (inputs[1].value||'').toUpperCase().slice(0,20)];
+          const _disp = inputs[3]?.value || 'fld';
+          this._sequence[idx].args = ['text', (inputs[1].value||'').toUpperCase().slice(0,20), _disp];
         } else if (v === 'teeces:psi') {
           this._sequence[idx].cmd  = 'teeces';
           this._sequence[idx].args = ['psi', (inputs[2].value||'1:Random').split(':')[0]];
@@ -3494,13 +3501,13 @@ class SequenceEditor {
         LIGHT_ANIMATIONS.forEach(a => {
           if (![1, 6, 20].includes(a.mode)) lightOpts.push({ val: `teeces:anim:${a.mode}`, lbl: `${a.icon} ${a.label}` });
         });
-        lightOpts.push({ val: 'teeces:text', lbl: '💬 FLD Text…' });
+        lightOpts.push({ val: 'teeces:text', lbl: '💬 Text…' });
         lightOpts.push({ val: 'teeces:psi',  lbl: '💠 PSI Mode…' });
         lightOpts.push({ val: 'teeces:raw',  lbl: '⚙️ Raw JawaLite…' });
         this._lseqNames.forEach(n => lightOpts.push({ val: `lseq:${n}`, lbl: `▶ ${n}` }));
 
         // Determine current encoded value + sub-field values
-        let curVal = 'teeces:random', subText = '', curPsi = '1';
+        let curVal = 'teeces:random', subText = '', curPsi = '1', curDisplay = 'fld';
         if (cmd === 'lseq') {
           const n = args[0] || '';
           curVal = n ? `lseq:${n}` : 'teeces:random';
@@ -3511,7 +3518,7 @@ class SequenceEditor {
           else if (a0 === 'leia') curVal = 'teeces:leia';
           else if (a0 === 'off')  curVal = 'teeces:off';
           else if (a0 === 'anim') curVal = `teeces:anim:${args[1]||'2'}`;
-          else if (a0 === 'text') { curVal = 'teeces:text'; subText = args[1]||''; }
+          else if (a0 === 'text') { curVal = 'teeces:text'; subText = args[1]||''; curDisplay = args[2]||'fld'; }
           else if (a0 === 'psi')  { curVal = 'teeces:psi';  curPsi  = args[1]||'1'; }
           else if (a0 === 'raw')  { curVal = 'teeces:raw';  subText = args[1]||''; }
         }
@@ -3524,6 +3531,9 @@ class SequenceEditor {
             hidden: curVal !== 'teeces:text' && curVal !== 'teeces:raw' },
           { label: 'PSI Mode', value: curPsiOpt, options: psiOpts,
             hidden: curVal !== 'teeces:psi' },
+          { label: 'Display', value: curDisplay,
+            options: ['fld:FLD (Front)', 'rld:RLD (Rear)', 'both:FLD + RLD'],
+            hidden: curVal !== 'teeces:text' },
         ];
       }
       case 'dome': return [
