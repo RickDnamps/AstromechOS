@@ -2979,7 +2979,17 @@ class SequenceEditor {
 
     const desc = document.createElement('span');
     desc.style.cssText = 'font-size:10px;color:#a0c0e0;flex:1';
-    desc.textContent = step.args.join(' ');
+    let _descText = step.args.join(' ');
+    if (step.cmd === 'teeces') {
+      const _a = step.args[0] || '';
+      if (_a === 'anim') { const _m = LIGHT_ANIMATIONS.find(x => x.mode === parseInt(step.args[1])); _descText = _m ? `${_m.icon} ${_m.label}` : `T${step.args[1]}`; }
+      else if (_a === 'random') _descText = '✨ Random';
+      else if (_a === 'leia')   _descText = '🌀 Leia';
+      else if (_a === 'off')    _descText = '⬛ Off';
+      else if (_a === 'text')   _descText = `💬 "${step.args[1] || ''}"`;
+      else if (_a === 'psi')    _descText = `💠 PSI ${step.args[1] || ''}`;
+    } else if (step.cmd === 'lseq') _descText = `▶ ${step.args[0] || ''}`;
+    desc.textContent = _descText;
 
     const actions = document.createElement('span');
     actions.style.cssText = 'font-size:9px;color:#4a6a8a;margin-left:auto;display:flex;align-items:center;gap:6px';
@@ -3075,8 +3085,13 @@ class SequenceEditor {
         inp = document.createElement('select');
         f.options.forEach(o => {
           const opt = document.createElement('option');
-          opt.value = o; opt.textContent = o;
-          if (o === f.value) opt.selected = true;
+          if (typeof o === 'object') {
+            opt.value = o.val; opt.textContent = o.lbl;
+            if (o.val === f.value) opt.selected = true;
+          } else {
+            opt.value = o; opt.textContent = o;
+            if (o === f.value) opt.selected = true;
+          }
           inp.appendChild(opt);
         });
       } else {
@@ -3127,6 +3142,17 @@ class SequenceEditor {
       });
     }
 
+    // For lights (teeces/lseq): main selection → show/hide sub-fields
+    if ((step.cmd === 'teeces' || step.cmd === 'lseq') && inputs[0] && wraps[1] && wraps[2]) {
+      const updateLightSubs = () => {
+        const v = inputs[0].value;
+        wraps[1].style.display = (v === 'teeces:text' || v === 'teeces:raw') ? '' : 'none';
+        wraps[2].style.display = v === 'teeces:psi' ? '' : 'none';
+      };
+      inputs[0].addEventListener('change', updateLightSubs);
+      updateLightSubs();
+    }
+
     const ok = document.createElement('button');
     ok.textContent = '✓ OK';
     ok.className = 'btn-editor-action';
@@ -3149,6 +3175,32 @@ class SequenceEditor {
           newArgs = ['fixed', newArgs[1] || '1'];
         }
       }
+      // Lights (teeces/lseq): parse encoded selection, update cmd+args
+      if (this._sequence[idx].cmd === 'teeces' || this._sequence[idx].cmd === 'lseq') {
+        const v = inputs[0].value;
+        if (v.startsWith('lseq:')) {
+          this._sequence[idx].cmd  = 'lseq';
+          this._sequence[idx].args = [v.slice(5)];
+        } else if (v.startsWith('teeces:anim:')) {
+          this._sequence[idx].cmd  = 'teeces';
+          this._sequence[idx].args = ['anim', v.slice(12)];
+        } else if (v === 'teeces:text') {
+          this._sequence[idx].cmd  = 'teeces';
+          this._sequence[idx].args = ['text', (inputs[1].value||'').toUpperCase().slice(0,20)];
+        } else if (v === 'teeces:psi') {
+          this._sequence[idx].cmd  = 'teeces';
+          this._sequence[idx].args = ['psi', (inputs[2].value||'1:Random').split(':')[0]];
+        } else if (v === 'teeces:raw') {
+          this._sequence[idx].cmd  = 'teeces';
+          this._sequence[idx].args = ['raw', inputs[1].value||''];
+        } else {
+          this._sequence[idx].cmd  = 'teeces';
+          this._sequence[idx].args = [v.slice(8)];
+        }
+        this._editingIdx = null;
+        this._renderSteps();
+        return;
+      }
       this._sequence[idx].args = newArgs;
       this._editingIdx = null;
       this._renderSteps();
@@ -3166,10 +3218,10 @@ class SequenceEditor {
       const opts = this._seqNames.filter(n => n !== this._openName);
       if (opts.length > 0) resolvedArgs = [opts[0]];
     }
-    // Pre-fill lseq with fresh list
-    if (cmd === 'lseq') {
+    // Pre-fill lights: refresh lseq names
+    if (cmd === 'lseq' || cmd === 'teeces') {
       await this._loadLightSeqNames();
-      if (!resolvedArgs[0] && this._lseqNames.length > 0) resolvedArgs = [this._lseqNames[0]];
+      if (cmd === 'lseq' && !resolvedArgs[0] && this._lseqNames.length > 0) resolvedArgs = [this._lseqNames[0]];
     }
     this._sequence.push({ cmd, args: resolvedArgs });
     this._editingIdx = this._sequence.length - 1;
@@ -3185,9 +3237,10 @@ class SequenceEditor {
 
   async _toggleEdit(idx) {
     this._editingIdx = this._editingIdx === idx ? null : idx;
-    // Refresh light sequence names before showing lseq form
-    if (this._editingIdx !== null && this._sequence[idx]?.cmd === 'lseq') {
-      await this._loadLightSeqNames();
+    // Refresh light sequence names before showing lights form
+    if (this._editingIdx !== null) {
+      const _ec = this._sequence[idx]?.cmd;
+      if (_ec === 'lseq' || _ec === 'teeces') await this._loadLightSeqNames();
     }
     this._renderSteps();
   }
@@ -3431,11 +3484,48 @@ class SequenceEditor {
         { label: 'Right (-1..1)', value: args[1]||'0.0', type:'number', placeholder:'0.0' },
         { label: 'Duration ms',   value: args[2]||'1000', type:'number', placeholder:'1000' },
       ];
-      case 'teeces': return [
-        { label: 'Mode', value: args[0]||'random', options: ['random','leia','off','text','psi'] },
-        ...(args[0]==='text' ? [{ label:'Texte', value: args[1]||'', placeholder:'HELLO' }] : []),
-        ...(args[0]==='psi'  ? [{ label:'Mode PSI', value: args[1]||'0', type:'number' }] : []),
-      ];
+      case 'teeces':
+      case 'lseq': {
+        // Mega-dropdown: named modes + T-code animations + FLD Text + PSI + Raw + custom .lseq
+        const lightOpts = [];
+        lightOpts.push({ val: 'teeces:random', lbl: '✨ Random' });
+        lightOpts.push({ val: 'teeces:leia',   lbl: '🌀 Leia' });
+        lightOpts.push({ val: 'teeces:off',    lbl: '⬛ Off' });
+        LIGHT_ANIMATIONS.forEach(a => {
+          if (![1, 6, 20].includes(a.mode)) lightOpts.push({ val: `teeces:anim:${a.mode}`, lbl: `${a.icon} ${a.label}` });
+        });
+        lightOpts.push({ val: 'teeces:text', lbl: '💬 FLD Text…' });
+        lightOpts.push({ val: 'teeces:psi',  lbl: '💠 PSI Mode…' });
+        lightOpts.push({ val: 'teeces:raw',  lbl: '⚙️ Raw JawaLite…' });
+        this._lseqNames.forEach(n => lightOpts.push({ val: `lseq:${n}`, lbl: `▶ ${n}` }));
+
+        // Determine current encoded value + sub-field values
+        let curVal = 'teeces:random', subText = '', curPsi = '1';
+        if (cmd === 'lseq') {
+          const n = args[0] || '';
+          curVal = n ? `lseq:${n}` : 'teeces:random';
+          if (n && !lightOpts.find(o => o.val === curVal)) lightOpts.push({ val: curVal, lbl: `▶ ${n}` });
+        } else {
+          const a0 = args[0] || 'random';
+          if (a0 === 'random')    curVal = 'teeces:random';
+          else if (a0 === 'leia') curVal = 'teeces:leia';
+          else if (a0 === 'off')  curVal = 'teeces:off';
+          else if (a0 === 'anim') curVal = `teeces:anim:${args[1]||'2'}`;
+          else if (a0 === 'text') { curVal = 'teeces:text'; subText = args[1]||''; }
+          else if (a0 === 'psi')  { curVal = 'teeces:psi';  curPsi  = args[1]||'1'; }
+          else if (a0 === 'raw')  { curVal = 'teeces:raw';  subText = args[1]||''; }
+        }
+        const psiOpts = ['0:Off','1:Random','2:Red','3:Yellow','4:Green',
+                         '5:Cyan','6:Blue','7:Magenta','8:White','9:Inverse Random'];
+        const curPsiOpt = psiOpts.find(o => o.startsWith(curPsi + ':')) || psiOpts[1];
+        return [
+          { label: 'Light', value: curVal, options: lightOpts },
+          { label: 'Text / Value', value: subText, placeholder: 'HELLO',
+            hidden: curVal !== 'teeces:text' && curVal !== 'teeces:raw' },
+          { label: 'PSI Mode', value: curPsiOpt, options: psiOpts,
+            hidden: curVal !== 'teeces:psi' },
+        ];
+      }
       case 'dome': return [
         { label: 'Action', value: args[0]||'stop', options: ['turn','stop','random','center'] },
         ...(args[0]==='turn'   ? [{ label:'Vitesse (-1..1)', value: args[1]||'0.3', type:'number' }] : []),
@@ -3447,10 +3537,6 @@ class SequenceEditor {
           ? [{ label: 'Sub-sequence', value: args[0] || opts[0], options: opts }]
           : [{ label: 'Sub-sequence', value: args[0] || '', placeholder: 'sequence-name' }];
       }
-      case 'lseq':
-        return this._lseqNames.length
-          ? [{ label: 'Light Sequence', value: args[0] || this._lseqNames[0] || '', options: this._lseqNames }]
-          : [{ label: 'Light Sequence', value: args[0] || '', type: 'text', placeholder: 'name' }];
       case 'wait_light':
         return [];   // no args — just blocks until light sequences finish
       default: return args.map((a, i) => ({ label: `arg${i+1}`, value: a }));
