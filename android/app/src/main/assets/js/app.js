@@ -364,6 +364,7 @@ function switchTab(tabId) {
 
   if (tabId === 'config') { loadSettings(); loadServoSettings(); }
   if (tabId === 'sequences') loadScripts();
+  if (tabId === 'lights') loadLightSequences();
   if (tabId === 'audio') loadAudioCategories();
   if (tabId === 'editor') {
     if (typeof seqEditor !== 'undefined') seqEditor.loadSequenceList();
@@ -734,11 +735,18 @@ class TeecesController {
     this._applyFLDMode(mode);
   }
 
-  sendText(text) {
+  sendText(text, display = 'fld') {
     if (!text) return;
-    api('/teeces/text', 'POST', { text }).then(d => {
-      if (d) toast(`FLD: "${text}"`, 'ok');
+    api('/teeces/text', 'POST', { text, display }).then(d => {
+      if (d) toast(`${display.toUpperCase()}: "${text}"`, 'ok');
     });
+  }
+
+  updateCardTitle(backend) {
+    const title = el('lights-card-title');
+    if (!title) return;
+    const names = { teeces: 'TEECES LOGIC DISPLAY', astropixels: 'ASTROPIXELS+ CONTROL' };
+    title.textContent = names[backend] || 'LIGHTS CONTROL';
   }
 
   setPSI(modeNum) {
@@ -761,7 +769,42 @@ class TeecesController {
 const teecesController = new TeecesController();
 
 function teecesMode(mode)  { teecesController.setMode(mode); }
-function sendTeecesText()  { teecesController.sendText(el('teeces-text').value.trim()); }
+function sendTeecesText()  {
+  const text    = el('teeces-text')?.value.trim() || '';
+  const display = el('teeces-display')?.value || 'fld';
+  teecesController.sendText(text, display);
+}
+
+async function loadLightSequences() {
+  const data = await api('/light/list');
+  const grid = el('light-seq-list');
+  if (!grid || !data) return;
+  const names = data.sequences || [];
+  if (names.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:8px 0;letter-spacing:0.5px">No light sequences — create one in the Editor tab</div>';
+    return;
+  }
+  grid.innerHTML = names.map(name => `
+    <div class="script-card" id="light-card-${name}">
+      <div class="script-name">${name.toUpperCase()}<span class="script-badge-light">LIGHT</span></div>
+      <div class="script-btns">
+        <div class="running-indicator"></div>
+        <button class="btn btn-sm btn-active" onclick="runLightSeq('${name}', false)">RUN</button>
+        <button class="btn btn-sm" onclick="runLightSeq('${name}', true)">LOOP</button>
+        <button class="btn btn-sm btn-danger" onclick="api('/light/stop_all','POST').then(()=>toast('Stopped','ok'))">STOP</button>
+      </div>
+    </div>
+  `).join('');
+  // Also refresh the backend title
+  const state = await api('/teeces/state');
+  if (state?.backend) teecesController.updateCardTitle(state.backend);
+}
+
+function runLightSeq(name, loop) {
+  api('/light/run', 'POST', { name, loop }).then(d => {
+    if (d) toast(`${name.toUpperCase()} started${loop ? ' (loop)' : ''}`, 'ok');
+  });
+}
 
 // ================================================================
 // Servo Panel
@@ -1864,9 +1907,12 @@ class StatusPoller {
       lockMgr.syncFromStatus(data.lock_mode);
     }
 
-    // Teeces state
+    // Teeces / lights state
     if (data.teeces_mode) {
       teecesController._applyFLDMode(data.teeces_mode);
+    }
+    if (data.lights_backend) {
+      teecesController.updateCardTitle(data.lights_backend);
     }
 
     // VESC telemetry — refresh only if VESC tab is active

@@ -144,7 +144,9 @@ def teeces_raw():
 @teeces_bp.get('/state')
 def teeces_state():
     """État courant des Teeces."""
+    backend = type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none'
     return jsonify({
-        'mode':  _mode,
-        'ready': bool(reg.teeces and reg.teeces.is_ready()),
+        'mode':    _mode,
+        'ready':   bool(reg.teeces and reg.teeces.is_ready()),
+        'backend': backend,
     })

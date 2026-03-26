@@ -106,6 +106,7 @@ def get_status():
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
         'estop_active':      reg.estop_active,
+        'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
         **bt_status,
     })
 

@@ -1833,6 +1833,20 @@ body::after {
 select.input-text { cursor: pointer; }
 select.input-text option { background: #0a1525; }
 
+.input-select-sm {
+  flex: 0 0 auto;
+  width: 58px;
+  background: rgba(0, 10, 25, 0.8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 6px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+}
+.input-select-sm option { background: #0a1525; }
+
 /* ================================================================
    SETTINGS / CONFIG TAB
 ================================================================ */
