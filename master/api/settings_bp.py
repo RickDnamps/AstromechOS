@@ -90,6 +90,52 @@ def _nm_field(device: str, field: str) -> str:
     return out if rc == 0 else ''
 
 
+import threading as _threading
+_lights_reload_lock = _threading.Lock()
+
+
+def _read_fresh_cfg() -> configparser.ConfigParser:
+    """Relit main.cfg + local.cfg depuis le disque (pour hot-reload)."""
+    from master.config.config_loader import MAIN_CFG, LOCAL_CFG
+    cfg = configparser.ConfigParser()
+    cfg.read([MAIN_CFG, LOCAL_CFG])
+    return cfg
+
+
+def _reload_lights_driver(backend: str) -> dict:
+    """
+    Éteint le driver courant, charge le nouveau, met à jour reg.teeces.
+    Thread-safe via _lights_reload_lock (Flask tourne en threaded=True).
+    """
+    import master.registry as reg
+    from master.lights import load_driver
+
+    with _lights_reload_lock:
+        if reg.teeces:
+            try:
+                reg.teeces.shutdown()
+            except Exception as e:
+                log.warning(f"Shutdown ancien driver lights: {e}")
+            reg.teeces = None   # guard pendant le swap
+
+        cfg = _read_fresh_cfg()
+        try:
+            new_driver = load_driver(cfg)
+        except ValueError as e:
+            log.error(f"Backend lights invalide: {e}")
+            return {'ok': False, 'error': str(e)}
+
+        if not new_driver.setup():
+            log.error(f"Setup driver lights échoué ({backend})")
+            return {'ok': False, 'error': f"Setup {backend} échoué (port indisponible ?)"}
+
+        reg.teeces = new_driver
+        new_driver.random_mode()
+
+    log.info(f"Driver lights rechargé: {backend}")
+    return {'ok': True}
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -130,6 +176,10 @@ def get_settings():
         },
         'deploy': {
             'button_pin': cfg.getint('deploy', 'button_pin', fallback=17),
+        },
+        'lights': {
+            'backend':   cfg.get('lights', 'backend', fallback='teeces'),
+            'available': ['teeces', 'astropixels'],
         },
     })
 
@@ -251,6 +301,7 @@ def set_config():
     allowed = {
         'github.branch', 'github.auto_pull_on_boot',
         'slave.host', 'deploy.button_pin',
+        'lights.backend',
     }
 
     updated = []
@@ -261,3 +312,18 @@ def set_config():
             updated.append(dotkey)
 
     return jsonify({'status': 'ok', 'updated': updated})
+
+
+@settings_bp.post('/settings/lights')
+def set_lights_backend():
+    """Change le driver lights à chaud (sans reboot). Body: {\"backend\": \"astropixels\"}"""
+    data    = request.get_json() or {}
+    backend = data.get('backend', '').strip().lower()
+    if backend not in {'teeces', 'astropixels'}:
+        return jsonify({'error': 'backend invalide. Valeurs: teeces, astropixels'}), 400
+    _write_key('lights', 'backend', backend)
+    result = _reload_lights_driver(backend)
+    if not result['ok']:
+        return jsonify({'status': 'error', **result}), 500
+    return jsonify({'status': 'ok', 'backend': backend,
+                    'message': f'Driver lights rechargé: {backend}'})
