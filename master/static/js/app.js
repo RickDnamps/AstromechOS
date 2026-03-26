@@ -776,28 +776,55 @@ function sendTeecesText()  {
 }
 
 async function loadLightSequences() {
-  const data = await api('/light/list');
-  const grid = el('light-seq-list');
-  if (!grid || !data) return;
-  const names = data.sequences || [];
-  if (names.length === 0) {
-    grid.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:8px 0;letter-spacing:0.5px">No light sequences — create one in the Editor tab</div>';
-    return;
+  const [seqData, animData, state] = await Promise.all([
+    api('/light/list'),
+    api('/teeces/animations'),
+    api('/teeces/state'),
+  ]);
+
+  // Animations grid
+  const animGrid = el('anim-grid');
+  if (animGrid && animData?.animations) {
+    animGrid.innerHTML = animData.animations.map(a => `
+      <button class="anim-btn" id="anim-btn-${a.mode}"
+              onclick="playAnimation(${a.mode})">${a.name.toUpperCase()}</button>
+    `).join('');
   }
-  grid.innerHTML = names.map(name => `
-    <div class="script-card" id="light-card-${name}">
-      <div class="script-name">${name.toUpperCase()}<span class="script-badge-light">LIGHT</span></div>
-      <div class="script-btns">
-        <div class="running-indicator"></div>
-        <button class="btn btn-sm btn-active" onclick="runLightSeq('${name}', false)">RUN</button>
-        <button class="btn btn-sm" onclick="runLightSeq('${name}', true)">LOOP</button>
-        <button class="btn btn-sm btn-danger" onclick="api('/light/stop_all','POST').then(()=>toast('Stopped','ok'))">STOP</button>
-      </div>
-    </div>
-  `).join('');
-  // Also refresh the backend title
-  const state = await api('/teeces/state');
+
+  // Saved light sequences
+  const seqGrid = el('light-seq-list');
+  if (seqGrid && seqData) {
+    const names = seqData.sequences || [];
+    if (names.length === 0) {
+      seqGrid.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:8px 0;letter-spacing:0.5px">No saved sequences — create one in the Editor tab</div>';
+    } else {
+      seqGrid.innerHTML = names.map(name => `
+        <div class="script-card" id="light-card-${name}">
+          <div class="script-name">${name.toUpperCase()}<span class="script-badge-light">LIGHT</span></div>
+          <div class="script-btns">
+            <div class="running-indicator"></div>
+            <button class="btn btn-sm btn-active" onclick="runLightSeq('${name}', false)">RUN</button>
+            <button class="btn btn-sm" onclick="runLightSeq('${name}', true)">LOOP</button>
+            <button class="btn btn-sm btn-danger" onclick="api('/light/stop_all','POST').then(()=>toast('Stopped','ok'))">STOP</button>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Backend title
   if (state?.backend) teecesController.updateCardTitle(state.backend);
+}
+
+function playAnimation(mode) {
+  api('/teeces/animation', 'POST', { mode }).then(d => {
+    if (d) {
+      document.querySelectorAll('.anim-btn').forEach(b => b.classList.remove('active'));
+      const btn = el(`anim-btn-${mode}`);
+      if (btn) btn.classList.add('active');
+      toast(d.name ? d.name.toUpperCase() : `Anim ${mode}`, 'ok');
+    }
+  });
 }
 
 function runLightSeq(name, loop) {

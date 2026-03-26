@@ -1318,6 +1318,36 @@ body::after {
   letter-spacing: 0.5px;
 }
 
+.anim-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.anim-btn {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  background: rgba(0,170,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.anim-btn:hover {
+  background: rgba(0,170,255,0.18);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.anim-btn.active {
+  background: rgba(0,170,255,0.25);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
 .script-badge-light {
   display: inline-block;
   margin-left: 6px;
