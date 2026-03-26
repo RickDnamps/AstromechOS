@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from master.lights.teeces import TeecesDriver
 from master.lights.astropixels import AstroPixelsDriver
+from master.lights import load_driver
 
 
 def _teeces_cfg(port='/dev/ttyUSB0', baud=9600, backend='teeces') -> configparser.ConfigParser:
@@ -341,6 +342,36 @@ class TestAstroPixelsDriver(unittest.TestCase):
         d, ser = self._make_driver()
         d.fld_text("TEST")
         ser.write.assert_called_with(b'@1MTEST\r')
+
+
+class TestLoadDriverFactory(unittest.TestCase):
+
+    def _cfg(self, backend: str) -> configparser.ConfigParser:
+        return _teeces_cfg(backend=backend)
+
+    def test_teeces_backend(self):
+        self.assertIsInstance(load_driver(self._cfg('teeces')), TeecesDriver)
+
+    def test_astropixels_backend(self):
+        self.assertIsInstance(load_driver(self._cfg('astropixels')), AstroPixelsDriver)
+
+    def test_unknown_backend_raises(self):
+        with self.assertRaises(ValueError):
+            load_driver(self._cfg('magic_led'))
+
+    def test_default_fallback_is_teeces(self):
+        """If [lights] section is absent from config → TeecesDriver by default."""
+        cfg = configparser.ConfigParser()
+        cfg.add_section('teeces')
+        cfg.set('teeces', 'port', '/dev/ttyUSB0')
+        cfg.set('teeces', 'baud', '9600')
+        # No [lights] section
+        self.assertIsInstance(load_driver(cfg), TeecesDriver)
+
+    def test_returned_driver_is_base_subclass(self):
+        from master.lights.base_controller import BaseLightsController
+        d = load_driver(self._cfg('teeces'))
+        self.assertIsInstance(d, BaseLightsController)
 
 
 if __name__ == '__main__':
