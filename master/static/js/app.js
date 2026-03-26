@@ -2297,15 +2297,15 @@ class LightEditor {
     txtItem.className = 'editor-palette-item light-palette-item';
     txtItem.draggable = true;
     txtItem.dataset.cmd  = 'teeces';
-    txtItem.dataset.args = JSON.stringify(['text', 'HELLO']);
-    txtItem.textContent = '💬 FLD Text';
+    txtItem.dataset.args = JSON.stringify(['text', 'HELLO', 'fld']);
+    txtItem.textContent = '💬 Text';
     let _txtDragged = false;
     txtItem.addEventListener('dragstart', () => { _txtDragged = true; });
     txtItem.addEventListener('dragend',   () => { setTimeout(() => { _txtDragged = false; }, 50); });
     txtItem.addEventListener('click', () => {
       if (_txtDragged) return;
       if (!this._openName) { alert('Create or open a sequence first.'); return; }
-      this._addStep('teeces', ['text', 'HELLO']);
+      this._addStep('teeces', ['text', 'HELLO', 'fld']);
     });
     palette.appendChild(txtItem);
 
@@ -2463,7 +2463,7 @@ class LightEditor {
       const a = LIGHT_ANIMATIONS.find(x => x.mode === mode);
       return a ? `${a.icon} ${a.label}` : `T${mode}`;
     }
-    if (action === 'text')  return `💬 "${step.args[1] || ''}"`;
+    if (action === 'text') { const disp = (step.args[2] || 'fld').toUpperCase(); return `💬 [${disp}] "${step.args[1] || ''}"` ; }
     if (action === 'psi')   return `💠 PSI ${step.args[1] || ''}`;
     if (action === 'raw')   return `⚙️ ${step.args[1] || ''}`;
     if (action === 'random') return '✨ Random';
@@ -2542,7 +2542,12 @@ class LightEditor {
         fields = [{ label:'Animation', value: args[1]||'1',
           options: LIGHT_ANIMATIONS.map(a => `${a.mode}:${a.icon} ${a.label}`) }];
       } else if (action === 'text') {
-        fields = [{ label:'FLD Text (max 20)', value: args[1]||'', type:'text', placeholder:'HELLO' }];
+        const curDisp = args[2] || 'fld';
+        fields = [
+          { label: 'Display', value: curDisp,
+            options: ['fld:FLD (Front)', 'rld:RLD (Rear)', 'both:FLD + RLD'] },
+          { label: 'Text (max 20)', value: args[1]||'', type:'text', placeholder:'HELLO' },
+        ];
       } else if (action === 'psi') {
         fields = [{ label:'PSI Mode', value: args[1]||'1', options:[
           '0:Off', '1:Random', '2:Red', '3:Yellow', '4:Green',
@@ -2610,7 +2615,7 @@ class LightEditor {
       } else if (step.cmd === 'teeces') {
         const a = action || 'anim';
         if (a === 'anim')  newArgs = ['anim',  inputs[0].value];
-        else if (a === 'text') newArgs = ['text', inputs[0].value.substring(0, 20).toUpperCase()];
+        else if (a === 'text') newArgs = ['text', inputs[1].value.substring(0, 20).toUpperCase(), inputs[0].value];
         else if (a === 'psi')  newArgs = ['psi',  inputs[0].value];
         else if (a === 'raw')  newArgs = ['raw',  inputs[0].value];
         else newArgs = [inputs[0].value];
