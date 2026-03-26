@@ -138,4 +138,5 @@ class BaseLightsController(BaseDriver, ABC):
         return self.raw(cmd)
 
     def alert_master_offline(self) -> bool:
+        # Historical alias: called when Master goes offline, alerts via lights
         return self.slave_offline()

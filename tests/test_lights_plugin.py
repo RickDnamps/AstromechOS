@@ -24,7 +24,8 @@ class TestBaseController(unittest.TestCase):
                      'random_mode', 'leia', 'off',
                      'text', 'animation', 'psi', 'raw',
                      'system_error', 'system_ok',
-                     'slave_offline', 'uart_error'):
+                     'slave_offline', 'uart_error',
+                     'show_version', 'alert_error'):
             self.assertIn(name, abstract, f"{name} must be abstract")
 
     def test_backward_compat_aliases_present(self):
