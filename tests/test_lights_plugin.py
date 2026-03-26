@@ -9,6 +9,7 @@ sys.modules.setdefault('serial', MagicMock())
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from master.lights.teeces import TeecesDriver
+from master.lights.astropixels import AstroPixelsDriver
 
 
 def _teeces_cfg(port='/dev/ttyUSB0', baud=9600, backend='teeces') -> configparser.ConfigParser:
@@ -225,6 +226,121 @@ class TestTeecesDriver(unittest.TestCase):
         d.show_version("abc1234")
         calls = b''.join(c.args[0] for c in ser.write.call_args_list)
         self.assertIn(b'VER', calls)
+
+
+class TestAstroPixelsDriver(unittest.TestCase):
+
+    def _make_driver(self):
+        cfg = _teeces_cfg()   # reuse existing helper
+        with patch('serial.Serial') as mock_cls:
+            mock_serial = MagicMock()
+            mock_serial.is_open = True
+            mock_cls.return_value = mock_serial
+            d = AstroPixelsDriver(cfg)
+            d.setup()
+        d._serial = mock_serial
+        d._ready  = True
+        return d, mock_serial
+
+    def _all_written(self, ser):
+        return b''.join(c.args[0] for c in ser.write.call_args_list)
+
+    def test_random_mode(self):
+        d, ser = self._make_driver()
+        d.random_mode()
+        ser.write.assert_called_with(b'@0T1\r')
+
+    def test_leia(self):
+        d, ser = self._make_driver()
+        d.leia()
+        ser.write.assert_called_with(b'@0T6\r')
+
+    def test_off(self):
+        d, ser = self._make_driver()
+        d.off()
+        ser.write.assert_called_with(b'@0T20\r')
+
+    def test_text_fld(self):
+        d, ser = self._make_driver()
+        d.text("HELLO", "fld")
+        ser.write.assert_called_with(b'@1MHELLO\r')
+
+    def test_text_rld(self):
+        d, ser = self._make_driver()
+        d.text("HELLO", "rld")
+        ser.write.assert_called_with(b'@2MHELLO\r')
+
+    def test_text_both_single_command(self):
+        """AstroPixels+ has @3M — ONE write for both."""
+        d, ser = self._make_driver()
+        d.text("HELLO", "both")
+        self.assertEqual(ser.write.call_count, 1)
+        ser.write.assert_called_with(b'@3MHELLO\r')
+
+    def test_text_uppercase_truncated(self):
+        d, ser = self._make_driver()
+        d.text("hello world this is way too long for astropixels display", "both")
+        written = ser.write.call_args[0][0].decode()
+        self.assertTrue(written.startswith('@3M'))
+        self.assertTrue(written[3:-1].isupper())
+
+    def test_animation(self):
+        d, ser = self._make_driver()
+        d.animation(11)
+        ser.write.assert_called_with(b'@0T11\r')
+
+    def test_psi(self):
+        d, ser = self._make_driver()
+        d.psi(3)
+        ser.write.assert_called_with(b'@4S3\r')
+
+    def test_psi_clamped_negative(self):
+        d, ser = self._make_driver()
+        d.psi(-1)
+        ser.write.assert_called_with(b'@4S0\r')
+
+    def test_raw_appends_cr(self):
+        d, ser = self._make_driver()
+        d.raw("@0T5")
+        ser.write.assert_called_with(b'@0T5\r')
+
+    def test_slave_offline(self):
+        d, ser = self._make_driver()
+        d.slave_offline()
+        data = self._all_written(ser)
+        self.assertIn(b'SLAVE DOWN', data)
+        self.assertIn(b'@3M', data)
+
+    def test_uart_error(self):
+        d, ser = self._make_driver()
+        d.uart_error()
+        data = self._all_written(ser)
+        self.assertIn(b'UART ERROR', data)
+        self.assertIn(b'@3M', data)
+
+    def test_system_error(self):
+        d, ser = self._make_driver()
+        d.system_error("DB FAIL")
+        data = self._all_written(ser)
+        self.assertIn(b'DB FAIL', data)
+
+    def test_is_subclass_of_base(self):
+        from master.lights.base_controller import BaseLightsController
+        self.assertTrue(issubclass(AstroPixelsDriver, BaseLightsController))
+
+    def test_setup_fail_returns_false(self):
+        cfg = _teeces_cfg()
+        with patch('master.lights.astropixels.serial.Serial', side_effect=Exception("no port")):
+            d = AstroPixelsDriver(cfg)
+            result = d.setup()
+        self.assertFalse(result)
+        self.assertFalse(d.is_ready())
+
+    def test_backward_compat_fld_text(self):
+        """fld_text() alias routes to text(..., 'fld')."""
+        d, ser = self._make_driver()
+        d.fld_text("TEST")
+        ser.write.assert_called_with(b'@1MTEST\r')
 
 
 if __name__ == '__main__':
