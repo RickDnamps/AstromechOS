@@ -626,6 +626,12 @@ const _domeSim = (() => {
     'rld':     { buf:null, scroll:0, color:'#ff8800', active:false },
   };
 
+  // Independent custom PSI state (front / rear blink)
+  const _psiCustom = {
+    front: { c1:'#00aaff', c2:'#000000', speed:0.8, active:false },
+    rear:  { c1:'#00aaff', c2:'#000000', speed:0.8, active:false },
+  };
+
   function _buildBuf(text, rows, font) {
     const buf = Array.from({ length: rows }, () => []);
     (text.toUpperCase() + '   ').split('').forEach(ch => {
@@ -647,8 +653,20 @@ const _domeSim = (() => {
   function _setPSI(front, rear) {
     const pf = document.getElementById('psi-front');
     const pr = document.getElementById('psi-rear');
-    if (pf) { pf.style.background = front; pf.style.boxShadow = `0 0 14px ${front}`; }
-    if (pr) { pr.style.background = rear;  pr.style.boxShadow = `0 0 14px ${rear}`; }
+    if (pf && !_psiCustom.front.active) { pf.style.background = front; pf.style.boxShadow = `0 0 14px ${front}`; }
+    if (pr && !_psiCustom.rear.active)  { pr.style.background = rear;  pr.style.boxShadow = `0 0 14px ${rear}`; }
+  }
+
+  function _renderCustomPSI() {
+    const now = Date.now() / 1000;
+    for (const [side, elemId] of [['front','psi-front'],['rear','psi-rear']]) {
+      const s = _psiCustom[side];
+      if (!s.active) continue;
+      const phase = (now % s.speed) / s.speed;
+      const color = phase < 0.5 ? s.c1 : s.c2;
+      const e = document.getElementById(elemId);
+      if (e) { e.style.background = color; e.style.boxShadow = color === '#000000' ? 'none' : `0 0 14px ${color}`; }
+    }
   }
 
   function _renderText(id) {
@@ -795,6 +813,7 @@ const _domeSim = (() => {
     } else {
       (_modes[_mode] || _modes.random)(_tick);
     }
+    _renderCustomPSI();
     requestAnimationFrame(_loop);
   }
 
@@ -879,13 +898,46 @@ const _domeSim = (() => {
       _updateBadge('text');
     },
 
-    /** Update PSI circle colors directly (e.g. from swatch click) */
+    /** Update PSI circle colors (from animation mode — resets custom state) */
     updatePSI(color) {
+      _psiCustom.front.active = false;
+      _psiCustom.rear.active = false;
+      document.getElementById('psi-front')?.classList.remove('psi-custom');
+      document.getElementById('psi-rear')?.classList.remove('psi-custom');
       _setPSI(color, color);
+    },
+
+    /** Set one PSI to a custom blink: c2='#000000' = pulse off→c1 */
+    setPSICustom(side, c1, c2, speed) {
+      _psiCustom[side].c1 = c1;
+      _psiCustom[side].c2 = c2;
+      _psiCustom[side].speed = speed;
+      _psiCustom[side].active = true;
+      const elemId = side === 'front' ? 'psi-front' : 'psi-rear';
+      document.getElementById(elemId)?.classList.add('psi-custom');
+    },
+
+    /** Reset both PSIs back to animation control */
+    resetPSICustom() {
+      _psiCustom.front.active = false;
+      _psiCustom.rear.active = false;
+      document.getElementById('psi-front')?.classList.remove('psi-custom');
+      document.getElementById('psi-rear')?.classList.remove('psi-custom');
     },
   };
 })();
 
+
+function applyPSICustom(side) {
+  const c1    = el(side === 'front' ? 'psi-f-c1'    : 'psi-r-c1')?.value    || '#00aaff';
+  const c2    = el(side === 'front' ? 'psi-f-c2'    : 'psi-r-c2')?.value    || '#000000';
+  const speed = parseFloat(el(side === 'front' ? 'psi-f-spd' : 'psi-r-spd')?.value || '0.8');
+  _domeSim.setPSICustom(side, c1, c2, speed);
+}
+
+function resetPSICustom() {
+  _domeSim.resetPSICustom();
+}
 
 function setSpeed(val) {
   _speedLimit = val / 100;
