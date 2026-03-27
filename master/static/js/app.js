@@ -853,18 +853,21 @@ const _domeSim = (() => {
       _updateBadge(key);
     },
 
-    /** Set text for a display target: 'fld'=both FLDs, 'rld', 'both'=all */
-    setText(target, text) {
+    /** Set text for a display target: 'fld'=both FLDs, 'rld', 'both'=all. Optional color. */
+    setText(target, text, color) {
       if (!text) return;
       if (target === 'fld' || target === 'both') {
         _textState['fld-top'].buf = _buildBuf(text, 5, FONT5);
         _textState['fld-top'].scroll = 0; _textState['fld-top'].active = true;
+        if (color) _textState['fld-top'].color = color;
         _textState['fld-bot'].buf = _buildBuf(text, 5, FONT5);
         _textState['fld-bot'].scroll = 0; _textState['fld-bot'].active = true;
+        if (color) _textState['fld-bot'].color = color;
       }
       if (target === 'rld' || target === 'both') {
         _textState['rld'].buf = _buildBuf(text, 4, FONT4);
         _textState['rld'].scroll = 0; _textState['rld'].active = true;
+        if (color) _textState['rld'].color = color;
       }
       _mode = 'text';
       _tick = 0;
@@ -1112,8 +1115,9 @@ function teecesMode(mode)  { teecesController.setMode(mode); }
 function sendTeecesText()  {
   const text    = el('teeces-text')?.value.trim() || '';
   const display = el('teeces-display')?.value || 'fld';
+  const color   = el('teeces-text-color')?.value || '#00ffea';
   teecesController.sendText(text, display);
-  _domeSim.setText(display, text);
+  _domeSim.setText(display, text, color);
 }
 
 async function loadLightSequences() {
