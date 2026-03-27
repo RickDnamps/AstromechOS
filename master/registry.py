@@ -51,6 +51,7 @@ uart:        'UARTController | None'    = None
 teeces:      'BaseLightsController | None' = None
 deploy:      'DeployController | None'  = None
 engine:      'ScriptEngine | None'      = None
+choreo:      'ChoreoPlayer | None'      = None
 vesc:        'VescDriver | None'        = None
 dome:        'DomeMotorDriver | None'   = None
 servo:       'BodyServoDriver | None'   = None
