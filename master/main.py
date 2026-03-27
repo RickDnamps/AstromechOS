@@ -238,6 +238,18 @@ def main() -> None:
     )
     reg.engine = engine
 
+    from master.choreo_player import ChoreoPlayer
+    reg.choreo = ChoreoPlayer(
+        cfg=cfg,
+        audio=uart,
+        teeces=teeces,
+        dome_motor=reg.dome,
+        dome_servo=reg.dome_servo,
+        body_servo=reg.servo,
+        vesc=reg.vesc,
+    )
+    reg.choreo.setup()
+
     from master.drivers.bt_controller_driver import BTControllerDriver
 
     bt_ctrl = BTControllerDriver()
