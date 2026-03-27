@@ -1348,6 +1348,114 @@ body::after {
   color: var(--blue);
 }
 
+/* ── Colored animation chips ── */
+.anim-chip {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-family: var(--font);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  border: 1px solid;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.anim-chip:hover  { filter: brightness(1.3); }
+.anim-chip.active { filter: brightness(1.5); box-shadow: 0 0 10px currentColor; }
+
+/* chip color variants */
+.c-blue   { color:#00aaff; border-color:rgba(0,170,255,.4);   background:rgba(0,170,255,.07); }
+.c-yellow { color:#ffcc00; border-color:rgba(255,204,0,.4);   background:rgba(255,204,0,.06); }
+.c-red    { color:#ff3355; border-color:rgba(255,51,85,.4);   background:rgba(255,51,85,.06); }
+.c-orange { color:#ff8800; border-color:rgba(255,136,0,.4);   background:rgba(255,136,0,.06); }
+.c-cyan   { color:#00ffea; border-color:rgba(0,255,234,.4);   background:rgba(0,255,234,.06); }
+.c-green  { color:#00cc66; border-color:rgba(0,204,102,.4);   background:rgba(0,204,102,.06); }
+.c-pink   { color:#ff66cc; border-color:rgba(255,102,204,.4); background:rgba(255,102,204,.06); }
+.c-purple { color:#aa66ff; border-color:rgba(170,102,255,.4); background:rgba(170,102,255,.06); }
+.c-white  { color:#ddeeff; border-color:rgba(200,220,240,.3); background:rgba(200,220,240,.04); }
+.c-dim    { color:#556677; border-color:rgba(85,102,119,.3);  background:rgba(85,102,119,.04); }
+.c-lsaber { color:#44ff88; border-color:rgba(68,255,136,.4);  background:rgba(68,255,136,.06); }
+.c-gold   { color:#ffdd00; border-color:rgba(255,221,0,.4);   background:rgba(255,221,0,.06); }
+
+/* ── Mode status badge ── */
+.badge-wrap { display:flex; justify-content:center; margin:8px 0; }
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-family: var(--font);
+  border: 1px solid;
+  animation: badge-glow 2s ease-in-out infinite;
+}
+@keyframes badge-glow { 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.25); } }
+
+/* ── Dome simulation ── */
+.dome-views {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.dome-side { display:flex; flex-direction:column; align-items:center; gap:5px; }
+.dome-side-label { font-size:9px; letter-spacing:2px; color:var(--text-dim); }
+.dome-shape {
+  background: rgba(0,0,0,.6);
+  border: 1px solid rgba(0,170,255,.22);
+  border-radius: 50% 50% 22% 22%/42% 42% 22% 22%;
+  padding: 16px 18px 12px;
+  box-shadow: 0 0 24px rgba(0,0,0,.8);
+  position: relative;
+}
+.dome-shape::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at 30% 25%, rgba(0,170,255,.05), transparent 65%);
+  pointer-events: none;
+}
+.front-inner { display:flex; align-items:center; gap:10px; }
+.rear-inner  { display:flex; align-items:center; gap:10px; }
+.fld-stack   { display:flex; flex-direction:column; gap:4px; }
+
+.logic-display {
+  background: #000;
+  border-radius: 4px;
+  padding: 5px 6px;
+  border: 1px solid rgba(0,170,255,.3);
+  box-shadow: 0 0 10px rgba(0,0,0,.9), inset 0 0 6px rgba(0,0,0,.6);
+}
+.logic-display.active-top { border-color:rgba(0,255,234,.6); box-shadow:0 0 12px rgba(0,255,234,.3); }
+.logic-display.active-bot { border-color:rgba(0,170,255,.6); box-shadow:0 0 12px rgba(0,170,255,.3); }
+.logic-display.active-rld { border-color:rgba(255,136,0,.6);  box-shadow:0 0 12px rgba(255,136,0,.2); }
+
+.logic-row { display:flex; gap:3px; margin-bottom:3px; }
+.logic-row:last-child { margin-bottom:0; }
+.sim-dot { border-radius:50%; flex-shrink:0; transition:background .05s, box-shadow .05s; }
+.dot-fld { width:9px; height:9px; background:rgba(0,170,255,.07); }
+.dot-rld { width:7px; height:7px; background:rgba(0,170,255,.07); }
+.panel-label { font-size:7px; letter-spacing:1.5px; color:var(--text-dim); text-align:center; margin-bottom:3px; }
+
+/* PSI circle in dome sim */
+.psi-wrap   { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.psi-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 12px var(--blue);
+  animation: psi-pulse 2s ease-in-out infinite;
+  transition: background .3s, box-shadow .3s;
+}
+@keyframes psi-pulse { 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.4; transform:scale(.84); } }
+
 .script-badge-light {
   display: inline-block;
   margin-left: 6px;

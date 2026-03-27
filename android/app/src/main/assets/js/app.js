@@ -552,6 +552,338 @@ function _updateRawPaletteItem() {
   if (item) item.textContent = _rawLabel();
 }
 
+// ================================================================
+// Dome Simulation — FLD Top/Bot (5×9), RLD (4×27), PSI front/rear
+// ================================================================
+const _domeSim = (() => {
+  // ── Pixel fonts (3-wide glyphs + 1 gap) ──────────────────────
+  const FONT5 = {
+    'A':[2,5,7,5,5],'B':[6,5,6,5,6],'C':[3,4,4,4,3],'D':[6,5,5,5,6],'E':[7,4,6,4,7],
+    'F':[7,4,6,4,4],'G':[3,4,5,5,3],'H':[5,5,7,5,5],'I':[7,2,2,2,7],'J':[1,1,1,5,2],
+    'K':[5,5,6,5,5],'L':[4,4,4,4,7],'M':[5,7,7,5,5],'N':[5,7,5,5,5],'O':[2,5,5,5,2],
+    'P':[6,5,6,4,4],'Q':[2,5,5,7,3],'R':[6,5,6,5,5],'S':[3,4,2,1,6],'T':[7,2,2,2,2],
+    'U':[5,5,5,5,2],'V':[5,5,5,5,2],'W':[5,5,7,7,5],'X':[5,5,2,5,5],'Y':[5,5,2,2,2],
+    'Z':[7,1,2,4,7],'0':[2,5,5,5,2],'1':[2,6,2,2,7],'2':[6,1,2,4,7],'3':[6,1,2,1,6],
+    '4':[5,5,7,1,1],'5':[7,4,6,1,6],'6':[3,4,6,5,2],'7':[7,1,2,2,2],'8':[2,5,2,5,2],
+    '9':[2,5,3,1,6],' ':[0,0,0,0,0],'!':[2,2,2,0,2],'?':[6,1,2,0,2],'.':[0,0,0,0,2],
+    '-':[0,0,7,0,0],':':[0,2,0,2,0],'+':[0,2,7,2,0],'♥':[0,5,7,2,0],'#':[5,7,5,7,5],
+  };
+  const FONT4 = {
+    'A':[2,5,7,5],'B':[6,6,5,6],'C':[3,4,4,3],'D':[6,5,5,6],'E':[7,6,4,7],
+    'F':[7,6,4,4],'G':[3,4,5,3],'H':[5,7,5,5],'I':[7,2,2,7],'J':[1,1,5,2],
+    'K':[5,6,6,5],'L':[4,4,4,7],'M':[5,7,5,5],'N':[5,7,5,5],'O':[2,5,5,2],
+    'P':[6,5,6,4],'Q':[2,5,7,3],'R':[6,5,6,5],'S':[3,2,1,6],'T':[7,2,2,2],
+    'U':[5,5,5,2],'V':[5,5,5,2],'W':[5,5,7,5],'X':[5,2,2,5],'Y':[5,5,2,2],
+    'Z':[7,2,4,7],'0':[2,5,5,2],'1':[2,6,2,7],'2':[6,2,4,7],'3':[6,2,1,6],
+    '4':[5,7,1,1],'5':[7,6,1,6],'6':[3,6,5,2],'7':[7,1,2,2],'8':[2,2,5,2],
+    '9':[2,5,3,1],' ':[0,0,0,0],'!':[2,2,0,2],'?':[6,2,0,2],'.':[0,0,0,2],
+    '-':[0,7,0,0],':':[2,0,2,0],'+':[0,7,2,0],'♥':[5,7,2,0],
+  };
+
+  const CFG = {
+    'fld-top': { rows:5, cols:9, cls:'dot-fld' },
+    'fld-bot': { rows:5, cols:9, cls:'dot-fld' },
+    'rld':     { rows:4, cols:27, cls:'dot-rld' },
+  };
+
+  // mode number → sim mode key
+  const MODE_MAP = {
+    1:'random', 2:'flash', 3:'alarm', 4:'short', 5:'scream',
+    6:'leia', 7:'love', 8:'sweep', 9:'pulse', 10:'starwars',
+    11:'imperial', 12:'disco', 13:'disco', 14:'alarm', 15:'sweep',
+    16:'white', 17:'redon', 18:'greenon', 19:'saber', 20:'off',
+    21:'pulse', 92:'pulse',
+  };
+
+  const META = {
+    random:   { label:'✨ RANDOM',        color:'#00aaff' },
+    flash:    { label:'⚡ FLASH',          color:'#ffcc00' },
+    alarm:    { label:'🚨 ALARM',          color:'#ff3355' },
+    short:    { label:'💥 SHORT CIRCUIT',  color:'#ff8800' },
+    scream:   { label:'😱 SCREAM',         color:'#00ffea' },
+    leia:     { label:'🌀 LEIA',           color:'#aa66ff' },
+    love:     { label:'❤️ I ♥ U',          color:'#ff66cc' },
+    sweep:    { label:'↔️ SWEEP',           color:'#00aaff' },
+    pulse:    { label:'💓 PULSE',          color:'#00cc66' },
+    starwars: { label:'⭐ STAR WARS',      color:'#ffdd00' },
+    imperial: { label:'🎵 IMPERIAL',       color:'#ff8800' },
+    disco:    { label:'🪩 DISCO',          color:'#ff66cc' },
+    saber:    { label:'⚔️ LIGHTSABER',      color:'#44ff88' },
+    redon:    { label:'🔴 RED ON',         color:'#ff2244' },
+    greenon:  { label:'🟢 GREEN ON',       color:'#00cc66' },
+    white:    { label:'⬜ TEST WHITE',     color:'#ddeeff' },
+    off:      { label:'⬛ OFF',            color:'#445566' },
+    text:     { label:'💬 TEXT',           color:'#00ffea' },
+  };
+
+  let _tick = 0;
+  let _mode = 'random';
+  let _lastShort = 0;
+  let _running = false;
+  const _textState = {
+    'fld-top': { buf:null, scroll:0, color:'#00ffea', active:false },
+    'fld-bot': { buf:null, scroll:0, color:'#00aaff', active:false },
+    'rld':     { buf:null, scroll:0, color:'#ff8800', active:false },
+  };
+
+  function _buildBuf(text, rows, font) {
+    const buf = Array.from({ length: rows }, () => []);
+    (text.toUpperCase() + '   ').split('').forEach(ch => {
+      const g = font[ch] || font[' '];
+      for (let c = 0; c < 3; c++) for (let r = 0; r < rows; r++) buf[r].push((g[r] >> (2 - c)) & 1);
+      for (let r = 0; r < rows; r++) buf[r].push(0);
+    });
+    return buf;
+  }
+
+  function _getDots(id) {
+    const e = document.getElementById(id);
+    return e ? Array.from(e.querySelectorAll('.sim-dot')) : [];
+  }
+
+  function _lit(d, c) { if (!d) return; d.style.background = c; d.style.boxShadow = `0 0 4px ${c}`; }
+  function _dim(d)    { if (!d) return; d.style.background = 'rgba(0,170,255,0.07)'; d.style.boxShadow = 'none'; }
+
+  function _setPSI(front, rear) {
+    const pf = document.getElementById('psi-front');
+    const pr = document.getElementById('psi-rear');
+    if (pf) { pf.style.background = front; pf.style.boxShadow = `0 0 14px ${front}`; }
+    if (pr) { pr.style.background = rear;  pr.style.boxShadow = `0 0 14px ${rear}`; }
+  }
+
+  function _renderText(id) {
+    const st = _textState[id];
+    if (!st.buf) return;
+    const { rows, cols } = CFG[id];
+    const dots = _getDots(id);
+    const bufLen = st.buf[0]?.length || 1;
+    st.scroll = (st.scroll + 1) % (bufLen + cols);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const bIdx = c + st.scroll - cols;
+      const on = bIdx >= 0 && bIdx < bufLen && st.buf[r] && st.buf[r][bIdx];
+      on ? _lit(dots[r * cols + c], st.color) : _dim(dots[r * cols + c]);
+    }
+  }
+
+  const _modes = {
+    random(t) {
+      ['fld-top','fld-bot','rld'].forEach((id, si) => {
+        const {rows,cols}=CFG[id]; const dots=_getDots(id);
+        for(let r=0;r<rows;r++) for(let c=0;c<cols;c++)
+          Math.sin(t*0.07+(r*cols+c+si*23)*0.73)>0.1?_lit(dots[r*cols+c],'#00aaff'):_dim(dots[r*cols+c]);
+      });
+      _setPSI('#00aaff','#0077cc');
+    },
+    flash(t) {
+      const on=Math.floor(t/5)%2===0;
+      ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>on?_lit(d,'#ffcc00'):_dim(d)));
+      _setPSI(on?'#ffcc00':'#221100',on?'#ffaa00':'#110800');
+    },
+    alarm(t) {
+      const sw=Math.floor(t*0.1)%9;
+      ['fld-top','fld-bot'].forEach(id=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.abs(c-sw)<2?_lit(dots[r*cols+c],'#ff2244'):_dim(dots[r*cols+c]);
+      });
+      const sw2=Math.floor(t*0.1)%27;const{rows:rr,cols:rc}=CFG['rld'];const rd=_getDots('rld');
+      for(let r=0;r<rr;r++)for(let c=0;c<rc;c++)Math.abs(c-sw2)<3?_lit(rd[r*rc+c],'#ff2244'):_dim(rd[r*rc+c]);
+      _setPSI('#ff2244','#ff0022');
+    },
+    short(t) {
+      const cs=['#ff2244','#ffcc00','#00ffea','#ff8800','#aa66ff','#00cc66','#fff'];
+      ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>Math.random()>0.65?_lit(d,cs[Math.floor(Math.random()*cs.length)]):_dim(d)));
+      _setPSI(cs[Math.floor(t*0.18)%cs.length],cs[(Math.floor(t*0.18)+3)%cs.length]);
+    },
+    scream(t) {
+      ['fld-top','fld-bot','rld'].forEach((id,si)=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
+          Math.sin(t*0.14+(r*cols+c+si*11)*0.4)*0.5+0.5>0.35?_lit(dots[r*cols+c],'#00ffea'):_dim(dots[r*cols+c]);
+      });
+      _setPSI('#00ffea','#009988');
+    },
+    leia(t) {
+      const wave=(t*0.03)%1;
+      ['fld-top','fld-bot','rld'].forEach(id=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+          const frac=c/cols,dist=Math.min(Math.abs(frac-wave),1-Math.abs(frac-wave));
+          dist<0.22?_lit(dots[r*cols+c],'#9955ff'):_dim(dots[r*cols+c]);
+        }
+      });
+      _setPSI('#9955ff','#7733bb');
+    },
+    love(t) {
+      const beat=Math.sin(t*0.14)*0.5+0.5>0.35;
+      ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>beat?_lit(d,'#ff66cc'):_dim(d)));
+      _setPSI(beat?'#ff66cc':'#330011',beat?'#ff44aa':'#220011');
+    },
+    sweep(t) {
+      const pos=Math.sin(t*0.04)*0.5+0.5;
+      ['fld-top','fld-bot','rld'].forEach(id=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
+          Math.abs(c/cols-pos)<0.12?_lit(dots[r*cols+c],'#00aaff'):_dim(dots[r*cols+c]);
+      });
+      _setPSI('#00aaff','#0066aa');
+    },
+    pulse(t) {
+      const v=Math.sin(t*0.09)*0.5+0.5;
+      ['fld-top','fld-bot','rld'].forEach(id=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)c/cols<v?_lit(dots[r*cols+c],'#00cc66'):_dim(dots[r*cols+c]);
+      });
+      _setPSI('#00cc66','#009944');
+    },
+    starwars(t) {
+      ['fld-top','fld-bot','rld'].forEach(id=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);const sp=Math.floor(t*0.07);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)(c+sp)%cols<3?_lit(dots[r*cols+c],'#ffdd00'):_dim(dots[r*cols+c]);
+      });
+      _setPSI('#ffdd00','#bb9900');
+    },
+    imperial(t) {
+      const beat=Math.sin(t*0.22)*0.5+0.5>0.55;
+      ['fld-top','fld-bot','rld'].forEach((id,si)=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)
+          Math.sin(t*0.18+(r*cols+c+si*7)*0.45)*0.5+0.5*(beat?1:0.3)>0.4?_lit(dots[r*cols+c],'#ff8800'):_dim(dots[r*cols+c]);
+      });
+      _setPSI(beat?'#ff8800':'#331100',beat?'#ff6600':'#221100');
+    },
+    disco(t) {
+      const cs=['#ff2244','#ffcc00','#00ffea','#ff66cc','#8844ff','#00cc66','#ff8800'];
+      ['fld-top','fld-bot','rld'].forEach((id,si)=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)_lit(dots[r*cols+c],cs[(Math.floor(t*0.09)+(r*cols+c+si*5))%cs.length]);
+      });
+      _setPSI(cs[Math.floor(t*0.12)%cs.length],cs[(Math.floor(t*0.12)+3)%cs.length]);
+    },
+    saber(t) {
+      const pos=Math.sin(t*0.05)*0.5+0.5;
+      ['fld-top','fld-bot','rld'].forEach(id=>{
+        const{rows,cols}=CFG[id];const dots=_getDots(id);
+        for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)c/cols<pos?_lit(dots[r*cols+c],'#44ff88'):_dim(dots[r*cols+c]);
+      });
+      _setPSI('#44ff88','#22cc55');
+    },
+    redon()   { ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>_lit(d,'#ff2244'))); _setPSI('#ff2244','#cc0022'); },
+    greenon() { ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>_lit(d,'#00cc66'))); _setPSI('#00cc66','#009944'); },
+    white()   { ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>_lit(d,'#eef2ff'))); _setPSI('#ffffff','#ccddff'); },
+    off()     { ['fld-top','fld-bot','rld'].forEach(id=>_getDots(id).forEach(d=>_dim(d))); _setPSI('#0a0e14','#0a0e14'); },
+    text(t) {
+      // Scroll every 8 frames (~133ms at 60fps) — more readable
+      if (t % 8 === 0) {
+        ['fld-top','fld-bot','rld'].forEach(id => {
+          if (_textState[id].active) {
+            _renderText(id);
+          } else {
+            const {rows,cols}=CFG[id];const dots=_getDots(id);
+            for(let r=0;r<rows;r++) for(let c=0;c<cols;c++)
+              Math.sin(t*0.07+(r*cols+c)*0.5)>0.1?_lit(dots[r*cols+c],'rgba(0,170,255,0.3)'):_dim(dots[r*cols+c]);
+          }
+        });
+      }
+      _setPSI('#00ffea','#ff8800');
+    },
+  };
+
+  function _loop() {
+    _tick++;
+    if (_mode === 'short') {
+      if (_tick - _lastShort >= 3) { _modes.short(_tick); _lastShort = _tick; }
+    } else {
+      (_modes[_mode] || _modes.random)(_tick);
+    }
+    requestAnimationFrame(_loop);
+  }
+
+  function _updateBadge(key) {
+    const badge = document.getElementById('mode-status-badge');
+    if (!badge) return;
+    const m = META[key] || { label: key.toUpperCase(), color: '#00aaff' };
+    badge.textContent = m.label;
+    badge.style.color = m.color;
+    badge.style.borderColor = m.color + '55';
+    badge.style.background = m.color + '10';
+  }
+
+  return {
+    /** Call once when the lights tab first loads */
+    init() {
+      if (_running) return;
+      // Build dot grids
+      Object.entries(CFG).forEach(([id, c]) => {
+        const e = document.getElementById(id);
+        if (!e || e.querySelector('.sim-dot')) return; // already built
+        for (let r = 0; r < c.rows; r++) {
+          const row = document.createElement('div');
+          row.className = 'logic-row';
+          for (let col = 0; col < c.cols; col++) {
+            const d = document.createElement('div');
+            d.className = `sim-dot ${c.cls}`;
+            row.appendChild(d);
+          }
+          e.appendChild(row);
+        }
+      });
+      _running = true;
+      _loop();
+    },
+
+    /** Set animation mode from a mode number (from playAnimation) */
+    setModeNum(num) {
+      const key = MODE_MAP[num] || 'random';
+      this.setMode(key);
+    },
+
+    /** Set animation mode from a string key ('random', 'leia', 'off') */
+    setMode(key) {
+      _mode = key;
+      _tick = 0;
+      if (key !== 'text') {
+        Object.keys(_textState).forEach(k => { _textState[k].active = false; _textState[k].buf = null; });
+        ['fld-top','fld-bot','rld'].forEach(id => {
+          const e = document.getElementById(id);
+          if (e) e.className = 'logic-display';
+        });
+      }
+      // Update active chip
+      document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
+      _updateBadge(key);
+    },
+
+    /** Set text for a display target: 'fld'=both FLDs, 'rld', 'both'=all */
+    setText(target, text) {
+      if (!text) return;
+      if (target === 'fld' || target === 'both') {
+        _textState['fld-top'].buf = _buildBuf(text, 5, FONT5);
+        _textState['fld-top'].scroll = 0; _textState['fld-top'].active = true;
+        _textState['fld-bot'].buf = _buildBuf(text, 5, FONT5);
+        _textState['fld-bot'].scroll = 0; _textState['fld-bot'].active = true;
+      }
+      if (target === 'rld' || target === 'both') {
+        _textState['rld'].buf = _buildBuf(text, 4, FONT4);
+        _textState['rld'].scroll = 0; _textState['rld'].active = true;
+      }
+      _mode = 'text';
+      _tick = 0;
+      // Highlight active panels
+      document.getElementById('fld-top')?.classList.toggle('active-top', _textState['fld-top'].active);
+      document.getElementById('fld-bot')?.classList.toggle('active-bot', _textState['fld-bot'].active);
+      document.getElementById('rld')?.classList.toggle('active-rld', _textState['rld'].active);
+      document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
+      _updateBadge('text');
+    },
+
+    /** Update PSI circle colors directly (e.g. from swatch click) */
+    updatePSI(color) {
+      _setPSI(color, color);
+    },
+  };
+})();
+
+
 function setSpeed(val) {
   _speedLimit = val / 100;
   el('speed-val').textContent = val + '%';
@@ -743,6 +1075,7 @@ class TeecesController {
     const btn = el(`teeces-btn-${mode}`);
     if (btn) btn.classList.add('btn-active');
     this._applyFLDMode(mode);
+    _domeSim.setMode(mode);
   }
 
   sendText(text, display = 'fld') {
@@ -765,10 +1098,7 @@ class TeecesController {
     });
     const PSI_COLORS = ['#ff2244','#ff8800','#ffee00','#00cc66','#00aaff','#8844ff','#ff44aa','#ffffff'];
     const color = PSI_COLORS[modeNum - 1] || '#00aaff';
-    ['psi-left','psi-right'].forEach(id => {
-      const d = el(id);
-      if (d) { d.style.background = color; d.style.boxShadow = `0 0 10px ${color}`; }
-    });
+    _domeSim.updatePSI(color);
     // highlight active swatch
     document.querySelectorAll('.psi-swatch').forEach((s, i) => {
       s.classList.toggle('active', i === modeNum - 1);
@@ -783,6 +1113,7 @@ function sendTeecesText()  {
   const text    = el('teeces-text')?.value.trim() || '';
   const display = el('teeces-display')?.value || 'fld';
   teecesController.sendText(text, display);
+  _domeSim.setText(display, text);
 }
 
 async function loadLightSequences() {
@@ -792,14 +1123,24 @@ async function loadLightSequences() {
     api('/teeces/state'),
   ]);
 
-  // Animations grid — use LIGHT_ANIMATIONS for icons, fallback to API name
+  // Initialize dome simulation (idempotent)
+  _domeSim.init();
+
+  // Animations grid — colored chips
+  const CHIP_COLORS = {
+    1:'c-blue',2:'c-yellow',3:'c-red',4:'c-orange',5:'c-cyan',6:'c-purple',7:'c-pink',
+    8:'c-blue',9:'c-green',10:'c-gold',11:'c-orange',12:'c-pink',13:'c-pink',
+    14:'c-red',15:'c-orange',16:'c-white',17:'c-red',18:'c-green',19:'c-lsaber',
+    20:'c-dim',21:'c-green',92:'c-green',
+  };
   const animGrid = el('anim-grid');
   if (animGrid && animData?.animations) {
     animGrid.innerHTML = animData.animations.map(a => {
       const meta = LIGHT_ANIMATIONS.find(x => x.mode === a.mode);
       const icon = meta ? meta.icon : '';
       const label = (meta ? meta.label : a.name).toUpperCase();
-      return `<button class="anim-btn" id="anim-btn-${a.mode}"
+      const cc = CHIP_COLORS[a.mode] || 'c-blue';
+      return `<button class="anim-chip ${cc}" id="anim-btn-${a.mode}"
               onclick="playAnimation(${a.mode})">${icon ? icon + ' ' : ''}${label}</button>`;
     }).join('');
   }
@@ -838,7 +1179,8 @@ async function loadLightSequences() {
 function playAnimation(mode) {
   api('/teeces/animation', 'POST', { mode }).then(d => {
     if (d) {
-      document.querySelectorAll('.anim-btn').forEach(b => b.classList.remove('active'));
+      _domeSim.setModeNum(mode);
+      document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
       const btn = el(`anim-btn-${mode}`);
       if (btn) btn.classList.add('active');
       toast(d.name ? d.name.toUpperCase() : `Anim ${mode}`, 'ok');

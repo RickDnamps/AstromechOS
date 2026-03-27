@@ -554,20 +554,53 @@
     <section class="card systems-card">
       <h2 class="card-title" id="lights-card-title">LIGHTS CONTROL</h2>
 
-      <!-- FLD preview -->
-      <div class="fld-preview" id="fld-preview">
-        <div class="fld-row" id="fld-row-0"></div>
-        <div class="fld-row" id="fld-row-1"></div>
-        <div class="fld-row" id="fld-row-2"></div>
+      <!-- Dome simulation -->
+      <div class="dome-views" id="dome-sim">
+        <div class="dome-side">
+          <div class="dome-side-label">▼ FACE AVANT</div>
+          <div class="dome-shape">
+            <div class="front-inner">
+              <div class="fld-stack">
+                <div>
+                  <div class="panel-label" style="color:#00ffea">FLD TOP</div>
+                  <div class="logic-display" id="fld-top"></div>
+                </div>
+                <div>
+                  <div class="panel-label" style="color:#00aaff">FLD BOT</div>
+                  <div class="logic-display" id="fld-bot"></div>
+                </div>
+              </div>
+              <div class="psi-wrap">
+                <div class="panel-label">PSI</div>
+                <div class="psi-circle" id="psi-front"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dome-side">
+          <div class="dome-side-label">▼ FACE ARRIÈRE</div>
+          <div class="dome-shape" style="padding:18px 20px 14px">
+            <div class="rear-inner">
+              <div>
+                <div class="panel-label" style="color:#ff8800">RLD</div>
+                <div class="logic-display" id="rld"></div>
+              </div>
+              <div class="psi-wrap">
+                <div class="panel-label">PSI</div>
+                <div class="psi-circle" id="psi-rear" style="animation-delay:.6s"></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="psi-preview">
-        <div class="psi-label">PSI</div>
-        <div class="psi-dot" id="psi-left"></div>
-        <div class="psi-dot" id="psi-right"></div>
+
+      <!-- Mode status badge -->
+      <div class="badge-wrap">
+        <div class="mode-badge c-blue" id="mode-status-badge">✨ RANDOM</div>
       </div>
 
       <!-- Mode buttons -->
-      <div class="btn-group mt">
+      <div class="btn-group">
         <button class="btn btn-active" id="teeces-btn-random" onclick="teecesMode('random')">RANDOM</button>
         <button class="btn btn-dark" id="teeces-btn-off" onclick="teecesMode('off')">OFF</button>
       </div>
