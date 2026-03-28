@@ -4082,32 +4082,208 @@ class SequenceEditor {
 }
 
 // ================================================================
-// CHOREO EDITOR — Multi-track choreography timeline editor
+// CHOREO EDITOR — Multi-track choreography timeline editor (Ultratime Edition)
 // ================================================================
 const choreoEditor = (() => {
-  const PX_PER_SEC_DEFAULT = 30;
+  // ── State ────────────────────────────────────────────────────────
+  let _chor        = null;
+  let _pxPerSec    = 30;
+  let _snapVal     = 0.1;
+  let _selected    = null;
+  let _pollTimer   = null;
+  let _dirty       = false;
+  let _monitorRaf  = null;
+  let _monitorTick = 0;
+  let _lastTelem   = null;
 
-  let _chor       = null;   // current .chor object in memory
-  let _pxPerSec   = PX_PER_SEC_DEFAULT;
-  let _selected   = null;   // { track, index } of selected block
-  let _pollTimer  = null;
-  let _dirty      = false;  // unsaved changes flag
+  // ── Snap helper ──────────────────────────────────────────────────
+  function _snap(t) {
+    if (!_snapVal) return Math.round(t * 100) / 100;
+    return Math.round(t / _snapVal) * _snapVal;
+  }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
-
+  // ── Helpers ──────────────────────────────────────────────────────
   function _px(sec)  { return sec * _pxPerSec; }
   function _sec(px)  { return px  / _pxPerSec; }
-
   function _fmtTime(s) {
     const m   = Math.floor(s / 60);
     const sec = (s % 60).toFixed(3).padStart(6, '0');
     return `${String(m).padStart(2, '0')}:${sec}`;
   }
-
   function _lane(track) { return document.getElementById(`chor-lane-${track}`); }
 
-  // ── Render ruler ─────────────────────────────────────────────────────────
+  // ── Monitor canvas animations ─────────────────────────────────────
+  function _startMonitor() {
+    if (_monitorRaf) return;
+    const tick = () => {
+      _monitorTick++;
+      _drawFLD(_monitorTick);
+      _drawRLD(_monitorTick);
+      _drawBattery(_lastTelem);
+      _drawDomeCompass(_monitorTick);
+      _monitorRaf = requestAnimationFrame(tick);
+    };
+    _monitorRaf = requestAnimationFrame(tick);
+  }
+  function _stopMonitor() {
+    if (_monitorRaf) { cancelAnimationFrame(_monitorRaf); _monitorRaf = null; }
+  }
 
+  // Front Logic Display — 9×5 top grid + 9×5 bottom grid in cyan
+  function _drawFLD(t) {
+    const canvas = document.getElementById('chor-fld-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const cols = 9, rows = 5, pw = 9, ph = 7, gap = 3;
+    function drawGrid(yOffset, color, phase) {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const lit = Math.sin(t * 0.07 + (r * cols + c) * 0.73 + phase) > 0.1;
+          const x = c * (pw + 1) + 1;
+          const y = yOffset + r * (ph + 1) + 1;
+          ctx.beginPath();
+          ctx.arc(x + pw / 2, y + ph / 2, pw / 2, 0, Math.PI * 2);
+          ctx.fillStyle = lit ? color : 'rgba(0,150,200,0.06)';
+          ctx.shadowBlur = lit ? 5 : 0;
+          ctx.shadowColor = color;
+          ctx.fill();
+        }
+      }
+    }
+    drawGrid(0, '#00ccff', 0);
+    drawGrid(rows * (ph + 1) + gap, '#0088cc', Math.PI * 0.6);
+    ctx.shadowBlur = 0;
+  }
+
+  // Rear Logic Display — 27×4 orange sweep on canvas
+  function _drawRLD(t) {
+    const canvas = document.getElementById('chor-rld-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const cols = 27, rows = 4;
+    const pw = Math.floor((W - cols) / cols);
+    const ph = Math.floor((H - rows) / rows);
+    const sw = Math.floor(t * 0.08) % cols;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const lit = Math.abs(c - sw) < 3 || Math.sin(t * 0.05 + (r * cols + c) * 0.45) > 0.3;
+        ctx.fillStyle = lit ? '#ff8800' : 'rgba(180,80,0,0.07)';
+        ctx.shadowBlur = lit ? 4 : 0;
+        ctx.shadowColor = '#ff8800';
+        ctx.fillRect(c * (pw + 1), r * (ph + 1), pw, ph);
+      }
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  // Battery arc gauge
+  function _drawBattery(telem) {
+    const canvas = document.getElementById('chor-battery-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H * 0.72, r = Math.min(W, H) * 0.38;
+    const startA = Math.PI * 0.85, endA = Math.PI * 2.15;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startA, endA);
+    ctx.strokeStyle = 'rgba(0,170,255,0.1)';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    let pct = 0, voltage = null;
+    if (telem) {
+      const vals = [telem.L ? telem.L.v_in : null, telem.R ? telem.R.v_in : null].filter(v => v !== null);
+      if (vals.length) { voltage = Math.min(...vals); pct = Math.max(0, Math.min(1, (voltage - 20) / 9.4)); }
+    }
+    const color = pct < 0.2 ? '#ff2244' : pct < 0.5 ? '#ffb300' : '#00cc66';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startA, startA + (endA - startA) * pct);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 7;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = color;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = color;
+    ctx.font = 'bold 12px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(voltage !== null ? Math.round(pct * 100) + '%' : '—', cx, cy - 4);
+    ctx.font = '7px Courier New';
+    ctx.fillStyle = 'rgba(0,170,255,0.4)';
+    ctx.fillText(voltage !== null ? voltage.toFixed(1) + 'V' : 'NO TELEM', cx, cy + 10);
+  }
+
+  // Dome compass with rotating needle
+  function _drawDomeCompass(t) {
+    const canvas = document.getElementById('chor-dome-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.42;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(0,170,255,0.18)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    const angle = (t * 0.015) % (Math.PI * 2);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.sin(angle) * (r - 12), cy - Math.cos(angle) * (r - 12));
+    ctx.strokeStyle = '#00eeff';
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#00eeff';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = '#00eeff';
+    ctx.fill();
+    ctx.fillStyle = 'rgba(0,170,255,0.25)';
+    ctx.font = '7px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', Math.PI * 1.5]].forEach(([label, a]) => {
+      ctx.fillText(label, cx + Math.sin(a) * (r - 7), cy - Math.cos(a) * (r - 7));
+    });
+  }
+
+  // ── Audio waveform ────────────────────────────────────────────────
+  function _drawWaveform() {
+    const canvas = document.getElementById('chor-waveform-canvas');
+    const lane   = _lane('audio');
+    if (!canvas || !lane || !_chor) return;
+    const totalSec = _chor.meta.duration + 5;
+    const W = _px(totalSec) + 100;
+    const H = lane.clientHeight || 44;
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    const name  = (_chor.tracks.audio[0] || {}).file || 'audio';
+    const barW  = 2, barGap = 1;
+    const nBars = Math.floor(W / (barW + barGap));
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, 'rgba(0,200,255,0.85)');
+    grad.addColorStop(1, 'rgba(0,100,180,0.15)');
+    ctx.fillStyle = grad;
+    for (let i = 0; i < nBars; i++) {
+      hash = ((hash * 1664525) + 1013904223) | 0;
+      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
+      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
+    }
+  }
+
+  // ── Ruler ─────────────────────────────────────────────────────────
   function _renderRuler(duration) {
     const ruler = document.getElementById('chor-ruler');
     if (!ruler) return;
@@ -4125,28 +4301,26 @@ const choreoEditor = (() => {
     if (canvas) canvas.style.width = (_px(total) + 100) + 'px';
   }
 
-  // ── Render all tracks ────────────────────────────────────────────────────
-
+  // ── Track rendering ───────────────────────────────────────────────
   function _renderAllTracks() {
     if (!_chor) return;
     ['audio', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
     _renderRuler(_chor.meta.duration);
-    const dur = document.getElementById('chor-duration');
-    if (dur) dur.textContent = _fmtTime(_chor.meta.duration);
+    _drawWaveform();
+    const durEl = document.getElementById('chor-duration');
+    if (durEl) durEl.textContent = _fmtTime(_chor.meta.duration);
   }
 
   function _renderTrack(track) {
     const lane = _lane(track);
     if (!lane) return;
     lane.querySelectorAll('.chor-block').forEach(b => b.remove());
-
     const items = _chor.tracks[track] || [];
     items.forEach((item, idx) => {
       if (track === 'dome') return;
       lane.appendChild(_makeBlock(track, item, idx));
     });
-
     if (track === 'dome') _renderDomeLane(items);
   }
 
@@ -4156,25 +4330,21 @@ const choreoEditor = (() => {
     block.dataset.track = track;
     block.dataset.idx   = idx;
     if (item.mode) block.dataset.mode = item.mode;
-
     const t   = item.t        || 0;
     const dur = item.duration || (track === 'audio' ? (_chor.meta.duration - t) : 2);
     block.style.left  = _px(t)   + 'px';
     block.style.width = _px(dur) + 'px';
-
-    const label = _blockLabel(track, item);
-    block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis">${label}</span>
+    block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
                        <div class="chor-block-resize" data-resize="true"></div>`;
-
     _attachBlockEvents(block, track, idx);
     return block;
   }
 
   function _blockLabel(track, item) {
-    if (track === 'audio')      return `\uD83C\uDFB5 ${item.file || '?'}`;
-    if (track === 'lights')     return `\uD83D\uDCA1 ${(item.mode || item.name || '?').toUpperCase()}`;
-    if (track === 'servos')     return `\u2699\uFE0F ${item.servo || '?'} ${item.action || ''}`;
-    if (track === 'propulsion') return `\uD83D\uDE80 L${item.left || 0} R${item.right || 0}`;
+    if (track === 'audio')      return item.file || '?';
+    if (track === 'lights')     return (item.mode || item.name || '?').toUpperCase();
+    if (track === 'servos')     return `${item.servo || '?'} ${item.action || ''}`;
+    if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
   }
 
@@ -4183,122 +4353,80 @@ const choreoEditor = (() => {
     if (!lane) return;
     lane.innerHTML = '';
     if (keyframes.length < 2) return;
-
-    const W   = _px(_chor.meta.duration + 5);
-    const H   = 52;
+    const W = _px(_chor.meta.duration + 5), H = 56;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', W);
-    svg.setAttribute('height', H);
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.style.cssText = 'position:absolute;top:4px;left:0';
-
-    const pts = keyframes.map(kf => ({
-      x: _px(kf.t),
-      y: H - (kf.angle / 360) * (H - 4) - 2,
-    }));
-
+    const pts = keyframes.map(kf => ({ x: _px(kf.t), y: H - (kf.angle / 360) * (H - 6) - 3 }));
     let d = `M ${pts[0].x} ${pts[0].y}`;
     for (let i = 1; i < pts.length; i++) {
       const cp = (pts[i].x - pts[i - 1].x) / 2;
       d += ` C ${pts[i-1].x + cp} ${pts[i-1].y} ${pts[i].x - cp} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;
     }
-
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d);
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', '#aa55ff');
-    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('d', d); path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#cc44ff'); path.setAttribute('stroke-width', '2');
     svg.appendChild(path);
-
     pts.forEach((p, i) => {
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', p.x);
-      circle.setAttribute('cy', p.y);
-      circle.setAttribute('r', '4');
-      circle.setAttribute('fill', '#aa55ff');
-      circle.setAttribute('stroke', '#0d1826');
-      circle.setAttribute('stroke-width', '1.5');
-      circle.style.cursor = 'pointer';
-      circle.addEventListener('click', () => _selectDomeKF(i));
-      svg.appendChild(circle);
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', '5');
+      c.setAttribute('fill', '#cc44ff'); c.setAttribute('stroke', '#060910'); c.setAttribute('stroke-width', '2');
+      c.style.cursor = 'pointer';
+      c.addEventListener('click', () => _selectDomeKF(i));
+      svg.appendChild(c);
     });
-
     lane.appendChild(svg);
   }
 
   function _renderMarkers() {
-    document.querySelectorAll('.chor-lane').forEach(lane => {
-      lane.querySelectorAll('.chor-marker').forEach(m => m.remove());
-    });
-    const markers   = _chor.tracks.markers || [];
+    document.querySelectorAll('.chor-lane').forEach(l => l.querySelectorAll('.chor-marker').forEach(m => m.remove()));
     const firstLane = _lane('audio');
-    if (!firstLane) return;
-    markers.forEach(m => {
-      const marker = document.createElement('div');
-      marker.className  = 'chor-marker';
-      marker.style.left = _px(m.t) + 'px';
-      const label = document.createElement('div');
-      label.className   = 'chor-marker-label';
-      label.textContent = m.label;
-      marker.appendChild(label);
-      firstLane.appendChild(marker);
+    if (!firstLane || !_chor) return;
+    (_chor.tracks.markers || []).forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'chor-marker'; div.style.left = _px(m.t) + 'px';
+      const lbl = document.createElement('div');
+      lbl.className = 'chor-marker-label'; lbl.textContent = m.label;
+      div.appendChild(lbl); firstLane.appendChild(div);
     });
   }
 
-  // ── Block drag + resize ──────────────────────────────────────────────────
-
+  // ── Drag + resize ─────────────────────────────────────────────────
   function _attachBlockEvents(block, track, idx) {
     block.addEventListener('mousedown', e => {
-      if (e.target.dataset.resize) {
-        _startResize(e, block, track, idx);
-      } else {
-        _startDrag(e, block, track, idx);
-      }
+      e.target.dataset.resize ? _startResize(e, block, track, idx) : _startDrag(e, block, track, idx);
       _selectBlock(track, idx);
       e.preventDefault();
     });
   }
 
   function _startDrag(e, block, track, idx) {
-    const startX    = e.clientX;
-    const startLeft = parseFloat(block.style.left) || 0;
-
-    function onMove(e2) {
-      const newLeft = Math.max(0, startLeft + e2.clientX - startX);
-      block.style.left = newLeft + 'px';
-      _chor.tracks[track][idx].t = Math.round(_sec(newLeft) * 10) / 10;
+    const startX = e.clientX, startLeft = parseFloat(block.style.left) || 0;
+    const onMove = e2 => {
+      const newT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX)));
+      block.style.left = _px(newT) + 'px';
+      _chor.tracks[track][idx].t = newT;
       _dirty = true;
       _updatePropsPanel(track, idx);
-    }
-    function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      block.style.left = _px(_chor.tracks[track][idx].t) + 'px';
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
   function _startResize(e, block, track, idx) {
-    const startX = e.clientX;
-    const startW = parseFloat(block.style.width) || 60;
-
-    function onMove(e2) {
-      const newW = Math.max(20, startW + e2.clientX - startX);
-      block.style.width = newW + 'px';
-      _chor.tracks[track][idx].duration = Math.round(_sec(newW) * 10) / 10;
+    const startX = e.clientX, startW = parseFloat(block.style.width) || 60;
+    const onMove = e2 => {
+      const newDur = _snap(_sec(Math.max(20, startW + e2.clientX - startX)));
+      block.style.width = _px(newDur) + 'px';
+      _chor.tracks[track][idx].duration = newDur;
       _dirty = true;
       _updatePropsPanel(track, idx);
-    }
-    function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
-  // ── Selection + properties panel ─────────────────────────────────────────
-
+  // ── Properties panel ─────────────────────────────────────────────
   function _selectBlock(track, idx) {
     document.querySelectorAll('.chor-block').forEach(b => b.classList.remove('selected'));
     const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
@@ -4318,122 +4446,153 @@ const choreoEditor = (() => {
     const item = (_chor.tracks[track] || [])[idx];
     if (!item) return;
 
-    const rows = [
-      ['TRACK',    track.toUpperCase()],
-      ['START',    (item.t || 0).toFixed(2) + 's'],
-      ['DURATION', item.duration ? item.duration.toFixed(2) + 's' : '—'],
-    ];
-    if (track === 'lights')     rows.push(['MODE',   (item.mode || item.name || '?').toUpperCase()]);
-    if (track === 'dome')       rows.push(['ANGLE',  (item.angle || 0) + '°'], ['EASING', item.easing || 'linear']);
-    if (track === 'servos')     rows.push(['SERVO',  item.servo || '?'], ['ACTION', item.action || '?']);
-    if (track === 'propulsion') rows.push(['LEFT',   item.left  || 0],   ['RIGHT',  item.right || 0]);
+    function row(key, field, type) {
+      const val = item[field] !== undefined ? item[field] : '';
+      return `<div class="chor-prop-row">
+        <span class="chor-prop-key">${key}</span>
+        <input class="chor-prop-input" type="${type || 'number'}" value="${val}"
+          onchange="choreoEditor._setProp('${track}',${idx},'${field}',this.value)" style="width:70px">
+      </div>`;
+    }
+    function readRow(key, val) {
+      return `<div class="chor-prop-row"><span class="chor-prop-key">${key}</span><span class="chor-prop-val">${val}</span></div>`;
+    }
 
-    panel.innerHTML = rows.map(([k, v]) => `
-      <div class="chor-prop-row">
-        <span class="chor-prop-key">${k}</span>
-        <span class="chor-prop-val">${v}</span>
-      </div>`).join('');
+    let html = readRow('TRACK', track.toUpperCase());
+    html += row('START', 't');
+    if (item.duration !== undefined) html += row('DURATION', 'duration');
+    if (track === 'audio')      html += row('FILE', 'file', 'text') + row('VOLUME', 'volume');
+    if (track === 'lights')     html += readRow('MODE', (item.mode || '?').toUpperCase());
+    if (track === 'dome')       html += row('ANGLE', 'angle');
+    if (track === 'servos')     html += readRow('SERVO', item.servo || '?') + readRow('ACTION', item.action || '?');
+    if (track === 'propulsion') html += row('LEFT', 'left') + row('RIGHT', 'right');
+    panel.innerHTML = html;
+
+    const showEasing = track === 'dome' || !!item.easing;
+    const wrap = document.getElementById('chor-easing-wrap');
+    if (wrap) { wrap.style.display = showEasing ? 'block' : 'none'; if (showEasing) _drawEasingPreview(item.easing || 'linear'); }
   }
 
-  // ── Telemetry gauges ─────────────────────────────────────────────────────
+  function _drawEasingPreview(name) {
+    const canvas = document.getElementById('chor-easing-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    function ease(t) {
+      if (name === 'ease-in')     return t * t;
+      if (name === 'ease-out')    return 1 - (1 - t) * (1 - t);
+      if (name === 'ease-in-out') return t < 0.5 ? 2*t*t : 1 - 2*(1-t)*(1-t);
+      return t;
+    }
+    ctx.strokeStyle = 'rgba(0,170,255,0.08)'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      ctx.beginPath(); ctx.moveTo(W*i/4, 0); ctx.lineTo(W*i/4, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, H*i/4); ctx.lineTo(W, H*i/4); ctx.stroke();
+    }
+    ctx.beginPath();
+    for (let x = 0; x <= W; x++) { const y = H - ease(x/W)*H; x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); }
+    ctx.strokeStyle = '#00eeff'; ctx.lineWidth = 2; ctx.shadowBlur = 6; ctx.shadowColor = '#00eeff';
+    ctx.stroke(); ctx.shadowBlur = 0;
+    document.querySelectorAll('.chor-ease-btn').forEach(btn => {
+      const map = { 'LINEAR':'linear', 'EASE IN':'ease-in', 'EASE OUT':'ease-out', 'IN-OUT':'ease-in-out' };
+      btn.classList.toggle('active', map[btn.textContent] === name);
+    });
+  }
 
+  // ── Telemetry + alarms ────────────────────────────────────────────
   function _updateTelem(telem) {
+    _lastTelem = telem;
     const section = document.getElementById('chor-telem-section');
     if (!section) return;
-
-    if (!telem || (!telem.L && !telem.R)) {
-      section.style.display = 'none';
-      return;
-    }
+    if (!telem || (!telem.L && !telem.R)) { section.style.display = 'none'; return; }
     section.style.display = 'block';
 
-    // Use the highest value across L and R sides for the gauges
-    const vL = telem.L ? telem.L.v_in    : null;
-    const vR = telem.R ? telem.R.v_in    : null;
-    const tL = telem.L ? telem.L.temp    : null;
-    const tR = telem.R ? telem.R.temp    : null;
-    const cL = telem.L ? Math.abs(telem.L.current) : null;
-    const cR = telem.R ? Math.abs(telem.R.current) : null;
+    const vVals = [telem.L && telem.L.v_in, telem.R && telem.R.v_in].filter(Boolean);
+    const tVals = [telem.L && telem.L.temp, telem.R && telem.R.temp].filter(Boolean);
+    const cVals = [telem.L && Math.abs(telem.L.current), telem.R && Math.abs(telem.R.current)].filter(Boolean);
 
-    // Voltage: min of both sides (the limiting one matters for safety), range 20V–29.4V
-    const vMin = [vL, vR].filter(v => v !== null).reduce((a, b) => Math.min(a, b), 29.4);
-    const vPct = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
-    const vBar = document.getElementById('chor-telem-v-bar');
-    const vLbl = document.getElementById('chor-telem-v');
-    if (vBar) { vBar.style.width = vPct + '%'; vBar.style.background = vPct < 20 ? 'var(--red)' : vPct < 50 ? 'var(--orange)' : 'var(--green)'; }
-    if (vLbl) vLbl.textContent = vMin.toFixed(1) + 'V';
-
-    // Temperature: max of both sides, range 0–80°C
-    const tMax = [tL, tR].filter(v => v !== null).reduce((a, b) => Math.max(a, b), 0);
-    const tPct = Math.max(0, Math.min(100, (tMax / 80) * 100));
-    const tBar = document.getElementById('chor-telem-t-bar');
-    const tLbl = document.getElementById('chor-telem-t');
-    if (tBar) { tBar.style.width = tPct + '%'; tBar.style.background = tPct > 87 ? 'var(--red)' : tPct > 62 ? 'var(--orange)' : '#ffb300'; }
-    if (tLbl) tLbl.textContent = [tL, tR].filter(v => v !== null).map(v => v.toFixed(0) + '°').join(' / ');
-
-    // Current: max of both sides, range 0–30A
-    const cMax = [cL, cR].filter(v => v !== null).reduce((a, b) => Math.max(a, b), 0);
-    const cPct = Math.max(0, Math.min(100, (cMax / 30) * 100));
-    const cBar = document.getElementById('chor-telem-c-bar');
-    const cLbl = document.getElementById('chor-telem-c');
-    if (cBar) { cBar.style.width = cPct + '%'; cBar.style.background = cPct > 87 ? 'var(--red)' : cPct > 62 ? 'var(--orange)' : 'var(--red)'; }
-    if (cLbl) cLbl.textContent = [cL, cR].filter(v => v !== null).map(v => v.toFixed(1) + 'A').join(' / ');
+    if (vVals.length) {
+      const vMin = Math.min(...vVals);
+      const vPct = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
+      const vCol = vPct < 20 ? 'var(--red)' : vPct < 50 ? 'var(--amber)' : 'var(--green)';
+      _setBar('chor-telem-v-bar', 'chor-telem-v', vPct, vMin.toFixed(1)+'V', vCol);
+      const battEl = document.getElementById('chor-stat-battery');
+      if (battEl) battEl.textContent = Math.round(vPct) + '%';
+    }
+    if (tVals.length) {
+      const tMax = Math.max(...tVals);
+      const tPct = Math.max(0, Math.min(100, (tMax / 80) * 100));
+      const tCol = tPct > 87 ? 'var(--red)' : tPct > 62 ? 'var(--amber)' : 'var(--amber)';
+      _setBar('chor-telem-t-bar', 'chor-telem-t', tPct, tVals.map(v=>v.toFixed(0)+'°').join('/'), tCol);
+      const tempEl = document.getElementById('chor-stat-temp');
+      if (tempEl) tempEl.textContent = Math.max(...tVals).toFixed(0) + '°C';
+    }
+    if (cVals.length) {
+      const cMax = Math.max(...cVals);
+      const cPct = Math.max(0, Math.min(100, (cMax / 30) * 100));
+      const cCol = cPct > 87 ? 'var(--red)' : cPct > 62 ? 'var(--amber)' : 'var(--red)';
+      _setBar('chor-telem-c-bar', 'chor-telem-c', cPct, cVals.map(v=>v.toFixed(1)+'A').join('/'), cCol);
+    }
   }
 
-  // ── Playhead polling ─────────────────────────────────────────────────────
+  function _setBar(barId, valId, pct, label, color) {
+    const bar = document.getElementById(barId);
+    const lbl = document.getElementById(valId);
+    if (bar) { bar.style.width = pct + '%'; bar.style.background = color; }
+    if (lbl) lbl.textContent = label;
+  }
 
+  function _updateAlarms(reason) {
+    const dot  = document.getElementById('chor-alarms-dot');
+    const text = document.getElementById('chor-alarms-text');
+    if (!dot || !text) return;
+    if (!reason) { dot.className = 'chor-alarms-dot ok'; text.textContent = 'NO ALARMS'; return; }
+    const msgs = { uart_loss:'UART LOSS', undervoltage:'UNDERVOLTAGE', overheat:'OVERHEAT', overcurrent:'OVERCURRENT' };
+    dot.className = 'chor-alarms-dot crit';
+    text.textContent = msgs[reason] || reason.toUpperCase();
+  }
+
+  // ── Playhead polling ─────────────────────────────────────────────
   function _startPolling() {
     _stopPolling();
     _pollTimer = setInterval(async () => {
       const status = await api('/choreo/status');
       if (!status) return;
-
-      // Update playhead position
       const ph = document.getElementById('chor-playhead');
       if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
-
-      // Update timecode
       const tc = document.getElementById('chor-timecode');
       if (tc) tc.textContent = _fmtTime(status.t_now || 0);
-
-      // Update VESC telemetry gauges
       _updateTelem(status.telem || null);
-
-      // Check for abort
-      if (status.abort_reason) {
-        _stopPolling();
-        _showAbortModal(status.abort_reason);
-        return;
-      }
-
-      // Stop polling when playback ends
+      _updateAlarms(status.abort_reason || null);
+      if (status.abort_reason) { _stopPolling(); _showAbortModal(status.abort_reason); return; }
       if (!status.playing) _stopPolling();
     }, 200);
   }
-
-  function _stopPolling() {
-    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-  }
+  function _stopPolling() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
 
   function _showAbortModal(reason) {
-    const modal  = document.getElementById('modal-chor-abort');
-    const label  = document.getElementById('chor-abort-reason');
+    const modal = document.getElementById('modal-chor-abort');
+    const label = document.getElementById('chor-abort-reason');
     if (!modal) return;
-    const messages = {
-      uart_loss:    'UART LOSS',
-      undervoltage: 'UNDERVOLTAGE',
-      overheat:     'OVERHEAT',
-      overcurrent:  'OVERCURRENT',
-    };
-    if (label) label.textContent = messages[reason] || reason.toUpperCase().replace(/_/g, ' ');
+    const msgs = { uart_loss:'UART LOSS', undervoltage:'UNDERVOLTAGE', overheat:'OVERHEAT', overcurrent:'OVERCURRENT' };
+    if (label) label.textContent = msgs[reason] || reason.toUpperCase().replace(/_/g,' ');
     modal.style.display = 'flex';
   }
 
-  // ── Public API ───────────────────────────────────────────────────────────
+  // ── Snap UI sync ──────────────────────────────────────────────────
+  function _syncSnapUI() {
+    document.getElementById('chor-snap-01')?.classList.toggle('active', _snapVal === 0.1);
+    document.getElementById('chor-snap-05')?.classList.toggle('active', _snapVal === 0.5);
+    document.getElementById('chor-snap-off')?.classList.toggle('active', _snapVal === 0);
+  }
 
+  // ── Public API ────────────────────────────────────────────────────
   return {
 
     async init() {
+      _startMonitor();
+      _syncSnapUI();
       const names = await api('/choreo/list');
       const sel   = document.getElementById('chor-select');
       if (!sel || !names) return;
@@ -4446,9 +4605,7 @@ const choreoEditor = (() => {
       if (!name) return;
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
-      _chor   = chor;
-      _dirty  = false;
-      _selected = null;
+      _chor = chor; _dirty = false; _selected = null;
       _renderAllTracks();
       toast(`Loaded: ${name}`, 'ok');
     },
@@ -4457,20 +4614,12 @@ const choreoEditor = (() => {
       const name = prompt('Choreography name:', 'my_show');
       if (!name) return;
       _chor = {
-        meta:   { name, version: '1.0', duration: 30.0, created: new Date().toISOString().slice(0, 10), author: 'R2-D2 Control' },
-        tracks: { audio: [], lights: [], dome: [
-          { t: 0, angle: 0, easing: 'linear' },
-          { t: 30, angle: 0, easing: 'linear' }
-        ], servos: [], propulsion: [], markers: [] }
+        meta:   { name, version:'1.0', duration:30.0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
+        tracks: { audio:[], lights:[], dome:[{t:0,angle:0,easing:'linear'},{t:30,angle:0,easing:'linear'}], servos:[], propulsion:[], markers:[] }
       };
-      _dirty = true;
-      _renderAllTracks();
+      _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');
-      if (sel) {
-        const opt = document.createElement('option');
-        opt.value = name; opt.textContent = name; opt.selected = true;
-        sel.appendChild(opt);
-      }
+      if (sel) { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; opt.selected = true; sel.appendChild(opt); }
       toast(`New choreography: ${name}`, 'ok');
     },
 
@@ -4483,13 +4632,10 @@ const choreoEditor = (() => {
 
     async stop() {
       await api('/choreo/stop', 'POST');
-      _stopPolling();
-      const section = document.getElementById('chor-telem-section');
-      if (section) section.style.display = 'none';
-      const ph = document.getElementById('chor-playhead');
-      if (ph) ph.style.left = '0px';
-      const tc = document.getElementById('chor-timecode');
-      if (tc) tc.textContent = '00:00.000';
+      _stopPolling(); _updateAlarms(null);
+      const ph = document.getElementById('chor-playhead'); if (ph) ph.style.left = '0px';
+      const tc = document.getElementById('chor-timecode'); if (tc) tc.textContent = '00:00.000';
+      const section = document.getElementById('chor-telem-section'); if (section) section.style.display = 'none';
       toast('Choreo stopped', 'ok');
     },
 
@@ -4504,10 +4650,9 @@ const choreoEditor = (() => {
       if (_dirty) await this.save();
       const result = await api('/choreo/export_scr', 'POST', { name: _chor.meta.name });
       if (!result) return;
-      const blob = new Blob([result.scr], { type: 'text/plain' });
+      const blob = new Blob([result.scr], { type:'text/plain' });
       const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = _chor.meta.name + '.scr'; a.click();
+      const a    = document.createElement('a'); a.href = url; a.download = _chor.meta.name + '.scr'; a.click();
       URL.revokeObjectURL(url);
       toast('SCR exported', 'ok');
     },
@@ -4515,6 +4660,29 @@ const choreoEditor = (() => {
     dismissAbort() {
       const modal = document.getElementById('modal-chor-abort');
       if (modal) modal.style.display = 'none';
+      _updateAlarms(null);
+    },
+
+    setSnap(val) { _snapVal = val; _syncSnapUI(); },
+
+    zoom(delta) { _pxPerSec = Math.max(10, Math.min(200, _pxPerSec + delta)); if (_chor) _renderAllTracks(); },
+
+    setEasing(name) {
+      if (!_selected || _selected.track !== 'dome') return;
+      const item = (_chor.tracks.dome || [])[_selected.idx];
+      if (!item) return;
+      item.easing = name; _dirty = true; _drawEasingPreview(name);
+    },
+
+    _setProp(track, idx, field, rawVal) {
+      const item = (_chor.tracks[track] || [])[idx];
+      if (!item) return;
+      const num = parseFloat(rawVal); item[field] = isNaN(num) ? rawVal : num; _dirty = true;
+      const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
+      if (block) {
+        if (field === 't')        block.style.left  = _px(item.t)        + 'px';
+        if (field === 'duration') block.style.width = _px(item.duration) + 'px';
+      }
     },
   };
 })();
