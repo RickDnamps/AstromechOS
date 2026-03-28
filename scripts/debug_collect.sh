@@ -46,7 +46,7 @@ echo "=== Collecte debug $TIMESTAMP ==="
 # ──────────────────────────────────────────────
 # MASTER
 # ──────────────────────────────────────────────
-echo "[Master] Infos système..."
+echo "[Master] System info..."
 {
   echo "=== HOSTNAME ==="
   hostname
@@ -75,7 +75,7 @@ echo "[Master] Infos système..."
   systemctl status r2d2-monitor.service --no-pager 2>&1 || echo "(service inexistant)"
 
   echo ""
-  echo "=== RÉSEAU ==="
+  echo "=== NETWORK ==="
   ip addr show wlan0 2>&1
   ip addr show wlan1 2>&1
 
@@ -86,7 +86,7 @@ echo "[Master] Infos système..."
   cd $REPO && git log --oneline -5
 
   echo ""
-  echo "=== DEVICES SÉRIE ==="
+  echo "=== SERIAL DEVICES ==="
   ls -la /dev/ttyAMA0 /dev/ttyUSB0 /dev/ttyACM* 2>&1
 
   echo ""
@@ -101,12 +101,12 @@ cp /tmp/master.log "$OUT_DIR/master_log.txt" 2>/dev/null || echo "(aucun log mas
 # ──────────────────────────────────────────────
 # SLAVE (via SSH)
 # ──────────────────────────────────────────────
-echo "[Slave] Vérification SSH..."
+echo "[Slave] Checking SSH..."
 if ! ssh -o ConnectTimeout=5 $SLAVE "echo OK" > /dev/null 2>&1; then
   echo "SLAVE INJOIGNABLE via SSH" > "$SLAVE_OUT/status.txt"
-  echo "[Slave] Injoignable — infos slave ignorées"
+  echo "[Slave] Unreachable — slave info skipped"
 else
-  echo "[Slave] Infos système..."
+  echo "[Slave] System info..."
   ssh $SLAVE "
     echo '=== HOSTNAME ===' && hostname
     echo '' && echo '=== DATE ===' && date
@@ -114,7 +114,7 @@ else
     echo '--- fuser ---' && fuser /dev/ttyAMA0 2>&1 || echo '(libre)'
     echo '' && echo '=== PROCESSUS PYTHON ===' && ps aux | grep python3 | grep -v grep
     echo '' && echo '=== SERVICES SYSTEMD ===' && systemctl status r2d2-slave.service --no-pager 2>&1 || echo '(service inexistant)'
-    echo '' && echo '=== DEVICES SÉRIE ===' && ls -la /dev/ttyAMA0 /dev/ttyACM* 2>&1
+    echo '' && echo '=== SERIAL DEVICES ===' && ls -la /dev/ttyAMA0 /dev/ttyACM* 2>&1
     echo '' && echo '=== /boot/firmware/config.txt (uart/bt) ===' && grep -E 'uart|bluetooth|miniuart|disable.bt|enable_uart' /boot/firmware/config.txt 2>&1 || echo '(aucune ligne uart/bt)'
   " > "$SLAVE_OUT/slave_system.txt" 2>&1
 
@@ -123,10 +123,10 @@ else
 fi
 
 # ──────────────────────────────────────────────
-# RÉSUMÉ
+# SUMMARY
 # ──────────────────────────────────────────────
 {
-  echo "Debug collecté: $TIMESTAMP"
+  echo "Debug collected: $TIMESTAMP"
   echo "Master: $(hostname)"
   echo "Slave SSH: $(ssh -o ConnectTimeout=3 $SLAVE "hostname" 2>/dev/null || echo "injoignable")"
   echo ""
@@ -138,11 +138,11 @@ fi
 cat "$OUT_DIR/README.txt"
 
 # ──────────────────────────────────────────────
-# RÉCUPÉRER DEPUIS LE PC DE DEV
+# RETRIEVE FROM THE DEV PC
 # ──────────────────────────────────────────────
 echo ""
 echo "=== Fait ==="
 echo "Fichiers dans: $OUT_DIR"
 echo ""
-echo "Pour récupérer sur ton PC Windows (Git Bash) :"
+echo "To retrieve on your Windows PC (Git Bash):"
 echo "  scp -r artoo@r2-master.local:/home/artoo/r2d2/debug/$TIMESTAMP/ \"J:/R2-D2_Build/software/debug/\""

@@ -29,14 +29,14 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Test servo Slave — PCA9685 @ 0x41, canal 0
-Supporte servo STANDARD et servo CONTINU.
+Test servo Slave — PCA9685 @ 0x41, channel 0
+Supports STANDARD and CONTINUOUS servo modes.
 
 Usage: python3 scripts/test_servo_slave.py [standard|continu]
-Par défaut: continu
+Default: continu
 
-Servo standard  : 1000µs=0°  1500µs=90°  2000µs=180°
-Servo continu   : 1500µs=STOP  <1500=sens1  >1500=sens2
+Standard servo  : 1000µs=0°  1500µs=90°  2000µs=180°
+Continuous servo: 1500µs=STOP  <1500=dir1  >1500=dir2
 """
 
 import sys, time
@@ -64,7 +64,7 @@ def set_pulse(us):
 def stop():
     set_pulse(1500)
     time.sleep(0.3)
-    # Sleep mode direct via smbus2 — arrête l'oscillateur sans reset()
+    # Direct sleep mode via smbus2 — stops the oscillator without reset()
     import smbus2
     b = smbus2.SMBus(1)
     b.write_byte_data(0x41, 0x00, 0x10)
@@ -74,15 +74,15 @@ def stop():
 try:
     if MODE == "continu":
         print("Servo continu — lent sens 1 → stop → lent sens 2 → stop (boucle)")
-        print("Ctrl+C pour arrêter")
+        print("Ctrl+C to stop")
         while True:
-            print("  → sens horaire lent (1600µs)")
+            print("  → slow clockwise (1600µs)")
             set_pulse(1600)
             time.sleep(2)
             print("  → STOP (1500µs)")
             set_pulse(1500)
             time.sleep(1)
-            print("  → sens anti-horaire lent (1400µs)")
+            print("  → slow counter-clockwise (1400µs)")
             set_pulse(1400)
             time.sleep(2)
             print("  → STOP (1500µs)")
@@ -95,7 +95,7 @@ try:
         US_MAX = 2000   # ~135°
         STEPS  = 50
         DELAY  = 0.04
-        print(f"SG90 — sweep 45°→135° en boucle (Ctrl+C pour arrêter)")
+        print(f"SG90 — sweep 45°→135° loop (Ctrl+C to stop)")
         set_pulse(1500)  # centre d'abord
         time.sleep(0.5)
         while True:
@@ -107,5 +107,5 @@ try:
                 time.sleep(DELAY)
 
 except KeyboardInterrupt:
-    print("\nArrêt propre...")
+    print("\nClean shutdown...")
     stop()

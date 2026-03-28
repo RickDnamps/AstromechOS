@@ -28,15 +28,15 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Test servos Master + Slave — vérifie I2C, installe libs si besoin, teste les servos
+# Test servos Master + Slave — checks I2C, installs libs if needed, tests servos
 # Usage: bash scripts/test_servos.sh
-# Ctrl+C pour arrêter les tests
+# Ctrl+C to stop tests
 
 REPO=/home/artoo/r2d2
 SLAVE=artoo@r2-slave.local
 
 # ──────────────────────────────────────────────
-# MASTER — vérification I2C + install + test
+# MASTER — I2C check + install + test
 # ──────────────────────────────────────────────
 echo "=== MASTER — I2C ==="
 if ! command -v i2cdetect &>/dev/null; then
@@ -45,61 +45,61 @@ if ! command -v i2cdetect &>/dev/null; then
 fi
 
 I2C_MASTER=$(sudo /usr/sbin/i2cdetect -y 1 2>&1)
-echo "$I2C_MASTER" | grep -q "40" && echo "✓ PCA9685 @ 0x40 détecté" || echo "✗ 0x40 NON détecté — vérifier branchement I2C Master"
+echo "$I2C_MASTER" | grep -q "40" && echo "✓ PCA9685 @ 0x40 detected" || echo "✗ 0x40 NOT detected — check I2C wiring Master"
 
 echo ""
-echo "=== MASTER — Dépendances Python ==="
-python3 -c "import adafruit_pca9685" 2>/dev/null && echo "✓ adafruit-pca9685 déjà installé" || {
+echo "=== MASTER — Python dependencies ==="
+python3 -c "import adafruit_pca9685" 2>/dev/null && echo "✓ adafruit-pca9685 already installed" || {
     echo "Installation adafruit-circuitpython-pca9685..."
-    pip install adafruit-circuitpython-pca9685 -q && echo "✓ Installé"
+    pip install adafruit-circuitpython-pca9685 -q && echo "✓ Installed"
 }
 
 # ──────────────────────────────────────────────
-# SLAVE — vérification I2C + install + test
+# SLAVE — I2C check + install + test
 # ──────────────────────────────────────────────
 echo ""
 echo "=== SLAVE — Sync scripts ==="
-rsync -a $REPO/scripts/ $SLAVE:$REPO/scripts/ && echo "✓ Scripts synchronisés" || echo "⚠ rsync échoué"
+rsync -a $REPO/scripts/ $SLAVE:$REPO/scripts/ && echo "✓ Scripts synced" || echo "⚠ rsync failed"
 
 echo ""
 echo "=== SLAVE — I2C ==="
 I2C_SLAVE=$(ssh $SLAVE "sudo /usr/sbin/i2cdetect -y 1 2>&1" 2>&1)
-echo "$I2C_SLAVE" | grep -q "41" && echo "✓ PCA9685 @ 0x41 détecté" || echo "✗ 0x41 NON détecté — vérifier branchement I2C Slave"
+echo "$I2C_SLAVE" | grep -q "41" && echo "✓ PCA9685 @ 0x41 detected" || echo "✗ 0x41 NOT detected — check I2C wiring Slave"
 
 echo ""
-echo "=== SLAVE — Dépendances Python ==="
-ssh $SLAVE "python3 -c 'import adafruit_pca9685' 2>/dev/null && echo '✓ adafruit-pca9685 déjà installé' || { pip install adafruit-circuitpython-pca9685 -q && echo '✓ Installé'; }"
+echo "=== SLAVE — Python dependencies ==="
+ssh $SLAVE "python3 -c 'import adafruit_pca9685' 2>/dev/null && echo '✓ adafruit-pca9685 already installed' || { pip install adafruit-circuitpython-pca9685 -q && echo '✓ Installed'; }"
 
 # ──────────────────────────────────────────────
 # Abort si I2C manquant
 # ──────────────────────────────────────────────
 if ! echo "$I2C_MASTER" | grep -q "40"; then
     echo ""
-    echo "✗ Test annulé — PCA9685 Master non détecté"
+    echo "✗ Test aborted — PCA9685 Master not detected"
     exit 1
 fi
 if ! echo "$I2C_SLAVE" | grep -q "41"; then
     echo ""
-    echo "✗ Test annulé — PCA9685 Slave non détecté"
+    echo "✗ Test aborted — PCA9685 Slave not detected"
     exit 1
 fi
 
 # ──────────────────────────────────────────────
-# LANCEMENT DES TESTS EN PARALLÈLE
+# LAUNCH TESTS IN PARALLEL
 # ──────────────────────────────────────────────
 echo ""
-echo "=== Test servo en cours — Ctrl+C pour arrêter ==="
-echo "  Master : PCA9685 @ 0x40, canal 0  (servo dôme)"
+echo "=== Servo test running — Ctrl+C to stop ==="
+echo "  Master : PCA9685 @ 0x40, channel 0  (dome servo)"
 echo "  Slave  : PCA9685 @ 0x41, canal 0  (servo body)"
 echo ""
 
 cleanup() {
     echo ""
-    echo "=== Arrêt ==="
+    echo "=== Stopping ==="
     pkill -9 -f test_servo_master.py 2>/dev/null
     ssh $SLAVE "pkill -9 -f test_servo_slave.py" 2>/dev/null
     kill $MASTER_PID $SLAVE_PID 2>/dev/null
-    # Coupe PWM via I2C direct — garanti peu importe ce qui s'est passé
+    # Cut PWM via direct I2C — guaranteed regardless of what happened
     python3 $REPO/scripts/estop.py
     exit 0
 }

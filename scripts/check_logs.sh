@@ -30,7 +30,7 @@
 # ============================================================
 # Diagnostic R2-D2 — lit les logs Master + Slave et teste les servos via API
 # Usage: bash scripts/check_logs.sh
-# Options: --tail 50   (nb de lignes de log, défaut 80)
+# Options: --tail 50   (number of log lines, default 80)
 #          --servo     (envoie aussi une commande test servo via API)
 
 MASTER=artoo@r2-master.local
@@ -67,7 +67,7 @@ echo ""
 echo "=== API FLASK (Master :5000) ==="
 STATUS=$(curl -s --max-time 5 http://$MASTER_IP:5000/status 2>/dev/null)
 if [ -n "$STATUS" ]; then
-    ok "Flask répond"
+    ok "Flask responding"
     echo "$STATUS" | python3 -c "
 import sys, json
 try:
@@ -78,26 +78,26 @@ try:
 except: print('  (JSON invalide)')
 " 2>/dev/null
 else
-    err "Flask ne répond pas (service down ou réseau ?)"
+    err "Flask not responding (service down or network issue?)"
 fi
 
 # ──────────────────────────────────────────────
-# 3. I2C — vérifier que les chips répondent
+# 3. I2C — verify that the chips respond
 # ──────────────────────────────────────────────
 echo ""
 echo "=== I2C ==="
 I2C_MASTER=$(ssh -o ConnectTimeout=5 $MASTER "sudo /usr/sbin/i2cdetect -y 1 2>&1" 2>/dev/null)
 if echo "$I2C_MASTER" | grep -q "40"; then
-    ok "Master  PCA9685 @ 0x40 détecté"
+    ok "Master  PCA9685 @ 0x40 detected"
 else
-    err "Master  PCA9685 @ 0x40 NON DÉTECTÉ"
+    err "Master  PCA9685 @ 0x40 NOT DETECTED"
 fi
 
 I2C_SLAVE=$(ssh -o ConnectTimeout=5 $SLAVE "sudo /usr/sbin/i2cdetect -y 1 2>/dev/null" 2>/dev/null)
 if echo "$I2C_SLAVE" | grep -q "41"; then
-    ok "Slave   PCA9685 @ 0x41 détecté"
+    ok "Slave   PCA9685 @ 0x41 detected"
 else
-    err "Slave   PCA9685 @ 0x41 NON DÉTECTÉ"
+    err "Slave   PCA9685 @ 0x41 NOT DETECTED"
 fi
 
 # ──────────────────────────────────────────────
@@ -122,15 +122,15 @@ if [ "$1" == "--servo" ] || [ "$2" == "--servo" ]; then
 fi
 
 # ──────────────────────────────────────────────
-# 5. Logs Master — dernières lignes + erreurs
+# 5. Master logs — last lines + errors
 # ──────────────────────────────────────────────
 echo ""
 sep
-echo -e "${CYAN}  LOGS MASTER — dernières $TAIL lignes${NC}"
+echo -e "${CYAN}  MASTER LOGS — last $TAIL lines${NC}"
 sep
-# Lire les logs master directement (pas de SSH — on est déjà sur le master)
+# Read master logs directly (no SSH — already on the master)
 sudo journalctl -u r2d2-master -b --no-pager -n $TAIL --output=short-iso 2>/dev/null \
-    | grep -iE "servo|dome|pca|smbus|error|warn|prêt|setup|Erreur" \
+    | grep -iE "servo|dome|pca|smbus|error|warn|ready|setup|Error" \
     | tail -40
 
 echo ""
@@ -139,15 +139,15 @@ sudo journalctl -u r2d2-master -b --no-pager -n $TAIL --output=short-iso 2>/dev/
     | grep -iE "traceback|Exception|NoneType|AttributeError|TypeError" | tail -20
 
 # ──────────────────────────────────────────────
-# 6. Logs Slave — dernières lignes + erreurs
+# 6. Slave logs — last lines + errors
 # ──────────────────────────────────────────────
 echo ""
 sep
-echo -e "${CYAN}  LOGS SLAVE — dernières $TAIL lignes${NC}"
+echo -e "${CYAN}  SLAVE LOGS — last $TAIL lines${NC}"
 sep
 ssh -o ConnectTimeout=5 $SLAVE \
     "sudo journalctl -u r2d2-slave -b --no-pager -n $TAIL --output=short-iso 2>/dev/null" 2>/dev/null \
-    | grep -iE "servo|SRV|pca|smbus|error|warn|prêt|setup|Erreur" \
+    | grep -iE "servo|SRV|pca|smbus|error|warn|ready|setup|Error" \
     | tail -40
 
 echo ""
@@ -157,10 +157,10 @@ ssh -o ConnectTimeout=5 $SLAVE \
     | grep -iE "traceback|Exception|NoneType|AttributeError|TypeError" | tail -20
 
 # ──────────────────────────────────────────────
-# 7. Registres PCA9685 — état actuel (MODE1)
+# 7. PCA9685 registers — current state (MODE1)
 # ──────────────────────────────────────────────
 echo ""
-echo "=== MODE1 PCA9685 (état sleep/wake) ==="
+echo "=== MODE1 PCA9685 (sleep/wake state) ==="
 python3 -c "
 import smbus2
 b = smbus2.SMBus(1)

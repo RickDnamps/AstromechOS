@@ -28,7 +28,7 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Arrêt d'urgence servos
+# Emergency servo stop
 # Envoie 1500µs (neutre = STOP pour servo continu) puis coupe PWM
 # Master : PCA9685 @ 0x40 via I2C local
 # Slave  : PCA9685 @ 0x41 via SSH
@@ -38,7 +38,7 @@ SLAVE = "artoo@r2-slave.local"
 MODE1 = 0x00
 
 def stop_pca(bus, addr):
-    """Envoie 1500µs sur tous les canaux puis met en sleep."""
+    """Send 1500µs on all channels then put into sleep mode."""
     bus.write_byte_data(addr, MODE1, 0x00)
     time.sleep(0.01)
     tick = int((1500 / 20000.0) * 4096)  # 1500µs = neutre
@@ -78,6 +78,6 @@ result = subprocess.run(
     ["ssh", "-o", "ConnectTimeout=5", SLAVE, slave_cmd],
     capture_output=True, text=True
 )
-print(result.stdout.strip() if result.stdout else f"Slave — SSH échoué ou hors ligne")
+print(result.stdout.strip() if result.stdout else f"Slave — SSH failed or offline")
 
-print("Estop terminé")
+print("Estop complete")

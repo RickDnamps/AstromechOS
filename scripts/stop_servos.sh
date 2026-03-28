@@ -28,7 +28,7 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Arrêt d'urgence servos — coupe PWM Master (0x40) + Slave (0x41)
+# Emergency servo stop — cut PWM Master (0x40) + Slave (0x41)
 REPO=/home/artoo/r2d2
 SLAVE=artoo@r2-slave.local
 

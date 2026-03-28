@@ -28,11 +28,11 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# deploy_rp2040.sh — Pousse le firmware MicroPython vers le RP2040 via USB/ampy
+# deploy_rp2040.sh — Push MicroPython firmware to the RP2040 via USB/ampy
 # Usage: bash scripts/deploy_rp2040.sh [/dev/ttyACMx]
 #
-# Doit être exécuté sur le Slave Pi (où le RP2040 est branché via USB).
-# Arrête temporairement r2d2-slave.service pour libérer le port USB.
+# Must be run on the Slave Pi (where the RP2040 is connected via USB).
+# Temporarily stops r2d2-slave.service to release the USB port.
 
 set -e
 
@@ -46,18 +46,18 @@ warn() { echo -e "${YELLOW}[deploy_rp2040]${NC} $*"; }
 err()  { echo -e "${RED}[deploy_rp2040]${NC} $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Trouver le port RP2040
+# Find the RP2040 port
 # ---------------------------------------------------------------------------
 find_port() {
-    # Chercher par identifiant USB stable (Raspberry Pi / MicroPython)
+    # Look up by stable USB identifier (Raspberry Pi / MicroPython)
     local by_id
     by_id=$(ls /dev/serial/by-id/ 2>/dev/null | grep -i "Raspberry_Pi" | head -1)
     if [ -n "$by_id" ]; then
         echo "/dev/serial/by-id/$by_id"
         return
     fi
-    # Fallback : tester les ports ACM du plus grand au plus petit
-    # (avec VESCs branchés = ttyACM2, sans VESCs = ttyACM0)
+    # Fallback: try ACM ports from highest to lowest
+    # (with VESCs connected = ttyACM2, without VESCs = ttyACM0)
     for p in /dev/ttyACM2 /dev/ttyACM1 /dev/ttyACM0; do
         [ -e "$p" ] && echo "$p" && return
     done
@@ -67,7 +67,7 @@ PORT="${1:-}"
 if [ -z "$PORT" ]; then
     PORT="$(find_port)"
 fi
-[ -z "$PORT" ] && err "Port RP2040 introuvable. Brancher le RP2040 via USB et réessayer."
+[ -z "$PORT" ] && err "RP2040 port not found. Connect the RP2040 via USB and try again."
 log "Port RP2040 : $PORT"
 
 # ---------------------------------------------------------------------------
@@ -76,30 +76,30 @@ log "Port RP2040 : $PORT"
 export PATH="$HOME/.local/bin:$PATH"
 
 if ! command -v ampy &>/dev/null; then
-    warn "ampy non trouvé — installation (adafruit-ampy)..."
+    warn "ampy not found — installing (adafruit-ampy)..."
     pip3 install --quiet --break-system-packages adafruit-ampy
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
 # ---------------------------------------------------------------------------
-# Arrêter r2d2-slave.service pour libérer le port
+# Stop r2d2-slave.service to release the port
 # ---------------------------------------------------------------------------
 SLAVE_WAS_RUNNING=false
 if systemctl is-active --quiet r2d2-slave.service 2>/dev/null; then
-    log "Arrêt r2d2-slave.service (libère le port USB)..."
+    log "Stopping r2d2-slave.service (releasing USB port)..."
     sudo systemctl stop r2d2-slave.service
     SLAVE_WAS_RUNNING=true
 fi
 
 cleanup() {
     if [ "$SLAVE_WAS_RUNNING" = true ]; then
-        log "Redémarrage r2d2-slave.service..."
+        log "Restarting r2d2-slave.service..."
         sudo systemctl start r2d2-slave.service
     fi
 }
 trap cleanup EXIT
 
-# Courte pause pour que le port soit bien libéré
+# Short pause to ensure the port is fully released
 sleep 1
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ if [ -f "$FIRMWARE_DIR/touch.py" ]; then
     ampy --port "$PORT" put "$FIRMWARE_DIR/touch.py" touch.py
 fi
 
-log "Upload main.py (en dernier — déclenche l'exécution au reset)..."
+log "Upload main.py (last — triggers execution on reset)..."
 ampy --port "$PORT" put "$FIRMWARE_DIR/main.py" main.py
 
 # ---------------------------------------------------------------------------
@@ -123,6 +123,6 @@ log "Reset RP2040 (soft reset via ampy)..."
 ampy --port "$PORT" reset
 
 log ""
-log "✓ Firmware RP2040 déployé sur $PORT"
-log "  Le RP2040 redémarre et affiche le spinner BOOTING (orange)."
-log "  Si le service r2d2-slave était actif, il redémarre automatiquement."
+log "✓ RP2040 firmware deployed to $PORT"
+log "  The RP2040 restarts and shows the BOOTING spinner (orange)."
+log "  If the r2d2-slave service was active, it restarts automatically."

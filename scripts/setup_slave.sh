@@ -29,38 +29,38 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # =============================================================================
-# setup_slave.sh — Installation complète du R2-Slave (une seule commande)
+# setup_slave.sh — Full R2-Slave installation (single command)
 # =============================================================================
 #
-# Ce script automatise toutes les étapes d'installation du Slave :
-#   1. Mise à jour système + paquets
-#   2. Fix UART (disable-bt pour libérer ttyAMA0)
-#   3. Activation UART + I2C via raspi-config
-#   4. Création du dossier /home/artoo/r2d2
-#   5. Configuration réseau (wlan0 → hotspot Master)
+# This script automates all Slave installation steps:
+#   1. System update + packages
+#   2. UART fix (disable-bt to free ttyAMA0)
+#   3. Enable UART + I2C via raspi-config
+#   4. Create the /home/artoo/r2d2 directory
+#   5. Network configuration (wlan0 → Master hotspot)
 #   → reboot
 #
-# Après reboot, le Master fait le rsync + installe les services automatiquement :
+# After reboot, the Master runs rsync + installs services automatically:
 #   bash /home/artoo/r2d2/scripts/deploy.sh --first-install
 #
-# Usage (sur le R2-Slave, connecté au WiFi maison) :
+# Usage (on the R2-Slave, connected to home WiFi):
 #   curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_slave.sh | sudo bash
 #
-# Ou si le script est copié depuis le Master :
+# Or if the script was copied from the Master:
 #   sudo bash /home/artoo/setup_slave.sh
 #
 # =============================================================================
 
 set -e
 
-# Réouvrir stdin depuis le terminal si le script est exécuté via pipe (curl | bash)
+# Reopen stdin from the terminal if the script is run via pipe (curl | bash)
 [ -t 0 ] || exec < /dev/tty
 
 REPO_PATH="/home/artoo/r2d2"
 USER="artoo"
 GITHUB_RAW="https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main"
 
-# Couleurs
+# Colors
 RED='\033[0;31m'
 GRN='\033[0;32m'
 YEL='\033[1;33m'
@@ -72,17 +72,17 @@ ok()    { echo -e "${GRN}[ OK ]${NC}  $*"; }
 warn()  { echo -e "${YEL}[WARN]${NC}  $*"; }
 err()   { echo -e "${RED}[ERR ]${NC}  $*"; exit 1; }
 
-# Vérifier qu'on tourne en root
-[ "$EUID" -eq 0 ] || err "Lancer avec sudo : sudo bash $0"
+# Check that we are running as root
+[ "$EUID" -eq 0 ] || err "Run with sudo: sudo bash $0"
 
-# Vérifier qu'on est bien sur le Slave (pas sur le Master)
+# Check that we are on the Slave (not the Master)
 HOSTNAME=$(hostname)
 if [ "$HOSTNAME" = "r2-master" ]; then
-    err "Ce script doit être lancé sur le R2-SLAVE, pas sur le Master ! (hostname: $HOSTNAME)"
+    err "This script must be run on the R2-SLAVE, not on the Master! (hostname: $HOSTNAME)"
 fi
 
-# Vérifier que l'utilisateur artoo existe
-id "$USER" &>/dev/null || err "L'utilisateur '$USER' n'existe pas — reconfigurer via Raspberry Pi Imager"
+# Check that the artoo user exists
+id "$USER" &>/dev/null || err "User '$USER' does not exist — reconfigure via Raspberry Pi Imager"
 
 echo ""
 echo "============================================================"
@@ -91,52 +91,52 @@ echo "============================================================"
 echo ""
 
 # =============================================================================
-# ÉTAPE 1 — Mise à jour système + paquets
+# STEP 1 — System update + packages
 # =============================================================================
-info "Étape 1/5 — Mise à jour système..."
+info "Step 1/5 — Updating system..."
 apt-get update -qq
 apt-get upgrade -y -qq
 apt-get install -y -qq python3-pip python3-serial git alsa-utils mpg123 avahi-daemon
-ok "Paquets installés (mpg123 inclus pour lecture MP3)"
+ok "Packages installed (mpg123 included for MP3 playback)"
 
 # =============================================================================
-# ÉTAPE 2 — Fix UART : libérer ttyAMA0 du Bluetooth
+# STEP 2 — UART fix: free ttyAMA0 from Bluetooth
 # =============================================================================
-info "Étape 2/5 — Fix UART (disable-bt)..."
+info "Step 2/5 — UART fix (disable-bt)..."
 CONFIG="/boot/firmware/config.txt"
 if grep -q "dtoverlay=disable-bt" "$CONFIG"; then
-    ok "dtoverlay=disable-bt déjà présent"
+    ok "dtoverlay=disable-bt already present"
 else
     echo "dtoverlay=disable-bt" >> "$CONFIG"
-    ok "dtoverlay=disable-bt ajouté dans $CONFIG"
+    ok "dtoverlay=disable-bt added to $CONFIG"
 fi
 
 # =============================================================================
-# ÉTAPE 3 — Activation UART hardware + I2C
+# STEP 3 — Enable hardware UART + I2C
 # =============================================================================
-info "Étape 3/5 — Activation UART + I2C..."
-raspi-config nonint do_serial_hw 0   # active UART hardware
-raspi-config nonint do_serial_cons 1 # désactive console série sur UART
-raspi-config nonint do_i2c 0         # active I2C
-ok "UART hardware activé, console série désactivée, I2C activé"
+info "Step 3/5 — Enabling UART + I2C..."
+raspi-config nonint do_serial_hw 0   # enable hardware UART
+raspi-config nonint do_serial_cons 1 # disable serial console on UART
+raspi-config nonint do_i2c 0         # enable I2C
+ok "Hardware UART enabled, serial console disabled, I2C enabled"
 
 # =============================================================================
-# ÉTAPE 4 — Créer le dossier du repo (sera rempli par rsync depuis le Master)
+# STEP 4 — Create the repo directory (will be filled by rsync from the Master)
 # =============================================================================
-info "Étape 4/5 — Préparation dossier repo..."
+info "Step 4/5 — Preparing repo directory..."
 mkdir -p "$REPO_PATH"
 chown "$USER:$USER" "$REPO_PATH"
-ok "Dossier $REPO_PATH prêt"
+ok "Directory $REPO_PATH ready"
 
 # =============================================================================
-# ÉTAPE 5 — Configuration réseau (wlan0 → hotspot Master)
+# STEP 5 — Network configuration (wlan0 → Master hotspot)
 # =============================================================================
-info "Étape 5/5 — Configuration réseau..."
+info "Step 5/5 — Network configuration..."
 
-# Trouver le script setup_slave_network.sh
+# Find the setup_slave_network.sh script
 NETWORK_SCRIPT=""
 
-# Chercher localement (si lancé depuis le repo ou copié)
+# Search locally (if launched from the repo or copied)
 for candidate in \
     "$(dirname "$0")/setup_slave_network.sh" \
     "/home/artoo/r2d2/scripts/setup_slave_network.sh" \
@@ -148,76 +148,76 @@ do
     fi
 done
 
-# Sinon télécharger depuis GitHub
+# Otherwise download from GitHub
 if [ -z "$NETWORK_SCRIPT" ]; then
-    warn "setup_slave_network.sh non trouvé localement — téléchargement depuis GitHub..."
+    warn "setup_slave_network.sh not found locally — downloading from GitHub..."
     TMP_SCRIPT=$(mktemp /tmp/setup_slave_network_XXXXXX.sh)
     if curl -fsSL "$GITHUB_RAW/scripts/setup_slave_network.sh" -o "$TMP_SCRIPT" 2>/dev/null; then
         NETWORK_SCRIPT="$TMP_SCRIPT"
-        ok "Script téléchargé"
+        ok "Script downloaded"
     else
-        err "Impossible de télécharger setup_slave_network.sh — vérifier la connexion internet"
+        err "Cannot download setup_slave_network.sh — check internet connection"
     fi
 fi
 
 bash "$NETWORK_SCRIPT"
 
 # =============================================================================
-# ÉTAPE 5b — Fix WiFi power saving (évite les ARP incomplets / SSH qui drop)
+# STEP 5b — Disable WiFi power saving (avoids incomplete ARPs / SSH drops)
 # =============================================================================
-info "Étape 5b — Désactivation WiFi power saving..."
+info "Step 5b — Disabling WiFi power saving..."
 cat > /etc/udev/rules.d/70-wifi-powersave.rules << 'EOF'
 ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan0", RUN+="/sbin/iw dev wlan0 set power_save off"
 EOF
-# Appliquer immédiatement si wlan0 est déjà actif
+# Apply immediately if wlan0 is already active
 iw dev wlan0 set power_save off 2>/dev/null || true
-ok "WiFi power saving désactivé (règle udev permanente)"
+ok "WiFi power saving disabled (permanent udev rule)"
 
 # =============================================================================
-# ÉTAPE 6 — Configuration audio ALSA (jack 3.5mm, pas HDMI)
+# STEP 6 — ALSA audio configuration (3.5mm jack, not HDMI)
 # =============================================================================
-info "Étape 6 — Configuration audio (jack 3.5mm)..."
+info "Step 6 — Audio configuration (3.5mm jack)..."
 
-# Forcer la sortie audio sur le jack 3.5mm (card 0 = bcm2835 Headphones)
-# Par défaut le Pi sort sur HDMI — sans ça les sons ne sortent pas du jack
+# Force audio output to the 3.5mm jack (card 0 = bcm2835 Headphones)
+# By default the Pi outputs to HDMI — without this, sounds won't come out of the jack
 cat > /home/"$USER"/.asoundrc << 'ASOUNDRC'
 defaults.pcm.card 0
 defaults.ctl.card 0
 ASOUNDRC
 chown "$USER:$USER" /home/"$USER"/.asoundrc
 
-# Volume à 100% + unmute (contrôles numid sur card 0)
+# Volume at 100% + unmute (numid controls on card 0)
 amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true  # PCM Playback Volume
 amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true  # PCM Playback Switch
 
-# Sauvegarder l'état ALSA pour qu'il survive aux reboots
+# Save ALSA state so it survives reboots
 alsactl store 2>/dev/null || true
 
-ok "Audio configuré — jack 3.5mm actif, volume 100%"
+ok "Audio configured — 3.5mm jack active, volume 100%"
 
 # =============================================================================
-# Résumé
+# Summary
 # =============================================================================
 echo ""
 echo "============================================================"
-echo "  Installation Slave terminée ✓"
+echo "  Slave installation complete ✓"
 echo "============================================================"
 echo ""
-echo "  Après le reboot :"
-echo "    Le Slave se connecte au hotspot R2D2_Control du Master."
+echo "  After reboot:"
+echo "    The Slave connects to the R2D2_Control hotspot on the Master."
 echo ""
-echo "  Sur le Master, lancer le premier déploiement :"
+echo "  On the Master, run the first deployment:"
 echo "    bash /home/artoo/r2d2/scripts/deploy.sh --first-install"
 echo ""
-echo "  Cela va :"
-echo "    → rsync le code sur le Slave"
-echo "    → installer les dépendances Python"
-echo "    → installer les services systemd"
-echo "    → démarrer r2d2-slave"
+echo "  This will:"
+echo "    → rsync the code to the Slave"
+echo "    → install Python dependencies"
+echo "    → install systemd services"
+echo "    → start r2d2-slave"
 echo "============================================================"
 echo ""
 
-read -p "Rebooter maintenant ? [O/n] " -n 1 -r
+read -p "Reboot now? [Y/n] " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
     reboot

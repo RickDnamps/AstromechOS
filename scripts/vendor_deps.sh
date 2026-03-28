@@ -28,9 +28,9 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# vendor_deps.sh — Pré-télécharge les dépendances pip dans slave/vendor/
-# À lancer UNE FOIS sur le Master quand internet (wlan1) est disponible.
-# Le dossier vendor/ est ensuite transféré au Slave par deploy.sh — sans internet.
+# vendor_deps.sh — Pre-download pip dependencies into slave/vendor/
+# Run ONCE on the Master when internet (wlan1) is available.
+# The vendor/ directory is then transferred to the Slave by deploy.sh — no internet needed.
 #
 # Usage: bash scripts/vendor_deps.sh
 
@@ -40,20 +40,20 @@ REPO_PATH="/home/artoo/r2d2"
 VENDOR_DIR="$REPO_PATH/slave/vendor"
 REQS="$REPO_PATH/slave/requirements.txt"
 
-echo "=== Pré-téléchargement des dépendances Slave ==="
+echo "=== Pre-downloading Slave dependencies ==="
 
 if ! ip addr show wlan1 2>/dev/null | grep -q "inet "; then
-    echo "ERREUR: wlan1 non connecté — internet requis pour cette opération"
+    echo "ERROR: wlan1 not connected — internet required for this operation"
     exit 1
 fi
 
 mkdir -p "$VENDOR_DIR"
-echo "Téléchargement vers $VENDOR_DIR..."
+echo "Downloading to $VENDOR_DIR..."
 pip3 download -r "$REQS" -d "$VENDOR_DIR"
 
 echo ""
-echo "=== Vendor créé ==="
+echo "=== Vendor directory created ==="
 ls "$VENDOR_DIR"
 echo ""
-echo "Le prochain 'bash scripts/deploy.sh' installera les dépendances"
+echo "The next 'bash scripts/deploy.sh' will install the dependencies"
 echo "sur le Slave sans connexion internet."

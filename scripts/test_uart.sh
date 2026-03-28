@@ -28,11 +28,11 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Test UART — Lance Master + Slave et affiche les logs en temps réel
+# Test UART — Start Master + Slave and display live logs
 # Usage: bash scripts/test_uart.sh
-# Ctrl+C pour tout arrêter
+# Ctrl+C to stop everything
 #
-# Si le port /dev/ttyAMA0 est occupé (service systemd), arrêter d'abord :
+# If /dev/ttyAMA0 is in use (systemd service), stop it first:
 #   sudo systemctl stop r2d2-master.service r2d2-monitor.service
 #   ssh artoo@r2-slave.local "sudo systemctl stop r2d2-slave.service"
 
@@ -47,22 +47,22 @@ sleep 1
 ssh $SLAVE "> /tmp/slave.log"
 echo "OK"
 
-echo "=== Démarrage Slave ==="
+echo "=== Starting Slave ==="
 ssh $SLAVE "cd $REPO && python3 -m slave.main >> /tmp/slave.log 2>&1" &
 SSH_PID=$!
 sleep 2
 
-echo "=== Démarrage Master ==="
+echo "=== Starting Master ==="
 cd $REPO
 python3 -m master.main >> /tmp/master.log 2>&1 &
 MASTER_PID=$!
 sleep 1
 
 echo ""
-echo "=== Logs en direct — Ctrl+C pour tout arrêter ==="
+echo "=== Live logs — Ctrl+C to stop everything ==="
 echo ""
 
-trap "echo ''; echo '=== Arrêt ==='; kill $MASTER_PID 2>/dev/null; kill $SSH_PID 2>/dev/null; kill $TAIL_M $TAIL_S 2>/dev/null; ssh $SLAVE 'pkill -9 -f slave.main' 2>/dev/null; exit 0" INT TERM
+trap "echo ''; echo '=== Stopping ==='; kill $MASTER_PID 2>/dev/null; kill $SSH_PID 2>/dev/null; kill $TAIL_M $TAIL_S 2>/dev/null; ssh $SLAVE 'pkill -9 -f slave.main' 2>/dev/null; exit 0" INT TERM
 
 tail -f /tmp/master.log | sed 's/^/[MASTER] /' &
 TAIL_M=$!

@@ -28,12 +28,12 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# deploy.sh — Déploie le code Slave sur le R2-Slave (Pi 4B 2G) et redémarre le service
+# deploy.sh — Deploys Slave code to the R2-Slave (Pi 4B 2G) and restarts the service
 # Usage: bash scripts/deploy.sh [--no-reboot] [--git-pull]
 #
 # Options:
-#   --no-reboot   rsync uniquement, sans redémarrer le Slave
-#   --git-pull    git pull avant le rsync (nécessite wlan1 connecté)
+#   --no-reboot   rsync only, without restarting the Slave
+#   --git-pull    git pull before rsync (requires wlan1 connected)
 
 set -e
 
@@ -70,22 +70,22 @@ if [ "$DO_GIT_PULL" = true ]; then
         git pull && git rev-parse --short HEAD > "$VERSION_FILE"
         echo "      git pull OK — version: $(cat $VERSION_FILE)"
     else
-        echo "      wlan1 non disponible — git pull ignoré"
+        echo "      wlan1 not available — git pull skipped"
     fi
 else
-    echo "[1/4] git pull ignoré (utiliser --git-pull pour l'activer)"
+    echo "[1/4] git pull skipped (use --git-pull to enable)"
 fi
 
 # ------------------------------------------------------------------
-# Vérifier que le Slave est joignable
+# Check that the Slave is reachable
 # ------------------------------------------------------------------
-echo "[2/4] Vérification connexion Slave (${SLAVE_HOST})..."
+echo "[2/4] Checking Slave connection (${SLAVE_HOST})..."
 if ! ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" echo "ping" > /dev/null 2>&1; then
-    echo "ERREUR: Impossible de joindre le Slave ${SLAVE_HOST}"
-    echo "       Vérifier que le R2-Slave est connecté au hotspot R2D2_Control"
+    echo "ERROR: Cannot reach the Slave ${SLAVE_HOST}"
+    echo "       Check that the R2-Slave is connected to the R2D2_Control hotspot"
     exit 1
 fi
-echo "      Slave joignable OK"
+echo "      Slave reachable OK"
 
 # ------------------------------------------------------------------
 # rsync slave/ + shared/ + VERSION
@@ -108,48 +108,48 @@ rsync -az \
     "${SLAVE_USER}@${SLAVE_HOST}:${VERSION_FILE}"
 
 LOCAL_VERSION=$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")
-echo "      rsync OK — version déployée: ${LOCAL_VERSION}"
+echo "      rsync OK — deployed version: ${LOCAL_VERSION}"
 
 # ------------------------------------------------------------------
-# Dépendances pip — installation depuis le cache local (vendor/)
-# Le vendor/ est pré-téléchargé sur le Master (internet requis une fois)
-# puis transféré au Slave via rsync → aucun internet requis sur le Slave
+# pip dependencies — install from local cache (vendor/)
+# vendor/ is pre-downloaded on the Master (internet required once)
+# then transferred to the Slave via rsync → no internet needed on the Slave
 # ------------------------------------------------------------------
-echo "      Dépendances pip..."
+echo "      pip dependencies..."
 REQS="$REPO_PATH/slave/requirements.txt"
 
 _pip_install_slave() {
-    # Tente installation offline depuis vendor/, fallback PyPI si échec
+    # Try offline install from vendor/, fall back to PyPI on failure
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
         "pip3 install --break-system-packages -q --no-index --find-links=${SLAVE_REPO}/slave/vendor -r ${SLAVE_REPO}/slave/requirements.txt" \
     || {
-        echo "      → vendor/ incomplet, fallback installation PyPI..."
+        echo "      → vendor/ incomplete, falling back to PyPI installation..."
         ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
             "pip3 install --break-system-packages -q -r ${SLAVE_REPO}/slave/requirements.txt"
     }
 }
 
 if [ -d "$VENDOR_DIR" ] && [ "$(ls -A $VENDOR_DIR)" ]; then
-    # Installer depuis le cache local — fonctionne sans internet
-    echo "      → installation offline depuis vendor/"
+    # Install from local cache — works without internet
+    echo "      → offline installation from vendor/"
     _pip_install_slave
 else
-    # Pas de vendor/ : télécharger depuis PyPI (nécessite NAT wlan1 actif)
-    echo "      → vendor/ absent, téléchargement PyPI (nécessite internet via Master NAT)"
+    # No vendor/ directory: download from PyPI (requires NAT wlan1 active)
+    echo "      → vendor/ missing, downloading from PyPI (requires internet via Master NAT)"
     if ip addr show wlan1 2>/dev/null | grep -q "inet "; then
-        # Pré-télécharger sur le Master (setuptools + wheel en premier pour éviter erreurs)
+        # Pre-download on the Master (setuptools + wheel first to avoid errors)
         mkdir -p "$VENDOR_DIR"
         pip3 download -q setuptools wheel -d "$VENDOR_DIR"
         pip3 download -q -r "$REQS" -d "$VENDOR_DIR"
-        # Re-rsync le vendor/ fraîchement créé
+        # Re-rsync the freshly created vendor/ directory
         rsync -az -e "ssh $SSH_OPTS" "$VENDOR_DIR/" "${SLAVE_USER}@${SLAVE_HOST}:${SLAVE_REPO}/slave/vendor/"
         _pip_install_slave
-        echo "      → vendor/ créé pour les prochains déploiements offline"
+        echo "      → vendor/ created for future offline deployments"
     else
-        echo "      ATTENTION: vendor/ absent et wlan1 indisponible — tentative PyPI direct..."
+        echo "      WARNING: vendor/ missing and wlan1 unavailable — attempting direct PyPI install..."
         ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
             "pip3 install --break-system-packages -q -r ${SLAVE_REPO}/slave/requirements.txt" \
-        || echo "      ÉCHEC pip — lancer 'bash scripts/vendor_deps.sh' avec internet pour créer le cache"
+        || echo "      FAILED pip — run 'bash scripts/vendor_deps.sh' with internet to build the cache"
     fi
 fi
 
@@ -164,17 +164,17 @@ if [ "$FIRST_INSTALL" = true ]; then
         sudo cp /home/artoo/r2d2/slave/services/r2d2-version.service /etc/systemd/system/
         sudo systemctl daemon-reload
         sudo systemctl enable r2d2-version r2d2-slave
-        echo "  → Services systemd installés"
+        echo "  → systemd services installed"
 
         # Installer mpg123 si absent (lecteur MP3)
         if ! which mpg123 > /dev/null 2>&1; then
             sudo apt-get install -y -qq mpg123
-            echo "  → mpg123 installé"
+            echo "  → mpg123 installed"
         else
-            echo "  → mpg123 déjà présent"
+            echo "  → mpg123 already present"
         fi
 
-        # Config ALSA : forcer jack 3.5mm (card 0) — par défaut Pi sort sur HDMI
+        # ALSA config: force 3.5mm jack (card 0) — Pi defaults to HDMI output
         cat > /home/artoo/.asoundrc << 'ASOUNDRC'
 defaults.pcm.card 0
 defaults.ctl.card 0
@@ -182,26 +182,26 @@ ASOUNDRC
         amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true
         amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true
         sudo alsactl store 2>/dev/null || true
-        echo "  → Audio configuré (jack 3.5mm, volume 100%)"
+        echo "  → Audio configured (3.5mm jack, volume 100%)"
 REMOTE
     echo "      Services + audio OK"
 else
-    echo "[4/5] Services systemd ignorés (--first-install non spécifié)"
+    echo "[4/5] systemd services skipped (--first-install not specified)"
 fi
 
 # ------------------------------------------------------------------
 # Reboot Slave
 # ------------------------------------------------------------------
 if [ "$DO_REBOOT" = true ]; then
-    echo "[5/5] Redémarrage service r2d2-slave sur le Slave..."
+    echo "[5/5] Restarting r2d2-slave service on the Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
         "sudo systemctl restart r2d2-slave" 2>/dev/null || \
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
         "sudo reboot" 2>/dev/null || true
-    echo "      Slave redémarré"
+    echo "      Slave restarted"
 else
-    echo "[5/5] Reboot ignoré (--no-reboot)"
+    echo "[5/5] Reboot skipped (--no-reboot)"
 fi
 
 echo ""
-echo "=== Deploy terminé — version: ${LOCAL_VERSION} ==="
+echo "=== Deploy complete — version: ${LOCAL_VERSION} ==="

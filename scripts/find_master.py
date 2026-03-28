@@ -30,8 +30,8 @@
 # ============================================================
 # -*- coding: utf-8 -*-
 """
-Trouve l'IP de r2-master depuis Windows.
-Tente mDNS d'abord, puis scan SSH sur le sous-réseau local.
+Find the IP of r2-master from Windows.
+Tries mDNS first, then SSH scan on the local subnet.
 Usage: python3 scripts/find_master.py
 """
 import socket
@@ -53,7 +53,7 @@ def _try_mdns(hostname='r2-master.local', timeout=2) -> str | None:
 
 
 def _get_local_subnet() -> str | None:
-    """Retourne le préfixe de sous-réseau local (ex: '192.168.2.')."""
+    """Return the local subnet prefix (e.g. '192.168.2.')."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('8.8.8.8', 80))
@@ -65,7 +65,7 @@ def _get_local_subnet() -> str | None:
 
 
 def _scan_ssh(prefix: str, port=22, timeout=0.5) -> list[str]:
-    """Scan SSH sur toutes les IPs du sous-réseau."""
+    """SSH scan across all IPs on the subnet."""
     def check(ip):
         s = socket.socket()
         s.settimeout(timeout)
@@ -79,33 +79,33 @@ def _scan_ssh(prefix: str, port=22, timeout=0.5) -> list[str]:
 
 
 def find_master() -> str | None:
-    # 1. Tentative mDNS
-    print('Tentative mDNS r2-master.local...', end=' ', flush=True)
+    # 1. mDNS attempt
+    print('Trying mDNS r2-master.local...', end=' ', flush=True)
     ip = _try_mdns()
     if ip:
-        print(f'trouvé → {ip}')
+        print(f'found → {ip}')
         return ip
-    print('échec')
+    print('failed')
 
-    # 2. Scan SSH sur le sous-réseau
+    # 2. SSH scan on the subnet
     prefix = _get_local_subnet()
     if not prefix:
-        print('Impossible de déterminer le sous-réseau local')
+        print('Unable to determine the local subnet')
         return None
-    print(f'Scan SSH sur {prefix}0/24...', end=' ', flush=True)
+    print(f'SSH scan on {prefix}0/24...', end=' ', flush=True)
     hosts = _scan_ssh(prefix)
     if not hosts:
-        print('aucun hôte SSH trouvé')
+        print('no SSH host found')
         return None
-    print(f'{len(hosts)} hôte(s) SSH: {hosts}')
+    print(f'{len(hosts)} SSH host(s): {hosts}')
 
-    # Si un seul hôte SSH → c'est probablement le Pi
+    # Single SSH host → most likely the Pi
     if len(hosts) == 1:
-        print(f'→ r2-master probablement à {hosts[0]}')
+        print(f'→ r2-master probably at {hosts[0]}')
         return hosts[0]
 
-    # Plusieurs hôtes → afficher la liste, laisser l'utilisateur choisir
-    print('Plusieurs hôtes SSH trouvés. Lequel est r2-master ?')
+    # Multiple hosts → display the list, let the user choose
+    print('Multiple SSH hosts found. Which one is r2-master?')
     for i, h in enumerate(hosts):
         print(f'  [{i}] {h}')
     return None
@@ -117,5 +117,5 @@ if __name__ == '__main__':
         print(f'\nr2-master IP: {ip}')
         sys.exit(0)
     else:
-        print('\nNon trouvé')
+        print('\nNot found')
         sys.exit(1)

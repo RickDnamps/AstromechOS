@@ -29,35 +29,35 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # =============================================================================
-# setup_master_network.sh — Configuration réseau R2-D2 Master
+# setup_master_network.sh — R2-D2 Master network configuration
 # =============================================================================
 #
-# ⚠️  INSTALLER LE MASTER EN PREMIER — avant le Slave.
-#     Le Slave a besoin des credentials du hotspot Master pour se configurer.
+# ⚠️  INSTALL THE MASTER FIRST — before the Slave.
+#     The Slave needs the Master hotspot credentials to configure itself.
 #
-# Ce script doit être exécuté UNE SEULE FOIS sur le R2-Master.
+# This script must be run ONCE on the R2-Master.
 #
-# Ce qu'il fait :
-#   1. Lit les credentials WiFi maison déjà configurés sur wlan0
-#   2. Demande le SSID/mot de passe du hotspot R2-D2 (personnalisable)
-#   3. Sauvegarde tout dans local.cfg (survit aux git pull)
-#   4. Configure wlan1 (clé USB) pour se connecter au WiFi maison
-#   5. Convertit wlan0 en point d'accès (192.168.4.1)
+# What it does:
+#   1. Reads the home WiFi credentials already configured on wlan0
+#   2. Prompts for the R2-D2 hotspot SSID/password (customizable)
+#   3. Saves everything to local.cfg (survives git pulls)
+#   4. Configures wlan1 (USB dongle) to connect to the home WiFi
+#   5. Converts wlan0 into an access point (192.168.4.1)
 #
-# Résultat final :
-#   wlan0  → Hotspot R2-D2            192.168.4.1  (Slave + télécommande)
-#   wlan1  → WiFi maison              DHCP         (git pull / GitHub)
+# End result:
+#   wlan0  → R2-D2 Hotspot             192.168.4.1  (Slave + remote control)
+#   wlan1  → Home WiFi                 DHCP         (git pull / GitHub)
 #
-# Prérequis :
-#   - Raspberry Pi OS Bookworm 64-bit Lite (NetworkManager actif)
-#   - Pi connecté au WiFi maison via wlan0 (configuré via Imager)
-#   - Clé USB WiFi branchée (sera wlan1) OU brancher plus tard
+# Prerequisites:
+#   - Raspberry Pi OS Bookworm 64-bit Lite (NetworkManager active)
+#   - Pi connected to home WiFi via wlan0 (configured via Imager)
+#   - WiFi USB dongle plugged in (will be wlan1) OR plug in later
 #
-# Usage :
+# Usage:
 #   sudo bash /home/artoo/r2d2/scripts/setup_master_network.sh
 #
-# Note le SSID et mot de passe du hotspot — tu en auras besoin
-# pour configurer le Slave avec setup_slave_network.sh.
+# Note the hotspot SSID and password — you will need them
+# to configure the Slave with setup_slave_network.sh.
 #
 # =============================================================================
 
@@ -67,14 +67,14 @@ REPO_PATH="/home/artoo/r2d2"
 LOCAL_CFG="${REPO_PATH}/master/config/local.cfg"
 LOCAL_CFG_EXAMPLE="${REPO_PATH}/master/config/local.cfg.example"
 
-# Valeurs par défaut du hotspot (modifiables interactivement)
+# Default hotspot values (can be changed interactively)
 HOTSPOT_SSID="R2D2_Control"
 HOTSPOT_PASS="r2d2droid"
 HOTSPOT_IP="192.168.4.1/24"
 HOTSPOT_CON="r2d2-hotspot"
 INTERNET_CON="r2d2-internet"
 
-# Couleurs
+# Colors
 RED='\033[0;31m'
 GRN='\033[0;32m'
 YEL='\033[1;33m'
@@ -89,59 +89,59 @@ die()   { echo -e "${RED}[ERR ]${NC}  $*" >&2; exit 1; }
 # =============================================================================
 echo ""
 echo -e "${BLU}========================================${NC}"
-echo -e "${BLU}  R2-D2 Master — Configuration réseau  ${NC}"
+echo -e "${BLU}  R2-D2 Master — Network configuration  ${NC}"
 echo -e "${BLU}========================================${NC}"
 echo ""
 
-# --- Vérification root ---
-[[ $EUID -eq 0 ]] || die "Ce script doit être exécuté avec sudo"
+# --- Root check ---
+[[ $EUID -eq 0 ]] || die "This script must be run with sudo"
 
-# --- Vérification NetworkManager ---
+# --- NetworkManager check ---
 if ! systemctl is-active --quiet NetworkManager; then
-    die "NetworkManager n'est pas actif. Bookworm requis.\n    sudo systemctl enable --now NetworkManager"
+    die "NetworkManager is not active. Bookworm required.\n    sudo systemctl enable --now NetworkManager"
 fi
-ok "NetworkManager actif"
+ok "NetworkManager active"
 
-# --- Vérification repo ---
-[[ -d "$REPO_PATH" ]] || die "Repo introuvable: $REPO_PATH\n    Cloner d'abord: git clone ... $REPO_PATH"
+# --- Repo check ---
+[[ -d "$REPO_PATH" ]] || die "Repo not found: $REPO_PATH\n    Clone first: git clone ... $REPO_PATH"
 
 # =============================================================================
-# ÉTAPE 1 — Récupérer les credentials WiFi maison depuis wlan0
+# STEP 1 — Retrieve home WiFi credentials from wlan0
 # =============================================================================
 echo ""
-info "Étape 1 — Lecture des credentials WiFi maison (wlan0 actuel)..."
+info "Step 1 — Reading home WiFi credentials (current wlan0)..."
 
 HOME_SSID=""
 HOME_PASS=""
 
-# Trouver le nom de connexion active sur wlan0
+# Find the active connection name on wlan0
 WLAN0_CON=$(nmcli -g GENERAL.CONNECTION device show wlan0 2>/dev/null | tr -d ' ')
 
 if [[ -n "$WLAN0_CON" && "$WLAN0_CON" != "--" ]]; then
-    info "Connexion active sur wlan0 : '$WLAN0_CON'"
+    info "Active connection on wlan0: '$WLAN0_CON'"
 
-    # Extraire SSID
+    # Extract SSID
     HOME_SSID=$(nmcli -g 802-11-wireless.ssid connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
 
-    # Extraire mot de passe (requiert sudo, déjà root ici)
+    # Extract password (requires sudo, already root here)
     HOME_PASS=$(nmcli -s -g 802-11-wireless-security.psk connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
 
     if [[ -n "$HOME_SSID" ]]; then
-        ok "SSID détecté : '$HOME_SSID'"
+        ok "SSID detected: '$HOME_SSID'"
     fi
     if [[ -n "$HOME_PASS" ]]; then
-        ok "Mot de passe récupéré (masqué)"
+        ok "Password retrieved (masked)"
     else
-        warn "Mot de passe non trouvé automatiquement (réseau ouvert ou format inconnu)"
+        warn "Password not found automatically (open network or unknown format)"
     fi
 else
-    warn "Aucune connexion active sur wlan0"
+    warn "No active connection on wlan0"
 fi
 
-# --- Demander confirmation ou saisie manuelle ---
+# --- Ask for confirmation or manual entry ---
 echo ""
 if [[ -n "$HOME_SSID" ]]; then
-    read -r -p "Utiliser le WiFi '${HOME_SSID}' pour wlan1 (internet) ? [O/n] " CONFIRM
+    read -r -p "Use WiFi '${HOME_SSID}' for wlan1 (internet)? [Y/n] " CONFIRM
     if [[ "$CONFIRM" =~ ^[Nn] ]]; then
         HOME_SSID=""
         HOME_PASS=""
@@ -150,33 +150,33 @@ fi
 
 if [[ -z "$HOME_SSID" ]]; then
     echo ""
-    info "Saisie manuelle des credentials WiFi maison :"
-    read -r -p "  SSID (nom du réseau WiFi) : " HOME_SSID
-    [[ -n "$HOME_SSID" ]] || die "SSID vide — abandon"
-    read -r -s -p "  Mot de passe WiFi        : " HOME_PASS
+    info "Manual entry of home WiFi credentials:"
+    read -r -p "  SSID (WiFi network name): " HOME_SSID
+    [[ -n "$HOME_SSID" ]] || die "Empty SSID — aborting"
+    read -r -s -p "  WiFi password           : " HOME_PASS
     echo ""
 fi
 
 # =============================================================================
-# ÉTAPE 1b — Configurer le hotspot R2-D2 (SSID + mot de passe)
+# STEP 1b — Configure the R2-D2 hotspot (SSID + password)
 # =============================================================================
 echo ""
-echo -e "${BLU}--- Hotspot R2-D2 (point d'accès pour le Slave et la télécommande) ---${NC}"
+echo -e "${BLU}--- R2-D2 Hotspot (access point for the Slave and remote control) ---${NC}"
 echo ""
-echo    "  Le R2-Master va créer un réseau WiFi auquel le Slave se connectera."
-echo    "  Tu peux personnaliser le nom et le mot de passe, ou garder les défauts."
+echo    "  The R2-Master will create a WiFi network that the Slave will connect to."
+echo    "  You can customize the name and password, or keep the defaults."
 echo ""
-read -r -p "  SSID du hotspot     [${HOTSPOT_SSID}] : " INPUT
+read -r -p "  Hotspot SSID     [${HOTSPOT_SSID}]: " INPUT
 [[ -n "$INPUT" ]] && HOTSPOT_SSID="$INPUT"
 
 while true; do
-    read -r -s -p "  Mot de passe hotspot [${HOTSPOT_PASS}] : " INPUT
+    read -r -s -p "  Hotspot password [${HOTSPOT_PASS}]: " INPUT
     echo ""
     if [[ -z "$INPUT" ]]; then
-        break   # garder le défaut
+        break   # keep default
     fi
     if [[ ${#INPUT} -lt 8 ]]; then
-        warn "Le mot de passe WPA doit faire au moins 8 caractères — réessayer"
+        warn "WPA password must be at least 8 characters — try again"
     else
         HOTSPOT_PASS="$INPUT"
         break
@@ -184,43 +184,43 @@ while true; do
 done
 
 echo ""
-ok "Hotspot configuré : SSID='${HOTSPOT_SSID}'  (mot de passe enregistré)"
+ok "Hotspot configured: SSID='${HOTSPOT_SSID}'  (password saved)"
 echo ""
-echo -e "  ${YEL}⚠  Note ces informations — tu en auras besoin pour le Slave :${NC}"
+echo -e "  ${YEL}⚠  Note these details — you will need them for the Slave:${NC}"
 echo    "     SSID     : ${HOTSPOT_SSID}"
 echo    "     Password : ${HOTSPOT_PASS}"
 echo ""
 
 # =============================================================================
-# ÉTAPE 2 — Sauvegarder dans local.cfg
+# STEP 2 — Save to local.cfg
 # =============================================================================
 echo ""
-info "Étape 2 — Sauvegarde dans local.cfg..."
+info "Step 2 — Saving to local.cfg..."
 
-# Créer local.cfg depuis l'exemple s'il n'existe pas encore
+# Create local.cfg from the example if it does not exist yet
 if [[ ! -f "$LOCAL_CFG" ]]; then
     if [[ -f "$LOCAL_CFG_EXAMPLE" ]]; then
         cp "$LOCAL_CFG_EXAMPLE" "$LOCAL_CFG"
         chown artoo:artoo "$LOCAL_CFG"
-        info "local.cfg créé depuis l'exemple"
+        info "local.cfg created from example"
     else
-        die "local.cfg.example introuvable : $LOCAL_CFG_EXAMPLE"
+        die "local.cfg.example not found: $LOCAL_CFG_EXAMPLE"
     fi
 fi
 
-# Fonction pour écrire/mettre à jour une clé dans une section .cfg
+# Helper to write/update a key in a .cfg section
 cfg_set() {
     local file="$1" section="$2" key="$3" value="$4"
-    # Vérifier si la section existe
+    # Check if the section exists
     if grep -q "^\[${section}\]" "$file"; then
-        # Mettre à jour ou ajouter la clé dans la section
+        # Update or add the key in the section
         if grep -q "^${key}\s*=" "$file"; then
             sed -i "s|^${key}\s*=.*|${key} = ${value}|" "$file"
         else
             sed -i "/^\[${section}\]/a ${key} = ${value}" "$file"
         fi
     else
-        # Ajouter la section entière
+        # Add the entire section
         echo "" >> "$file"
         echo "[${section}]" >> "$file"
         echo "${key} = ${value}" >> "$file"
@@ -233,22 +233,22 @@ cfg_set "$LOCAL_CFG" "hotspot"   "ssid"     "$HOTSPOT_SSID"
 cfg_set "$LOCAL_CFG" "hotspot"   "password" "$HOTSPOT_PASS"
 chown artoo:artoo "$LOCAL_CFG"
 
-ok "Credentials WiFi maison sauvegardés dans local.cfg [home_wifi]"
-ok "Credentials hotspot sauvegardés dans local.cfg [hotspot]"
+ok "Home WiFi credentials saved to local.cfg [home_wifi]"
+ok "Hotspot credentials saved to local.cfg [hotspot]"
 
 # =============================================================================
-# ÉTAPE 3 — Configurer wlan1 (clé USB) pour le WiFi maison
+# STEP 3 — Configure wlan1 (USB dongle) for home WiFi
 # =============================================================================
 echo ""
-info "Étape 3 — Configuration wlan1 → WiFi maison '$HOME_SSID'..."
+info "Step 3 — Configuring wlan1 → home WiFi '$HOME_SSID'..."
 
-# Supprimer l'ancienne connexion r2d2-internet si elle existe
+# Delete the old r2d2-internet connection if it exists
 if nmcli connection show "$INTERNET_CON" &>/dev/null; then
     nmcli connection delete "$INTERNET_CON"
-    info "Ancienne connexion '$INTERNET_CON' supprimée"
+    info "Old connection '$INTERNET_CON' deleted"
 fi
 
-# Créer la connexion wlan1
+# Create the wlan1 connection
 if [[ -n "$HOME_PASS" ]]; then
     nmcli connection add \
         type wifi \
@@ -260,7 +260,7 @@ if [[ -n "$HOME_PASS" ]]; then
         connection.autoconnect yes \
         connection.autoconnect-priority 10
 else
-    # Réseau ouvert
+    # Open network
     nmcli connection add \
         type wifi \
         ifname wlan1 \
@@ -270,38 +270,38 @@ else
         connection.autoconnect-priority 10
 fi
 
-ok "Connexion '$INTERNET_CON' créée pour wlan1"
+ok "Connection '$INTERNET_CON' created for wlan1"
 
-# Tenter de la démarrer si wlan1 existe déjà
+# Try to bring it up if wlan1 already exists
 if ip link show wlan1 &>/dev/null; then
-    info "wlan1 détecté — connexion en cours..."
-    nmcli connection up "$INTERNET_CON" && ok "wlan1 connecté à '$HOME_SSID'" \
-        || warn "Connexion wlan1 échouée — vérifie que la clé USB WiFi est branchée"
+    info "wlan1 detected — connecting..."
+    nmcli connection up "$INTERNET_CON" && ok "wlan1 connected to '$HOME_SSID'" \
+        || warn "wlan1 connection failed — check that the WiFi USB dongle is plugged in"
 else
-    warn "wlan1 non détecté maintenant — la connexion s'activera automatiquement au prochain branchement de la clé USB"
+    warn "wlan1 not detected now — the connection will activate automatically when the USB dongle is plugged in"
 fi
 
 # =============================================================================
-# ÉTAPE 4 — Supprimer la connexion wlan0 maison et créer le hotspot
+# STEP 4 — Remove the wlan0 home connection and create the hotspot
 # =============================================================================
 echo ""
-info "Étape 4 — Conversion wlan0 en hotspot '$HOTSPOT_SSID'..."
+info "Step 4 — Converting wlan0 to hotspot '$HOTSPOT_SSID'..."
 
-# Supprimer l'ancienne connexion hotspot si elle existe
+# Delete the old hotspot connection if it exists
 if nmcli connection show "$HOTSPOT_CON" &>/dev/null; then
     nmcli connection delete "$HOTSPOT_CON"
-    info "Ancien hotspot supprimé"
+    info "Old hotspot deleted"
 fi
 
-# Supprimer la connexion WiFi maison de wlan0 pour libérer l'interface
+# Remove the home WiFi connection from wlan0 to free the interface
 if [[ -n "$WLAN0_CON" && "$WLAN0_CON" != "--" ]]; then
-    # Désactiver d'abord, puis configurer pour ne plus être prioritaire
-    # On NE supprime PAS — NetworkManager sera redirigé via autoconnect
+    # Deactivate first, then redirect so it no longer takes priority
+    # Do NOT delete — NetworkManager will be redirected via autoconnect
     nmcli connection modify "$WLAN0_CON" connection.interface-name wlan1 2>/dev/null || true
-    info "Connexion '$WLAN0_CON' redirigée vers wlan1"
+    info "Connection '$WLAN0_CON' redirected to wlan1"
 fi
 
-# Créer le hotspot sur wlan0
+# Create the hotspot on wlan0
 nmcli connection add \
     type wifi \
     ifname wlan0 \
@@ -316,58 +316,58 @@ nmcli connection add \
     connection.autoconnect yes \
     connection.autoconnect-priority 100
 
-ok "Hotspot '$HOTSPOT_CON' créé sur wlan0"
+ok "Hotspot '$HOTSPOT_CON' created on wlan0"
 
-# Activer le hotspot
-nmcli connection up "$HOTSPOT_CON" && ok "Hotspot démarré sur wlan0" \
-    || warn "Démarrage hotspot différé au reboot"
+# Activate the hotspot
+nmcli connection up "$HOTSPOT_CON" && ok "Hotspot started on wlan0" \
+    || warn "Hotspot startup deferred to reboot"
 
 # =============================================================================
-# ÉTAPE 5 — Avahi pour résolution .local
+# STEP 5 — Avahi for .local resolution
 # =============================================================================
 echo ""
-info "Étape 5 — Vérification avahi-daemon (.local DNS)..."
+info "Step 5 — Checking avahi-daemon (.local DNS)..."
 
 if ! command -v avahi-daemon &>/dev/null; then
     apt-get install -y avahi-daemon -qq
 fi
 systemctl enable --now avahi-daemon
-ok "avahi-daemon actif (r2-master.local / r2-slave.local)"
+ok "avahi-daemon active (r2-master.local / r2-slave.local)"
 
 # =============================================================================
-# RÉSUMÉ
+# SUMMARY
 # =============================================================================
 echo ""
 echo -e "${GRN}========================================${NC}"
-echo -e "${GRN}  Master réseau configuré ✓             ${NC}"
+echo -e "${GRN}  Master network configured ✓           ${NC}"
 echo -e "${GRN}========================================${NC}"
 echo ""
-echo -e "  ${BLU}wlan0${NC} → Hotspot R2-D2 (point d'accès)"
+echo -e "  ${BLU}wlan0${NC} → R2-D2 Hotspot (access point)"
 echo    "         SSID     : ${HOTSPOT_SSID}"
 echo    "         Password : ${HOTSPOT_PASS}"
-echo    "         IP fixe  : 192.168.4.1"
+echo    "         Fixed IP : 192.168.4.1"
 echo ""
-echo -e "  ${BLU}wlan1${NC} → WiFi maison / internet (clé USB)"
+echo -e "  ${BLU}wlan1${NC} → Home WiFi / internet (USB dongle)"
 echo    "         SSID     : ${HOME_SSID}"
-echo    "         (connexion automatique au branchement)"
+echo    "         (automatic connection when dongle is plugged in)"
 echo ""
-echo -e "  ${BLU}Sauvegardé dans${NC} : ${LOCAL_CFG}"
+echo -e "  ${BLU}Saved to${NC}: ${LOCAL_CFG}"
 echo    "    [home_wifi]  ssid / password"
 echo    "    [hotspot]    ssid / password"
 echo ""
 echo -e "  ${YEL}══════════════════════════════════════${NC}"
-echo -e "  ${YEL}  INFOS POUR CONFIGURER LE SLAVE :     ${NC}"
+echo -e "  ${YEL}  INFORMATION FOR SLAVE SETUP:         ${NC}"
 echo -e "  ${YEL}══════════════════════════════════════${NC}"
 echo    ""
-echo    "  Sur le R2-Slave, tu auras besoin de :"
+echo    "  On the R2-Slave, you will need:"
 echo -e "  ${GRN}  Hotspot SSID     : ${HOTSPOT_SSID}${NC}"
 echo -e "  ${GRN}  Hotspot Password : ${HOTSPOT_PASS}${NC}"
 echo    ""
-echo    "  Commande Slave (après reboot Master) :"
+echo    "  Slave command (after Master reboot):"
 echo    "  sudo bash /home/artoo/r2d2/scripts/setup_slave_network.sh"
 echo    ""
-echo -e "  ${YEL}Prochaines étapes :${NC}"
-echo    "    1. Brancher la clé USB WiFi sur le Master (si pas encore fait)"
+echo -e "  ${YEL}Next steps:${NC}"
+echo    "    1. Plug the WiFi USB dongle into the Master (if not already done)"
 echo    "    2. sudo reboot"
-echo    "    3. Configurer le Slave : setup_slave_network.sh"
+echo    "    3. Configure the Slave: setup_slave_network.sh"
 echo ""

@@ -28,8 +28,8 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# setup_hotspot.sh — Configure wlan0 en point d'accès sur Pi 4B
-# wlan1 = clé USB externe → internet (git pull)
+# setup_hotspot.sh — Configure wlan0 as an access point on Pi 4B
+# wlan1 = external USB adapter → internet (git pull)
 # wlan0 = interface interne → hotspot "R2D2_Control" 192.168.4.x
 #
 # Usage: sudo bash setup_hotspot.sh
@@ -47,7 +47,7 @@ echo "=== Installation des paquets ==="
 apt-get update -qq
 apt-get install -y hostapd dnsmasq
 
-echo "=== Arrêt des services ==="
+echo "=== Stopping services ==="
 systemctl stop hostapd dnsmasq 2>/dev/null || true
 systemctl unmask hostapd
 
@@ -100,15 +100,15 @@ iptables -A FORWARD -i ${IFACE} -o wlan1 -j ACCEPT
 apt-get install -y iptables-persistent -qq
 netfilter-persistent save
 
-echo "=== Activation des services au démarrage ==="
+echo "=== Enabling services at startup ==="
 systemctl enable hostapd dnsmasq
 systemctl start hostapd dnsmasq
 
 echo ""
-echo "=== Hotspot configuré ==="
+echo "=== Hotspot configured ==="
 echo "  SSID : ${SSID}"
-echo "  Clé  : ${PASSPHRASE}"
+echo "  Key  : ${PASSPHRASE}"
 echo "  IP   : ${HOTSPOT_IP}"
 echo ""
-echo "  R2-Slave doit se connecter à '${SSID}' et obtiendra 192.168.4.2+"
-echo "  Redémarrez le Pi 4B pour appliquer tous les changements."
+echo "  R2-Slave must connect to '${SSID}' and will get 192.168.4.2+"
+echo "  Reboot the Pi 4B to apply all changes."

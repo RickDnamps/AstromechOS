@@ -29,8 +29,8 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # setup_ssh_keys.sh — SSH sans mot de passe R2-Master → R2-Slave
-# À lancer depuis le R2-Master (Pi 4B) après que le hotspot soit actif
-# et que le R2-Slave soit connecté (hostname: r2-slave.local)
+# Run from the R2-Master (Pi 4B) after the hotspot is active
+# and the R2-Slave is connected (hostname: r2-slave.local)
 #
 # Usage: bash setup_ssh_keys.sh
 
@@ -39,24 +39,24 @@ set -e
 SLAVE_USER="artoo"
 SLAVE_HOST="r2-slave.local"
 
-echo "=== Génération clé SSH (si absente) ==="
+echo "=== SSH key generation (if absent) ==="
 if [ ! -f ~/.ssh/id_ed25519 ]; then
     ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
-    echo "Clé générée: ~/.ssh/id_ed25519"
+    echo "Key generated: ~/.ssh/id_ed25519"
 else
-    echo "Clé existante: ~/.ssh/id_ed25519"
+    echo "Existing key: ~/.ssh/id_ed25519"
 fi
 
-echo "=== Copie clé publique vers R2-Slave ==="
-echo "Vous allez devoir entrer le mot de passe de R2-Slave une dernière fois."
+echo "=== Copy public key to R2-Slave ==="
+echo "You will need to enter the R2-Slave password one last time."
 ssh-copy-id -i ~/.ssh/id_ed25519.pub "${SLAVE_USER}@${SLAVE_HOST}"
 
 echo "=== Test connexion SSH sans mot de passe ==="
 if ssh -o BatchMode=yes -o ConnectTimeout=5 "${SLAVE_USER}@${SLAVE_HOST}" echo "OK"; then
     echo ""
-    echo "=== SSH sans mot de passe configuré avec succès ==="
+    echo "=== Passwordless SSH configured successfully ==="
     echo "  R2-Master → R2-Slave (${SLAVE_HOST}) : OK"
 else
-    echo "ERREUR: connexion SSH sans mot de passe échouée"
+    echo "ERROR: passwordless SSH connection failed"
     exit 1
 fi

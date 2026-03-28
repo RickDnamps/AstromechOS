@@ -28,17 +28,17 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# update.sh — Mise à jour complète R2-D2 : git pull + rsync Slave + restart tout
+# update.sh — Full R2-D2 update: git pull + rsync Slave + restart everything
 # Usage: bash scripts/update.sh
-# À exécuter sur le Master (r2-master.local)
+# Run on the Master (r2-master.local)
 #
-# Ce script :
-#   1. Git pull (si wlan1 dispo)
-#   2. Vérifie la connectivité Slave
-#   3. Rsync slave/ + shared/ + scripts/ + rp2040/ vers le Slave
-#   4. Redémarre le service Slave
-#   5. Redémarre le service Master (watchdogs app + motion inclus)
-#   6. Vérifie que les services sont actifs
+# This script:
+#   1. Git pull (if wlan1 available)
+#   2. Check Slave connectivity
+#   3. Rsync slave/ + shared/ + scripts/ + rp2040/ to the Slave
+#   4. Restart the Slave service
+#   5. Restart the Master service (app + motion watchdogs included)
+#   6. Verify that services are active
 
 REPO=/home/artoo/r2d2
 SLAVE=artoo@r2-slave.local
@@ -70,12 +70,12 @@ echo "  ────────────────────────
 # ──────────────────────────────────────────────
 SEQUENCES_DIR="$REPO/master/sequences"
 SEQUENCES_BACKUP="/home/artoo/sequences_backup"
-step "0/7" "Backup séquences custom"
+step "0/7" "Backup custom sequences"
 mkdir -p "$SEQUENCES_BACKUP"
 if rsync -a "$SEQUENCES_DIR/" "$SEQUENCES_BACKUP/" 2>/dev/null; then
-    ok "Séquences sauvegardées → $SEQUENCES_BACKUP"
+    ok "Sequences backed up → $SEQUENCES_BACKUP"
 else
-    warn "Backup séquences impossible — dossier inexistant?"
+    warn "Sequence backup failed — directory missing?"
 fi
 
 # ──────────────────────────────────────────────
@@ -86,47 +86,47 @@ if ip addr show wlan1 2>/dev/null | grep -q "inet "; then
     cd "$REPO"
     OUTPUT=$(git pull --ff-only 2>&1)
     if echo "$OUTPUT" | grep -q "error\|fatal"; then
-        fail "git pull échoué : $OUTPUT"
+        fail "git pull failed: $OUTPUT"
     else
-        # Toujours mettre à jour le VERSION file avec le HEAD réel
+        # Always update the VERSION file with the real HEAD
         git rev-parse --short HEAD > "$VERSION_FILE"
         if echo "$OUTPUT" | grep -q "Already up to date"; then
-            ok "Déjà à jour — $(cat $VERSION_FILE)"
+            ok "Already up to date — $(cat $VERSION_FILE)"
         else
-            ok "Mis à jour → version: $(cat $VERSION_FILE)"
+            ok "Updated → version: $(cat $VERSION_FILE)"
         fi
     fi
 else
-    warn "wlan1 non disponible — git pull ignoré, version locale utilisée"
+    warn "wlan1 not available — git pull skipped, using local version"
 fi
 
 # ──────────────────────────────────────────────
 # 1b. Restore custom sequences after git pull
 # ──────────────────────────────────────────────
-step "1b/7" "Restauration séquences custom"
+step "1b/7" "Restore custom sequences"
 if [ -d "$SEQUENCES_BACKUP" ]; then
     # --ignore-existing: skip files that already exist in dest (git-updated built-ins stay)
     # git pull --ff-only never deletes untracked files, so custom sequences are always safe
     # This restore is a safety net in case git ever adds a file that shadows a custom one
     if rsync -a --ignore-existing "$SEQUENCES_BACKUP/" "$SEQUENCES_DIR/" 2>/dev/null; then
-        ok "Séquences custom restaurées"
+        ok "Custom sequences restored"
     else
-        warn "Restauration séquences impossible"
+        warn "Sequence restore failed"
     fi
 else
-    ok "Pas de backup à restaurer"
+    ok "No backup to restore"
 fi
 
 # ──────────────────────────────────────────────
-# 2. Vérifier le Slave
+# 2. Check the Slave
 # ──────────────────────────────────────────────
-step "2/7" "Connexion Slave"
+step "2/7" "Slave connection"
 if ! $SSH $SLAVE "echo ok" > /dev/null 2>&1; then
-    fail "Slave inaccessible — vérifier le Wi-Fi hotspot"
-    echo -e "\n${RED}Arrêt — Slave requis pour continuer.${NC}"
+    fail "Slave unreachable — check the Wi-Fi hotspot"
+    echo -e "\n${RED}Stopping — Slave required to continue.${NC}"
     exit 1
 fi
-ok "Slave joignable ($SLAVE)"
+ok "Slave reachable ($SLAVE)"
 
 # ──────────────────────────────────────────────
 # 3. Rsync vers le Slave
@@ -140,64 +140,64 @@ rsync -az --delete \
     --exclude='sounds/*.mp3' \
     --exclude='vendor/' \
     "$REPO/slave/" "$SLAVE:$REPO/slave/" 2>&1 \
-    && ok "slave/ synchronisé" || fail "rsync slave/ échoué"
+    && ok "slave/ synced" || fail "rsync slave/ failed"
 
 rsync -az \
     -e "$SSH" \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     "$REPO/shared/" "$SLAVE:$REPO/shared/" 2>&1 \
-    && ok "shared/ synchronisé" || fail "rsync shared/ échoué"
+    && ok "shared/ synced" || fail "rsync shared/ failed"
 
 rsync -az \
     -e "$SSH" \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     "$REPO/scripts/" "$SLAVE:$REPO/scripts/" 2>&1 \
-    && ok "scripts/ synchronisé" || fail "rsync scripts/ échoué"
+    && ok "scripts/ synced" || fail "rsync scripts/ failed"
 
 rsync -az \
     -e "$SSH" \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     "$REPO/rp2040/" "$SLAVE:$REPO/rp2040/" 2>&1 \
-    && ok "rp2040/ synchronisé" || fail "rsync rp2040/ échoué"
+    && ok "rp2040/ synced" || fail "rsync rp2040/ failed"
 
 rsync -az -e "$SSH" "$VERSION_FILE" "$SLAVE:$VERSION_FILE" 2>/dev/null
-ok "VERSION synchronisé → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
+ok "VERSION synced → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
 
-# Installer le service file sur le Slave (PYTHONPATH + config à jour)
+# Install the service file on the Slave (PYTHONPATH + config up to date)
 SERVICE_SRC="$REPO/slave/services/r2d2-slave.service"
 if [ -f "$SERVICE_SRC" ]; then
     $SSH $SLAVE "sudo tee /etc/systemd/system/r2d2-slave.service > /dev/null" < "$SERVICE_SRC" \
         && $SSH $SLAVE "sudo systemctl daemon-reload" \
-        && ok "Service file installé (PYTHONPATH OK)" \
-        || warn "Service file: échec installation sudo — vérifier sudoers"
+        && ok "Service file installed (PYTHONPATH OK)" \
+        || warn "Service file: sudo install failed — check sudoers"
 fi
 
 # ──────────────────────────────────────────────
-# 4. Redémarrer le Slave
+# 4. Restart the Slave
 # ──────────────────────────────────────────────
-step "4/7" "Redémarrage Slave"
+step "4/7" "Restarting Slave"
 if $SSH $SLAVE "sudo systemctl restart r2d2-slave.service" 2>/dev/null; then
     sleep 4
     SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
     if [ "$SLAVE_STATUS" = "active" ]; then
-        ok "r2d2-slave actif"
+        ok "r2d2-slave active"
     else
-        # Service en échec → reboot complet
-        warn "r2d2-slave en échec ($SLAVE_STATUS) — reboot Slave..."
-        $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave en reboot" || fail "Reboot Slave échoué"
+        # Service failed → full reboot
+        warn "r2d2-slave failed ($SLAVE_STATUS) — rebooting Slave..."
+        $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave rebooting" || fail "Slave reboot failed"
     fi
 else
-    warn "systemctl échoué — reboot Slave..."
-    $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave en reboot" || fail "Reboot Slave échoué"
+    warn "systemctl failed — rebooting Slave..."
+    $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave rebooting" || fail "Slave reboot failed"
 fi
 
 # ──────────────────────────────────────────────
-# 5. Redémarrer le Master
+# 5. Restart the Master
 # ──────────────────────────────────────────────
-step "5/7" "Redémarrage Master"
+step "5/7" "Restarting Master"
 
 VERSION=$(cat "$VERSION_FILE" 2>/dev/null || echo "unknown")
 
@@ -206,58 +206,58 @@ echo "  ────────────────────────
 if [ $ERRORS -eq 0 ]; then
     echo -e "  ${GREEN}✓ Sync OK — version: ${VERSION}${NC}"
 else
-    echo -e "  ${YELLOW}⚠ Sync avec $ERRORS erreur(s) — version: ${VERSION}${NC}"
+    echo -e "  ${YELLOW}⚠ Sync with $ERRORS error(s) — version: ${VERSION}${NC}"
 fi
 echo "  ────────────────────────────────────"
 echo ""
-echo -e "  ${YELLOW}→ Redémarrage Master dans 3 secondes...${NC}"
-echo -e "  ${YELLOW}  (AppWatchdog + MotionWatchdog + SafeStop seront relancés)${NC}"
+echo -e "  ${YELLOW}→ Restarting Master in 3 seconds...${NC}"
+echo -e "  ${YELLOW}  (AppWatchdog + MotionWatchdog + SafeStop will be restarted)${NC}"
 sleep 3
 
-# Restart Master — r2d2-monitor.service si présent, sinon juste r2d2-master
+# Restart Master — r2d2-monitor.service if present, otherwise just r2d2-master
 sudo systemctl restart r2d2-master.service r2d2-monitor.service 2>/dev/null || \
     sudo systemctl restart r2d2-master.service 2>/dev/null || \
-    { fail "systemctl non disponible — relance manuelle requise"; exit 1; }
+    { fail "systemctl not available — manual restart required"; exit 1; }
 
 # ──────────────────────────────────────────────
-# 6. Vérification post-démarrage
+# 6. Post-startup verification
 # ──────────────────────────────────────────────
-step "6/7" "Vérification services"
-sleep 3   # laisser le temps au Master de démarrer Flask
+step "6/7" "Verifying services"
+sleep 3   # give the Master time to start Flask
 
 MASTER_STATUS=$(systemctl is-active r2d2-master.service 2>/dev/null)
 if [ "$MASTER_STATUS" = "active" ]; then
-    ok "r2d2-master actif"
+    ok "r2d2-master active"
 else
     fail "r2d2-master status: $MASTER_STATUS"
 fi
 
 SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
 if [ "$SLAVE_STATUS" = "active" ]; then
-    ok "r2d2-slave actif"
+    ok "r2d2-slave active"
 elif [ -z "$SLAVE_STATUS" ]; then
-    warn "r2d2-slave — impossible de vérifier (SSH timeout)"
+    warn "r2d2-slave — cannot verify (SSH timeout)"
 else
     fail "r2d2-slave status: $SLAVE_STATUS"
 fi
 
-# Vérification API Flask (heartbeat rapide)
+# Flask API check (quick heartbeat)
 if curl -sf --max-time 3 http://localhost:5000/status > /dev/null 2>&1; then
-    ok "API Flask répond sur :5000"
+    ok "Flask API responding on :5000"
 else
-    warn "API Flask pas encore disponible (normal si boot lent)"
+    warn "Flask API not yet available (normal on slow boot)"
 fi
 
 # ──────────────────────────────────────────────
-# Résumé final
+# Final summary
 # ──────────────────────────────────────────────
 echo ""
 echo "  ════════════════════════════════════"
 if [ $ERRORS -eq 0 ]; then
-    echo -e "  ${GREEN}✓ R2-D2 opérationnel — version: ${VERSION}${NC}"
+    echo -e "  ${GREEN}✓ R2-D2 operational — version: ${VERSION}${NC}"
 else
-    echo -e "  ${YELLOW}⚠ Démarré avec $ERRORS erreur(s) — version: ${VERSION}${NC}"
-    echo -e "  ${YELLOW}  Vérifier: sudo journalctl -u r2d2-master -n 30${NC}"
+    echo -e "  ${YELLOW}⚠ Started with $ERRORS error(s) — version: ${VERSION}${NC}"
+    echo -e "  ${YELLOW}  Check: sudo journalctl -u r2d2-master -n 30${NC}"
 fi
 echo "  ════════════════════════════════════"
 echo ""
