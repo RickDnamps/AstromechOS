@@ -714,40 +714,92 @@
 </div>
 
 <!-- ================================================================
-     TAB CHOREO: Choreography Timeline Editor
+     TAB CHOREO: Choreography Timeline Editor — ULTRATIME EDITION
 ================================================================ -->
 <div class="tab-content" id="tab-choreo">
   <div class="chor-layout">
 
-    <!-- Top bar: choreo selector + transport -->
+    <!-- ── Ultratime header ────────────────────────────────────── -->
+    <div class="chor-header">
+      <div class="chor-header-title">R2-D2 — MASTER CHOREOGRAPHER — <span style="color:var(--cyan)">ULTRATIME EDITION</span></div>
+      <div class="chor-header-timecode" id="chor-timecode">00:00.000</div>
+      <div class="chor-header-stats">
+        <span class="chor-stat" id="chor-stat-battery">—%</span>
+        <span class="chor-stat-sep">·</span>
+        <span class="chor-stat" id="chor-stat-temp">—°C</span>
+        <span class="chor-stat-sep">·</span>
+        <span class="chor-stat" id="chor-stat-dur"><span id="chor-duration">—</span></span>
+        <span class="chor-stat-sep">·</span>
+        <span class="chor-conn" id="chor-conn">● CONNECTED</span>
+      </div>
+    </div>
+
+    <!-- ── Transport bar ───────────────────────────────────────── -->
     <div class="chor-topbar">
-      <select id="chor-select" class="input-select-sm" style="width:180px">
+      <select id="chor-select" class="input-select-sm" style="width:170px">
         <option value="">— select choreography —</option>
       </select>
       <button class="btn btn-sm" onclick="choreoEditor.newChor()">+ NEW</button>
-      <div style="width:1px;height:20px;background:var(--border);margin:0 8px"></div>
-      <button class="btn btn-active btn-sm" id="chor-btn-play"  onclick="choreoEditor.play()">▶ PLAY</button>
-      <button class="btn btn-danger btn-sm" id="chor-btn-stop"  onclick="choreoEditor.stop()">⏹ STOP</button>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <span id="chor-timecode" style="font-family:monospace;font-size:13px;color:var(--blue);letter-spacing:2px">00:00.000</span>
-        <span style="font-size:8px;color:var(--text-dim);letter-spacing:1.5px">/</span>
-        <span id="chor-duration" style="font-family:monospace;font-size:11px;color:var(--text-dim)">00:00.000</span>
-        <button class="btn btn-sm" onclick="choreoEditor.save()" style="margin-left:8px">💾 SAVE</button>
+      <div class="chor-sep"></div>
+      <button class="btn btn-active btn-sm" id="chor-btn-play" onclick="choreoEditor.play()">▶ PLAY</button>
+      <button class="btn btn-danger btn-sm" id="chor-btn-stop" onclick="choreoEditor.stop()">⏹ STOP</button>
+      <div class="chor-sep"></div>
+      <!-- Snap toggle -->
+      <span style="font-size:8px;letter-spacing:1.5px;color:var(--text-dim)">SNAP</span>
+      <button class="chor-snap-btn active" id="chor-snap-01" onclick="choreoEditor.setSnap(0.1)">0.1s</button>
+      <button class="chor-snap-btn" id="chor-snap-05" onclick="choreoEditor.setSnap(0.5)">0.5s</button>
+      <button class="chor-snap-btn" id="chor-snap-off" onclick="choreoEditor.setSnap(0)">OFF</button>
+      <!-- Zoom -->
+      <div class="chor-sep"></div>
+      <span style="font-size:8px;letter-spacing:1.5px;color:var(--text-dim)">ZOOM</span>
+      <button class="btn btn-sm" onclick="choreoEditor.zoom(-10)">−</button>
+      <button class="btn btn-sm" onclick="choreoEditor.zoom(10)">+</button>
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm" onclick="choreoEditor.save()">💾 SAVE</button>
         <button class="btn btn-sm" onclick="choreoEditor.exportScr()">📄 .SCR</button>
       </div>
     </div>
 
-    <!-- Timeline body -->
+    <!-- ── Body: monitor | labels | timeline | props ───────────── -->
     <div class="chor-body">
+
+      <!-- Left: Live Monitor Panel -->
+      <div class="chor-monitor" id="chor-monitor">
+        <div class="chor-monitor-title">LIVE MONITOR</div>
+
+        <!-- Front Logic Display -->
+        <div class="chor-monitor-section">
+          <div class="chor-monitor-label">FRONT LOGIC</div>
+          <canvas id="chor-fld-canvas" class="chor-pixel-canvas" width="108" height="44"></canvas>
+        </div>
+
+        <!-- Rear Logic Display -->
+        <div class="chor-monitor-section">
+          <div class="chor-monitor-label">REAR LOGIC</div>
+          <canvas id="chor-rld-canvas" class="chor-pixel-canvas" width="108" height="26"></canvas>
+        </div>
+
+        <!-- Battery arc gauge -->
+        <div class="chor-monitor-section" style="align-items:center">
+          <div class="chor-monitor-label">BATTERY</div>
+          <canvas id="chor-battery-canvas" width="90" height="56"></canvas>
+        </div>
+
+        <!-- Dome compass -->
+        <div class="chor-monitor-section" style="align-items:center">
+          <div class="chor-monitor-label">DOME</div>
+          <canvas id="chor-dome-canvas" width="80" height="80"></canvas>
+        </div>
+      </div>
 
       <!-- Track label column -->
       <div class="chor-labels" id="chor-labels">
-        <div class="chor-label-spacer"></div><!-- ruler height -->
-        <div class="chor-track-label" data-track="audio">🎵 AUDIO</div>
-        <div class="chor-track-label" data-track="lights">💡 LIGHTS</div>
-        <div class="chor-track-label chor-track-label-dome" data-track="dome">🔄 DOME °</div>
-        <div class="chor-track-label" data-track="servos">⚙️ SERVOS</div>
-        <div class="chor-track-label" data-track="propulsion">🚀 PROPULSION</div>
+        <div class="chor-label-spacer"></div>
+        <div class="chor-track-label" data-track="audio">AUDIO</div>
+        <div class="chor-track-label" data-track="lights">LIGHTS</div>
+        <div class="chor-track-label chor-track-label-dome" data-track="dome">DOME °</div>
+        <div class="chor-track-label" data-track="servos">SERVOS</div>
+        <div class="chor-track-label" data-track="propulsion">PROPULSION</div>
       </div>
 
       <!-- Scrollable timeline canvas -->
@@ -755,59 +807,71 @@
         <div class="chor-canvas" id="chor-canvas">
           <!-- Ruler -->
           <div class="chor-ruler" id="chor-ruler"></div>
-          <!-- Track lanes -->
-          <div class="chor-lane" id="chor-lane-audio"       data-track="audio"></div>
-          <div class="chor-lane" id="chor-lane-lights"      data-track="lights"></div>
+          <!-- Audio lane (with waveform canvas underneath blocks) -->
+          <div class="chor-lane chor-lane-audio" id="chor-lane-audio" data-track="audio">
+            <canvas class="chor-waveform-canvas" id="chor-waveform-canvas"></canvas>
+          </div>
+          <!-- Other lanes -->
+          <div class="chor-lane" id="chor-lane-lights"     data-track="lights"></div>
           <div class="chor-lane chor-lane-dome" id="chor-lane-dome" data-track="dome"></div>
-          <div class="chor-lane" id="chor-lane-servos"      data-track="servos"></div>
-          <div class="chor-lane" id="chor-lane-propulsion"  data-track="propulsion"></div>
-          <!-- Playhead -->
+          <div class="chor-lane" id="chor-lane-servos"     data-track="servos"></div>
+          <div class="chor-lane" id="chor-lane-propulsion" data-track="propulsion"></div>
+          <!-- High-visibility playhead -->
           <div class="chor-playhead" id="chor-playhead">
             <div class="chor-playhead-head"></div>
           </div>
         </div>
       </div>
 
-    </div><!-- /chor-body -->
+      <!-- Right: Properties + Telemetry Panel -->
+      <div class="chor-props" id="chor-props">
 
-    <!-- Properties panel -->
-    <div class="chor-props" id="chor-props">
-      <div class="chor-props-title">PROPERTIES</div>
-      <div id="chor-props-content" style="color:var(--text-dim);font-size:10px;padding:10px">
-        Select a block to edit its properties.
-      </div>
-      <!-- VESC Telemetry (shown during playback) -->
-      <div id="chor-telem-section" style="display:none;border-top:1px solid var(--border);padding:8px 10px">
-        <div style="font-size:8px;letter-spacing:2px;color:var(--blue);margin-bottom:6px">VESC TELEMETRY</div>
-        <!-- Voltage -->
-        <div style="margin-bottom:6px">
-          <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text-dim);letter-spacing:.8px;margin-bottom:2px">
-            <span>VOLTAGE</span><span id="chor-telem-v">—</span>
+        <!-- Alarms indicator -->
+        <div class="chor-alarms" id="chor-alarms">
+          <span class="chor-alarms-dot ok" id="chor-alarms-dot">●</span>
+          <span id="chor-alarms-text" style="font-size:8px;letter-spacing:1.5px">NO ALARMS</span>
+        </div>
+
+        <!-- VESC telemetry compact values -->
+        <div class="chor-telem-compact" id="chor-telem-section" style="display:none">
+          <div class="chor-telem-row">
+            <span class="chor-telem-key">VOLT</span>
+            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-v-bar"></div></div>
+            <span class="chor-telem-val" id="chor-telem-v">—</span>
           </div>
-          <div style="background:var(--bg3);border-radius:2px;height:4px;overflow:hidden">
-            <div id="chor-telem-v-bar" style="height:100%;width:0%;background:var(--green);transition:width .4s"></div>
+          <div class="chor-telem-row">
+            <span class="chor-telem-key">TEMP</span>
+            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-t-bar" style="background:var(--amber)"></div></div>
+            <span class="chor-telem-val" id="chor-telem-t">—</span>
+          </div>
+          <div class="chor-telem-row">
+            <span class="chor-telem-key">CURR</span>
+            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-c-bar" style="background:var(--red)"></div></div>
+            <span class="chor-telem-val" id="chor-telem-c">—</span>
           </div>
         </div>
-        <!-- Temperature -->
-        <div style="margin-bottom:6px">
-          <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text-dim);letter-spacing:.8px;margin-bottom:2px">
-            <span>TEMP L/R</span><span id="chor-telem-t">—</span>
-          </div>
-          <div style="background:var(--bg3);border-radius:2px;height:4px;overflow:hidden">
-            <div id="chor-telem-t-bar" style="height:100%;width:0%;background:var(--orange);transition:width .4s"></div>
+
+        <!-- Selected block properties -->
+        <div class="chor-props-title">SELECTED BLOCK</div>
+        <div id="chor-props-content" style="color:var(--text-dim);font-size:10px;padding:10px 8px">
+          Select a block to inspect.
+        </div>
+
+        <!-- Easing curve preview (shown when dome KF or block with easing selected) -->
+        <div id="chor-easing-wrap" style="display:none;padding:0 8px 8px">
+          <div class="chor-props-title" style="border:none;margin-bottom:4px">EASING</div>
+          <canvas id="chor-easing-canvas" width="184" height="70" style="width:100%;border:1px solid var(--border);border-radius:3px;background:var(--bg3)"></canvas>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('linear')">LINEAR</button>
+            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-in')">EASE IN</button>
+            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-out')">EASE OUT</button>
+            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-in-out')">IN-OUT</button>
           </div>
         </div>
-        <!-- Current -->
-        <div>
-          <div style="display:flex;justify-content:space-between;font-size:8px;color:var(--text-dim);letter-spacing:.8px;margin-bottom:2px">
-            <span>CURRENT L/R</span><span id="chor-telem-c">—</span>
-          </div>
-          <div style="background:var(--bg3);border-radius:2px;height:4px;overflow:hidden">
-            <div id="chor-telem-c-bar" style="height:100%;width:0%;background:var(--red);transition:width .4s"></div>
-          </div>
-        </div>
-      </div>
-    </div>
+
+      </div><!-- /chor-props -->
+
+    </div><!-- /chor-body -->
 
   </div><!-- /chor-layout -->
 </div>
