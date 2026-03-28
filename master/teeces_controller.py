@@ -28,8 +28,8 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Teeces32 Controller — Protocole JawaLite via USB /dev/ttyUSB0.
-Gère les LED logics FLD/RLD/PSI sur le dôme.
+Teeces32 Controller — JawaLite protocol via USB /dev/ttyUSB0.
+Controls the FLD/RLD/PSI logic LEDs on the dome.
 """
 
 import logging
@@ -81,10 +81,10 @@ class TeecesController(BaseDriver):
         try:
             self._serial = serial.Serial(self._port, self._baud, timeout=1)
             self._ready = True
-            log.info(f"Teeces32 ouvert: {self._port} @ {self._baud}")
+            log.info(f"Teeces32 opened: {self._port} @ {self._baud}")
             return True
         except serial.SerialException as e:
-            log.error(f"Impossible d'ouvrir Teeces32 {self._port}: {e}")
+            log.error(f"Unable to open Teeces32 {self._port}: {e}")
             self._ready = False
             return False
 
@@ -93,71 +93,71 @@ class TeecesController(BaseDriver):
         if self._serial and self._serial.is_open:
             self._serial.close()
         self._ready = False
-        log.info("Teeces32 arrêté")
+        log.info("Teeces32 stopped")
 
     def is_ready(self) -> bool:
         return self._ready and self._serial is not None and self._serial.is_open
 
     def send_command(self, cmd: str) -> bool:
-        """Envoie une commande JawaLite brute. Ex: '0T1\r'"""
+        """Sends a raw JawaLite command. Ex: '0T1\r'"""
         if not self.is_ready():
-            log.warning(f"Teeces32 non prêt, commande ignorée: {cmd!r}")
+            log.warning(f"Teeces32 not ready, command ignored: {cmd!r}")
             return False
         try:
             self._serial.write(cmd.encode('ascii'))
             log.debug(f"Teeces TX: {cmd!r}")
             return True
         except serial.SerialException as e:
-            log.error(f"Erreur Teeces32 send: {e}")
+            log.error(f"Teeces32 send error: {e}")
             self._ready = False
             return False
 
     # ------------------------------------------------------------------
-    # Commandes préfabriquées
+    # Pre-built commands
     # ------------------------------------------------------------------
 
     def random_mode(self) -> bool:
-        """Mode animations aléatoires (mode normal)."""
+        """Random animation mode (normal mode)."""
         return self.send_command("0T1\r")
 
     def all_off(self) -> bool:
-        """Éteint toutes les LEDs."""
+        """Turn off all LEDs."""
         return self.send_command("0T20\r")
 
     def leia_mode(self) -> bool:
-        """Mode Leia."""
+        """Leia mode."""
         return self.send_command("0T6\r")
 
     def psi_random(self) -> bool:
-        """PSI animations aléatoires."""
+        """PSI random animations."""
         return self.send_command("4S1\r")
 
     def psi_mode(self, mode: int) -> bool:
-        """Contrôle PSI avec mode spécifique. 1=aléatoire, 0=éteint."""
+        """Control PSI with specific mode. 1=random, 0=off."""
         mode = max(0, int(mode))
         return self.send_command(f"4S{mode}\r")
 
     def fld_text(self, text: str) -> bool:
-        """Texte défilant sur Front Logic Display. Max ~20 chars."""
+        """Scrolling text on Front Logic Display. Max ~20 chars."""
         text = text[:20].upper()
         return self.send_command(f"1M{text}\r")
 
     def rld_text(self, text: str) -> bool:
-        """Texte défilant sur Rear Logic Display. Max ~20 chars."""
+        """Scrolling text on Rear Logic Display. Max ~20 chars."""
         text = text[:20].upper()
         return self.send_command(f"2M{text}\r")
 
     def alert_master_offline(self) -> bool:
-        """Alerte visuelle Master hors ligne."""
+        """Visual alert: Master offline."""
         return self.send_command("1MMASTER OFFLINE\r")
 
     def alert_error(self, code: str = "") -> bool:
-        """Alerte visuelle erreur."""
-        msg = f"ERREUR {code}"[:20] if code else "ERREUR"
+        """Visual error alert."""
+        msg = f"ERROR {code}"[:20] if code else "ERROR"
         return self.send_command(f"1M{msg}\r")
 
     def show_version(self, version: str) -> bool:
-        """Affiche la version courante sur FLD."""
+        """Display the current version on FLD."""
         return self.fld_text(f"VER {version}")
 
     def animation(self, mode: int) -> bool:

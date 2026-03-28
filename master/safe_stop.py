@@ -28,24 +28,24 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Safe Stop — Arrêt progressif des moteurs de propulsion.
+Safe Stop — Gradual motor stop for propulsion.
 
-Au lieu d'envoyer M:0,0 brutalement (risque de basculement du robot),
-on rampe la commande de la vitesse courante vers 0 sur une durée
-proportionnelle à la vitesse.
+Instead of brutally sending M:0,0 (risk of robot tipping),
+we ramp the command from current speed to 0 over a duration
+proportional to speed.
 
-Paramètres (ajustables) :
-  RAMP_MAX_MS : durée d'arrêt à vitesse maximale (1.0) = 400ms
-  RAMP_STEP_MS: intervalle entre deux mises à jour VESC      = 20ms
-  DEADZONE    : en dessous → arrêt immédiat (inutile de ramper)
+Parameters (adjustable):
+  RAMP_MAX_MS : stop duration at maximum speed (1.0) = 400ms
+  RAMP_STEP_MS: interval between VESC updates           = 20ms
+  DEADZONE    : below this → immediate stop (no ramp needed)
 
-Exemples de durées effectives :
-  Vitesse 1.0  → 400ms  (~20 steps à 20ms)
-  Vitesse 0.5  → 200ms  (~10 steps)
-  Vitesse 0.3  → 120ms  (6 steps)
-  Vitesse 0.1  → arrêt immédiat (deadzone)
+Effective duration examples:
+  Speed 1.0  → 400ms  (~20 steps at 20ms)
+  Speed 0.5  → 200ms  (~10 steps)
+  Speed 0.3  → 120ms  (6 steps)
+  Speed 0.1  → immediate stop (deadzone)
 
-Usage dans les watchdogs :
+Usage in watchdogs:
   safe_stop.stop_drive(vesc, uart)
   safe_stop.stop_dome(dome, uart)
 """
@@ -58,38 +58,38 @@ import master.registry as reg
 
 log = logging.getLogger(__name__)
 
-RAMP_MAX_MS  = 400    # durée ms à vitesse = 1.0
-RAMP_STEP_MS = 20     # step VESC en ms (~50Hz)
-DEADZONE     = 0.08   # en dessous → arrêt immédiat
+RAMP_MAX_MS  = 400    # duration ms at speed = 1.0
+RAMP_STEP_MS = 20     # VESC step in ms (~50Hz)
+DEADZONE     = 0.08   # below this → immediate stop
 
-# Event global pour annuler une ramp en cours (ex: app reconnecte)
+# Global event to cancel an ongoing ramp (e.g. app reconnects)
 _cancel_drive = threading.Event()
 _cancel_dome  = threading.Event()
 
 
 def cancel_ramp():
-    """Annule toute ramp en cours — appelé quand l'app renvoie une commande."""
+    """Cancel any ongoing ramp — called when the app sends a new command."""
     _cancel_drive.set()
     _cancel_dome.set()
 
 
 def stop_drive(vesc=None, uart=None) -> None:
     """
-    Arrêt progressif de la propulsion.
-    Rampe de la vitesse courante vers 0.
-    Lance dans un thread daemon pour ne pas bloquer le watchdog.
+    Gradual propulsion stop.
+    Ramps current speed down to 0.
+    Runs in a daemon thread to avoid blocking the watchdog.
     """
     v = vesc or reg.vesc
     u = uart or reg.uart
 
-    # Lire la vitesse courante depuis le driver si dispo
+    # Read current speed from the driver if available
     left  = getattr(v, '_left',  0.0) if v else 0.0
     right = getattr(v, '_right', 0.0) if v else 0.0
 
     max_speed = max(abs(left), abs(right))
 
     if max_speed < DEADZONE:
-        # Déjà quasi arrêté — juste confirmer M:0,0
+        # Already nearly stopped — just confirm M:0,0
         _send_drive(v, u, 0.0, 0.0)
         return
 
@@ -99,31 +99,31 @@ def stop_drive(vesc=None, uart=None) -> None:
     interval    = duration_ms / 1000.0 / steps
 
     log.warning(
-        "SafeStop drive: %.2f,%.2f → 0 en %dms (%d steps)",
+        "SafeStop drive: %.2f,%.2f → 0 in %dms (%d steps)",
         left, right, duration_ms, steps
     )
 
     def _ramp():
         for i in range(1, steps + 1):
             if _cancel_drive.is_set():
-                log.info("SafeStop drive: ramp annulée (nouvelle commande reçue)")
+                log.info("SafeStop drive: ramp cancelled (new command received)")
                 return
             factor = 1.0 - (i / steps)   # 1.0 → 0.0
             l = left  * factor
             r = right * factor
             _send_drive(v, u, l, r)
             time.sleep(interval)
-        # Arrêt final garanti
+        # Final guaranteed stop
         _send_drive(v, u, 0.0, 0.0)
-        log.info("SafeStop drive: arrêt progressif terminé")
+        log.info("SafeStop drive: gradual stop complete")
 
     threading.Thread(target=_ramp, daemon=True, name="safe-stop-drive").start()
 
 
 def stop_dome(dome=None, uart=None) -> None:
     """
-    Arrêt progressif du moteur dôme.
-    Même logique que stop_drive mais pour la rotation dôme.
+    Gradual dome motor stop.
+    Same logic as stop_drive but for dome rotation.
     """
     d = dome or reg.dome
     u = uart or reg.uart
@@ -138,7 +138,7 @@ def stop_dome(dome=None, uart=None) -> None:
     steps       = max(3, duration_ms // RAMP_STEP_MS)
     interval    = duration_ms / 1000.0 / steps
 
-    log.warning("SafeStop dome: %.2f → 0 en %dms", speed, duration_ms)
+    log.warning("SafeStop dome: %.2f → 0 in %dms", speed, duration_ms)
 
     def _ramp():
         for i in range(1, steps + 1):
@@ -152,7 +152,7 @@ def stop_dome(dome=None, uart=None) -> None:
 
 
 # ------------------------------------------------------------------
-# Helpers bas niveau
+# Low-level helpers
 # ------------------------------------------------------------------
 
 def _send_drive(vesc, uart, left: float, right: float) -> None:

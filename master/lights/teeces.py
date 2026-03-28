@@ -1,14 +1,14 @@
 # master/lights/teeces.py
 """
-TeecesDriver — Protocole JawaLite via USB série (Teeces32 board).
+TeecesDriver — JawaLite protocol via USB serial (Teeces32 board).
 
-Commandes JawaLite :
-  0T{n}\\r      Animations logics (0T1=random, 0T6=leia, 0T20=off)
-  1M{txt}\\r    Texte FLD (Front Logic Display)
-  2M{txt}\\r    Texte RLD (Rear Logic Display)
-  4S{n}\\r      Mode PSI (0=off, 1=random, 2-8=couleurs)
+JawaLite commands:
+  0T{n}\\r      Logic animations (0T1=random, 0T6=leia, 0T20=off)
+  1M{txt}\\r    FLD text (Front Logic Display)
+  2M{txt}\\r    RLD text (Rear Logic Display)
+  4S{n}\\r      PSI mode (0=off, 1=random, 2-8=colors)
 
-Port et baud lus dans [teeces] du config (port=/dev/ttyUSB0, baud=9600).
+Port and baud read from [teeces] in config (port=/dev/ttyUSB0, baud=9600).
 """
 
 import logging
@@ -21,12 +21,12 @@ from master.lights.base_controller import BaseLightsController
 
 log = logging.getLogger(__name__)
 
-_MAX_TEXT = 20          # max chars JawaLite (hardware limit Teeces32)
-_OK_DURATION = 3.0      # secondes d'affichage system_ok avant retour random
+_MAX_TEXT = 20          # max chars JawaLite (Teeces32 hardware limit)
+_OK_DURATION = 3.0      # seconds to display system_ok before returning to random
 
 
 class TeecesDriver(BaseLightsController):
-    """Driver JawaLite pour la carte Teeces32."""
+    """JawaLite driver for the Teeces32 board."""
 
     def __init__(self, cfg: configparser.ConfigParser):
         self._port   = cfg.get('teeces', 'port')
@@ -43,10 +43,10 @@ class TeecesDriver(BaseLightsController):
         try:
             self._serial = serial.Serial(self._port, self._baud, timeout=1)
             self._ready  = True
-            log.info(f"TeecesDriver ouvert: {self._port} @ {self._baud}")
+            log.info(f"TeecesDriver opened: {self._port} @ {self._baud}")
             return True
         except Exception as e:
-            log.error(f"TeecesDriver impossible d'ouvrir {self._port}: {e}")
+            log.error(f"TeecesDriver unable to open {self._port}: {e}")
             self._ready = False
             return False
 
@@ -56,7 +56,7 @@ class TeecesDriver(BaseLightsController):
         if self._serial and self._serial.is_open:
             self._serial.close()
         self._ready = False
-        log.info("TeecesDriver arrêté")
+        log.info("TeecesDriver stopped")
 
     def is_ready(self) -> bool:
         return self._ready and self._serial is not None and self._serial.is_open
@@ -67,14 +67,14 @@ class TeecesDriver(BaseLightsController):
 
     def _send(self, cmd: str) -> bool:
         if not self.is_ready():
-            log.warning(f"TeecesDriver non prêt, ignoré: {cmd!r}")
+            log.warning(f"TeecesDriver not ready, ignored: {cmd!r}")
             return False
         try:
             self._serial.write(cmd.encode('ascii'))
             log.debug(f"Teeces TX: {cmd!r}")
             return True
         except serial.SerialException as e:
-            log.error(f"TeecesDriver erreur send: {e}")
+            log.error(f"TeecesDriver send error: {e}")
             self._ready = False
             return False
 
@@ -103,7 +103,7 @@ class TeecesDriver(BaseLightsController):
             return self._send(f"1M{msg}\r")
         if t == "rld":
             return self._send(f"2M{msg}\r")
-        # "both" — JawaLite n'a pas de commande combinée
+        # "both" — JawaLite has no combined command
         ok1 = self._send(f"1M{msg}\r")
         ok2 = self._send(f"2M{msg}\r")
         return ok1 and ok2
@@ -162,5 +162,5 @@ class TeecesDriver(BaseLightsController):
         return self.text(f"VER {version}", "both")
 
     def alert_error(self, code: str = "") -> bool:
-        label = f"ERREUR {code}".strip()[:_MAX_TEXT]
+        label = f"ERROR {code}".strip()[:_MAX_TEXT]
         return self.text(label, "both")

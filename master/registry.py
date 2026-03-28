@@ -28,9 +28,9 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Registre des contrôleurs actifs — injection de dépendances pour Flask.
-Les blueprints accèdent aux drivers via ce module.
-Initialisé dans master/main.py avant le démarrage de Flask.
+Active controller registry — dependency injection for Flask.
+Blueprints access drivers through this module.
+Initialized in master/main.py before Flask starts.
 """
 
 import threading
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     from master.drivers.body_servo_driver  import BodyServoDriver
     from master.drivers.dome_servo_driver  import DomeServoDriver
 
-# Ces variables sont assignées dans main.py avant app.run()
+# These variables are assigned in main.py before app.run()
 uart:        'UARTController | None'    = None
 teeces:      'BaseLightsController | None' = None
 deploy:      'DeployController | None'  = None
@@ -57,39 +57,39 @@ dome:        'DomeMotorDriver | None'   = None
 servo:       'BodyServoDriver | None'   = None
 dome_servo:  'DomeServoDriver | None'   = None
 
-# Télémétrie VESC — mise à jour par les callbacks TL/TR du Master
+# VESC telemetry — updated by TL/TR callbacks on the Master
 # Format: {'v_in': 23.5, 'temp': 35.2, 'current': 8.5, 'rpm': 1200, 'duty': 0.45, 'fault': 0, 'ts': 1234567890.0}
 vesc_telem: dict = {'L': None, 'R': None}
 vesc_power_scale: float = 1.0
 
-# Résultat du scan CAN bus — mis à jour par callback CANFOUND dans main.py
-# None = pas encore de résultat, [] = aucun VESC trouvé, [...] = IDs trouvés
+# CAN bus scan result — updated by CANFOUND callback in main.py
+# None = no result yet, [] = no VESC found, [...] = found IDs
 vesc_can_scan_result: list | None = None
 vesc_can_scan_event: threading.Event = threading.Event()
 
-# Santé UART Slave — mis à jour par le thread slave-health-poll dans main.py
-# None = Slave injoignable ou pas encore pollé
+# Slave UART health — updated by the slave-health-poll thread in main.py
+# None = Slave unreachable or not yet polled
 # dict: {'total': N, 'errors': E, 'health_pct': 98.1, 'window_s': 60}
 slave_uart_health: dict | None = None
 
-# État audio — mis à jour par audio_bp à chaque play/stop
+# Audio state — updated by audio_bp on each play/stop
 audio_playing: bool = False
 audio_current: str  = ''
 
-# Lock mode — 0=Normal, 1=Kids, 2=ChildLock
+# Lock mode — 0=Normal, 1=Kids, 2=Child Lock
 lock_mode: int = 0
 
-# Manette Bluetooth (evdev) — initialisé dans main.py
+# Bluetooth gamepad (evdev) — initialized in main.py
 bt_ctrl: 'BTControllerDriver | None' = None
 
-# E-Stop global — True quand E-Stop actif (servos coupés)
-# Mis à True par /system/estop et bouton E-Stop manette
-# Remis à False par /system/estop_reset et /bt/estop_reset
+# Global E-Stop — True when E-Stop is active (servos cut)
+# Set to True by /system/estop and gamepad E-Stop button
+# Reset to False by /system/estop_reset and /bt/estop_reset
 estop_active: bool = False
 
-# Timestamp dernière commande drive/dome depuis web/Android (priorité > manette BT)
+# Timestamp of last drive/dome command from web/Android (priority over BT gamepad)
 web_last_drive_t: float = 0.0
 web_last_dome_t:  float = 0.0
 
-# Limite de vitesse Kids Mode (0.0..1.0) — synchronisé depuis JS via /lock/set
+# Kids Mode speed limit (0.0..1.0) — synchronized from JS via /lock/set
 kids_speed_limit: float = 0.5

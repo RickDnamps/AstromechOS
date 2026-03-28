@@ -28,9 +28,9 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Config loader — Fusionne main.cfg (repo) et local.cfg (local, gitignore).
-local.cfg a priorité sur main.cfg pour toutes les clés qu'il définit.
-Si local.cfg est absent, affiche un avertissement et propose de le créer.
+Config loader — Merges main.cfg (repo) and local.cfg (local, gitignored).
+local.cfg takes priority over main.cfg for all keys it defines.
+If local.cfg is missing, displays a warning and suggests creating it.
 """
 
 import configparser
@@ -48,33 +48,33 @@ LOCAL_EXAMPLE = os.path.join(CONFIG_DIR, 'local.cfg.example')
 
 def load() -> configparser.ConfigParser:
     """
-    Charge main.cfg puis surcharge avec local.cfg.
-    Arrête le programme si local.cfg est absent (premier lancement).
+    Loads main.cfg then overrides with local.cfg.
+    Exits the program if local.cfg is missing (first run).
     """
     cfg = configparser.ConfigParser()
 
-    # 1. Lire main.cfg (valeurs par défaut, dans le repo)
+    # 1. Read main.cfg (default values, in the repo)
     if not os.path.exists(MAIN_CFG):
-        log.error(f"main.cfg introuvable: {MAIN_CFG}")
+        log.error(f"main.cfg not found: {MAIN_CFG}")
         sys.exit(1)
     cfg.read(MAIN_CFG)
 
-    # 2. Surcharger avec local.cfg (paramètres locaux, hors repo)
+    # 2. Override with local.cfg (local settings, outside the repo)
     if not os.path.exists(LOCAL_CFG):
         print("\n" + "="*60)
-        print("PREMIER LANCEMENT — local.cfg manquant")
+        print("FIRST RUN — local.cfg missing")
         print("="*60)
-        print(f"\nCopie le fichier exemple et configure-le :")
+        print(f"\nCopy the example file and configure it:")
         print(f"  cp {LOCAL_EXAMPLE} {LOCAL_CFG}")
         print(f"  nano {LOCAL_CFG}")
-        print("\nMinimum requis dans local.cfg :")
+        print("\nMinimum required in local.cfg:")
         print("  [github]")
         print("  repo_url = https://github.com/TON_USER/r2d2.git")
         print("="*60 + "\n")
         sys.exit(1)
 
     cfg.read(LOCAL_CFG)
-    log.debug(f"Config chargée: {MAIN_CFG} + {LOCAL_CFG}")
+    log.debug(f"Config loaded: {MAIN_CFG} + {LOCAL_CFG}")
     return cfg
 
 

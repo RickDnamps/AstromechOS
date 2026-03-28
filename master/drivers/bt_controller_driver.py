@@ -29,12 +29,12 @@
 # ============================================================
 """
 Bluetooth Controller Driver — Master Pi (evdev).
-Lit les entrées d'une manette BT connectée au Pi via evdev.
+Reads inputs from a BT gamepad connected to the Pi via evdev.
 
-Applique: Lock Mode (Kids vitesse limitée / Child Lock bloqué),
-          E-Stop, timeout d'inactivité, priorité web/Android.
+Applies: Lock Mode (Kids limited speed / Child Lock blocked),
+         E-Stop, inactivity timeout, web/Android priority.
 
-Config persistante: master/config/bt_config.json
+Persistent config: master/config/bt_config.json
 """
 
 import json
@@ -51,16 +51,16 @@ try:
     EVDEV_OK = True
 except ImportError:
     EVDEV_OK = False
-    log.warning("evdev non disponible — BTControllerDriver désactivé (pip install evdev)")
+    log.warning("evdev not available — BTControllerDriver disabled (pip install evdev)")
 
-# Mots-clés pour identifier une manette parmi les devices evdev
+# Keywords to identify a gamepad among evdev devices
 _GAMEPAD_KEYWORDS = [
     'xbox', 'ps4', 'ps5', 'dualshock', 'dualsense', 'wireless controller',
     'pro controller', 'switch', 'shield', 'gamepad', 'joystick', 'joypad',
     'controller', '8bitdo',
 ]
 
-# Config par défaut
+# Default config
 _DEFAULT_CFG = {
     'enabled':            True,
     'gamepad_type':       'ps',
@@ -85,7 +85,7 @@ def _load_cfg() -> dict:
     try:
         with open(_CFG_PATH, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
-        # Fusionner avec défauts pour les clés manquantes
+        # Merge with defaults for missing keys
         merged = dict(_DEFAULT_CFG)
         merged['mappings'] = dict(_DEFAULT_CFG['mappings'])
         merged.update({k: v for k, v in cfg.items() if k != 'mappings'})
@@ -95,7 +95,7 @@ def _load_cfg() -> dict:
     except FileNotFoundError:
         return dict(_DEFAULT_CFG)
     except Exception as e:
-        log.warning(f"bt_config.json illisible: {e}")
+        log.warning(f"bt_config.json unreadable: {e}")
         return dict(_DEFAULT_CFG)
 
 
@@ -106,14 +106,14 @@ def save_cfg(cfg: dict) -> bool:
             json.dump(cfg, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
-        log.error(f"Erreur sauvegarde bt_config: {e}")
+        log.error(f"Error saving bt_config: {e}")
         return False
 
 
 class BTControllerDriver:
     """
-    Driver manette Bluetooth via evdev.
-    Tourne en background — auto-reconnexion toutes les 5s si déconnectée.
+    Bluetooth gamepad driver via evdev.
+    Runs in background — auto-reconnects every 5s if disconnected.
     """
 
     def __init__(self):
@@ -130,7 +130,7 @@ class BTControllerDriver:
         self._prev_btns    = {}
 
     # ------------------------------------------------------------------
-    # Cycle de vie
+    # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
@@ -139,7 +139,7 @@ class BTControllerDriver:
         self._stop_evt.clear()
         threading.Thread(target=self._reconnect_loop,    name='bt-reconnect',   daemon=True).start()
         threading.Thread(target=self._inactivity_loop,   name='bt-inactivity',  daemon=True).start()
-        log.info("BTControllerDriver démarré")
+        log.info("BTControllerDriver started")
 
     def stop(self) -> None:
         self._stop_evt.set()
@@ -174,7 +174,7 @@ class BTControllerDriver:
         save_cfg(self._cfg)
         if not enabled:
             self._stop_motion()
-        log.info(f"BT controller {'activé' if enabled else 'désactivé'}")
+        log.info(f"BT controller {'enabled' if enabled else 'disabled'}")
 
     def get_status(self) -> dict:
         return {
@@ -186,7 +186,7 @@ class BTControllerDriver:
         }
 
     # ------------------------------------------------------------------
-    # Détection device
+    # Device detection
     # ------------------------------------------------------------------
 
     def _find_gamepad(self):
@@ -202,7 +202,7 @@ class BTControllerDriver:
                 if any(kw in dev.name.lower() for kw in _GAMEPAD_KEYWORDS):
                     caps = dev.capabilities()
                     if ecodes.EV_ABS in caps:
-                        log.info(f"Manette BT trouvée: {dev.name} ({path})")
+                        log.info(f"BT gamepad found: {dev.name} ({path})")
                         return dev
                 dev.close()
             except Exception:
@@ -210,7 +210,7 @@ class BTControllerDriver:
         return None
 
     # ------------------------------------------------------------------
-    # Reconnexion automatique
+    # Automatic reconnection
     # ------------------------------------------------------------------
 
     def _reconnect_loop(self) -> None:
@@ -223,12 +223,12 @@ class BTControllerDriver:
                         self._connected   = True
                         self._device_name = dev.name[:32]
                         self._prev_btns   = {}
-                    log.info(f"Manette connectée: {dev.name}")
-                    self._poll_loop()   # bloquant jusqu'à déconnexion
+                    log.info(f"Gamepad connected: {dev.name}")
+                    self._poll_loop()   # blocking until disconnection
             self._stop_evt.wait(5)
 
     # ------------------------------------------------------------------
-    # Boucle de lecture
+    # Read loop
     # ------------------------------------------------------------------
 
     def _poll_loop(self) -> None:
@@ -249,7 +249,7 @@ class BTControllerDriver:
                     self._handle_button(event)
 
         except Exception as e:
-            log.warning(f"Manette déconnectée: {e}")
+            log.warning(f"Gamepad disconnected: {e}")
         finally:
             with self._lock:
                 self._connected   = False
@@ -262,7 +262,7 @@ class BTControllerDriver:
     # ------------------------------------------------------------------
 
     def _norm(self, value: int, info) -> float:
-        """Normalise une valeur d'axe brute → -1.0..1.0."""
+        """Normalizes a raw axis value → -1.0..1.0."""
         lo, hi = info.min, info.max
         mid  = (lo + hi) / 2.0
         half = (hi - lo) / 2.0
@@ -292,7 +292,7 @@ class BTControllerDriver:
             self._send_dome(dome_val, reg)
 
     def _read_axis_val(self, device, code_name: str, abs_info: dict, dz: float) -> float:
-        """Lit la valeur courante d'un axe par nom (ex: 'ABS_Y')."""
+        """Reads the current value of an axis by name (e.g. 'ABS_Y')."""
         try:
             code = getattr(ecodes, code_name, None)
             if code is None:
@@ -307,19 +307,19 @@ class BTControllerDriver:
             return 0.0
 
     def _send_drive(self, abs_info: dict, m: dict, reg) -> None:
-        """Calcule et envoie la commande drive depuis les axes actuels."""
-        # Child Lock — bloquer propulsion
+        """Compute and send drive command from current axes."""
+        # Child Lock — block propulsion
         if getattr(reg, 'lock_mode', 0) == 2:
             if self._drive_active:
                 self._do_stop(reg)
                 self._drive_active = False
             return
 
-        # E-Stop actif — ignorer
+        # E-Stop active — ignore
         if getattr(reg, 'estop_active', False):
             return
 
-        # Priorité web/Android — céder si commande web récente (<500ms)
+        # Web/Android priority — yield if recent web command (<500ms)
         if time.time() - getattr(reg, 'web_last_drive_t', 0) < 0.5:
             return
 
@@ -330,7 +330,7 @@ class BTControllerDriver:
         thr_raw   = -self._read_axis_val(dev, m.get('throttle', 'ABS_Y'), abs_info, dz)
         str_raw   =  self._read_axis_val(dev, m.get('steer',    'ABS_X'), abs_info, dz)
 
-        # Vitesse max — Kids mode
+        # Max speed — Kids mode
         spd = 1.0
         if getattr(reg, 'lock_mode', 0) == 1:
             spd = float(getattr(reg, 'kids_speed_limit', 0.5))
@@ -350,7 +350,7 @@ class BTControllerDriver:
     def _send_dome(self, val: float, reg) -> None:
         if getattr(reg, 'estop_active', False):
             return
-        # Priorité web/Android pour le dôme
+        # Web/Android priority for dome
         if time.time() - getattr(reg, 'web_last_dome_t', 0) < 0.5:
             return
         if abs(val) > 0.01:
@@ -361,14 +361,14 @@ class BTControllerDriver:
             self._dome_active = False
 
     # ------------------------------------------------------------------
-    # Boutons
+    # Buttons
     # ------------------------------------------------------------------
 
     def _handle_button(self, event) -> None:
         import master.registry as reg
 
-        # ecodes.BTN peut retourner une liste d'alias pour un même code
-        # ex: BTN_EAST (305) → ['BTN_B', 'BTN_EAST'] sur Shield/Xbox
+        # ecodes.BTN may return a list of aliases for the same code
+        # e.g.: BTN_EAST (305) → ['BTN_B', 'BTN_EAST'] on Shield/Xbox
         raw = ecodes.KEY.get(event.code) or ecodes.BTN.get(event.code)
         if not raw:
             return
@@ -383,17 +383,17 @@ class BTControllerDriver:
 
         log.debug(f"BTN codes={code_names} pressed={pressed} released={released}")
 
-        # E-Stop — toujours traité même si désactivé
+        # E-Stop — always processed even if disabled
         if _is(m.get('estop', 'BTN_MODE')):
             if pressed:
                 self._trigger_estop(reg)
             return
 
-        # Si E-Stop actif → ignorer tout le reste
+        # If E-Stop active → ignore everything else
         if getattr(reg, 'estop_active', False):
             return
 
-        # Panneau dôme (maintenu = ouvert, relâché = fermé)
+        # Dome panel (held = open, released = closed)
         if _is(m.get('panel_dome', 'BTN_WEST')):
             if pressed and reg.dome_servo:
                 log.info("BT: open_all dome_servo")
@@ -404,7 +404,7 @@ class BTControllerDriver:
                 try: reg.dome_servo.close_all()
                 except Exception as e: log.warning(f"dome close_all: {e}")
 
-        # Panneau body (maintenu = ouvert, relâché = fermé)
+        # Body panel (held = open, released = closed)
         elif _is(m.get('panel_body', 'BTN_NORTH')):
             if pressed and reg.servo:
                 log.info("BT: open_all body_servo")
@@ -415,7 +415,7 @@ class BTControllerDriver:
                 try: reg.servo.close_all()
                 except Exception as e: log.warning(f"body close_all: {e}")
 
-        # Son aléatoire (front montant)
+        # Random sound (rising edge)
         elif _is(m.get('audio', 'BTN_EAST')):
             if pressed and reg.uart:
                 log.info("BT: S:RANDOM:happy")
@@ -423,7 +423,7 @@ class BTControllerDriver:
                 except Exception as e: log.warning(f"audio send: {e}")
 
     def _trigger_estop(self, reg) -> None:
-        log.warning("E-STOP déclenché depuis manette BT")
+        log.warning("E-STOP triggered from BT gamepad")
         reg.estop_active = True
         self._stop_motion()
         if reg.dome_servo:
@@ -434,7 +434,7 @@ class BTControllerDriver:
             except Exception: pass
 
     # ------------------------------------------------------------------
-    # Helpers motion
+    # Motion helpers
     # ------------------------------------------------------------------
 
     def _do_drive(self, left: float, right: float, reg) -> None:
@@ -483,7 +483,7 @@ class BTControllerDriver:
         self._dome_active  = False
 
     # ------------------------------------------------------------------
-    # Watchdog inactivité
+    # Inactivity watchdog
     # ------------------------------------------------------------------
 
     def _inactivity_loop(self) -> None:
@@ -495,5 +495,5 @@ class BTControllerDriver:
                 continue
             if time.time() - self._last_input_t > timeout:
                 if self._drive_active or self._dome_active:
-                    log.info(f"BT inactivité >{timeout:.0f}s — arrêt mouvements")
+                    log.info(f"BT inactivity >{timeout:.0f}s — stopping movement")
                     self._stop_motion()

@@ -28,10 +28,10 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Deploy Controller — Mise à jour et déploiement.
-- git pull depuis wlan1 (internet)
-- rsync /slave/ vers Pi Zero via SSH
-- Bouton physique dôme (court=update, long=rollback, double=version)
+Deploy Controller — Update and deployment.
+- git pull from wlan1 (internet)
+- rsync /slave/ to Pi Zero via SSH
+- Physical dome button (short=update, long=rollback, double=version)
 - Reboot Slave via UART
 """
 
@@ -68,13 +68,13 @@ class DeployController:
     def start(self) -> None:
         self._running = True
         threading.Thread(target=self._button_loop, name="deploy-btn", daemon=True).start()
-        log.info("DeployController démarré")
+        log.info("DeployController started")
 
     def stop(self) -> None:
         self._running = False
 
     # ------------------------------------------------------------------
-    # Bouton GPIO
+    # GPIO Button
     # ------------------------------------------------------------------
 
     def _button_loop(self) -> None:
@@ -83,7 +83,7 @@ class DeployController:
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self._button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         except Exception as e:
-            log.error(f"GPIO init échoué: {e} — bouton désactivé")
+            log.error(f"GPIO init failed: {e} — button disabled")
             return
 
         last_release = 0.0
@@ -91,48 +91,48 @@ class DeployController:
             try:
                 if GPIO.input(self._button_pin) == GPIO.LOW:
                     press_start = time.monotonic()
-                    # Attendre relâchement
+                    # Wait for release
                     while GPIO.input(self._button_pin) == GPIO.LOW:
                         time.sleep(0.05)
                     duration = time.monotonic() - press_start
 
                     now = time.monotonic()
                     if duration >= self._short_press_threshold:
-                        # Appui long → rollback
-                        log.info("Bouton: appui long → rollback")
+                        # Long press → rollback
+                        log.info("Button: long press → rollback")
                         self.rollback()
                     elif (now - last_release) < 0.5:
-                        # Double appui → afficher version
-                        log.info("Bouton: double appui → afficher version")
+                        # Double press → show version
+                        log.info("Button: double press → show version")
                         self._show_version()
                     else:
-                        # Appui court → update
-                        log.info("Bouton: appui court → update")
+                        # Short press → update
+                        log.info("Button: short press → update")
                         self.update_and_deploy()
 
                     last_release = now
                 time.sleep(0.05)
             except Exception as e:
-                log.error(f"Erreur button_loop: {e}")
+                log.error(f"Error in button_loop: {e}")
                 time.sleep(1)
 
     # ------------------------------------------------------------------
-    # Actions principales
+    # Main actions
     # ------------------------------------------------------------------
 
     def update_and_deploy(self) -> bool:
-        """Appui court: git pull (si internet) + rsync + reboot Slave."""
+        """Short press: git pull (if internet available) + rsync + reboot Slave."""
         if self._is_internet_available():
             self.git_pull()
         else:
-            log.info("wlan1 absent — rsync version locale")
+            log.info("wlan1 unavailable — rsync local version")
         success = self.rsync_to_slave()
         if success:
             self.reboot_slave()
         return success
 
     def rollback(self) -> bool:
-        """Appui long: git checkout HEAD^ + rsync + reboot Slave."""
+        """Long press: git checkout HEAD^ + rsync + reboot Slave."""
         log.info("Rollback: git checkout HEAD^")
         try:
             result = subprocess.run(
@@ -141,12 +141,12 @@ class DeployController:
                 capture_output=True, text=True, timeout=30
             )
             if result.returncode != 0:
-                log.error(f"git checkout HEAD^ échoué: {result.stderr}")
+                log.error(f"git checkout HEAD^ failed: {result.stderr}")
                 return False
             self._update_version_file()
             log.info("Rollback git OK")
         except Exception as e:
-            log.error(f"Erreur rollback: {e}")
+            log.error(f"Rollback error: {e}")
             return False
 
         success = self.rsync_to_slave()
@@ -156,12 +156,12 @@ class DeployController:
 
     def git_pull(self) -> bool:
         """
-        git pull avec timeout.
-        Utilise l'URL GitHub de local.cfg — supporte les forks.
-        Met à jour le remote 'origin' si l'URL a changé.
+        git pull with timeout.
+        Uses the GitHub URL from local.cfg — supports forks.
+        Updates remote 'origin' if the URL has changed.
         """
         try:
-            # Synchroniser le remote origin avec local.cfg si nécessaire
+            # Sync remote origin with local.cfg if needed
             if self._github_url:
                 self._sync_remote_url()
 
@@ -173,23 +173,23 @@ class DeployController:
             )
             if result.returncode == 0:
                 self._update_version_file()
-                log.info(f"git pull réussi (branch: {self._github_branch})")
+                log.info(f"git pull succeeded (branch: {self._github_branch})")
                 return True
             else:
-                log.warning(f"git pull échoué: {result.stderr.strip()}")
+                log.warning(f"git pull failed: {result.stderr.strip()}")
                 return False
         except subprocess.TimeoutExpired:
             log.warning("git pull timeout")
             return False
         except Exception as e:
-            log.error(f"git pull erreur: {e}")
+            log.error(f"git pull error: {e}")
             return False
 
     def _sync_remote_url(self) -> None:
-        """Met à jour git remote origin si l'URL dans local.cfg est différente."""
+        """Updates git remote origin if the URL in local.cfg has changed."""
         url = self._github_url
         if not (url.startswith('https://') or url.startswith('http://') or url.startswith('git@')):
-            log.warning(f"URL GitHub invalide ignorée: {url!r}")
+            log.warning(f"Invalid GitHub URL ignored: {url!r}")
             return
         try:
             result = subprocess.run(
@@ -203,18 +203,18 @@ class DeployController:
                     ["git", "remote", "set-url", "origin", url],
                     cwd=self._repo_path, timeout=5, check=True
                 )
-                log.info(f"Remote origin mis à jour: {url}")
+                log.info(f"Remote origin updated: {url}")
         except Exception as e:
-            log.warning(f"Impossible de sync remote URL: {e}")
+            log.warning(f"Unable to sync remote URL: {e}")
 
     def rsync_to_slave(self, retries: int = MAX_SYNC_RETRIES) -> bool:
-        """rsync slave/ vers Pi Zero. Retry avec backoff."""
+        """rsync slave/ to Pi Zero. Retry with backoff."""
         slave_slave_path = f"{self._slave_user}@{self._slave_host}:{self._slave_path}/"
         local_path = os.path.join(self._repo_path, "slave/")
 
         for attempt in range(retries):
             try:
-                log.info(f"rsync tentative {attempt + 1}/{retries}")
+                log.info(f"rsync attempt {attempt + 1}/{retries}")
                 result = subprocess.run(
                     [
                         "rsync", "-avz", "--delete",
@@ -225,30 +225,30 @@ class DeployController:
                     capture_output=True, text=True
                 )
                 if result.returncode == 0:
-                    log.info("rsync réussi")
+                    log.info("rsync succeeded")
                     return True
                 else:
-                    log.warning(f"rsync échoué (code {result.returncode}): {result.stderr.strip()}")
+                    log.warning(f"rsync failed (code {result.returncode}): {result.stderr.strip()}")
             except subprocess.TimeoutExpired:
                 log.warning("rsync timeout")
             except Exception as e:
-                log.error(f"rsync erreur: {e}")
+                log.error(f"rsync error: {e}")
 
             if attempt < retries - 1:
                 backoff = SYNC_RETRY_BACKOFF_S[attempt]
-                log.info(f"Retry dans {backoff}s")
+                log.info(f"Retrying in {backoff}s")
                 time.sleep(backoff)
 
-        log.error("rsync échoué après toutes les tentatives")
+        log.error("rsync failed after all retries")
         if self._teeces:
             self._teeces.system_error("SYNC")
         return False
 
     def reboot_slave(self) -> None:
-        """Envoie commande REBOOT au Slave via UART."""
+        """Sends REBOOT command to the Slave via UART."""
         if self._uart:
             self._uart.send('REBOOT', '1')
-            log.info("Commande REBOOT envoyée au Slave")
+            log.info("REBOOT command sent to Slave")
 
     # ------------------------------------------------------------------
     # Utilitaires
@@ -258,7 +258,7 @@ class DeployController:
         version = self._read_version()
         if self._teeces:
             self._teeces.show_version(version)
-        log.info(f"Version courante: {version}")
+        log.info(f"Current version: {version}")
 
     def _update_version_file(self) -> None:
         try:
@@ -271,9 +271,9 @@ class DeployController:
                 version = result.stdout.strip()
                 with open(VERSION_FILE, 'w') as f:
                     f.write(version)
-                log.info(f"VERSION mis à jour: {version}")
+                log.info(f"VERSION updated: {version}")
         except Exception as e:
-            log.error(f"Erreur update VERSION: {e}")
+            log.error(f"Error updating VERSION: {e}")
 
     def _read_version(self) -> str:
         try:

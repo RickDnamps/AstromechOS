@@ -29,17 +29,17 @@
 # ============================================================
 """
 Master Dome Motor Driver — Phase 2.
-Contrôle le moteur DC du dôme via deux canaux UART:
+Controls the dome DC motor via UART:
 
-  D:SPEED          → moteur DC dôme (envoyé au Slave → Syren10/Sabertooth)
-  TEECES:cmd        → LEDs Teeces32 (local Master via TeecesController)
+  D:SPEED          → dome DC motor (sent to Slave → Syren10/Sabertooth)
+  TEECES:cmd        → Teeces32 LEDs (local Master via TeecesController)
 
-Le Slave reçoit D: et pilote le Syren10 sur /dev/ttyUSB1 (ou autre port).
+The Slave receives D: and drives the Syren10 on /dev/ttyUSB1 (or other port).
 
-Activation Phase 2:
-  1. Décommenter l'import dans master/main.py
-  2. Appeler dome.setup() dans main()
-  3. Configurer dome_port dans main.cfg si nécessaire
+Phase 2 activation:
+  1. Uncomment the import in master/main.py
+  2. Call dome.setup() in main()
+  3. Configure dome_port in main.cfg if needed
 """
 
 import logging
@@ -50,18 +50,18 @@ import random
 log = logging.getLogger(__name__)
 
 DEADZONE = 0.05
-# Vitesse max rotation aléatoire (fraction de 1.0)
+# Max speed for random rotation (fraction of 1.0)
 RANDOM_SPEED_MAX = 0.4
-# Délai entre rotations aléatoires (secondes)
+# Delay between random rotations (seconds)
 RANDOM_INTERVAL_MIN = 3.0
 RANDOM_INTERVAL_MAX = 8.0
 
 
 class DomeMotorDriver:
     """
-    Contrôle le moteur DC du dôme.
-    En mode manuel : dome.turn(speed)
-    En mode aléatoire : dome.set_random(True) → tourne par intervals
+    Controls the dome DC motor.
+    Manual mode: dome.turn(speed)
+    Random mode: dome.set_random(True) → rotates at intervals
     """
 
     def __init__(self, uart):
@@ -73,7 +73,7 @@ class DomeMotorDriver:
 
     def setup(self) -> bool:
         self._ready = True
-        log.info("DomeMotorDriver prêt")
+        log.info("DomeMotorDriver ready")
         return True
 
     def shutdown(self) -> None:
@@ -85,42 +85,42 @@ class DomeMotorDriver:
         return self._ready
 
     # ------------------------------------------------------------------
-    # API publique
+    # Public API
     # ------------------------------------------------------------------
 
     def turn(self, speed: float) -> bool:
         """
-        Rotation dôme.
+        Dome rotation.
         speed : float [-1.0 … +1.0]
-          -1.0 = gauche max, +1.0 = droite max, 0.0 = arrêt
+          -1.0 = full left, +1.0 = full right, 0.0 = stop
         """
         if abs(speed) < DEADZONE:
             speed = 0.0
         self._speed = max(-1.0, min(1.0, speed))
         ok = self._uart.send('D', f"{self._speed:.3f}")
-        log.debug(f"Dôme turn: {self._speed:.3f}")
+        log.debug(f"Dome turn: {self._speed:.3f}")
         return ok
 
     def stop(self) -> bool:
-        """Arrêt rotation dôme."""
+        """Stop dome rotation."""
         self._speed = 0.0
         return self._uart.send('D', '0.000')
 
     def center(self) -> bool:
-        """Retour position zéro (centre)."""
+        """Return to zero position (center)."""
         return self.stop()
 
     def set_random(self, enabled: bool) -> None:
-        """Active/désactive le mode rotation aléatoire."""
+        """Enable/disable random rotation mode."""
         self._random_mode = enabled
         if enabled and (self._random_thread is None or not self._random_thread.is_alive()):
             self._random_thread = threading.Thread(
                 target=self._random_loop, name="dome-random", daemon=True
             )
             self._random_thread.start()
-            log.info("Dôme mode aléatoire activé")
+            log.info("Dome random mode enabled")
         elif not enabled:
-            log.info("Dôme mode aléatoire désactivé")
+            log.info("Dome random mode disabled")
             self.stop()
 
     @property
@@ -128,18 +128,18 @@ class DomeMotorDriver:
         return {'speed': self._speed, 'random': self._random_mode}
 
     # ------------------------------------------------------------------
-    # Thread aléatoire (inspiré de DomeThread r2_control)
+    # Random thread (inspired by DomeThread r2_control)
     # ------------------------------------------------------------------
 
     def _random_loop(self) -> None:
         while self._random_mode:
-            # Pause entre mouvements
+            # Pause between movements
             pause = random.uniform(RANDOM_INTERVAL_MIN, RANDOM_INTERVAL_MAX)
             time.sleep(pause)
             if not self._random_mode:
                 break
 
-            # Choisir direction et durée
+            # Choose direction and duration
             speed = random.uniform(-RANDOM_SPEED_MAX, RANDOM_SPEED_MAX)
             duration = random.uniform(0.5, 2.0)
 

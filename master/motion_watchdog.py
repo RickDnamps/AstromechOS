@@ -28,21 +28,21 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Motion Watchdog — Sécurité contrôleur déconnecté.
+Motion Watchdog — Safety for disconnected controller.
 
-Si aucune commande de mouvement (drive ou dome) n'est reçue pendant TIMEOUT secondes
-ET que le robot est en mouvement → arrêt automatique via UART.
+If no motion command (drive or dome) is received for TIMEOUT seconds
+AND the robot is moving → automatic stop via UART.
 
-Protège contre :
-  - Perte de connexion WiFi de l'app Android / navigateur
-  - Crash de l'interface web
-  - Déconnexion réseau pendant une action
+Protects against:
+  - WiFi loss of Android app / browser
+  - Web interface crash
+  - Network disconnection during an action
 
-Timeout : 800ms — suffisant pour absorber les latences HTTP normales,
-          assez court pour stopper le robot rapidement.
+Timeout: 800ms — enough to absorb normal HTTP latency,
+         short enough to stop the robot quickly.
 
-Démarrage : motion_watchdog.start() dans master/main.py après UART init.
-Alimentation : motion_watchdog.feed_drive(l, r) / feed_dome(s) dans motion_bp.py.
+Start: motion_watchdog.start() in master/main.py after UART init.
+Feed:  motion_watchdog.feed_drive(l, r) / feed_dome(s) in motion_bp.py.
 """
 
 import logging
@@ -54,15 +54,15 @@ from master.safe_stop import stop_drive, stop_dome, cancel_ramp
 
 log = logging.getLogger(__name__)
 
-TIMEOUT_S   = 0.8   # secondes sans commande → arrêt
-CHECK_HZ    = 0.1   # intervalle de vérification (100ms)
-DEADZONE    = 0.05  # seuil pour considérer "en mouvement"
+TIMEOUT_S   = 0.8   # seconds without command → stop
+CHECK_HZ    = 0.1   # check interval (100ms)
+DEADZONE    = 0.05  # threshold to consider "in motion"
 
 
 class MotionWatchdog:
     """
-    Watchdog de sécurité : arrête la propulsion et le dôme si le contrôleur
-    ne répond plus.
+    Safety watchdog: stops propulsion and dome if the controller
+    stops responding.
     """
 
     def __init__(self):
@@ -74,48 +74,48 @@ class MotionWatchdog:
         self._running         = False
 
     # ------------------------------------------------------------------
-    # Cycle de vie
+    # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
         self._running = True
         threading.Thread(target=self._loop, daemon=True, name="motion-wdog").start()
-        log.info("MotionWatchdog démarré (timeout=%.1fs)", TIMEOUT_S)
+        log.info("MotionWatchdog started (timeout=%.1fs)", TIMEOUT_S)
 
     def stop(self) -> None:
         self._running = False
 
     # ------------------------------------------------------------------
-    # Alimentation — appelé à chaque commande de mouvement reçue
+    # Feed — called on each received motion command
     # ------------------------------------------------------------------
 
     def feed_drive(self, left: float, right: float) -> None:
-        """Signale une commande drive reçue."""
-        cancel_ramp()   # annule tout arrêt progressif en cours
+        """Signals a drive command received."""
+        cancel_ramp()   # cancel any ongoing gradual stop
         with self._lock:
             self._last_drive_time = time.monotonic()
             self._drive_active    = abs(left) > DEADZONE or abs(right) > DEADZONE
 
     def feed_dome(self, speed: float) -> None:
-        """Signale une commande dome reçue."""
+        """Signals a dome command received."""
         with self._lock:
             self._last_dome_time = time.monotonic()
             self._dome_active    = abs(speed) > DEADZONE
 
     def clear_drive(self) -> None:
-        """Signale un stop propulsion explicite (pas un timeout)."""
+        """Signals an explicit propulsion stop (not a timeout)."""
         with self._lock:
             self._drive_active    = False
             self._last_drive_time = time.monotonic()
 
     def clear_dome(self) -> None:
-        """Signale un stop dôme explicite."""
+        """Signals an explicit dome stop."""
         with self._lock:
             self._dome_active    = False
             self._last_dome_time = time.monotonic()
 
     # ------------------------------------------------------------------
-    # Boucle interne
+    # Internal loop
     # ------------------------------------------------------------------
 
     def _loop(self) -> None:
@@ -136,13 +136,13 @@ class MotionWatchdog:
     def _stop_drive(self) -> None:
         with self._lock:
             self._drive_active = False
-        log.warning("MotionWatchdog: timeout commande — arrêt progressif propulsion")
-        stop_drive()   # ramp proportionnelle à la vitesse courante
+        log.warning("MotionWatchdog: command timeout — gradual propulsion stop")
+        stop_drive()   # ramp proportional to current speed
 
     def _stop_dome(self) -> None:
         with self._lock:
             self._dome_active = False
-        log.warning("MotionWatchdog: timeout commande — arrêt progressif dôme")
+        log.warning("MotionWatchdog: command timeout — gradual dome stop")
         stop_dome()
 
 

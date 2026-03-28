@@ -1,12 +1,12 @@
 # master/lights/base_controller.py
 """
-Interface abstraite commune à tous les drivers lights.
+Common abstract interface for all lights drivers.
 
-Tous les drivers (TeecesDriver, AstroPixelsDriver, …) héritent de cette
-classe et implémentent les méthodes marquées @abstractmethod.
+All drivers (TeecesDriver, AstroPixelsDriver, ...) inherit from this
+class and implement the methods marked @abstractmethod.
 
-Les méthodes non-abstraites sont des alias de rétro-compatibilité pour les
-appelants qui utilisaient encore l'ancienne API TeecesController.
+Non-abstract methods are backward-compatibility aliases for callers
+that still used the old TeecesController API.
 """
 
 from abc import ABC, abstractmethod
@@ -18,7 +18,7 @@ from shared.base_driver import BaseDriver
 class BaseLightsController(BaseDriver, ABC):
     """Interface canonique pour tous les drivers lights R2-D2."""
 
-    # Catalogue d'animations — numérotation T-code commune à tous les drivers
+    # Animation catalogue — T-code numbering shared by all drivers
     ANIMATIONS: dict[int, str] = {
         1:  'Random',
         2:  'Flash',
@@ -45,75 +45,75 @@ class BaseLightsController(BaseDriver, ABC):
     }
 
     # ------------------------------------------------------------------
-    # Interface canonique (à implémenter dans chaque driver)
+    # Canonical interface (must be implemented in each driver)
     # ------------------------------------------------------------------
 
     @abstractmethod
     def setup(self) -> bool:
-        """Ouvre le port série. Retourne False si échec."""
+        """Opens the serial port. Returns False on failure."""
 
     @abstractmethod
     def shutdown(self) -> None:
-        """Arrêt propre — éteint les LEDs et ferme le port."""
+        """Clean shutdown — turns off LEDs and closes the port."""
 
     @abstractmethod
     def is_ready(self) -> bool:
-        """True si le port est ouvert et opérationnel."""
+        """True if the port is open and operational."""
 
     @abstractmethod
     def random_mode(self) -> bool:
-        """Mode animations aléatoires (mode normal R2)."""
+        """Random animation mode (normal R2 mode)."""
 
     @abstractmethod
     def leia(self) -> bool:
-        """Mode hologramme Leia."""
+        """Leia hologram mode."""
 
     @abstractmethod
     def off(self) -> bool:
-        """Éteint toutes les LEDs."""
+        """Turn off all LEDs."""
 
     @abstractmethod
     def text(self, message: str, target: str = "both") -> bool:
-        """Texte défilant sur les logics. target: 'fld' | 'rld' | 'both'"""
+        """Scrolling text on the logics. target: 'fld' | 'rld' | 'both'"""
 
     @abstractmethod
     def animation(self, code: int) -> bool:
-        """Déclenche une animation par T-code (voir ANIMATIONS)."""
+        """Trigger an animation by T-code (see ANIMATIONS)."""
 
     @abstractmethod
     def psi(self, state: int) -> bool:
-        """Contrôle les PSI. 0=off, 1=random, 2-8=couleurs."""
+        """Control the PSIs. 0=off, 1=random, 2-8=colors."""
 
     @abstractmethod
     def raw(self, cmd: str) -> bool:
-        """Envoie une commande brute (protocole natif du driver)."""
+        """Send a raw command (driver's native protocol)."""
 
     @abstractmethod
     def system_error(self, message: str = "") -> bool:
-        """Alerte visuelle erreur système."""
+        """Visual system error alert."""
 
     @abstractmethod
     def system_ok(self, message: str = "") -> bool:
-        """Confirmation visuelle succès (vert 3s puis retour random)."""
+        """Visual success confirmation (green 3s then back to random)."""
 
     @abstractmethod
     def slave_offline(self) -> bool:
-        """Alerte visuelle Slave hors ligne."""
+        """Visual alert: Slave offline."""
 
     @abstractmethod
     def uart_error(self) -> bool:
-        """Alerte visuelle erreur UART."""
+        """Visual alert: UART error."""
 
     @abstractmethod
     def show_version(self, version: str) -> bool:
-        """Affiche la version sur les logics."""
+        """Display the version on the logics."""
 
     @abstractmethod
     def alert_error(self, code: str = "") -> bool:
-        """Affiche un code d'erreur sur les logics."""
+        """Display an error code on the logics."""
 
     # ------------------------------------------------------------------
-    # Aliases de rétro-compatibilité (non-abstraits — hérités gratuitement)
+    # Backward-compatibility aliases (non-abstract — inherited for free)
     # ------------------------------------------------------------------
 
     def all_off(self) -> bool:

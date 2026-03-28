@@ -29,15 +29,15 @@
 # ============================================================
 """
 Master Body Servo Driver — Phase 2 (MG90S 180°).
-Envoie les commandes de servos body au Slave via UART (message SRV:).
-Le Slave exécute sur le PCA9685 I2C.
+Sends body servo commands to the Slave via UART (SRV: message).
+The Slave executes on the PCA9685 I2C.
 
-Format UART: SRV:NAME,ANGLE_DEG
-  NAME      : nom du servo (ex: body_panel_1)
-  ANGLE_DEG : float — angle cible en degrés (10–170°)
+UART format: SRV:NAME,ANGLE_DEG
+  NAME      : servo name (e.g. body_panel_1)
+  ANGLE_DEG : float — target angle in degrees (10–170°)
 
-Le Slave applique : pulse_us = 500 + (angle_deg / 180.0) * 2000
-Le servo MG90S maintient la position — pas de timer d'arrêt.
+The Slave applies: pulse_us = 500 + (angle_deg / 180.0) * 2000
+MG90S servo holds position — no stop timer.
 """
 
 import configparser
@@ -54,7 +54,7 @@ _LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
 
 
 def _calibrated_angle(name: str, action: str) -> float:
-    """Lit l'angle calibré depuis local.cfg [servo_panels]. Fallback sur DEFAULT."""
+    """Reads the calibrated angle from local.cfg [servo_panels]. Falls back to DEFAULT."""
     cfg = configparser.ConfigParser()
     for path in (_MAIN_CFG, _LOCAL_CFG):
         if os.path.exists(path):
@@ -75,8 +75,8 @@ KNOWN_SERVOS = {
 
 class BodyServoDriver:
     """
-    Couche d'abstraction servos body Master.
-    Traduit les commandes haut niveau en messages UART SRV:.
+    Master body servo abstraction layer.
+    Translates high-level commands into UART SRV: messages.
     """
 
     def __init__(self, uart):
@@ -85,7 +85,7 @@ class BodyServoDriver:
 
     def setup(self) -> bool:
         self._ready = True
-        log.info("BodyServoDriver prêt (%d servos connus)", len(KNOWN_SERVOS))
+        log.info("BodyServoDriver ready (%d known servos)", len(KNOWN_SERVOS))
         return True
 
     def shutdown(self) -> None:
@@ -96,7 +96,7 @@ class BodyServoDriver:
         return self._ready
 
     # ------------------------------------------------------------------
-    # API publique
+    # Public API
     # ------------------------------------------------------------------
 
     def open(self, name: str, angle_deg: float = None, speed: int = None) -> bool:
@@ -112,7 +112,7 @@ class BodyServoDriver:
     def move(self, name: str, position: float,
              angle_open: float = DEFAULT_OPEN_DEG,
              angle_close: float = DEFAULT_CLOSE_DEG) -> bool:
-        """position 0.0=fermé … 1.0=ouvert — interpolé entre angle_close et angle_open."""
+        """position 0.0=closed … 1.0=open — interpolated between angle_close and angle_open."""
         angle = angle_close + max(0.0, min(1.0, position)) * (angle_open - angle_close)
         return self._send(name, angle)
 
@@ -129,15 +129,15 @@ class BodyServoDriver:
         return {}
 
     # ------------------------------------------------------------------
-    # Interne
+    # Internal
     # ------------------------------------------------------------------
 
     def _send(self, name: str, angle_deg: float) -> bool:
         if not self._ready:
-            log.warning("BodyServoDriver non prêt — commande ignorée (%r)", name)
+            log.warning("BodyServoDriver not ready — command ignored (%r)", name)
             return False
         if name not in KNOWN_SERVOS:
-            log.warning("Servo inconnu: %r", name)
+            log.warning("Unknown servo: %r", name)
         ok = self._uart.send('SRV', f'{name},{angle_deg:.1f}')
         log.debug("Servo %s → %.1f°", name, angle_deg)
         return ok

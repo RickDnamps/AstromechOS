@@ -28,22 +28,22 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-App Watchdog — Heartbeat applicatif App → Master.
+App Watchdog — Application heartbeat App → Master.
 
-L'application (Android / navigateur web) envoie POST /heartbeat toutes les 200ms.
-Si aucun heartbeat reçu pendant TIMEOUT secondes après qu'une connexion ait été
-établie → arrêt d'urgence complet (propulsion + dôme).
+The application (Android / web browser) sends POST /heartbeat every 200ms.
+If no heartbeat is received for TIMEOUT seconds after a connection has been
+established → full emergency stop (propulsion + dome).
 
-Même principe que le watchdog UART Master→Slave, mais pour la couche applicative.
+Same principle as the UART Master→Slave watchdog, but for the application layer.
 
-Protège contre :
-  - Crash de l'app Android
-  - Fermeture de l'onglet navigateur pendant une action
-  - Perte WiFi de l'appareil de contrôle
-  - Écran du téléphone éteint (WebView en pause)
+Protects against:
+  - Android app crash
+  - Browser tab closed during an action
+  - WiFi loss of the control device
+  - Phone screen turned off (WebView paused)
 
-Démarrage : app_watchdog.start() dans master/main.py
-Alimentation : app_watchdog.feed() dans status_bp.py POST /heartbeat
+Start: app_watchdog.start() in master/main.py
+Feed:  app_watchdog.feed() in status_bp.py POST /heartbeat
 """
 
 import logging
@@ -55,45 +55,45 @@ from master.safe_stop import stop_drive, stop_dome
 
 log = logging.getLogger(__name__)
 
-TIMEOUT_S   = 0.6   # 600ms — 3 HB manqués à 200ms = déconnexion
-CHECK_HZ    = 0.1   # vérification toutes les 100ms
+TIMEOUT_S   = 0.6   # 600ms — 3 missed HBs at 200ms = disconnection
+CHECK_HZ    = 0.1   # check every 100ms
 
 
 class AppWatchdog:
     """
-    Surveille le heartbeat de l'application de contrôle.
-    Si le heartbeat s'arrête après avoir été établi → arrêt d'urgence.
+    Monitors the control application heartbeat.
+    If the heartbeat stops after being established → emergency stop.
     """
 
     def __init__(self):
         self._lock          = threading.Lock()
         self._last_hb_time  = 0.0
-        self._connected     = False   # True dès le premier HB reçu
-        self._triggered     = False   # True après un timeout — reset au prochain HB
+        self._connected     = False   # True once the first HB is received
+        self._triggered     = False   # True after a timeout — reset on next HB
         self._running       = False
 
     # ------------------------------------------------------------------
-    # Cycle de vie
+    # Lifecycle
     # ------------------------------------------------------------------
 
     def start(self) -> None:
         self._running = True
         threading.Thread(target=self._loop, daemon=True, name="app-wdog").start()
-        log.info("AppWatchdog démarré (timeout=%.1fs)", TIMEOUT_S)
+        log.info("AppWatchdog started (timeout=%.1fs)", TIMEOUT_S)
 
     def stop(self) -> None:
         self._running = False
 
     # ------------------------------------------------------------------
-    # API publique
+    # Public API
     # ------------------------------------------------------------------
 
     def feed(self) -> None:
-        """Appelé à chaque heartbeat reçu de l'application."""
+        """Called on each heartbeat received from the application."""
         with self._lock:
             self._last_hb_time = time.monotonic()
             if self._triggered:
-                log.info("AppWatchdog: connexion rétablie — watchdog réarmé")
+                log.info("AppWatchdog: connection restored — watchdog re-armed")
                 self._triggered = False
             self._connected = True
 
@@ -105,14 +105,14 @@ class AppWatchdog:
 
     @property
     def last_hb_age_ms(self) -> float:
-        """Âge du dernier heartbeat en millisecondes."""
+        """Age of the last heartbeat in milliseconds."""
         with self._lock:
             if not self._connected:
                 return -1.0
             return (time.monotonic() - self._last_hb_time) * 1000.0
 
     # ------------------------------------------------------------------
-    # Boucle interne
+    # Internal loop
     # ------------------------------------------------------------------
 
     def _loop(self) -> None:
@@ -126,15 +126,15 @@ class AppWatchdog:
                 self._triggered = True
                 self._connected = False
 
-            # Hors du lock pour éviter deadlock sur les drivers
+            # Outside the lock to avoid deadlock on drivers
             self._emergency_stop()
 
     def _emergency_stop(self) -> None:
         log.warning(
-            "AppWatchdog: heartbeat app perdu (>%.0fms) — arrêt progressif",
+            "AppWatchdog: app heartbeat lost (>%.0fms) — gradual stop",
             TIMEOUT_S * 1000
         )
-        stop_drive()   # ramp proportionnelle — pas de freinage brutal
+        stop_drive()   # proportional ramp — no abrupt braking
         stop_dome()
 
 

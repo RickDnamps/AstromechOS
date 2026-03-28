@@ -1,10 +1,10 @@
 # master/lights/__init__.py
 """
-Factory lights — charge le bon driver selon [lights] backend dans config.
+Lights factory — loads the correct driver based on [lights] backend in config.
 
-Usage dans main.py :
+Usage in main.py:
     from master.lights import load_driver
-    lights = load_driver(cfg)   # TeecesDriver ou AstroPixelsDriver
+    lights = load_driver(cfg)   # TeecesDriver or AstroPixelsDriver
 """
 
 import configparser
@@ -12,14 +12,14 @@ import configparser
 
 def load_driver(cfg: configparser.ConfigParser):
     """
-    Retourne l'instance du driver lights configuré.
+    Returns the configured lights driver instance.
 
-    Config (main.cfg ou local.cfg) :
+    Config (main.cfg or local.cfg):
         [lights]
-        backend = teeces          # ou astropixels
+        backend = teeces          # or astropixels
 
-    Lève ValueError si le backend est inconnu.
-    Fallback = teeces si la section [lights] est absente.
+    Raises ValueError if the backend is unknown.
+    Fallback = teeces if the [lights] section is absent.
     """
     backend = cfg.get('lights', 'backend', fallback='teeces').strip().lower()
 
@@ -32,6 +32,6 @@ def load_driver(cfg: configparser.ConfigParser):
         return AstroPixelsDriver(cfg)
 
     raise ValueError(
-        f"Backend lights inconnu: {backend!r}. "
-        f"Valeurs valides: teeces, astropixels"
+        f"Unknown lights backend: {backend!r}. "
+        f"Valid values: teeces, astropixels"
     )

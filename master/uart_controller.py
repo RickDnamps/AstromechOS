@@ -29,9 +29,9 @@
 # ============================================================
 """
 Master UART Controller.
-- Envoie heartbeat H:1:CS toutes les 200ms (CS = checksum somme mod 256)
-- Lit les réponses du Slave et dispatche via callbacks
-- Alerte si 3 checksums invalides consécutifs sur heartbeat
+- Sends heartbeat H:1:CS every 200ms (CS = checksum sum mod 256)
+- Reads Slave responses and dispatches via callbacks
+- Alerts if 3 consecutive invalid checksums on heartbeat
 """
 
 import logging
@@ -76,27 +76,27 @@ class UARTController:
                 rtscts=False,
                 dsrdtr=False
             )
-            log.info(f"UART ouvert: {self._port} @ {self._baud}")
+            log.info(f"UART opened: {self._port} @ {self._baud}")
             return True
         except serial.SerialException as e:
-            log.error(f"Impossible d'ouvrir UART {self._port}: {e}")
+            log.error(f"Unable to open UART {self._port}: {e}")
             return False
 
     def start(self) -> None:
         self._running = True
         threading.Thread(target=self._heartbeat_loop, name="uart-hb", daemon=True).start()
         threading.Thread(target=self._read_loop, name="uart-rx", daemon=True).start()
-        log.info("UARTController démarré")
+        log.info("UARTController started")
 
     def stop(self) -> None:
         self._running = False
         time.sleep(0.3)
         if self._serial and self._serial.is_open:
             self._serial.close()
-        log.info("UARTController arrêté")
+        log.info("UARTController stopped")
 
     def send(self, msg_type: str, value: str) -> bool:
-        """Envoie un message avec CRC. Thread-safe."""
+        """Sends a message with CRC. Thread-safe."""
         msg = build_msg(msg_type, value)
         try:
             with self._lock:
@@ -104,16 +104,16 @@ class UARTController:
                     self._serial.write(msg.encode('utf-8'))
                     return True
         except serial.SerialException as e:
-            log.error(f"Erreur envoi UART: {e}")
+            log.error(f"UART send error: {e}")
         return False
 
     def register_callback(self, msg_type: str, callback) -> None:
-        """Enregistre un callback pour un type de message reçu."""
+        """Registers a callback for a received message type."""
         self._callbacks.setdefault(msg_type, []).append(callback)
 
     @property
     def crc_errors(self) -> int:
-        """Nombre de messages CRC invalides consécutifs depuis le dernier message valide."""
+        """Number of consecutive invalid CRC messages since the last valid message."""
         return self._invalid_crc_count
 
     # ------------------------------------------------------------------
@@ -125,7 +125,7 @@ class UARTController:
             start = time.monotonic()
             ok = self.send('H', '1')
             if not ok:
-                log.warning("Echec envoi heartbeat")
+                log.warning("Failed to send heartbeat")
             elapsed = time.monotonic() - start
             sleep_time = self._heartbeat_interval - elapsed
             if sleep_time > 0:
@@ -149,25 +149,25 @@ class UARTController:
                     line, buffer = buffer.split('\n', 1)
                     self._process_line(line)
             except serial.SerialException as e:
-                log.error(f"Erreur lecture UART: {e}")
+                log.error(f"UART read error: {e}")
                 time.sleep(1)
             except Exception as e:
-                log.error(f"Erreur inattendue read_loop: {e}")
+                log.error(f"Unexpected error in read_loop: {e}")
 
     def _process_line(self, line: str) -> None:
         result = parse_msg(line)
         if result is None:
             self._invalid_crc_count += 1
-            # Heartbeat checksum invalide = bus bruité (parasites moteurs / Tobsun)
+            # Invalid heartbeat checksum = noisy bus (motor interference / Tobsun)
             if line.startswith('H:'):
                 self._heartbeat_invalid_crc_count += 1
                 if self._heartbeat_invalid_crc_count >= MAX_INVALID_CRC_BEFORE_ALERT:
                     log.warning(
-                        f"Bus UART bruité: {self._heartbeat_invalid_crc_count} "
-                        "heartbeats checksum invalides consécutifs"
+                        f"Noisy UART bus: {self._heartbeat_invalid_crc_count} "
+                        "consecutive invalid heartbeat checksums"
                     )
             if self._invalid_crc_count >= MAX_INVALID_CRC_BEFORE_ALERT:
-                log.warning(f"Alerte: {self._invalid_crc_count} messages checksum invalides consécutifs")
+                log.warning(f"Alert: {self._invalid_crc_count} consecutive invalid checksum messages")
             return
 
         self._invalid_crc_count = 0
@@ -179,4 +179,4 @@ class UARTController:
             try:
                 cb(value)
             except Exception as e:
-                log.error(f"Erreur callback {msg_type}: {e}")
+                log.error(f"Callback error {msg_type}: {e}")

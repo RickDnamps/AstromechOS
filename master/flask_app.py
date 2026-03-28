@@ -29,9 +29,9 @@
 # ============================================================
 """
 Flask Application Factory — Phase 4.
-Crée et configure l'app Flask R2-D2 avec tous les blueprints.
+Creates and configures the R2-D2 Flask app with all blueprints.
 
-Usage dans master/main.py:
+Usage in master/main.py:
     from master.flask_app import create_app
     import master.registry as reg
 
@@ -41,7 +41,7 @@ Usage dans master/main.py:
     # ... etc
 
     app = create_app()
-    # Lancer dans un thread daemon:
+    # Launch in a daemon thread:
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000,
                      use_reloader=False), daemon=True).start()
 """
@@ -54,7 +54,7 @@ log = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
-    """Crée et configure l'application Flask."""
+    """Creates and configures the Flask application."""
     template_dir = os.path.join(os.path.dirname(__file__), 'templates')
     static_dir   = os.path.join(os.path.dirname(__file__), 'static')
 
@@ -103,7 +103,7 @@ def create_app() -> Flask:
         return render_template('mobile.html')
 
     # ------------------------------------------------------------------
-    # Gestion erreurs JSON
+    # JSON error handling
     # ------------------------------------------------------------------
     @app.errorhandler(404)
     def not_found(e):
@@ -113,5 +113,5 @@ def create_app() -> Flask:
     def server_error(e):
         return jsonify({'error': 'Internal server error'}), 500
 
-    log.info("Flask app créée — blueprints: audio, motion, servo, scripts, status, teeces, settings")
+    log.info("Flask app created — blueprints: audio, motion, servo, scripts, status, teeces, settings")
     return app

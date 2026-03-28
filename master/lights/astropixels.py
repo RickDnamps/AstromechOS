@@ -1,15 +1,15 @@
 # master/lights/astropixels.py
 """
-AstroPixelsDriver — Protocole AstroPixelsPlus via USB série.
+AstroPixelsDriver — AstroPixelsPlus protocol via USB serial.
 
-Commandes AstroPixels+ (@ prefix, \\r terminateur) :
-  @0T{n}\\r     Animations logics (même numérotation T-code que JawaLite)
-  @1M{txt}\\r   Texte FLD uniquement
-  @2M{txt}\\r   Texte RLD uniquement
-  @3M{txt}\\r   Texte FLD + RLD simultané (commande combinée — 1 seul write)
-  @4S{n}\\r     Mode PSI (0=off, 1=random, 2-8=couleurs)
+AstroPixels+ commands (@ prefix, \\r terminator):
+  @0T{n}\\r     Logic animations (same T-code numbering as JawaLite)
+  @1M{txt}\\r   FLD text only
+  @2M{txt}\\r   RLD text only
+  @3M{txt}\\r   FLD + RLD simultaneously (combined command — 1 write)
+  @4S{n}\\r     PSI mode (0=off, 1=random, 2-8=colors)
 
-Port et baud lus dans [teeces] du config (même section que TeecesDriver).
+Port and baud read from [teeces] in config (same section as TeecesDriver).
 """
 
 import logging
@@ -23,8 +23,8 @@ from master.lights.base_controller import BaseLightsController
 
 log = logging.getLogger(__name__)
 
-_MAX_TEXT    = 32         # AstroPixels+ accepte jusqu'à 32 chars
-_OK_DURATION = 3.0        # secondes avant retour random après system_ok
+_MAX_TEXT    = 32         # AstroPixels+ accepts up to 32 chars
+_OK_DURATION = 3.0        # seconds before returning to random after system_ok
 
 _TEXT_PREFIX = {
     "fld":  "@1M",
@@ -34,7 +34,7 @@ _TEXT_PREFIX = {
 
 
 class AstroPixelsDriver(BaseLightsController):
-    """Driver AstroPixels+ (commandes @-préfixées)."""
+    """AstroPixels+ driver (@-prefixed commands)."""
 
     def __init__(self, cfg: configparser.ConfigParser):
         self._port   = cfg.get('teeces', 'port')
@@ -51,10 +51,10 @@ class AstroPixelsDriver(BaseLightsController):
         try:
             self._serial = serial.Serial(self._port, self._baud, timeout=1)
             self._ready  = True
-            log.info(f"AstroPixelsDriver ouvert: {self._port} @ {self._baud}")
+            log.info(f"AstroPixelsDriver opened: {self._port} @ {self._baud}")
             return True
         except Exception as e:
-            log.error(f"AstroPixelsDriver impossible d'ouvrir {self._port}: {e}")
+            log.error(f"AstroPixelsDriver unable to open {self._port}: {e}")
             self._ready = False
             return False
 
@@ -64,7 +64,7 @@ class AstroPixelsDriver(BaseLightsController):
         if self._serial and self._serial.is_open:
             self._serial.close()
         self._ready = False
-        log.info("AstroPixelsDriver arrêté")
+        log.info("AstroPixelsDriver stopped")
 
     def is_ready(self) -> bool:
         return self._ready and self._serial is not None and self._serial.is_open
@@ -75,14 +75,14 @@ class AstroPixelsDriver(BaseLightsController):
 
     def _send(self, cmd: str) -> bool:
         if not self.is_ready():
-            log.warning(f"AstroPixelsDriver non prêt, ignoré: {cmd!r}")
+            log.warning(f"AstroPixelsDriver not ready, ignored: {cmd!r}")
             return False
         try:
             self._serial.write(cmd.encode('ascii'))
             log.debug(f"AstroPixels+ TX: {cmd!r}")
             return True
         except Exception as e:
-            log.error(f"AstroPixelsDriver erreur send: {e}")
+            log.error(f"AstroPixelsDriver send error: {e}")
             self._ready = False
             return False
 

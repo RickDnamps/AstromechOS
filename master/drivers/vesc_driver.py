@@ -29,17 +29,17 @@
 # ============================================================
 """
 Master VESC Driver — Phase 2.
-Envoie les commandes de propulsion au Slave via UART (message M:).
-Le Slave exécute les commandes sur les VESC physiques.
+Sends propulsion commands to the Slave via UART (M: message).
+The Slave executes the commands on the physical VESCs.
 
-Format UART: M:LEFT,RIGHT
+UART format: M:LEFT,RIGHT
   LEFT, RIGHT : float [-1.0 … +1.0]
-  -1.0 = pleine marche arrière, +1.0 = pleine marche avant
+  -1.0 = full reverse, +1.0 = full forward
 
-Activation Phase 2:
-  1. Décommenter l'import dans master/main.py
-  2. Appeler vesc.setup() dans main()
-  3. Brancher les callbacks du gamepad
+Phase 2 activation:
+  1. Uncomment the import in master/main.py
+  2. Call vesc.setup() in main()
+  3. Wire up gamepad callbacks
 """
 
 import logging
@@ -47,16 +47,16 @@ import time
 
 log = logging.getLogger(__name__)
 
-# Limite de vitesse logicielle (0.0 à 1.0)
+# Software speed limit (0.0 to 1.0)
 SPEED_LIMIT = 1.0
-# Seuil de deadzone joystick
+# Joystick deadzone threshold
 DEADZONE = 0.05
 
 
 class VescDriver:
     """
-    Couche d'abstraction propulsion Master.
-    Convertit les entrées joystick en commandes UART M:.
+    Master propulsion abstraction layer.
+    Converts joystick inputs into UART M: commands.
     """
 
     def __init__(self, uart):
@@ -64,7 +64,7 @@ class VescDriver:
         Parameters
         ----------
         uart : UARTController
-            Instance active du contrôleur UART Master.
+            Active instance of the Master UART controller.
         """
         self._uart = uart
         self._ready = False
@@ -74,7 +74,7 @@ class VescDriver:
 
     def setup(self) -> bool:
         self._ready = True
-        log.info(f"VescDriver prêt (speed_limit={self._speed_limit:.2f})")
+        log.info(f"VescDriver ready (speed_limit={self._speed_limit:.2f})")
         return True
 
     def shutdown(self) -> None:
@@ -85,12 +85,12 @@ class VescDriver:
         return self._ready
 
     # ------------------------------------------------------------------
-    # API publique
+    # Public API
     # ------------------------------------------------------------------
 
     def drive(self, left: float, right: float) -> bool:
         """
-        Commande de propulsion différentielle.
+        Differential drive command.
 
         Parameters
         ----------
@@ -114,27 +114,27 @@ class VescDriver:
         return ok
 
     def stop(self) -> bool:
-        """Arrêt d'urgence propulsion."""
+        """Emergency stop propulsion."""
         self._left = 0.0
         self._right = 0.0
         return self._uart.send('M', '0.000,0.000')
 
     def arcade_drive(self, throttle: float, steering: float) -> bool:
         """
-        Conversion arcade → différentielle.
-        throttle : [-1.0 … +1.0] avant/arrière
-        steering : [-1.0 … +1.0] gauche/droite
+        Arcade → differential conversion.
+        throttle : [-1.0 … +1.0] forward/backward
+        steering : [-1.0 … +1.0] left/right
         """
         left  = throttle + steering
         right = throttle - steering
-        # Normaliser si hors [-1, 1]
+        # Normalize if outside [-1, 1]
         max_val = max(abs(left), abs(right), 1.0)
         return self.drive(left / max_val, right / max_val)
 
     def set_speed_limit(self, limit: float) -> None:
-        """Limite dynamique de vitesse (0.0 à 1.0)."""
+        """Dynamic speed limit (0.0 to 1.0)."""
         self._speed_limit = max(0.0, min(1.0, limit))
-        log.info(f"Limite vitesse: {self._speed_limit:.0%}")
+        log.info(f"Speed limit: {self._speed_limit:.0%}")
 
     @property
     def state(self) -> dict:

@@ -28,33 +28,33 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Moteur de scripts R2-D2 — Phase 3.
-Exécute des séquences comportementales depuis des fichiers .scr (CSV).
+R2-D2 Script Engine — Phase 3.
+Executes behavioral sequences from .scr files (CSV format).
 
-Format .scr (inspiré de r2_control ScriptThread):
-  # Commentaire
-  sound,Happy001               → joue un son spécifique
-  sound,RANDOM,happy           → son aléatoire de catégorie
-  dome,turn,0.5                → rotation dôme (vitesse -1.0..1.0)
-  dome,stop                    → arrêt dôme
-  dome,random,on               → mode aléatoire dôme
-  servo,utility_arm_left,1.0,500  → servo: nom, position, durée ms
-  servo,all,close              → ferme tous les servos
-  servo,all,open               → ouvre tous les servos
-  motion,0.5,0.5,2000          → propulsion: left, right, durée ms
-  motion,stop                  → arrêt propulsion
-  teeces,random                → Teeces mode aléatoire
-  teeces,leia                  → Teeces mode Leia
-  teeces,off                   → Teeces éteint
+.scr format (inspired by r2_control ScriptThread):
+  # Comment
+  sound,Happy001               → play a specific sound
+  sound,RANDOM,happy           → random sound from category
+  dome,turn,0.5                → dome rotation (speed -1.0..1.0)
+  dome,stop                    → stop dome
+  dome,random,on               → dome random mode
+  servo,utility_arm_left,1.0,500  → servo: name, position, duration ms
+  servo,all,close              → close all servos
+  servo,all,open               → open all servos
+  motion,0.5,0.5,2000          → drive: left, right, duration ms
+  motion,stop                  → stop drive
+  teeces,random                → Teeces random mode
+  teeces,leia                  → Teeces Leia mode
+  teeces,off                   → Teeces off
   teeces,anim,11               → trigger T-code animation (Imperial March)
   teeces,raw,0T5               → send raw JawaLite command
-  sleep,1.5                    → pause 1.5 secondes
-  sleep,random,2,5             → pause aléatoire entre 2 et 5 secondes
+  sleep,1.5                    → pause 1.5 seconds
+  sleep,random,2,5             → random pause between 2 and 5 seconds
 
-Activation Phase 3:
-  1. Décommenter l'import dans master/main.py
-  2. Passer les drivers au ScriptEngine dans main()
-  3. uart.register_callback('SCRIPT', engine.handle_uart) [optionnel]
+Phase 3 activation:
+  1. Uncomment the import in master/main.py
+  2. Pass drivers to ScriptEngine in main()
+  3. uart.register_callback('SCRIPT', engine.handle_uart) [optional]
 """
 
 import csv
@@ -73,8 +73,8 @@ LIGHT_DIR   = os.path.join(os.path.dirname(__file__), 'light_sequences')
 
 class ScriptEngine:
     """
-    Gestionnaire de séquences R2-D2.
-    Exécute des fichiers .scr dans des threads daemon.
+    R2-D2 sequence manager.
+    Executes .scr files in daemon threads.
     """
 
     def __init__(self, uart=None, teeces=None,
@@ -82,12 +82,12 @@ class ScriptEngine:
         """
         Parameters
         ----------
-        uart       : UARTController  (pour envoyer S:, M:, D:, SRV:)
+        uart       : UARTController  (for sending S:, M:, D:, SRV:)
         teeces     : TeecesController
         vesc       : VescDriver (master-side)
-        dome       : DomeMotorDriver (rotation dôme DC)
-        servo      : BodyServoDriver (panneaux body via UART → Slave)
-        dome_servo : DomeServoDriver (panneaux dôme I2C direct sur Master)
+        dome       : DomeMotorDriver (DC dome rotation)
+        servo      : BodyServoDriver (body panels via UART → Slave)
+        dome_servo : DomeServoDriver (dome panels I2C direct on Master)
         """
         self._uart       = uart
         self._teeces     = teeces
@@ -102,12 +102,12 @@ class ScriptEngine:
         self.sequences_dir = SCRIPTS_DIR
 
     def list_scripts(self) -> list[str]:
-        """Retourne les noms des scripts disponibles."""
+        """Returns the names of available scripts."""
         files = glob.glob(os.path.join(self.sequences_dir, '*.scr'))
         return [os.path.splitext(os.path.basename(f))[0] for f in sorted(files)]
 
     def list_running(self) -> list[dict]:
-        """Retourne les scripts en cours d'exécution."""
+        """Returns currently running scripts."""
         with self._lock:
             return [
                 {
@@ -122,19 +122,19 @@ class ScriptEngine:
 
     def run(self, name: str, loop: bool = False, skip_motion: bool = False) -> int | None:
         """
-        Lance un script — un seul à la fois.
-        Arrête tous les scripts en cours et remet les servos en position fermée avant de démarrer.
-        Retourne l'ID du script ou None si introuvable.
+        Start a script — one at a time.
+        Stops all running scripts and resets servos to closed position before starting.
+        Returns the script ID or None if not found.
         """
         path = os.path.join(self.sequences_dir, name + '.scr')
         if not os.path.isfile(path):
-            log.error(f"Script introuvable: {path}")
+            log.error(f"Script not found: {path}")
             return None
 
-        # Un seul script à la fois : stopper les précédents
+        # Only one script at a time: stop previous ones
         self.stop_all()
 
-        # Reset servos en position fermée avant la nouvelle séquence
+        # Reset servos to closed position before the new sequence
         try:
             if self._dome_servo:
                 self._dome_servo.close_all()
@@ -162,7 +162,7 @@ class ScriptEngine:
         with self._lock:
             self._running[script_id] = runner
         runner.start()
-        log.info(f"Script lancé: {name} (id={script_id}, loop={loop})")
+        log.info(f"Script started: {name} (id={script_id}, loop={loop})")
         return script_id
 
     def run_light(self, name: str, loop: bool = False) -> int | None:
@@ -205,23 +205,23 @@ class ScriptEngine:
         log.info('All light sequences stopped')
 
     def stop(self, script_id: int) -> bool:
-        """Arrête un script par ID — retire immédiatement de _running."""
+        """Stop a script by ID — removes it from _running immediately."""
         with self._lock:
             runner = self._running.pop(script_id, None)
         if runner:
             runner.stop()
-            log.info(f"Script arrêté: {runner.name} (id={script_id})")
+            log.info(f"Script stopped: {runner.name} (id={script_id})")
             return True
         return False
 
     def stop_all(self) -> None:
-        """Arrête toutes les séquences en cours + coupe le son."""
+        """Stop all running sequences and cut audio."""
         with self._lock:
             runners = list(self._running.values())
             self._running.clear()
         for runner in runners:
             runner.stop()
-        # Couper le son en cours (ex. Gangnam, Birthday)
+        # Stop current audio (e.g. Gangnam, Birthday)
         if self._uart:
             try:
                 self._uart.send('S', 'STOP')
@@ -229,11 +229,11 @@ class ScriptEngine:
                 log.warning(f"stop_all: S:STOP failed: {e}")
 
     # ------------------------------------------------------------------
-    # Dispatch des commandes de script
+    # Script command dispatch
     # ------------------------------------------------------------------
 
     def execute_command(self, row: list[str], stop_event=None, skip_motion: bool = False) -> None:
-        """Exécute une ligne CSV de script."""
+        """Execute a CSV line from a script."""
         if not row or row[0].startswith('#'):
             return
         cmd = row[0].lower().strip()
@@ -249,7 +249,7 @@ class ScriptEngine:
                 self._cmd_servo(row)
             elif cmd == 'motion':
                 if skip_motion:
-                    log.debug("motion ignoré (mode test sans propulsion)")
+                    log.debug("motion ignored (test mode without propulsion)")
                 else:
                     self._cmd_motion(row)
             elif cmd == 'teeces':
@@ -259,9 +259,9 @@ class ScriptEngine:
             elif cmd == 'wait_light':
                 self._cmd_wait_light(row, stop_event)
             else:
-                log.debug(f"Commande script inconnue: {cmd!r}")
+                log.debug(f"Unknown script command: {cmd!r}")
         except Exception as e:
-            log.error(f"Erreur exécution commande {row}: {e}")
+            log.error(f"Error executing command {row}: {e}")
 
     def _cmd_sleep(self, row: list[str], stop_event=None) -> None:
         if row[1] == 'random':
@@ -271,7 +271,7 @@ class ScriptEngine:
         else:
             t = float(row[1])  # legacy: sleep,1.0
         if stop_event:
-            stop_event.wait(t)   # interruptible — retourne dès que stop est signalé
+            stop_event.wait(t)   # interruptible — returns as soon as stop is signaled
         else:
             time.sleep(t)
 
@@ -316,7 +316,7 @@ class ScriptEngine:
         action = row[2].lower() if len(row) > 2 else 'open'
 
         if action in ('open', 'close'):
-            # servo,dome_panel_1,open          → angle calibré
+            # servo,dome_panel_1,open          → calibrated angle
             # servo,dome_panel_1,open,150      → angle override
             # servo,dome_panel_1,open,150,8    → angle + speed override
             angle = float(row[3]) if len(row) > 3 else None
@@ -346,11 +346,11 @@ class ScriptEngine:
                 self._servo.move(name, position, duration)
 
     def _cmd_motion(self, row: list[str]) -> None:
-        # Child Lock — filtrer toutes les commandes de déplacement des séquences
+        # Child Lock — block all motion commands from sequences
         try:
             import master.registry as _reg
             if getattr(_reg, 'lock_mode', 0) == 2:
-                log.debug("_cmd_motion ignoré: Child Lock actif")
+                log.debug("_cmd_motion ignored: Child Lock active")
                 return
         except Exception:
             pass
@@ -384,7 +384,7 @@ class ScriptEngine:
             self._teeces.text(text, display)
         elif action == 'psi':
             mode = int(row[2]) if len(row) > 2 else 0
-            # mode=0 dans .scr signifie "random" (héritage de psi_random)
+            # mode=0 in .scr means "random" (legacy from psi_random)
             self._teeces.psi(1 if mode == 0 else mode)
         elif action == 'anim':
             mode = int(row[2]) if len(row) > 2 else 1
@@ -495,19 +495,19 @@ class _ScriptRunner(threading.Thread):
                     self._engine.execute_command(row, stop_event,
                                                  skip_motion=self._skip_motion)
         except Exception as e:
-            log.error(f"Erreur lecture fichier {path}: {e}")
+            log.error(f"Error reading file {path}: {e}")
 
     def run(self) -> None:
         while not self._stop_event.is_set():
             try:
                 self._run_file(self._path, self._stop_event)
             except Exception as e:
-                log.error(f"Erreur script {self.name}: {e}")
+                log.error(f"Script error {self.name}: {e}")
                 break
             if not self._loop:
                 break
         self._on_done(self.script_id)
-        log.debug(f"Script terminé: {self.name}")
+        log.debug(f"Script finished: {self.name}")
 
     def stop(self) -> None:
         self._stop_event.set()
