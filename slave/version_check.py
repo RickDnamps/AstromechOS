@@ -28,9 +28,9 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Version Check — Validation de version au boot du Slave.
-Demande la version au Master via UART et compare avec la version locale.
-Déclenche un rsync si divergence (max 3 tentatives avec backoff).
+Version Check — Version validation at Slave boot.
+Requests the version from the Master via UART and compares it with the local version.
+Triggers a rsync if versions differ (max 3 attempts with backoff).
 """
 
 import logging
@@ -59,38 +59,38 @@ class VersionChecker:
 
     def run(self) -> bool:
         """
-        Exécute la vérification de version.
-        Retourne True si versions identiques ou sync réussi, False si mode dégradé.
+        Runs the version check.
+        Returns True if versions match or sync succeeded, False if in degraded mode.
         """
         local_version = self._read_local_version()
-        log.info(f"Version locale: {local_version}")
+        log.info(f"Local version: {local_version}")
 
         if self._display:
             self._display.syncing(local_version)
 
-        # Enregistrer callback version
+        # Register version callback
         self._uart.register_callback('V', self._on_version_received)
 
-        # Demander version au Master
+        # Request version from Master
         self._uart.send('V', '?')
-        log.info("Demande version au Master...")
+        log.info("Requesting version from Master...")
 
         if not self._version_event.wait(timeout=VERSION_REQUEST_TIMEOUT_S):
-            log.error("Master injoignable — démarrage en mode dégradé")
+            log.error("Master unreachable — starting in degraded mode")
             if self._display:
                 self._display.error("MASTER_OFFLINE")
             return False
 
         master_version = self._master_version
-        log.info(f"Version Master: {master_version}")
+        log.info(f"Master version: {master_version}")
 
         if local_version == master_version:
-            log.info("Versions identiques — démarrage normal")
+            log.info("Versions match — normal startup")
             if self._display:
-                self._display.ready(local_version)  # écran vert OPÉRATIONNEL 3s
+                self._display.ready(local_version)  # green OPERATIONAL screen 3s
             return True
 
-        # Versions différentes → rsync
+        # Versions differ → rsync
         log.warning(f"Version mismatch: local={local_version} master={master_version}")
         if self._display:
             self._display.syncing(master_version)
@@ -98,16 +98,16 @@ class VersionChecker:
         success = self._trigger_rsync(master_version)
         if success:
             if self._display:
-                self._display.ready(master_version)  # écran vert OPÉRATIONNEL 3s
+                self._display.ready(master_version)  # green OPERATIONAL screen 3s
             return True
         else:
-            log.error("Sync échoué — démarrage en mode dégradé avec version locale")
+            log.error("Sync failed — starting in degraded mode with local version")
             if self._display:
                 self._display.error("SYNC_FAILED")
             return False
 
     def _on_version_received(self, value: str) -> None:
-        """Callback UART: reçoit la version du Master."""
+        """UART callback: receives the version from the Master."""
         if value == '?':
             # Master demande notre version
             local = self._read_local_version()
@@ -125,9 +125,9 @@ class VersionChecker:
 
     def _trigger_rsync(self, expected_version: str) -> bool:
         """
-        Demande un resync au Master via HTTP POST /system/resync_slave.
-        Le Master exécute resync_slave.sh (rsync + service install + restart).
-        Si le resync réussit, le service est redémarré par le Master → ce process s'arrête.
+        Requests a resync from the Master via HTTP POST /system/resync_slave.
+        The Master runs resync_slave.sh (rsync + service install + restart).
+        If resync succeeds, the service is restarted by the Master → this process stops.
         """
         import urllib.request
         import json
@@ -135,7 +135,7 @@ class VersionChecker:
         MASTER_API = "http://192.168.4.1:5000"
 
         for attempt in range(MAX_SYNC_RETRIES):
-            log.info(f"Sync tentative {attempt + 1}/{MAX_SYNC_RETRIES}")
+            log.info(f"Sync attempt {attempt + 1}/{MAX_SYNC_RETRIES}")
             try:
                 req = urllib.request.Request(
                     f"{MASTER_API}/system/resync_slave",
@@ -144,20 +144,20 @@ class VersionChecker:
                     method='POST'
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
-                    log.info(f"Resync demandé au Master: {resp.status}")
-                # Attendre que le Master rsync et redémarre ce service
-                # Le restart du service tuerait ce process — si on arrive ici, il a échoué
+                    log.info(f"Resync requested from Master: {resp.status}")
+                # Wait for the Master to rsync and restart this service
+                # Service restart would kill this process — if we reach here, it failed
                 backoff = SYNC_RETRY_BACKOFF_S[attempt] if attempt < MAX_SYNC_RETRIES - 1 else 30
-                log.info(f"Attente {backoff}s pour le resync Master...")
+                log.info(f"Waiting {backoff}s for Master resync...")
                 time.sleep(backoff)
                 local = self._read_local_version()
                 if local == expected_version:
-                    log.info(f"Sync réussi à la tentative {attempt + 1}")
+                    log.info(f"Sync succeeded on attempt {attempt + 1}")
                     return True
             except Exception as e:
-                log.warning(f"Resync HTTP échoué: {e}")
+                log.warning(f"HTTP resync failed: {e}")
                 if attempt < MAX_SYNC_RETRIES - 1:
                     time.sleep(SYNC_RETRY_BACKOFF_S[attempt])
 
-        log.error("Tous les resyncs ont échoué")
+        log.error("All resync attempts failed")
         return False

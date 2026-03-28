@@ -29,9 +29,9 @@
 # ============================================================
 """
 WiFi Watchdog — Slave Pi 4B.
-Surveille la connectivité au hotspot Master (r2d2-master-hotspot).
-Level 1 : jusqu'à 5 tentatives de reconnexion au hotspot.
-Level 2 : fallback sur WiFi domestique (netplan-wlan0-mywifi2).
+Monitors connectivity to the Master hotspot (r2d2-master-hotspot).
+Level 1 : up to 5 reconnection attempts to the hotspot.
+Level 2 : fallback to home WiFi (netplan-wlan0-mywifi2).
 """
 
 import logging
@@ -42,20 +42,20 @@ import re
 
 log = logging.getLogger(__name__)
 
-# Paramètres
+# Parameters
 PING_HOST           = "r2-master.local"
-PING_RETRIES        = 3          # pings consécutifs avant de déclarer la perte
-PING_TIMEOUT_S      = 2          # timeout par ping
-CHECK_INTERVAL_S    = 30         # intervalle de vérification normal
-L1_WAIT_S           = 15         # attente après nmcli connection up (Level 1)
-L1_MAX_ATTEMPTS     = 5          # avant de passer Level 2
-L2_WAIT_S           = 20         # attente après connexion home WiFi
-HOME_CHECK_S        = 60         # intervalle de vérification en HOME_FALLBACK
+PING_RETRIES        = 3          # consecutive pings before declaring loss
+PING_TIMEOUT_S      = 2          # timeout per ping
+CHECK_INTERVAL_S    = 30         # normal check interval
+L1_WAIT_S           = 15         # wait after nmcli connection up (Level 1)
+L1_MAX_ATTEMPTS     = 5          # before switching to Level 2
+L2_WAIT_S           = 20         # wait after home WiFi connection
+HOME_CHECK_S        = 60         # check interval in HOME_FALLBACK state
 AP_PROFILE          = "r2d2-master-hotspot"
 HOME_PROFILE        = "netplan-wlan0-mywifi2"
 IFACE               = "wlan0"
 
-# États internes
+# Internal states
 CONNECTED     = "CONNECTED"
 SCANNING      = "SCANNING"
 HOME_FALLBACK = "HOME_FALLBACK"
@@ -64,8 +64,8 @@ HOME_FALLBACK = "HOME_FALLBACK"
 class WiFiWatchdog:
     def __init__(self, display) -> None:
         """
-        display : instance de DisplayDriver (déjà initialisé).
-        Peut être None — les appels display sont silencieusement ignorés.
+        display : DisplayDriver instance (already initialized).
+        Can be None — display calls are silently ignored.
         """
         self._display  = display
         self._stop_evt = threading.Event()
@@ -76,12 +76,12 @@ class WiFiWatchdog:
         )
 
     def start(self) -> None:
-        """Lance le thread de surveillance."""
-        log.info("WiFiWatchdog démarré")
+        """Starts the monitoring thread."""
+        log.info("WiFiWatchdog started")
         self._thread.start()
 
     def stop(self) -> None:
-        """Signal d'arrêt propre — retourne sans attendre la fin du thread."""
+        """Clean stop signal — returns without waiting for the thread to finish."""
         self._stop_evt.set()
 
     # ------------------------------------------------------------------
@@ -93,38 +93,38 @@ class WiFiWatchdog:
         l1_attempt     = 0
 
         while not self._stop_evt.is_set():
-            # ---- Délai selon l'état courant ----
+            # ---- Delay based on current state ----
             wait = HOME_CHECK_S if state == HOME_FALLBACK else CHECK_INTERVAL_S
             if self._stop_evt.wait(wait):
-                break  # arrêt demandé
+                break  # stop requested
 
             ping_ok = self._ping_master()
 
             if state == CONNECTED:
                 if not ping_ok:
-                    log.warning("WiFiWatchdog: Master injoignable — Level 1 démarre")
+                    log.warning("WiFiWatchdog: Master unreachable — Level 1 starting")
                     state      = SCANNING
                     l1_attempt = 0
 
             if state == SCANNING:
                 if ping_ok:
-                    log.info("WiFiWatchdog: Master joignable — CONNECTED")
+                    log.info("WiFiWatchdog: Master reachable — CONNECTED")
                     state = CONNECTED
                     self._disp_net_ok()
-                    self._stop_evt.wait(3)   # affiche "RECONNECTED" 3s puis retour écran OK
+                    self._stop_evt.wait(3)   # display "RECONNECTED" for 3s then return to OK screen
                     self._disp_operational()
                     continue
 
                 l1_attempt += 1
-                log.info(f"WiFiWatchdog: Level 1 tentative {l1_attempt}/{L1_MAX_ATTEMPTS}")
+                log.info(f"WiFiWatchdog: Level 1 attempt {l1_attempt}/{L1_MAX_ATTEMPTS}")
                 self._disp_net_scanning(l1_attempt)
 
-                # Déconnecter + reconnecter
+                # Disconnect + reconnect
                 self._nmcli_disconnect()
                 self._disp_net_ap(l1_attempt)
                 self._nmcli_up(AP_PROFILE)
 
-                # Attendre puis re-pinger
+                # Wait then re-ping
                 if self._stop_evt.wait(L1_WAIT_S):
                     break
                 if self._ping_master():
@@ -135,15 +135,15 @@ class WiFiWatchdog:
                     self._disp_operational()
                     continue
 
-                # Tentative échouée
+                # Attempt failed
                 if l1_attempt >= L1_MAX_ATTEMPTS:
-                    log.warning("WiFiWatchdog: Level 1 épuisé — Level 2 (home fallback)")
+                    log.warning("WiFiWatchdog: Level 1 exhausted — Level 2 (home fallback)")
                     state = HOME_FALLBACK
                     self._level2_connect()
 
             elif state == HOME_FALLBACK:
                 if ping_ok:
-                    log.info("WiFiWatchdog: Master de retour — reconnexion AP")
+                    log.info("WiFiWatchdog: Master back online — reconnecting to AP")
                     self._nmcli_up(AP_PROFILE)
                     if self._stop_evt.wait(L1_WAIT_S):
                         break
@@ -153,28 +153,28 @@ class WiFiWatchdog:
                         self._stop_evt.wait(3)
                         self._disp_operational()
                     else:
-                        log.warning("WiFiWatchdog: retour AP échoué — reste HOME_FALLBACK")
+                        log.warning("WiFiWatchdog: AP reconnect failed — staying in HOME_FALLBACK")
                         self._level2_connect()  # re-tenter home
 
     def _level2_connect(self) -> None:
-        """Connecte au WiFi domestique et affiche l'état."""
+        """Connects to home WiFi and displays the status."""
         self._disp_net_home_try()
         self._nmcli_up(HOME_PROFILE)
         if self._stop_evt.wait(L2_WAIT_S):
             return
         ip = self._get_wlan0_ip()
         if ip:
-            log.info(f"WiFiWatchdog: HOME_FALLBACK actif — IP {ip}")
+            log.info(f"WiFiWatchdog: HOME_FALLBACK active — IP {ip}")
             self._disp_net_home_ok(ip)
         else:
-            log.warning("WiFiWatchdog: home WiFi connecté mais pas d'IP")
+            log.warning("WiFiWatchdog: home WiFi connected but no IP assigned")
 
     # ------------------------------------------------------------------
-    # Helpers réseau
+    # Network helpers
     # ------------------------------------------------------------------
 
     def _ping_master(self) -> bool:
-        """Retourne True si au moins un ping réussit parmi PING_RETRIES tentatives."""
+        """Returns True if at least one ping succeeds among PING_RETRIES attempts."""
         for _ in range(PING_RETRIES):
             if self._stop_evt.is_set():
                 return False
@@ -209,7 +209,7 @@ class WiFiWatchdog:
             log.warning(f"nmcli connection up {profile}: {e}")
 
     def _get_wlan0_ip(self) -> str | None:
-        """Retourne l'IP courante de wlan0, ou None."""
+        """Returns the current wlan0 IP address, or None."""
         try:
             result = subprocess.run(
                 ['ip', '-4', 'addr', 'show', IFACE],
@@ -221,7 +221,7 @@ class WiFiWatchdog:
             return None
 
     # ------------------------------------------------------------------
-    # Helpers display (silencieux si _display est None)
+    # Display helpers (silent if _display is None)
     # ------------------------------------------------------------------
 
     def _disp_net_scanning(self, attempt: int) -> None:
@@ -260,7 +260,7 @@ class WiFiWatchdog:
                 pass
 
     def _disp_operational(self) -> None:
-        """Retourne l'écran RP2040 en mode OPERATIONAL après un événement réseau."""
+        """Returns the RP2040 screen to OPERATIONAL mode after a network event."""
         if self._display:
             try:
                 self._display.ok()

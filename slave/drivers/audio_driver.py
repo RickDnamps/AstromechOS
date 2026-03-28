@@ -28,14 +28,14 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Pilote audio Slave.
-Joue les sons MP3 via mpg123 (jack 3.5mm natif Pi 4B).
-Commandes UART:
-  S:Happy001          → joue le fichier spécifique
-  S:RANDOM:happy      → joue un son aléatoire de la catégorie
-  S:STOP              → coupe le son en cours
+Slave audio driver.
+Plays MP3 sounds via mpg123 (native 3.5mm jack Pi 4B).
+UART commands:
+  S:Happy001          → plays the specific file
+  S:RANDOM:happy      → plays a random sound from the category
+  S:STOP              → stops the current sound
 
-Prérequis : sudo apt install -y mpg123
+Prerequisite: sudo apt install -y mpg123
 """
 
 import json
@@ -69,18 +69,18 @@ class AudioDriver(BaseDriver):
 
     def setup(self) -> bool:
         if not os.path.isfile(_INDEX_FILE):
-            log.error(f"sounds_index.json introuvable: {_INDEX_FILE}")
+            log.error(f"sounds_index.json not found: {_INDEX_FILE}")
             return False
         try:
             with open(_INDEX_FILE, encoding='utf-8') as f:
                 data = json.load(f)
             self._index = data.get('categories', {})
             total = sum(len(v) for v in self._index.values())
-            log.info(f"AudioDriver prêt — {total} sons dans {len(self._index)} catégories")
+            log.info(f"AudioDriver ready — {total} sounds in {len(self._index)} categories")
             self._ready = True
             return True
         except Exception as e:
-            log.error(f"Erreur chargement sounds_index.json: {e}")
+            log.error(f"Error loading sounds_index.json: {e}")
             return False
 
     def shutdown(self) -> None:
@@ -91,40 +91,40 @@ class AudioDriver(BaseDriver):
         return self._ready
 
     # ------------------------------------------------------------------
-    # API publique
+    # Public API
     # ------------------------------------------------------------------
 
     def play(self, filename: str) -> bool:
-        """Joue un fichier MP3 par nom (sans extension)."""
+        """Plays an MP3 file by name (without extension)."""
         if not filename or any(c in filename for c in ('/', '\\', '..')):
-            log.warning(f"Nom de fichier audio refusé (path traversal): {filename!r}")
+            log.warning(f"Audio filename rejected (path traversal): {filename!r}")
             return False
         path = os.path.join(self._sounds_dir, filename + '.mp3')
         if not os.path.isfile(path):
-            log.warning(f"Son introuvable: {path}")
+            log.warning(f"Sound not found: {path}")
             return False
         self._launch(path)
         return True
 
     def play_random(self, category: str) -> bool:
-        """Joue un son aléatoire de la catégorie donnée."""
+        """Plays a random sound from the given category."""
         sounds = self._index.get(category.lower())
         if not sounds:
-            log.warning(f"Catégorie audio inconnue: {category!r}")
+            log.warning(f"Unknown audio category: {category!r}")
             return False
         filename = random.choice(sounds)
         return self.play(filename)
 
     def stop(self) -> None:
-        """Coupe le son en cours de lecture."""
+        """Stops the currently playing sound."""
         with self._lock:
             if self._proc and self._proc.poll() is None:
                 self._proc.terminate()
-                log.debug("Son arrêté")
+                log.debug("Sound stopped")
             self._proc = None
 
     def set_volume(self, volume: int) -> None:
-        """Règle le volume ALSA (0-100) sur le jack 3.5mm (card 0)."""
+        """Sets ALSA volume (0-100) on the 3.5mm jack (card 0)."""
         vol = max(0, min(100, volume))
         try:
             subprocess.run(
@@ -133,19 +133,19 @@ class AudioDriver(BaseDriver):
             )
             log.info(f"Volume: {vol}%")
         except Exception as e:
-            log.error(f"Erreur set_volume: {e}")
+            log.error(f"set_volume error: {e}")
 
     def handle_volume(self, value: str) -> None:
-        """Callback UART VOL:75 → règle le volume."""
+        """UART callback VOL:75 → sets the volume."""
         try:
             self.set_volume(int(value))
         except (ValueError, TypeError) as e:
-            log.error(f"Message VOL invalide {value!r}: {e}")
+            log.error(f"Invalid VOL message {value!r}: {e}")
 
     def handle_uart(self, value: str) -> None:
         """
-        Callback pour les messages UART S:.
-        Formats attendus:
+        Callback for UART S: messages.
+        Expected formats:
           - 'Happy001'          → play specific
           - 'RANDOM:happy'      → play random category
           - 'STOP'              → stop
@@ -160,11 +160,11 @@ class AudioDriver(BaseDriver):
             self.play(value)
 
     # ------------------------------------------------------------------
-    # Interne
+    # Internal
     # ------------------------------------------------------------------
 
     def _launch(self, path: str) -> None:
-        """Lance mpg123 en arrière-plan, coupe le son précédent."""
+        """Launches mpg123 in the background, stopping the previous sound."""
         with self._lock:
             if self._proc and self._proc.poll() is None:
                 self._proc.terminate()
@@ -176,6 +176,6 @@ class AudioDriver(BaseDriver):
                 )
                 log.info(f"Audio: {os.path.basename(path)}")
             except FileNotFoundError:
-                log.error("mpg123 introuvable — sudo apt install -y mpg123")
+                log.error("mpg123 not found — sudo apt install -y mpg123")
             except Exception as e:
-                log.error(f"Erreur lancement audio: {e}")
+                log.error(f"Audio launch error: {e}")

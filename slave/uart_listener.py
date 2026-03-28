@@ -29,14 +29,14 @@
 # ============================================================
 """
 Slave UART Listener.
-Lit le bus UART depuis le Master et dispatche les commandes.
+Reads the UART bus from the Master and dispatches commands.
 - H → watchdog feed + ACK
 - M → propulsion (VESC)
-- D → moteur dôme DC
-- SRV → servos body
+- D → dome DC motor
+- SRV → body servos
 - S → audio
 - V → version sync
-- DISP → écran RP2040
+- DISP → RP2040 display
 - REBOOT → reboot Slave
 """
 
@@ -57,7 +57,7 @@ log = logging.getLogger(__name__)
 
 MAX_INVALID_CRC_BEFORE_ALERT = 3
 _MAX_BUFFER = 4096
-_HEALTH_WINDOW_S = 60   # fenêtre glissante pour le calcul de santé UART
+_HEALTH_WINDOW_S = 60   # sliding window for UART health calculation
 
 
 class UARTListener:
@@ -69,7 +69,7 @@ class UARTListener:
         self._lock = threading.Lock()
         self._callbacks: dict[str, list] = {}
         self._invalid_crc_count = 0
-        # Santé UART — fenêtre glissante 60s : (timestamp, is_valid)
+        # UART health — 60s sliding window: (timestamp, is_valid)
         self._health_lock  = threading.Lock()
         self._health_window: deque = deque()
 
@@ -82,16 +82,16 @@ class UARTListener:
                 rtscts=False,
                 dsrdtr=False
             )
-            log.info(f"UART Slave ouvert: {self._port} @ {self._baud}")
+            log.info(f"Slave UART opened: {self._port} @ {self._baud}")
             return True
         except serial.SerialException as e:
-            log.error(f"Impossible d'ouvrir UART {self._port}: {e}")
+            log.error(f"Failed to open UART {self._port}: {e}")
             return False
 
     def start(self) -> None:
         self._running = True
         threading.Thread(target=self._read_loop, name="uart-slave-rx", daemon=True).start()
-        log.info("UARTListener démarré")
+        log.info("UARTListener started")
 
     def stop(self) -> None:
         self._running = False
@@ -99,7 +99,7 @@ class UARTListener:
             self._serial.close()
 
     def send(self, msg_type: str, value: str) -> bool:
-        """Envoi d'un message vers le Master. Thread-safe."""
+        """Sends a message to the Master. Thread-safe."""
         msg = build_msg(msg_type, value)
         try:
             with self._lock:
@@ -107,14 +107,14 @@ class UARTListener:
                     self._serial.write(msg.encode('utf-8'))
                     return True
         except serial.SerialException as e:
-            log.error(f"Erreur envoi UART Slave: {e}")
+            log.error(f"Slave UART send error: {e}")
         return False
 
     def register_callback(self, msg_type: str, callback) -> None:
         self._callbacks.setdefault(msg_type, []).append(callback)
 
     # ------------------------------------------------------------------
-    # Thread interne
+    # Internal thread
     # ------------------------------------------------------------------
 
     def _read_loop(self) -> None:
@@ -129,27 +129,27 @@ class UARTListener:
                     continue
                 buffer += data.decode('utf-8', errors='replace')
                 if len(buffer) > _MAX_BUFFER:
-                    log.warning(f"Buffer UART Slave overflow ({len(buffer)} bytes) — reset")
+                    log.warning(f"Slave UART buffer overflow ({len(buffer)} bytes) — reset")
                     buffer = ""
                 while '\n' in buffer:
                     line, buffer = buffer.split('\n', 1)
                     self._process_line(line.strip())
             except serial.SerialException as e:
-                log.error(f"Erreur lecture UART Slave: {e}")
+                log.error(f"Slave UART read error: {e}")
                 time.sleep(1)
             except Exception as e:
-                log.error("Erreur inattendue read_loop Slave: %s\n%s",
+                log.error("Unexpected error in Slave read_loop: %s\n%s",
                           e, traceback.format_exc())
                 time.sleep(0.1)
 
     def get_health_stats(self) -> dict:
-        """Retourne les stats de santé UART sur la fenêtre glissante de 60s.
-        Thread-safe — appelé depuis le serveur HTTP health (port 5001).
+        """Returns UART health stats over the 60s sliding window.
+        Thread-safe — called from the HTTP health server (port 5001).
         """
         now = time.monotonic()
         cutoff = now - _HEALTH_WINDOW_S
         with self._health_lock:
-            # Pruning inline — évite un thread de nettoyage séparé
+            # Inline pruning — avoids a separate cleanup thread
             while self._health_window and self._health_window[0][0] < cutoff:
                 self._health_window.popleft()
             total  = len(self._health_window)
@@ -167,7 +167,7 @@ class UARTListener:
             return
         result = parse_msg(line)
 
-        # Santé UART — toute ligne non-vide compte comme tentative de lecture
+        # UART health — every non-empty line counts as a read attempt
         now = time.monotonic()
         with self._health_lock:
             self._health_window.append((now, result is not None))
@@ -178,14 +178,14 @@ class UARTListener:
         if result is None:
             self._invalid_crc_count += 1
             if self._invalid_crc_count >= MAX_INVALID_CRC_BEFORE_ALERT:
-                log.warning(f"Alerte: {self._invalid_crc_count} messages checksum invalides consécutifs (parasites moteurs ?)")
+                log.warning(f"Alert: {self._invalid_crc_count} consecutive invalid checksum messages (motor interference?)")
             return
 
         self._invalid_crc_count = 0
         msg_type, value = result
         log.debug(f"UART Slave RX: {msg_type}={value}")
 
-        # Heartbeat: ACK immédiat
+        # Heartbeat: immediate ACK
         if msg_type == 'H':
             self.send('H', 'OK')
 
@@ -193,4 +193,4 @@ class UARTListener:
             try:
                 cb(value)
             except Exception as e:
-                log.error(f"Erreur callback Slave {msg_type}: {e}")
+                log.error(f"Slave callback error {msg_type}: {e}")

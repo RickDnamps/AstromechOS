@@ -28,9 +28,9 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Watchdog Slave — CRITIQUE SÉCURITÉ.
-Coupe les VESC si aucun heartbeat Master reçu après 500ms.
-Ne peut jamais être bloqué.
+Slave Watchdog — SAFETY CRITICAL.
+Cuts the VESCs if no Master heartbeat is received within 500ms.
+Must never be blocked.
 """
 
 import logging
@@ -40,7 +40,7 @@ import time
 log = logging.getLogger(__name__)
 
 WATCHDOG_TIMEOUT_S = 0.500   # 500ms
-CHECK_INTERVAL_S   = 0.050   # vérification toutes les 50ms
+CHECK_INTERVAL_S   = 0.050   # check every 50ms
 
 
 class WatchdogController:
@@ -54,31 +54,31 @@ class WatchdogController:
         self._lock = threading.Lock()
 
     def register_stop_callback(self, cb) -> None:
-        """Callback appelé quand watchdog se déclenche (coupe VESC)."""
+        """Callback called when the watchdog triggers (cuts VESC)."""
         self._stop_callbacks.append(cb)
 
     def register_resume_callback(self, cb) -> None:
-        """Callback appelé quand heartbeat reprend après une coupure."""
+        """Callback called when heartbeat resumes after a cutoff."""
         self._resume_callbacks.append(cb)
 
     def feed(self) -> None:
-        """Appelé à chaque heartbeat reçu. Thread-safe."""
+        """Called on each received heartbeat. Thread-safe."""
         with self._lock:
             was_triggered = self._triggered
             self._last_heartbeat = time.monotonic()
             self._triggered = False
         if was_triggered:
-            log.info("Watchdog: heartbeat repris — réactivation VESC")
+            log.info("Watchdog: heartbeat resumed — re-enabling VESC")
             for cb in self._resume_callbacks:
                 try:
                     cb()
                 except Exception as e:
-                    log.error(f"Erreur resume_callback: {e}")
+                    log.error(f"Error in resume_callback: {e}")
 
     def start(self) -> None:
         self._running = True
         threading.Thread(target=self._watch_loop, name="watchdog", daemon=True).start()
-        log.info(f"Watchdog démarré (timeout={self._timeout*1000:.0f}ms)")
+        log.info(f"Watchdog started (timeout={self._timeout*1000:.0f}ms)")
 
     def stop(self) -> None:
         self._running = False
@@ -92,8 +92,8 @@ class WatchdogController:
 
             if elapsed > self._timeout and not already_triggered:
                 log.error(
-                    f"WATCHDOG DÉCLENCHÉ: aucun heartbeat depuis {elapsed*1000:.0f}ms "
-                    f"(seuil {self._timeout*1000:.0f}ms) — COUPURE VESC"
+                    f"WATCHDOG TRIGGERED: no heartbeat for {elapsed*1000:.0f}ms "
+                    f"(threshold {self._timeout*1000:.0f}ms) — VESC CUTOFF"
                 )
                 with self._lock:
                     self._triggered = True
@@ -101,4 +101,4 @@ class WatchdogController:
                     try:
                         cb()
                     except Exception as e:
-                        log.error(f"Erreur stop_callback watchdog: {e}")
+                        log.error(f"Error in watchdog stop_callback: {e}")

@@ -28,13 +28,13 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Serveur HTTP léger — expose les statistiques de santé UART du Slave.
+Lightweight HTTP server — exposes Slave UART health statistics.
 Port 5001  —  GET /uart_health  →  JSON
 
     {"total": 312, "errors": 6, "health_pct": 98.1, "window_s": 60}
 
-Zéro dépendance externe (http.server stdlib).
-Démarré en thread daemon depuis slave/main.py.
+Zero external dependencies (http.server stdlib).
+Started as a daemon thread from slave/main.py.
 """
 
 import json
@@ -64,11 +64,11 @@ class _HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def log_message(self, fmt, *args):
-        pass   # Silence les logs HTTP access (trop verbeux en prod)
+        pass   # Suppress HTTP access logs (too verbose in production)
 
 
 def start_health_server(uart_listener, port: int = _DEFAULT_PORT) -> None:
-    """Démarre le serveur HTTP health en thread daemon. Non-bloquant."""
+    """Starts the HTTP health server as a daemon thread. Non-blocking."""
     server = HTTPServer(('', port), _HealthHandler)
     server.uart_listener = uart_listener
     threading.Thread(
@@ -76,4 +76,4 @@ def start_health_server(uart_listener, port: int = _DEFAULT_PORT) -> None:
         name='uart-health-http',
         daemon=True,
     ).start()
-    log.info("UARTHealthServer démarré sur port %d", port)
+    log.info("UARTHealthServer started on port %d", port)

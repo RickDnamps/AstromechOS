@@ -29,7 +29,7 @@
 # ============================================================
 """
 Display Driver — RP2040 Touch LCD 1.28 via USB serial.
-Envoie les commandes DISP: au RP2040 sur /dev/ttyACM2.
+Sends DISP: commands to the RP2040 on /dev/ttyACM2.
 """
 
 import logging
@@ -44,14 +44,14 @@ from shared.base_driver import BaseDriver
 log = logging.getLogger(__name__)
 
 DISPLAY_BAUD  = 115200
-# Ports à essayer dans l'ordre — le RP2040 prend le premier ACM disponible
-# Si les VESCs ne sont pas branchés, le RP2040 est sur ttyACM0
+# Ports to try in order — the RP2040 takes the first available ACM
+# If VESCs are not connected, the RP2040 is on ttyACM0
 DISPLAY_PORTS = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
 
 
 class DisplayDriver(BaseDriver):
     def __init__(self, port: str = "auto", baud: int = DISPLAY_BAUD):
-        self._port_config = port   # config originale pour les reconnexions
+        self._port_config = port   # original config for reconnections
         self._port   = port
         self._baud   = baud
         self._serial: serial.Serial | None = None
@@ -65,17 +65,17 @@ class DisplayDriver(BaseDriver):
                 self._serial = serial.Serial(port, self._baud, timeout=1)
                 self._port  = port
                 self._ready = True
-                time.sleep(0.5)  # laisser le USB/RP2040 stabiliser avant le premier envoi
-                log.info(f"DisplayDriver ouvert: {port}")
+                time.sleep(0.5)  # allow USB/RP2040 to stabilize before first send
+                log.info(f"DisplayDriver opened: {port}")
                 return True
             except serial.SerialException:
                 continue
-        log.error(f"DisplayDriver: aucun port disponible parmi {ports}")
+        log.error(f"DisplayDriver: no port available among {ports}")
         return False
 
     def reconnect(self) -> bool:
-        """Ferme la connexion existante et réessaie tous les ports ACM.
-        Appelé automatiquement quand le RP2040 est débranché/rebranché."""
+        """Closes the existing connection and retries all ACM ports.
+        Called automatically when the RP2040 is unplugged/replugged."""
         if self._serial:
             try:
                 self._serial.close()
@@ -83,7 +83,7 @@ class DisplayDriver(BaseDriver):
                 pass
             self._serial = None
         self._ready = False
-        self._port  = self._port_config   # reset pour réessayer tous les ports
+        self._port  = self._port_config   # reset to retry all ports
         return self.setup()
 
     def shutdown(self) -> None:
@@ -95,64 +95,64 @@ class DisplayDriver(BaseDriver):
         return self._ready and self._serial is not None and self._serial.is_open
 
     # ------------------------------------------------------------------
-    # Commandes d'état
+    # State commands
     # ------------------------------------------------------------------
 
     # ------------------------------------------------------------------
-    # Séquence de boot diagnostic
+    # Diagnostic boot sequence
     # ------------------------------------------------------------------
 
     def boot_start(self) -> bool:
-        """Démarre la séquence de diagnostic — reset tous les items."""
+        """Starts the diagnostic sequence — resets all items."""
         return self._send("DISP:BOOT:START")
 
     def boot_item(self, name: str) -> bool:
-        """Item 'name' en cours de démarrage (orange)."""
+        """Item 'name' currently starting (orange)."""
         return self._send(f"DISP:BOOT:ITEM:{name}")
 
     def boot_ok(self, name: str) -> bool:
-        """Item 'name' démarré avec succès (vert)."""
+        """Item 'name' started successfully (green)."""
         return self._send(f"DISP:BOOT:OK:{name}")
 
     def boot_fail(self, name: str) -> bool:
-        """Item 'name' en erreur (rouge)."""
+        """Item 'name' in error state (red)."""
         return self._send(f"DISP:BOOT:FAIL:{name}")
 
     def ready(self, version: str = "") -> bool:
-        """Tout OK — affiche écran vert OPÉRATIONNEL 3s puis PRÊT."""
+        """All OK — shows green OPERATIONAL screen for 3s then READY."""
         if version:
             return self._send(f"DISP:READY:{version}")
         return self._send("DISP:READY")
 
     def bt_connected(self, name: str = "") -> bool:
-        """Manette Bluetooth connectée."""
+        """Bluetooth controller connected."""
         if name:
             return self._send(f"DISP:BT:CONNECTED:{name}")
         return self._send("DISP:BT:CONNECTED")
 
     def bt_none(self) -> bool:
-        """Aucune manette connectée (info, pas une erreur)."""
+        """No controller connected (informational, not an error)."""
         return self._send("DISP:BT:NONE")
 
     # ------------------------------------------------------------------
-    # États opérationnels
+    # Operational states
     # ------------------------------------------------------------------
 
     def ok(self, version: str = "") -> bool:
-        """Écran opérationnel normal (bordure verte)."""
+        """Normal operational screen (green border)."""
         if version:
             return self._send(f"DISP:OK:{version}")
         return self._send("DISP:OK")
 
     def syncing(self, version: str = "") -> bool:
-        """Synchronisation version en cours — reste sur l'écran de diagnostic."""
+        """Version synchronization in progress — stays on the diagnostic screen."""
         if version:
             return self._send(f"DISP:SYNCING:{version}")
         return self._send("DISP:SYNCING")
 
     def error(self, code: str) -> bool:
         """
-        Erreur avec code lisible (bordure rouge).
+        Error with readable code (red border).
         Codes: MASTER_OFFLINE, VESC_TEMP_HIGH, VESC_FAULT, BATTERY_LOW,
                UART_ERROR, SYNC_FAILED, WATCHDOG, AUDIO_FAIL,
                SERVO_FAIL, VESC_L_FAIL, VESC_R_FAIL, I2C_ERROR
@@ -160,52 +160,52 @@ class DisplayDriver(BaseDriver):
         return self._send(f"DISP:ERROR:{code}")
 
     def telemetry(self, voltage: float, temp: float) -> bool:
-        """Jauge batterie + température."""
+        """Battery gauge + temperature."""
         return self._send(f"DISP:TELEM:{voltage:.1f}V:{temp:.0f}C")
 
     # ------------------------------------------------------------------
-    # WiFi Watchdog états réseau
+    # WiFi Watchdog network states
     # ------------------------------------------------------------------
 
     def net_scanning(self, attempt: int) -> bool:
-        """Scan WiFi — tentative de reconnexion au hotspot Master (Level 1)."""
+        """WiFi scan — attempting reconnection to Master hotspot (Level 1)."""
         return self._send(f"DISP:NET:SCANNING:{attempt}")
 
     def net_connecting_ap(self, attempt: int) -> bool:
-        """Connexion en cours vers hotspot Master."""
+        """Connecting to Master hotspot."""
         return self._send(f"DISP:NET:AP:{attempt}")
 
     def net_home_try(self) -> bool:
-        """Basculement vers WiFi domestique (Level 2)."""
+        """Switching to home WiFi (Level 2)."""
         return self._send("DISP:NET:HOME_TRY")
 
     def net_home_ok(self, ip: str) -> bool:
-        """Connecté au WiFi domestique — affiche l'IP obtenue."""
+        """Connected to home WiFi — displays the obtained IP."""
         return self._send(f"DISP:NET:HOME:{ip}")
 
     def net_ok(self) -> bool:
-        """Connexion Master rétablie."""
+        """Master connection restored."""
         return self._send("DISP:NET:OK")
 
     def bus_health(self, pct: float) -> bool:
-        """Santé du bus UART — mis à jour toutes les 10s."""
+        """UART bus health — updated every 10s."""
         return self._send(f"DISP:BUS:{pct:.1f}")
 
     def system_locked(self) -> bool:
-        """Cadenas rouge — watchdog VESC déclenché."""
+        """Red padlock — VESC watchdog triggered."""
         return self._send("DISP:LOCKED")
 
     def send_raw(self, cmd: str) -> bool:
-        """Commande brute (ex: DISP: transférée depuis UART Master)."""
+        """Raw command (e.g. DISP: forwarded from Master UART)."""
         return self._send(cmd)
 
     # ------------------------------------------------------------------
-    # Interne
+    # Internal
     # ------------------------------------------------------------------
 
     def _send(self, cmd: str) -> bool:
         if not self.is_ready():
-            log.debug(f"DisplayDriver non prêt, commande ignorée: {cmd}")
+            log.debug(f"DisplayDriver not ready, command ignored: {cmd}")
             return False
         try:
             self._serial.write(f"{cmd}\n".encode('utf-8'))
@@ -213,6 +213,6 @@ class DisplayDriver(BaseDriver):
             self._last_cmd = cmd
             return True
         except serial.SerialException as e:
-            log.error(f"Erreur display send: {e}")
+            log.error(f"Display send error: {e}")
             self._ready = False
             return False
