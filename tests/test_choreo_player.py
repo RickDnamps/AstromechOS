@@ -415,3 +415,85 @@ def test_abort_reason_resets_on_next_play():
     player.play(chor2)
     player._thread.join(timeout=2.0)
     assert player.get_status()['abort_reason'] is None
+
+
+# ── Telemetry threshold monitoring ────────────────────────────────────────────
+
+def _player_with_telem(telem_data, **cfg_overrides):
+    """Player with telem_getter returning fixed data, telem_check_interval=0 for speed."""
+    cfg = _make_cfg(telem_check_interval='0.0', **cfg_overrides)
+    getter = lambda: telem_data
+    return ChoreoPlayer(
+        cfg=cfg, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+        telem_getter=getter, audio_latency=0.0,
+    )
+
+
+def _short_chor(duration=2.0):
+    """Minimal chor with no propulsion (so drive failures don't interfere)."""
+    return {
+        'meta': {'name': 'telem_test', 'duration': duration},
+        'tracks': {
+            'audio': [], 'lights': [], 'dome': [],
+            'servos': [], 'propulsion': [], 'markers': [],
+        },
+    }
+
+
+def test_undervoltage_aborts_choreo():
+    telem = {'L': {'v_in': 15.0, 'temp': 40.0, 'current': 5.0, 'rpm': 0, 'duty': 0.0, 'fault': 0},
+             'R': None}
+    player = _player_with_telem(telem)
+    player.play(_short_chor())
+    player._thread.join(timeout=2.0)
+
+    assert not player.is_playing()
+    assert player.get_status()['abort_reason'] == 'undervoltage'
+
+
+def test_overheat_aborts_choreo():
+    telem = {'L': None,
+             'R': {'v_in': 25.0, 'temp': 95.0, 'current': 5.0, 'rpm': 0, 'duty': 0.0, 'fault': 0}}
+    player = _player_with_telem(telem)
+    player.play(_short_chor())
+    player._thread.join(timeout=2.0)
+
+    assert not player.is_playing()
+    assert player.get_status()['abort_reason'] == 'overheat'
+
+
+def test_overcurrent_aborts_choreo():
+    telem = {'L': {'v_in': 25.0, 'temp': 40.0, 'current': 45.0, 'rpm': 0, 'duty': 0.0, 'fault': 0},
+             'R': None}
+    player = _player_with_telem(telem)
+    player.play(_short_chor())
+    player._thread.join(timeout=2.0)
+
+    assert not player.is_playing()
+    assert player.get_status()['abort_reason'] == 'overcurrent'
+
+
+def test_nominal_telem_does_not_abort():
+    telem = {
+        'L': {'v_in': 24.0, 'temp': 45.0, 'current': 8.0, 'rpm': 500, 'duty': 0.3, 'fault': 0},
+        'R': {'v_in': 24.0, 'temp': 45.0, 'current': 8.0, 'rpm': 500, 'duty': 0.3, 'fault': 0},
+    }
+    player = _player_with_telem(telem)
+    player.play(_short_chor(duration=0.1))
+    player._thread.join(timeout=2.0)
+
+    assert player.get_status()['abort_reason'] is None
+
+
+def test_none_telem_getter_skips_checks():
+    """telem_getter=None → no abort regardless of play content."""
+    player = ChoreoPlayer(
+        cfg=None, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+        audio_latency=0.0,
+    )
+    player.play(_short_chor(duration=0.1))
+    player._thread.join(timeout=2.0)
+
+    assert player.get_status()['abort_reason'] is None

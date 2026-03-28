@@ -234,9 +234,16 @@ class ChoreoPlayer:
                 last_angle  = target
                 last_dome_t = t_now
 
+            # Check telemetry thresholds
+            if self._telem_getter and not self._stop_flag.is_set():
+                if t_now - self._last_telem_check >= self._telem_check_interval:
+                    self._check_telem()
+                    self._last_telem_check = t_now
+
             # Update status
             with self._status_lock:
                 self._status['t_now'] = round(t_now, 3)
+                self._status['telem'] = self._last_telem
 
             if t_now >= duration:
                 log.info(f"Choreo '{name}' finished")
@@ -323,6 +330,55 @@ class ChoreoPlayer:
 
         except Exception as e:
             log.error(f"Choreo dispatch error [{ev.get('track')} t={ev.get('t')}]: {e}")
+
+    def _check_telem(self) -> None:
+        """Read telemetry and abort if any threshold is exceeded."""
+        try:
+            telem = self._telem_getter()
+        except Exception as e:
+            log.warning(f"ChoreoPlayer: telem_getter error: {e}")
+            return
+
+        if telem is None:
+            return
+
+        self._last_telem = telem
+
+        for side in ('L', 'R'):
+            data = telem.get(side)
+            if data is None:
+                continue
+
+            v_in    = data.get('v_in', 999.0)
+            temp    = data.get('temp', 0.0)
+            current = abs(data.get('current', 0.0))
+
+            if v_in < self._vesc_min_voltage:
+                log.error(
+                    f"ChoreoPlayer: ABORT — undervoltage VESC {side}: "
+                    f"{v_in}V < {self._vesc_min_voltage}V"
+                )
+                self._abort_reason = 'undervoltage'
+                self._stop_flag.set()
+                return
+
+            if temp > self._vesc_max_temp:
+                log.error(
+                    f"ChoreoPlayer: ABORT — overheat VESC {side}: "
+                    f"{temp}°C > {self._vesc_max_temp}°C"
+                )
+                self._abort_reason = 'overheat'
+                self._stop_flag.set()
+                return
+
+            if current > self._vesc_max_current:
+                log.error(
+                    f"ChoreoPlayer: ABORT — overcurrent VESC {side}: "
+                    f"{current}A > {self._vesc_max_current}A"
+                )
+                self._abort_reason = 'overcurrent'
+                self._stop_flag.set()
+                return
 
     def _safe_stop_all(self) -> None:
         for fn in [
