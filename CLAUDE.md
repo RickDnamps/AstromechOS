@@ -304,6 +304,32 @@ sudo systemctl start r2d2-slave
 
 ---
 
+## 🌐 Code Language Standard (effective 2026-03-28)
+
+**All new code must use English** for comments, docstrings, log messages, and error strings.
+This applies to every file going forward. Existing French in untouched files is acceptable until refactored.
+
+**Commit convention additions:** `Feat:` · `Fix:` · `Config:` · `Docs:` · `Refactor:`
+
+---
+
+## ✅ Implementation Status — ChoreoPlayer VESC Telemetry (2026-03-28)
+
+Deployed at commit `2287eec` — all 5 tasks complete, 36/36 tests passing.
+
+| Feature | File | Status |
+|---------|------|--------|
+| Threshold config (20V / 80°C / 30A) | `master/config/main.cfg` | ✅ |
+| `telem_getter` injection + state vars | `master/choreo_player.py` | ✅ |
+| UART fail-safe (`uart_loss` after 3 failures) | `master/choreo_player.py` | ✅ |
+| Telemetry threshold monitoring | `master/choreo_player.py` | ✅ |
+| Live wiring (`lambda: reg.vesc_telem`) | `master/main.py` | ✅ |
+
+`GET /choreo/status` now returns `abort_reason` + `telem` fields.
+Next: UI — Choreography Timeline Editor (Tasks 6-7).
+
+---
+
 ## 🐙 GitHub & Déploiement
 
 ```
