@@ -28,17 +28,17 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 Master — Point d'entrée.
-Tourne sur Raspberry Pi 4B (dôme).
+R2-D2 Master — Entry point.
+Runs on Raspberry Pi 4B (dome).
 
-Séquence de boot:
-1. Lecture config
+Boot sequence:
+1. Load config
 2. Init logging
-3. git pull si wlan1 disponible
-4. Démarrage UARTController + TeecesController + DeployController
-5. Phase 2: VescDriver + DomeMotorDriver + BodyServoDriver (décommenter)
-6. Phase 3: ScriptEngine (décommenter)
-7. Phase 4: API Flask sur port 5000 (décommenter)
+3. git pull if wlan1 is available
+4. Start UARTController + TeecesController + DeployController
+5. Phase 2: VescDriver + DomeMotorDriver + BodyServoDriver (uncomment to enable)
+6. Phase 3: ScriptEngine (uncomment to enable)
+7. Phase 4: Flask API on port 5000 (uncomment to enable)
 """
 
 import logging
@@ -57,7 +57,7 @@ from master.deploy_controller import DeployController
 from master.config.config_loader import load, is_auto_pull_enabled
 import master.registry as reg
 
-# ---- Phase 2 — Décommenter pour activer ----
+# ---- Phase 2 — Uncomment to enable ----
 # from master.drivers.vesc_driver        import VescDriver
 # from master.drivers.dome_motor_driver  import DomeMotorDriver
 from master.drivers.body_servo_driver  import BodyServoDriver
@@ -66,7 +66,7 @@ from master.drivers.dome_servo_driver  import DomeServoDriver
 # ---- Phase 3 ----
 from master.script_engine import ScriptEngine
 
-# ---- Phase 4 — Décommenter pour activer ----
+# ---- Phase 4 — Uncomment to enable ----
 from master.flask_app import create_app
 from master.motion_watchdog import motion_watchdog
 from master.app_watchdog import app_watchdog
@@ -87,12 +87,12 @@ def setup_logging(level_str: str) -> None:
     ch = logging.StreamHandler()
     ch.setFormatter(fmt)
     root.addHandler(ch)
-    # Fichier rotatif persistant — survit aux reboots, gitignored (debug/)
+    # Persistent rotating file — survives reboots, gitignored (debug/)
     log_dir = '/home/artoo/r2d2/debug'
     os.makedirs(log_dir, exist_ok=True)
     fh = RotatingFileHandler(
         os.path.join(log_dir, 'master.log'),
-        maxBytes=5 * 1024 * 1024,   # 5 MB par fichier
+        maxBytes=5 * 1024 * 1024,   # 5 MB per file
         backupCount=3,               # master.log + master.log.1/2/3
         encoding='utf-8'
     )
@@ -101,7 +101,7 @@ def setup_logging(level_str: str) -> None:
 
 
 def _start_network_monitor() -> None:
-    """Thread daemon — surveille wlan0/wlan1 toutes les 30s et log les changements."""
+    """Daemon thread — monitors wlan0/wlan1 every 30s and logs changes."""
     import subprocess
     log_net = logging.getLogger('network')
 
@@ -124,9 +124,9 @@ def _start_network_monitor() -> None:
             up, ip = _iface_state(iface)
             prev[iface] = up
             if up:
-                log_net.info("%s connecté au boot — IP: %s", iface, ip)
+                log_net.info("%s connected at boot — IP: %s", iface, ip)
             else:
-                log_net.warning("%s non disponible au boot", iface)
+                log_net.warning("%s not available at boot", iface)
 
     def _monitor() -> None:
         while True:
@@ -135,9 +135,9 @@ def _start_network_monitor() -> None:
                 up, ip = _iface_state(iface)
                 if prev.get(iface) != up:
                     if up:
-                        log_net.info("%s reconnecté — IP: %s", iface, ip)
+                        log_net.info("%s reconnected — IP: %s", iface, ip)
                     else:
-                        log_net.warning("%s déconnecté !", iface)
+                        log_net.warning("%s disconnected!", iface)
                     prev[iface] = up
 
     _log_initial()
@@ -145,10 +145,10 @@ def _start_network_monitor() -> None:
 
 
 def try_git_pull(cfg: configparser.ConfigParser) -> bool:
-    """Tentative de git pull au boot si wlan1 connecté et auto_pull activé."""
+    """Attempt git pull at boot if wlan1 is connected and auto_pull is enabled."""
     import subprocess
     if not is_auto_pull_enabled(cfg):
-        logging.info("auto_pull_on_boot désactivé — git pull ignoré")
+        logging.info("auto_pull_on_boot disabled — skipping git pull")
         return False
     iface = cfg.get('network', 'internet_interface')
     repo = cfg.get('master', 'repo_path')
@@ -159,7 +159,7 @@ def try_git_pull(cfg: configparser.ConfigParser) -> bool:
             capture_output=True, text=True, timeout=5
         )
         if "inet " not in result.stdout:
-            logging.info(f"{iface} non disponible — git pull ignoré")
+            logging.info(f"{iface} not available — skipping git pull")
             return False
     except Exception:
         return False
@@ -181,17 +181,17 @@ def try_git_pull(cfg: configparser.ConfigParser) -> bool:
                     with open(VERSION_FILE, 'w') as f:
                         f.write(rev.stdout.strip())
                 except OSError as e:
-                    logging.warning(f"Impossible d'écrire VERSION: {e}")
-            logging.info("git pull réussi au démarrage")
+                    logging.warning(f"Failed to write VERSION file: {e}")
+            logging.info("git pull succeeded at startup")
             return True
         else:
-            logging.warning(f"git pull échoué: {result.stderr.strip()}")
+            logging.warning(f"git pull failed: {result.stderr.strip()}")
             return False
     except subprocess.TimeoutExpired:
-        logging.warning("git pull timeout — démarrage sans update")
+        logging.warning("git pull timed out — starting without update")
         return False
     except Exception as e:
-        logging.error(f"git pull erreur: {e}")
+        logging.error(f"git pull error: {e}")
         return False
 
 
@@ -199,24 +199,24 @@ def main() -> None:
     cfg = load()
     setup_logging(cfg.get('master', 'log_level', fallback='INFO'))
     log = logging.getLogger(__name__)
-    log.info("=== R2-D2 Master démarrage ===")
+    log.info("=== R2-D2 Master starting ===")
     _start_network_monitor()
 
-    # Boot: tentative git pull
+    # Boot: attempt git pull
     try_git_pull(cfg)
 
-    # Init composants Phase 1
+    # Init Phase 1 components
     uart   = UARTController(cfg)
     teeces = load_driver(cfg)
     deploy = DeployController(cfg, uart, teeces)
 
-    # Registre partagé (accessible par Flask blueprints)
+    # Shared registry (accessible by Flask blueprints)
     reg.uart   = uart
     reg.teeces = teeces
     reg.deploy = deploy
 
     # ------------------------------------------------------------------
-    # Phase 2 — Drivers propulsion / dôme / servos
+    # Phase 2 — Propulsion / dome / servo drivers
     # ------------------------------------------------------------------
     # vesc = VescDriver(uart)
     # dome = DomeMotorDriver(uart)
@@ -229,7 +229,7 @@ def main() -> None:
     if dome_servo.setup(): reg.dome_servo = dome_servo
 
     # ------------------------------------------------------------------
-    # Phase 3 — Moteur de scripts
+    # Phase 3 — Script engine
     # ------------------------------------------------------------------
     engine = ScriptEngine(
         uart=uart, teeces=teeces,
@@ -257,7 +257,7 @@ def main() -> None:
     reg.bt_ctrl = bt_ctrl
     bt_ctrl.start()
 
-    # Callbacks UART entrants
+    # Incoming UART callbacks
     def on_heartbeat_ack(value: str) -> None:
         log.debug(f"Heartbeat ACK Slave: {value}")
 
@@ -288,7 +288,7 @@ def main() -> None:
             reg.vesc_telem['R'] = d
 
     def on_can_found(value: str) -> None:
-        """Résultat scan CAN bus envoyé par le Slave."""
+        """CAN bus scan result received from Slave."""
         if value.strip() == 'ERR':
             reg.vesc_can_scan_result = None
         elif not value.strip():
@@ -298,9 +298,9 @@ def main() -> None:
                 reg.vesc_can_scan_result = [int(x) for x in value.split(',') if x.strip()]
             except ValueError:
                 reg.vesc_can_scan_result = []
-                log.warning(f"CANFOUND: format invalide {value!r}")
+                log.warning(f"CANFOUND: invalid format {value!r}")
         reg.vesc_can_scan_event.set()
-        log.info(f"CAN scan résultat: {reg.vesc_can_scan_result}")
+        log.info(f"CAN scan result: {reg.vesc_can_scan_result}")
 
     def on_version(value: str) -> None:
         if value == '?':
@@ -310,9 +310,9 @@ def main() -> None:
             except Exception:
                 version = "unknown"
             uart.send('V', version)
-            log.debug(f"Version demandée par Slave — réponse: {version}")
+            log.debug(f"Version requested by Slave — reply: {version}")
         else:
-            log.info(f"Version Slave reçue: {value}")
+            log.info(f"Slave version received: {value}")
 
     uart.register_callback('H',        on_heartbeat_ack)
     uart.register_callback('TL',       on_vesc_telem_left)
@@ -320,20 +320,20 @@ def main() -> None:
     uart.register_callback('V',        on_version)
     uart.register_callback('CANFOUND', on_can_found)
 
-    # Démarrage hardware
+    # Start hardware
     if not uart.setup():
-        log.error("UART init échoué — arrêt")
+        log.error("UART init failed — exiting")
         sys.exit(1)
 
     if not teeces.setup():
-        log.warning("Teeces32 init échoué — mode dégradé (LEDs indisponibles)")
+        log.warning("Teeces32 init failed — degraded mode (LEDs unavailable)")
 
     uart.start()
     teeces.random_mode()
     deploy.start()
 
     # ------------------------------------------------------------------
-    # Phase 4 — Serveur Flask (API REST + Web UI)
+    # Phase 4 — Flask server (REST API + Web UI)
     # ------------------------------------------------------------------
     app        = create_app()
     flask_port = cfg.getint('master', 'flask_port', fallback=5000)
@@ -343,15 +343,15 @@ def main() -> None:
         name='flask', daemon=True
     )
     flask_thread.start()
-    log.info(f"Flask démarré sur port {flask_port}")
+    log.info(f"Flask started on port {flask_port}")
 
-    # Watchdogs sécurité — démarrer après Flask
-    motion_watchdog.start()   # arrêt moteurs si plus de commande drive (800ms)
-    app_watchdog.start()      # arrêt moteurs si heartbeat app absent (600ms)
+    # Safety watchdogs — start after Flask
+    motion_watchdog.start()   # stop motors if no drive command within 800ms
+    app_watchdog.start()      # stop motors if app heartbeat absent for 600ms
 
     # ------------------------------------------------------------------
-    # Slave Health Poll — lit http://r2-slave.local:5001/uart_health
-    # toutes les 5s via urllib (stdlib, zéro dépendance extra)
+    # Slave Health Poll — reads http://r2-slave.local:5001/uart_health
+    # every 5s via urllib (stdlib, no extra dependency)
     # ------------------------------------------------------------------
     def _slave_health_poll() -> None:
         import urllib.request
@@ -370,11 +370,11 @@ def main() -> None:
         target=_slave_health_poll, name='slave-health-poll', daemon=True
     ).start()
 
-    log.info("Master opérationnel")
+    log.info("Master operational")
 
-    # Gestion arrêt propre
+    # Clean shutdown handler
     def shutdown(sig, frame):
-        log.info("Signal arrêt reçu")
+        log.info("Shutdown signal received")
         deploy.stop()
         uart.stop()
         teeces.shutdown()
@@ -384,13 +384,13 @@ def main() -> None:
         if reg.dome_servo: reg.dome_servo.shutdown()
         if reg.engine: reg.engine.stop_all()
         if reg.bt_ctrl: reg.bt_ctrl.stop()
-        log.info("Master arrêté proprement")
+        log.info("Master shut down cleanly")
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
-    # Maintien du processus
+    # Keep process alive
     signal.pause()
 
 
