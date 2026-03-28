@@ -371,6 +371,7 @@ function switchTab(tabId) {
     if (typeof lightEditor !== 'undefined') lightEditor.loadSequenceList();
   }
   if (tabId === 'vesc') vescPanel.refresh();
+  if (tabId === 'choreo') choreoEditor.init();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -4079,3 +4080,441 @@ class SequenceEditor {
     }
   }
 }
+
+// ================================================================
+// CHOREO EDITOR — Multi-track choreography timeline editor
+// ================================================================
+const choreoEditor = (() => {
+  const PX_PER_SEC_DEFAULT = 30;
+
+  let _chor       = null;   // current .chor object in memory
+  let _pxPerSec   = PX_PER_SEC_DEFAULT;
+  let _selected   = null;   // { track, index } of selected block
+  let _pollTimer  = null;
+  let _dirty      = false;  // unsaved changes flag
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  function _px(sec)  { return sec * _pxPerSec; }
+  function _sec(px)  { return px  / _pxPerSec; }
+
+  function _fmtTime(s) {
+    const m   = Math.floor(s / 60);
+    const sec = (s % 60).toFixed(3).padStart(6, '0');
+    return `${String(m).padStart(2, '0')}:${sec}`;
+  }
+
+  function _lane(track) { return document.getElementById(`chor-lane-${track}`); }
+
+  // ── Render ruler ─────────────────────────────────────────────────────────
+
+  function _renderRuler(duration) {
+    const ruler = document.getElementById('chor-ruler');
+    if (!ruler) return;
+    ruler.innerHTML = '';
+    const total = Math.ceil(duration) + 5;
+    for (let s = 0; s <= total; s++) {
+      const major = s % 5 === 0;
+      const tick  = document.createElement('div');
+      tick.className = 'chor-tick' + (major ? ' major' : '');
+      tick.style.left = _px(s) + 'px';
+      if (major) tick.textContent = s + 's';
+      ruler.appendChild(tick);
+    }
+    const canvas = document.getElementById('chor-canvas');
+    if (canvas) canvas.style.width = (_px(total) + 100) + 'px';
+  }
+
+  // ── Render all tracks ────────────────────────────────────────────────────
+
+  function _renderAllTracks() {
+    if (!_chor) return;
+    ['audio', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
+    _renderMarkers();
+    _renderRuler(_chor.meta.duration);
+    const dur = document.getElementById('chor-duration');
+    if (dur) dur.textContent = _fmtTime(_chor.meta.duration);
+  }
+
+  function _renderTrack(track) {
+    const lane = _lane(track);
+    if (!lane) return;
+    lane.querySelectorAll('.chor-block').forEach(b => b.remove());
+
+    const items = _chor.tracks[track] || [];
+    items.forEach((item, idx) => {
+      if (track === 'dome') return;
+      lane.appendChild(_makeBlock(track, item, idx));
+    });
+
+    if (track === 'dome') _renderDomeLane(items);
+  }
+
+  function _makeBlock(track, item, idx) {
+    const block = document.createElement('div');
+    block.className = 'chor-block';
+    block.dataset.track = track;
+    block.dataset.idx   = idx;
+    if (item.mode) block.dataset.mode = item.mode;
+
+    const t   = item.t        || 0;
+    const dur = item.duration || (track === 'audio' ? (_chor.meta.duration - t) : 2);
+    block.style.left  = _px(t)   + 'px';
+    block.style.width = _px(dur) + 'px';
+
+    const label = _blockLabel(track, item);
+    block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis">${label}</span>
+                       <div class="chor-block-resize" data-resize="true"></div>`;
+
+    _attachBlockEvents(block, track, idx);
+    return block;
+  }
+
+  function _blockLabel(track, item) {
+    if (track === 'audio')      return `\uD83C\uDFB5 ${item.file || '?'}`;
+    if (track === 'lights')     return `\uD83D\uDCA1 ${(item.mode || item.name || '?').toUpperCase()}`;
+    if (track === 'servos')     return `\u2699\uFE0F ${item.servo || '?'} ${item.action || ''}`;
+    if (track === 'propulsion') return `\uD83D\uDE80 L${item.left || 0} R${item.right || 0}`;
+    return '?';
+  }
+
+  function _renderDomeLane(keyframes) {
+    const lane = _lane('dome');
+    if (!lane) return;
+    lane.innerHTML = '';
+    if (keyframes.length < 2) return;
+
+    const W   = _px(_chor.meta.duration + 5);
+    const H   = 52;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    svg.style.cssText = 'position:absolute;top:4px;left:0';
+
+    const pts = keyframes.map(kf => ({
+      x: _px(kf.t),
+      y: H - (kf.angle / 360) * (H - 4) - 2,
+    }));
+
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 1; i < pts.length; i++) {
+      const cp = (pts[i].x - pts[i - 1].x) / 2;
+      d += ` C ${pts[i-1].x + cp} ${pts[i-1].y} ${pts[i].x - cp} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;
+    }
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', '#aa55ff');
+    path.setAttribute('stroke-width', '1.5');
+    svg.appendChild(path);
+
+    pts.forEach((p, i) => {
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', p.x);
+      circle.setAttribute('cy', p.y);
+      circle.setAttribute('r', '4');
+      circle.setAttribute('fill', '#aa55ff');
+      circle.setAttribute('stroke', '#0d1826');
+      circle.setAttribute('stroke-width', '1.5');
+      circle.style.cursor = 'pointer';
+      circle.addEventListener('click', () => _selectDomeKF(i));
+      svg.appendChild(circle);
+    });
+
+    lane.appendChild(svg);
+  }
+
+  function _renderMarkers() {
+    document.querySelectorAll('.chor-lane').forEach(lane => {
+      lane.querySelectorAll('.chor-marker').forEach(m => m.remove());
+    });
+    const markers   = _chor.tracks.markers || [];
+    const firstLane = _lane('audio');
+    if (!firstLane) return;
+    markers.forEach(m => {
+      const marker = document.createElement('div');
+      marker.className  = 'chor-marker';
+      marker.style.left = _px(m.t) + 'px';
+      const label = document.createElement('div');
+      label.className   = 'chor-marker-label';
+      label.textContent = m.label;
+      marker.appendChild(label);
+      firstLane.appendChild(marker);
+    });
+  }
+
+  // ── Block drag + resize ──────────────────────────────────────────────────
+
+  function _attachBlockEvents(block, track, idx) {
+    block.addEventListener('mousedown', e => {
+      if (e.target.dataset.resize) {
+        _startResize(e, block, track, idx);
+      } else {
+        _startDrag(e, block, track, idx);
+      }
+      _selectBlock(track, idx);
+      e.preventDefault();
+    });
+  }
+
+  function _startDrag(e, block, track, idx) {
+    const startX    = e.clientX;
+    const startLeft = parseFloat(block.style.left) || 0;
+
+    function onMove(e2) {
+      const newLeft = Math.max(0, startLeft + e2.clientX - startX);
+      block.style.left = newLeft + 'px';
+      _chor.tracks[track][idx].t = Math.round(_sec(newLeft) * 10) / 10;
+      _dirty = true;
+      _updatePropsPanel(track, idx);
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      block.style.left = _px(_chor.tracks[track][idx].t) + 'px';
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function _startResize(e, block, track, idx) {
+    const startX = e.clientX;
+    const startW = parseFloat(block.style.width) || 60;
+
+    function onMove(e2) {
+      const newW = Math.max(20, startW + e2.clientX - startX);
+      block.style.width = newW + 'px';
+      _chor.tracks[track][idx].duration = Math.round(_sec(newW) * 10) / 10;
+      _dirty = true;
+      _updatePropsPanel(track, idx);
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  // ── Selection + properties panel ─────────────────────────────────────────
+
+  function _selectBlock(track, idx) {
+    document.querySelectorAll('.chor-block').forEach(b => b.classList.remove('selected'));
+    const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
+    if (block) block.classList.add('selected');
+    _selected = { track, idx };
+    _updatePropsPanel(track, idx);
+  }
+
+  function _selectDomeKF(idx) {
+    _selected = { track: 'dome', idx };
+    _updatePropsPanel('dome', idx);
+  }
+
+  function _updatePropsPanel(track, idx) {
+    const panel = document.getElementById('chor-props-content');
+    if (!panel || !_chor) return;
+    const item = (_chor.tracks[track] || [])[idx];
+    if (!item) return;
+
+    const rows = [
+      ['TRACK',    track.toUpperCase()],
+      ['START',    (item.t || 0).toFixed(2) + 's'],
+      ['DURATION', item.duration ? item.duration.toFixed(2) + 's' : '—'],
+    ];
+    if (track === 'lights')     rows.push(['MODE',   (item.mode || item.name || '?').toUpperCase()]);
+    if (track === 'dome')       rows.push(['ANGLE',  (item.angle || 0) + '°'], ['EASING', item.easing || 'linear']);
+    if (track === 'servos')     rows.push(['SERVO',  item.servo || '?'], ['ACTION', item.action || '?']);
+    if (track === 'propulsion') rows.push(['LEFT',   item.left  || 0],   ['RIGHT',  item.right || 0]);
+
+    panel.innerHTML = rows.map(([k, v]) => `
+      <div class="chor-prop-row">
+        <span class="chor-prop-key">${k}</span>
+        <span class="chor-prop-val">${v}</span>
+      </div>`).join('');
+  }
+
+  // ── Telemetry gauges ─────────────────────────────────────────────────────
+
+  function _updateTelem(telem) {
+    const section = document.getElementById('chor-telem-section');
+    if (!section) return;
+
+    if (!telem || (!telem.L && !telem.R)) {
+      section.style.display = 'none';
+      return;
+    }
+    section.style.display = 'block';
+
+    // Use the highest value across L and R sides for the gauges
+    const vL = telem.L ? telem.L.v_in    : null;
+    const vR = telem.R ? telem.R.v_in    : null;
+    const tL = telem.L ? telem.L.temp    : null;
+    const tR = telem.R ? telem.R.temp    : null;
+    const cL = telem.L ? Math.abs(telem.L.current) : null;
+    const cR = telem.R ? Math.abs(telem.R.current) : null;
+
+    // Voltage: min of both sides (the limiting one matters for safety), range 20V–29.4V
+    const vMin = [vL, vR].filter(v => v !== null).reduce((a, b) => Math.min(a, b), 29.4);
+    const vPct = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
+    const vBar = document.getElementById('chor-telem-v-bar');
+    const vLbl = document.getElementById('chor-telem-v');
+    if (vBar) { vBar.style.width = vPct + '%'; vBar.style.background = vPct < 20 ? 'var(--red)' : vPct < 50 ? 'var(--orange)' : 'var(--green)'; }
+    if (vLbl) vLbl.textContent = vMin.toFixed(1) + 'V';
+
+    // Temperature: max of both sides, range 0–80°C
+    const tMax = [tL, tR].filter(v => v !== null).reduce((a, b) => Math.max(a, b), 0);
+    const tPct = Math.max(0, Math.min(100, (tMax / 80) * 100));
+    const tBar = document.getElementById('chor-telem-t-bar');
+    const tLbl = document.getElementById('chor-telem-t');
+    if (tBar) { tBar.style.width = tPct + '%'; tBar.style.background = tPct > 87 ? 'var(--red)' : tPct > 62 ? 'var(--orange)' : '#ffb300'; }
+    if (tLbl) tLbl.textContent = [tL, tR].filter(v => v !== null).map(v => v.toFixed(0) + '°').join(' / ');
+
+    // Current: max of both sides, range 0–30A
+    const cMax = [cL, cR].filter(v => v !== null).reduce((a, b) => Math.max(a, b), 0);
+    const cPct = Math.max(0, Math.min(100, (cMax / 30) * 100));
+    const cBar = document.getElementById('chor-telem-c-bar');
+    const cLbl = document.getElementById('chor-telem-c');
+    if (cBar) { cBar.style.width = cPct + '%'; cBar.style.background = cPct > 87 ? 'var(--red)' : cPct > 62 ? 'var(--orange)' : 'var(--red)'; }
+    if (cLbl) cLbl.textContent = [cL, cR].filter(v => v !== null).map(v => v.toFixed(1) + 'A').join(' / ');
+  }
+
+  // ── Playhead polling ─────────────────────────────────────────────────────
+
+  function _startPolling() {
+    _stopPolling();
+    _pollTimer = setInterval(async () => {
+      const status = await api('/choreo/status');
+      if (!status) return;
+
+      // Update playhead position
+      const ph = document.getElementById('chor-playhead');
+      if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
+
+      // Update timecode
+      const tc = document.getElementById('chor-timecode');
+      if (tc) tc.textContent = _fmtTime(status.t_now || 0);
+
+      // Update VESC telemetry gauges
+      _updateTelem(status.telem || null);
+
+      // Check for abort
+      if (status.abort_reason) {
+        _stopPolling();
+        _showAbortModal(status.abort_reason);
+        return;
+      }
+
+      // Stop polling when playback ends
+      if (!status.playing) _stopPolling();
+    }, 200);
+  }
+
+  function _stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
+  function _showAbortModal(reason) {
+    const modal  = document.getElementById('modal-chor-abort');
+    const label  = document.getElementById('chor-abort-reason');
+    if (!modal) return;
+    const messages = {
+      uart_loss:    'UART LOSS',
+      undervoltage: 'UNDERVOLTAGE',
+      overheat:     'OVERHEAT',
+      overcurrent:  'OVERCURRENT',
+    };
+    if (label) label.textContent = messages[reason] || reason.toUpperCase().replace(/_/g, ' ');
+    modal.style.display = 'flex';
+  }
+
+  // ── Public API ───────────────────────────────────────────────────────────
+
+  return {
+
+    async init() {
+      const names = await api('/choreo/list');
+      const sel   = document.getElementById('chor-select');
+      if (!sel || !names) return;
+      sel.innerHTML = '<option value="">— select choreography —</option>' +
+        names.map(n => `<option value="${n}">${n}</option>`).join('');
+      sel.onchange = () => this.load(sel.value);
+    },
+
+    async load(name) {
+      if (!name) return;
+      const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
+      if (!chor) { toast('Failed to load choreography', 'error'); return; }
+      _chor   = chor;
+      _dirty  = false;
+      _selected = null;
+      _renderAllTracks();
+      toast(`Loaded: ${name}`, 'ok');
+    },
+
+    newChor() {
+      const name = prompt('Choreography name:', 'my_show');
+      if (!name) return;
+      _chor = {
+        meta:   { name, version: '1.0', duration: 30.0, created: new Date().toISOString().slice(0, 10), author: 'R2-D2 Control' },
+        tracks: { audio: [], lights: [], dome: [
+          { t: 0, angle: 0, easing: 'linear' },
+          { t: 30, angle: 0, easing: 'linear' }
+        ], servos: [], propulsion: [], markers: [] }
+      };
+      _dirty = true;
+      _renderAllTracks();
+      const sel = document.getElementById('chor-select');
+      if (sel) {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name; opt.selected = true;
+        sel.appendChild(opt);
+      }
+      toast(`New choreography: ${name}`, 'ok');
+    },
+
+    async play() {
+      if (!_chor) { toast('No choreography loaded', 'error'); return; }
+      if (_dirty) await this.save();
+      const result = await api('/choreo/play', 'POST', { name: _chor.meta.name });
+      if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
+    },
+
+    async stop() {
+      await api('/choreo/stop', 'POST');
+      _stopPolling();
+      const section = document.getElementById('chor-telem-section');
+      if (section) section.style.display = 'none';
+      const ph = document.getElementById('chor-playhead');
+      if (ph) ph.style.left = '0px';
+      const tc = document.getElementById('chor-timecode');
+      if (tc) tc.textContent = '00:00.000';
+      toast('Choreo stopped', 'ok');
+    },
+
+    async save() {
+      if (!_chor) return;
+      const result = await api('/choreo/save', 'POST', { chor: _chor });
+      if (result) { _dirty = false; toast(`Saved: ${_chor.meta.name}`, 'ok'); }
+    },
+
+    async exportScr() {
+      if (!_chor) { toast('No choreography loaded', 'error'); return; }
+      if (_dirty) await this.save();
+      const result = await api('/choreo/export_scr', 'POST', { name: _chor.meta.name });
+      if (!result) return;
+      const blob = new Blob([result.scr], { type: 'text/plain' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = _chor.meta.name + '.scr'; a.click();
+      URL.revokeObjectURL(url);
+      toast('SCR exported', 'ok');
+    },
+
+    dismissAbort() {
+      const modal = document.getElementById('modal-chor-abort');
+      if (modal) modal.style.display = 'none';
+    },
+  };
+})();
