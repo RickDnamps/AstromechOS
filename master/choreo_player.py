@@ -143,7 +143,6 @@ class ChoreoPlayer:
         self._stop_flag.set()
         if self._thread:
             self._thread.join(timeout=2.0)
-        self._safe_stop_all()
         with self._status_lock:
             self._status.update({'playing': False, 't_now': 0.0})
 
@@ -382,7 +381,7 @@ class ChoreoPlayer:
 
     def _safe_stop_all(self) -> None:
         for fn in [
-            lambda: self._audio.stop() if self._audio else None,
+            lambda: self._audio.send('S', 'STOP') if self._audio else None,
             lambda: self._teeces.all_off() if self._teeces else None,
             lambda: self._dome_motor.set_speed(0.0) if self._dome_motor else None,
             lambda: self._vesc.drive(0.0, 0.0) if self._vesc else None,
