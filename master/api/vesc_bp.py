@@ -29,13 +29,13 @@
 # ============================================================
 """
 Blueprint API VESC — Phase 2.
-Expose la télémétrie et la configuration des VESC de propulsion.
+Exposes telemetry and configuration for the propulsion VESCs.
 
 Endpoints:
-  GET  /vesc/telemetry         → télémétrie live des deux VESC
+  GET  /vesc/telemetry         → live telemetry for both VESCs
   POST /vesc/config            {"scale": 0.8}   → power scale (10-100%)
-  POST /vesc/invert            {"side": "L"}    → inverse moteur L ou R
-  GET  /vesc/can/scan          → scan CAN bus via Slave (timeout 8s)
+  POST /vesc/invert            {"side": "L"}    → invert motor L or R
+  GET  /vesc/can/scan          → CAN bus scan via Slave (timeout 8s)
 """
 
 from flask import Blueprint, request, jsonify
@@ -64,7 +64,7 @@ def _fault_str(code: int) -> str:
 
 @vesc_bp.get('/telemetry')
 def get_telemetry():
-    """Télémétrie live des deux VESC + power scale actuel."""
+    """Live telemetry for both VESCs + current power scale."""
     telem = getattr(reg, 'vesc_telem', {'L': None, 'R': None})
     scale = getattr(reg, 'vesc_power_scale', 1.0)
     connected = (telem.get('L') is not None or telem.get('R') is not None)
@@ -84,12 +84,12 @@ def get_telemetry():
 
 @vesc_bp.post('/config')
 def set_config():
-    """Règle le power scale (0.1-1.0). Envoyé au Slave via UART VCFG:."""
+    """Sets the power scale (0.1-1.0). Sent to Slave via UART VCFG:."""
     body = request.get_json(silent=True) or {}
     try:
         scale = max(0.1, min(1.0, float(body.get('scale', 1.0))))
     except (TypeError, ValueError):
-        return jsonify({'error': 'scale doit être un float 0.1-1.0'}), 400
+        return jsonify({'error': 'scale must be a float 0.1-1.0'}), 400
 
     reg.vesc_power_scale = scale
     if reg.uart:
@@ -99,11 +99,11 @@ def set_config():
 
 @vesc_bp.post('/invert')
 def invert_motor():
-    """Inverse le sens d'un moteur. Body: {"side": "L"} ou {"side": "R"}."""
+    """Inverts a motor direction. Body: {"side": "L"} or {"side": "R"}."""
     body = request.get_json(silent=True) or {}
     side = body.get('side', '').upper()
     if side not in ('L', 'R'):
-        return jsonify({'error': 'side doit être "L" ou "R"'}), 400
+        return jsonify({'error': 'side must be "L" or "R"'}), 400
     if reg.uart:
         reg.uart.send('VINV', side)
     return jsonify({'status': 'ok', 'side': side})
@@ -112,27 +112,27 @@ def invert_motor():
 @vesc_bp.get('/can/scan')
 def can_scan():
     """
-    Lance un scan CAN bus via UART → Slave → VESC 1 USB.
-    Slave répond avec CANFOUND:id1,id2 ou CANFOUND:ERR.
-    Timeout 8s — retourne {'ids': [...], 'count': N}.
+    Starts a CAN bus scan via UART → Slave → VESC 1 USB.
+    Slave replies with CANFOUND:id1,id2 or CANFOUND:ERR.
+    Timeout 8s — returns {'ids': [...], 'count': N}.
     """
     if not reg.uart:
-        return jsonify({'error': 'UART non disponible'}), 503
+        return jsonify({'error': 'UART not available'}), 503
 
-    # Réinitialiser l'état du scan précédent
+    # Reset the previous scan state
     reg.vesc_can_scan_result = None
     reg.vesc_can_scan_event.clear()
 
-    # Envoyer la commande de scan au Slave
+    # Send the scan command to the Slave
     reg.uart.send('CANSCAN', 'start')
 
-    # Attendre la réponse (max 8s — scan 11 IDs × ~0.12s + marge)
+    # Wait for the response (max 8s — scan 11 IDs × ~0.12s + margin)
     got = reg.vesc_can_scan_event.wait(timeout=8.0)
     if not got:
-        return jsonify({'error': 'Timeout — Slave non disponible ou VESCs non connectés en USB'}), 504
+        return jsonify({'error': 'Timeout — Slave not available or VESCs not connected via USB'}), 504
 
     result = reg.vesc_can_scan_result
     if result is None:
-        return jsonify({'error': 'Scan échoué — VescDriver non prêt (Phase 2 non activée ?)'}), 500
+        return jsonify({'error': 'Scan failed — VescDriver not ready (Phase 2 not activated?)'}), 500
 
     return jsonify({'ids': result, 'count': len(result)})

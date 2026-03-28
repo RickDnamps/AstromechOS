@@ -29,15 +29,15 @@
 # ============================================================
 """
 Blueprint API Scripts — Phase 4.
-Lance, arrête et liste les scripts de séquence R2-D2.
+Starts, stops and lists R2-D2 sequence scripts.
 
 Endpoints:
-  GET  /scripts/list              → liste des scripts disponibles (avec is_builtin)
-  GET  /scripts/running           → scripts en cours
+  GET  /scripts/list              → list of available scripts (with is_builtin)
+  GET  /scripts/running           → currently running scripts
   POST /scripts/run               {"name": "patrol", "loop": false, "skip_motion": false}
   POST /scripts/stop              {"id": 3}
   POST /scripts/stop_all
-  GET  /scripts/get               ?name=xxx → steps d'une séquence
+  GET  /scripts/get               ?name=xxx → steps of a sequence
   POST /scripts/save              {"name": str, "steps": [{cmd, args}, ...]}
   POST /scripts/delete            {"name": str}
   POST /scripts/rename            {"old": str, "new": str}
@@ -123,7 +123,7 @@ def _is_running(name: str) -> bool:
 
 @script_bp.get('/list')
 def script_list():
-    """Liste des scripts .scr disponibles avec flag is_builtin."""
+    """List of available .scr scripts with is_builtin flag."""
     scripts = reg.engine.list_scripts() if reg.engine else []
     builtin_set = _get_builtin_set()
     return jsonify({
@@ -136,46 +136,46 @@ def script_list():
 
 @script_bp.get('/running')
 def script_running():
-    """Scripts en cours d'exécution."""
+    """Currently running scripts."""
     running = reg.engine.list_running() if reg.engine else []
     return jsonify({'running': running})
 
 
 @script_bp.post('/run')
 def script_run():
-    """Lance un script. Body: {"name": str, "loop": bool, "skip_motion": bool}"""
+    """Starts a script. Body: {"name": str, "loop": bool, "skip_motion": bool}"""
     body = request.get_json(silent=True) or {}
     name = body.get('name', '').strip()
     loop = bool(body.get('loop', False))
     skip_motion = bool(body.get('skip_motion', False))
 
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     if not reg.engine:
-        return jsonify({'error': 'ScriptEngine non initialisé'}), 503
+        return jsonify({'error': 'ScriptEngine not initialized'}), 503
 
     script_id = reg.engine.run(name, loop=loop, skip_motion=skip_motion)
     if script_id is None:
-        return jsonify({'error': f'Script "{name}" introuvable'}), 404
+        return jsonify({'error': f'Script "{name}" not found'}), 404
     return jsonify({'status': 'ok', 'id': script_id, 'name': name, 'loop': loop})
 
 
 @script_bp.post('/stop')
 def script_stop():
-    """Arrête un script. Body: {"id": int}"""
+    """Stops a script. Body: {"id": int}"""
     body      = request.get_json(silent=True) or {}
     script_id = body.get('id')
     if script_id is None:
-        return jsonify({'error': 'Champ "id" requis'}), 400
+        return jsonify({'error': 'Field "id" required'}), 400
     if reg.engine:
         ok = reg.engine.stop(int(script_id))
         return jsonify({'status': 'ok' if ok else 'not_found'})
-    return jsonify({'error': 'ScriptEngine non initialisé'}), 503
+    return jsonify({'error': 'ScriptEngine not initialized'}), 503
 
 
 @script_bp.post('/stop_all')
 def script_stop_all():
-    """Arrête tous les scripts en cours."""
+    """Stops all running scripts."""
     if reg.engine:
         reg.engine.stop_all()
     return jsonify({'status': 'ok'})
@@ -183,10 +183,10 @@ def script_stop_all():
 
 @script_bp.get('/get')
 def script_get():
-    """Charge une séquence. Query: ?name=xxx"""
+    """Loads a sequence. Query: ?name=xxx"""
     name = request.args.get('name', '').strip()
     if not name:
-        return jsonify({'error': 'Paramètre "name" requis'}), 400
+        return jsonify({'error': 'Parameter "name" required'}), 400
     if not _is_valid_name(name):
         return jsonify({'error': 'invalid name'}), 400
     path = SEQUENCES_DIR / f"{name}.scr"
@@ -201,7 +201,7 @@ def script_get():
 
 @script_bp.post('/save')
 def script_save():
-    """Sauvegarde une séquence. Body: {"name": str, "steps": [{cmd, args}, ...]}"""
+    """Saves a sequence. Body: {"name": str, "steps": [{cmd, args}, ...]}"""
     body  = request.get_json(silent=True) or {}
     name  = body.get('name', '').strip()
     steps = body.get('steps', [])
@@ -224,7 +224,7 @@ def script_save():
 
 @script_bp.post('/delete')
 def script_delete():
-    """Supprime une séquence. Body: {"name": str}"""
+    """Deletes a sequence. Body: {"name": str}"""
     body = request.get_json(silent=True) or {}
     name = body.get('name', '').strip()
     if not _is_valid_name(name):
@@ -240,7 +240,7 @@ def script_delete():
 
 @script_bp.post('/rename')
 def script_rename():
-    """Renomme une séquence. Body: {"old": str, "new": str}"""
+    """Renames a sequence. Body: {"old": str, "new": str}"""
     body     = request.get_json(silent=True) or {}
     old_name = body.get('old', '').strip()
     new_name = body.get('new', '').strip()

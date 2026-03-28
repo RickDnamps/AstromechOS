@@ -29,23 +29,23 @@
 # ============================================================
 """
 Blueprint API Motion — Phase 4.
-Contrôle la propulsion (VESC) et le moteur dôme.
+Controls propulsion (VESC) and the dome motor.
 
-Endpoints propulsion:
+Propulsion endpoints:
   POST /motion/drive        {"left": 0.5, "right": 0.5}
   POST /motion/arcade       {"throttle": 0.5, "steering": 0.0}
   POST /motion/stop
   GET  /motion/state
 
-Endpoints dôme:
+Dome endpoints:
   POST /motion/dome/turn    {"speed": 0.3}
   POST /motion/dome/stop
   POST /motion/dome/random  {"enabled": true}
   GET  /motion/dome/state
 
-Sécurité : chaque commande de mouvement alimente le MotionWatchdog.
-Si aucune commande reçue pendant 800ms alors que le robot est en mouvement
-→ arrêt automatique (perte de connexion contrôleur).
+Safety: every motion command feeds the MotionWatchdog.
+If no command is received for 800ms while the robot is moving
+→ automatic stop (controller connection lost).
 """
 
 import time
@@ -67,7 +67,7 @@ def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
 
 @motion_bp.post('/drive')
 def drive():
-    """Propulsion différentielle. Body: {"left": float, "right": float}"""
+    """Differential drive. Body: {"left": float, "right": float}"""
     if reg.lock_mode == 2:
         return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
 
@@ -76,8 +76,8 @@ def drive():
     left  = _clamp(float(body.get('left',  0.0)))
     right = _clamp(float(body.get('right', 0.0)))
 
-    cancel_ramp()                             # annule arrêt progressif si en cours
-    motion_watchdog.feed_drive(left, right)   # alimente le watchdog
+    cancel_ramp()                             # cancel any ongoing ramp-down
+    motion_watchdog.feed_drive(left, right)   # feed the watchdog
 
     if reg.vesc:
         reg.vesc.drive(left, right)
@@ -109,8 +109,8 @@ def arcade():
 
 @motion_bp.post('/stop')
 def stop_motion():
-    """Arrêt propulsion."""
-    motion_watchdog.clear_drive()             # stop explicite — pas un timeout
+    """Stop propulsion."""
+    motion_watchdog.clear_drive()             # explicit stop — not a timeout
     if reg.vesc:
         reg.vesc.stop()
     elif reg.uart:
@@ -120,23 +120,23 @@ def stop_motion():
 
 @motion_bp.get('/state')
 def motion_state():
-    """État courant propulsion."""
+    """Current propulsion state."""
     state = reg.vesc.state if reg.vesc else {}
     return jsonify(state)
 
 
 # ------------------------------------------------------------------
-# Dôme
+# Dome
 # ------------------------------------------------------------------
 
 @motion_bp.post('/dome/turn')
 def dome_turn():
-    """Rotation dôme. Body: {"speed": float}"""
+    """Dome rotation. Body: {"speed": float}"""
     body  = request.get_json(silent=True) or {}
     reg.web_last_dome_t = time.time()
     speed = _clamp(float(body.get('speed', 0.0)))
 
-    motion_watchdog.feed_dome(speed)          # alimente le watchdog
+    motion_watchdog.feed_dome(speed)          # feed the watchdog
 
     if reg.dome:
         reg.dome.turn(speed)
@@ -147,7 +147,7 @@ def dome_turn():
 
 @motion_bp.post('/dome/stop')
 def dome_stop():
-    """Arrêt rotation dôme."""
+    """Stop dome rotation."""
     motion_watchdog.clear_dome()
     if reg.dome:
         reg.dome.stop()
@@ -158,7 +158,7 @@ def dome_stop():
 
 @motion_bp.post('/dome/random')
 def dome_random():
-    """Mode aléatoire dôme. Body: {"enabled": bool}"""
+    """Dome random mode. Body: {"enabled": bool}"""
     body    = request.get_json(silent=True) or {}
     enabled = bool(body.get('enabled', False))
     if not enabled:
@@ -170,6 +170,6 @@ def dome_random():
 
 @motion_bp.get('/dome/state')
 def dome_state():
-    """État courant dôme."""
+    """Current dome state."""
     state = reg.dome.state if reg.dome else {}
     return jsonify(state)

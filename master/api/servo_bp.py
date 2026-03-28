@@ -29,20 +29,20 @@
 # ============================================================
 """
 Blueprint API Servo — Phase 4 (MG90S 180°).
-Contrôle les servos body (via UART → Slave) et dôme (local Master).
+Controls body servos (via UART → Slave) and dome servos (local Master).
 
-Chaque panneau a son propre angle d'ouverture (open_angle) et de fermeture
-(close_angle). Les angles sont passés directement aux drivers — plus de calcul
-de durée (SG90 CR legacy supprimé).
+Each panel has its own open angle (open_angle) and close angle
+(close_angle). Angles are passed directly to the drivers — no more
+duration calculation (legacy SG90 CR removed).
 
-Config dans local.cfg, section [servo_panels] :
-    dome_panel_1_open  = 110      # angle ouverture (10–170°)
-    dome_panel_1_close = 20       # angle fermeture (10–170°)
+Config in local.cfg, section [servo_panels]:
+    dome_panel_1_open  = 110      # open angle (10–170°)
+    dome_panel_1_close = 20       # close angle (10–170°)
     body_panel_1_open  = 110
     body_panel_1_close = 20
     ...
 
-Endpoints dôme (Master PCA9685 @ 0x40 direct):
+Dome endpoints (Master PCA9685 @ 0x40 direct):
   POST /servo/dome/open          {"name": "dome_panel_1"}
   POST /servo/dome/close         {"name": "dome_panel_1"}
   POST /servo/dome/open_all
@@ -50,7 +50,7 @@ Endpoints dôme (Master PCA9685 @ 0x40 direct):
   GET  /servo/dome/list
   GET  /servo/dome/state
 
-Endpoints body (Slave PCA9685 @ 0x41 via UART):
+Body endpoints (Slave PCA9685 @ 0x41 via UART):
   POST /servo/body/open          {"name": "body_panel_1"}
   POST /servo/body/close         {"name": "body_panel_1"}
   POST /servo/body/open_all
@@ -105,7 +105,7 @@ def _clamp_speed(val: int) -> int:
 
 def _read_panels_cfg() -> dict:
     """
-    Retourne {'panels': {name: {'open': int, 'close': int}}}
+    Returns {'panels': {name: {'open': int, 'close': int}}}
     """
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
@@ -135,12 +135,12 @@ def _write_panels_cfg(panels: dict) -> None:
             cfg.set('servo_panels', f'{name}_speed', str(_clamp_speed(int(vals['speed']))))
     with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
         cfg.write(f)
-    # Sync vers fichiers JSON dédiés
+    # Sync to dedicated JSON files
     _sync_angles_json(panels)
 
 
 def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
-    """Met à jour un fichier JSON d'angles avec les panneaux fournis."""
+    """Updates a JSON angles file with the provided panels."""
     subset = {k: v for k, v in panels.items() if k in names}
     if not subset:
         return
@@ -163,13 +163,13 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
 
 
 def _sync_angles_json(panels: dict) -> None:
-    """Écrit dome_angles.json (Master) et servo_angles.json (Slave via scp)."""
+    """Writes dome_angles.json (Master) and servo_angles.json (Slave via scp)."""
     import logging
     log = logging.getLogger(__name__)
     try:
         _update_angles_file(_DOME_ANGLES_FILE, panels, DOME_SERVOS)
     except Exception as e:
-        log.warning("Écriture dome_angles.json échouée: %s", e)
+        log.warning("Failed to write dome_angles.json: %s", e)
     try:
         _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
         subprocess.run(
@@ -177,7 +177,7 @@ def _sync_angles_json(panels: dict) -> None:
             timeout=5, check=False, capture_output=True,
         )
     except Exception as e:
-        log.warning("Sync servo_angles.json vers Slave échoué: %s", e)
+        log.warning("Sync servo_angles.json to Slave failed: %s", e)
 
 
 def _panel_angle(name: str, direction: str, panels_cfg: dict) -> int:
@@ -209,7 +209,7 @@ def body_move():
     name     = body.get('name', '')
     position = float(body.get('position', 0.0))
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     cfg         = _read_panels_cfg()
     open_angle  = _panel_angle(name, 'open',  cfg)
     close_angle = _panel_angle(name, 'close', cfg)
@@ -226,7 +226,7 @@ def body_open():
     body = request.get_json(silent=True) or {}
     name = body.get('name', '')
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     cfg   = _read_panels_cfg()
     angle = _panel_angle(name, 'open', cfg)
     speed = _panel_speed(name, cfg)
@@ -242,7 +242,7 @@ def body_close():
     body = request.get_json(silent=True) or {}
     name = body.get('name', '')
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     cfg   = _read_panels_cfg()
     angle = _panel_angle(name, 'close', cfg)
     speed = _panel_speed(name, cfg)
@@ -278,7 +278,7 @@ def body_close_all():
 
 
 # ================================================================
-# DOME SERVOS (direct PCA9685 @ 0x40 sur Master)
+# DOME SERVOS (direct PCA9685 @ 0x40 on Master)
 # ================================================================
 
 @servo_bp.get('/dome/list')
@@ -297,9 +297,9 @@ def dome_move():
     name     = body.get('name', '')
     position = float(body.get('position', 0.0))
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     if not reg.dome_servo:
-        return jsonify({'error': 'dome_servo driver non prêt — voir logs master'}), 503
+        return jsonify({'error': 'dome_servo driver not ready — check master logs'}), 503
     cfg         = _read_panels_cfg()
     open_angle  = _panel_angle(name, 'open',  cfg)
     close_angle = _panel_angle(name, 'close', cfg)
@@ -312,9 +312,9 @@ def dome_open():
     body = request.get_json(silent=True) or {}
     name = body.get('name', '')
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     if not reg.dome_servo:
-        return jsonify({'error': 'dome_servo driver non prêt — voir logs master'}), 503
+        return jsonify({'error': 'dome_servo driver not ready — check master logs'}), 503
     cfg   = _read_panels_cfg()
     angle = _panel_angle(name, 'open', cfg)
     speed = _panel_speed(name, cfg)
@@ -327,9 +327,9 @@ def dome_close():
     body = request.get_json(silent=True) or {}
     name = body.get('name', '')
     if not name:
-        return jsonify({'error': 'Champ "name" requis'}), 400
+        return jsonify({'error': 'Field "name" required'}), 400
     if not reg.dome_servo:
-        return jsonify({'error': 'dome_servo driver non prêt — voir logs master'}), 503
+        return jsonify({'error': 'dome_servo driver not ready — check master logs'}), 503
     cfg   = _read_panels_cfg()
     angle = _panel_angle(name, 'close', cfg)
     speed = _panel_speed(name, cfg)
@@ -358,7 +358,7 @@ def dome_close_all():
 
 
 # ================================================================
-# Backward compat — /servo/open_all|close_all (script_bp, anciens appels)
+# Backward compat — /servo/open_all|close_all (script_bp, legacy calls)
 # ================================================================
 
 @servo_bp.get('/list')

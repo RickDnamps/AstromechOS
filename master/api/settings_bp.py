@@ -28,14 +28,14 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Blueprint API Settings — Configuration réseau et paramètres R2-D2.
+Blueprint API Settings — Network configuration and R2-D2 parameters.
 
 Endpoints:
-  GET  /settings              → lecture config actuelle (local.cfg + état NM)
-  GET  /settings/wifi/scan    → scan réseaux WiFi disponibles sur wlan1
-  POST /settings/wifi         → mise à jour wlan1 (local.cfg + nmcli reconnect)
-  POST /settings/hotspot      → mise à jour credentials hotspot wlan0
-  POST /settings/config       → mise à jour paramètres généraux (branch, slave, etc.)
+  GET  /settings              → read current config (local.cfg + NM state)
+  GET  /settings/wifi/scan    → scan available WiFi networks on wlan1
+  POST /settings/wifi         → update wlan1 (local.cfg + nmcli reconnect)
+  POST /settings/hotspot      → update hotspot credentials for wlan0
+  POST /settings/config       → update general parameters (branch, slave, etc.)
 """
 
 import configparser
@@ -64,7 +64,7 @@ def _read_cfg() -> configparser.ConfigParser:
 
 
 def _write_key(section: str, key: str, value: str) -> None:
-    """Écrit ou met à jour une clé dans local.cfg."""
+    """Writes or updates a key in local.cfg."""
     cfg = _read_cfg()
     if not cfg.has_section(section):
         cfg.add_section(section)
@@ -74,7 +74,7 @@ def _write_key(section: str, key: str, value: str) -> None:
 
 
 def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
-    """Exécute une commande, retourne (returncode, stdout, stderr)."""
+    """Runs a command, returns (returncode, stdout, stderr)."""
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         return r.returncode, r.stdout.strip(), r.stderr.strip()
@@ -85,7 +85,7 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
 
 
 def _nm_field(device: str, field: str) -> str:
-    """Lit un champ nmcli pour un device."""
+    """Reads an nmcli field for a device."""
     rc, out, _ = _run(['nmcli', '-g', field, 'device', 'show', device])
     return out if rc == 0 else ''
 
@@ -95,7 +95,7 @@ _lights_reload_lock = _threading.Lock()
 
 
 def _read_fresh_cfg() -> configparser.ConfigParser:
-    """Relit main.cfg + local.cfg depuis le disque (pour hot-reload)."""
+    """Re-reads main.cfg + local.cfg from disk (for hot-reload)."""
     from master.config.config_loader import MAIN_CFG, LOCAL_CFG
     cfg = configparser.ConfigParser()
     cfg.read([MAIN_CFG, LOCAL_CFG])
@@ -104,8 +104,8 @@ def _read_fresh_cfg() -> configparser.ConfigParser:
 
 def _reload_lights_driver(backend: str) -> dict:
     """
-    Éteint le driver courant, charge le nouveau, met à jour reg.teeces.
-    Thread-safe via _lights_reload_lock (Flask tourne en threaded=True).
+    Shuts down the current driver, loads the new one, updates reg.teeces.
+    Thread-safe via _lights_reload_lock (Flask runs with threaded=True).
     """
     import master.registry as reg
     from master.lights import load_driver
@@ -115,24 +115,24 @@ def _reload_lights_driver(backend: str) -> dict:
             try:
                 reg.teeces.shutdown()
             except Exception as e:
-                log.warning(f"Shutdown ancien driver lights: {e}")
-            reg.teeces = None   # guard pendant le swap
+                log.warning(f"Shutdown of previous lights driver: {e}")
+            reg.teeces = None   # guard during swap
 
         cfg = _read_fresh_cfg()
         try:
             new_driver = load_driver(cfg)
         except ValueError as e:
-            log.error(f"Backend lights invalide: {e}")
+            log.error(f"Invalid lights backend: {e}")
             return {'ok': False, 'error': str(e)}
 
         if not new_driver.setup():
-            log.error(f"Setup driver lights échoué ({backend})")
-            return {'ok': False, 'error': f"Setup {backend} échoué (port indisponible ?)"}
+            log.error(f"Lights driver setup failed ({backend})")
+            return {'ok': False, 'error': f"Setup {backend} failed (port unavailable?)"}
 
         reg.teeces = new_driver
         new_driver.random_mode()
 
-    log.info(f"Driver lights rechargé: {backend}")
+    log.info(f"Lights driver reloaded: {backend}")
     return {'ok': True}
 
 
@@ -142,15 +142,15 @@ def _reload_lights_driver(backend: str) -> dict:
 
 @settings_bp.get('/settings')
 def get_settings():
-    """Retourne la configuration complète (local.cfg + état réseau)."""
+    """Returns the full configuration (local.cfg + network state)."""
     cfg = _read_cfg()
 
-    # État wlan1
+    # wlan1 state
     wlan1_state = _nm_field('wlan1', 'GENERAL.STATE')
     wlan1_conn  = _nm_field('wlan1', 'GENERAL.CONNECTION')
     wlan1_ip    = _nm_field('wlan1', 'IP4.ADDRESS[1]')
 
-    # État wlan0 (hotspot)
+    # wlan0 state (hotspot)
     wlan0_state = _nm_field('wlan0', 'GENERAL.STATE')
 
     return jsonify({
@@ -186,8 +186,8 @@ def get_settings():
 
 @settings_bp.get('/settings/wifi/scan')
 def wifi_scan():
-    """Scanne les réseaux WiFi disponibles sur wlan1."""
-    # Déclencher un rescan (non bloquant, erreur ignorée si wlan1 absent)
+    """Scans available WiFi networks on wlan1."""
+    # Trigger a rescan (non-blocking, error ignored if wlan1 is absent)
     _run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', 'wlan1'], timeout=5)
 
     rc, out, _ = _run(
@@ -198,8 +198,8 @@ def wifi_scan():
     networks = []
     if rc == 0:
         for line in out.splitlines():
-            # nmcli -t: escape les ':' dans le SSID en '\:'
-            # on split depuis la droite pour isoler SIGNAL et SECURITY
+            # nmcli -t: escapes ':' in SSID as '\:'
+            # split from the right to isolate SIGNAL and SECURITY
             parts = line.rsplit(':', 2)
             if len(parts) == 3:
                 ssid     = parts[0].replace('\\:', ':')
@@ -208,7 +208,7 @@ def wifi_scan():
                 if ssid:
                     networks.append({'ssid': ssid, 'signal': signal, 'security': security})
 
-        # Dédupliquer (garder le signal le plus fort) et trier
+        # Deduplicate (keep strongest signal) and sort
         seen: dict[str, dict] = {}
         for n in networks:
             if n['ssid'] not in seen or n['signal'] > seen[n['ssid']]['signal']:
@@ -220,20 +220,20 @@ def wifi_scan():
 
 @settings_bp.post('/settings/wifi')
 def set_wifi():
-    """Met à jour les credentials wlan1 et tente la connexion."""
+    """Updates wlan1 credentials and attempts to connect."""
     data = request.get_json() or {}
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
 
     if not ssid:
-        return jsonify({'error': 'SSID requis'}), 400
+        return jsonify({'error': 'SSID required'}), 400
 
-    # Sauvegarder dans local.cfg
+    # Save to local.cfg
     _write_key('home_wifi', 'ssid', ssid)
     if password:
         _write_key('home_wifi', 'password', password)
 
-    # Reconfigurer NetworkManager
+    # Reconfigure NetworkManager
     _run(['nmcli', 'connection', 'delete', INTERNET_CON])
 
     cmd = ['nmcli', 'connection', 'add',
@@ -248,56 +248,56 @@ def set_wifi():
     rc, _, err = _run(cmd)
     if rc != 0:
         log.error(f"nmcli add wlan1 failed: {err}")
-        return jsonify({'error': f'Erreur nmcli: {err}'}), 500
+        return jsonify({'error': f'nmcli error: {err}'}), 500
 
     rc2, _, _ = _run(['nmcli', 'connection', 'up', INTERNET_CON])
     connected = rc2 == 0
 
-    log.info(f"WiFi wlan1 mis à jour: ssid={ssid}, connected={connected}")
+    log.info(f"WiFi wlan1 updated: ssid={ssid}, connected={connected}")
     return jsonify({'status': 'ok', 'connected': connected,
-                    'message': 'Connecté ✓' if connected else 'Config sauvegardée — connexion au prochain boot'})
+                    'message': 'Connected ✓' if connected else 'Config saved — will connect on next boot'})
 
 
 @settings_bp.post('/settings/hotspot')
 def set_hotspot():
-    """Met à jour les credentials du hotspot wlan0 et redémarre le hotspot."""
+    """Updates hotspot credentials for wlan0 and restarts the hotspot."""
     data = request.get_json() or {}
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
 
     if not ssid:
-        return jsonify({'error': 'SSID requis'}), 400
+        return jsonify({'error': 'SSID required'}), 400
     if password and len(password) < 8:
-        return jsonify({'error': 'Mot de passe hotspot : minimum 8 caractères (WPA2)'}), 400
+        return jsonify({'error': 'Hotspot password: minimum 8 characters (WPA2)'}), 400
 
-    # Sauvegarder
+    # Save
     _write_key('hotspot', 'ssid', ssid)
     if password:
         _write_key('hotspot', 'password', password)
 
-    # Mettre à jour la connexion NM
+    # Update the NM connection
     modify_cmd = ['nmcli', 'connection', 'modify', HOTSPOT_CON, 'ssid', ssid]
     if password:
         modify_cmd += ['wifi-sec.psk', password]
     _run(modify_cmd)
 
-    # Redémarrer le hotspot (clients déconnectés puis reconnectés)
+    # Restart the hotspot (clients disconnect then reconnect)
     _run(['nmcli', 'connection', 'down', HOTSPOT_CON])
     rc, _, err = _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
 
-    log.info(f"Hotspot mis à jour: ssid={ssid}")
+    log.info(f"Hotspot updated: ssid={ssid}")
     return jsonify({
         'status': 'ok' if rc == 0 else 'partial',
-        'warning': 'Les clients WiFi doivent se reconnecter avec les nouveaux credentials',
+        'warning': 'WiFi clients must reconnect with the new credentials',
     })
 
 
 @settings_bp.post('/settings/config')
 def set_config():
-    """Met à jour les paramètres généraux dans local.cfg."""
+    """Updates general parameters in local.cfg."""
     data = request.get_json() or {}
 
-    # Clés autorisées (section.clé)
+    # Allowed keys (section.key)
     allowed = {
         'github.branch', 'github.auto_pull_on_boot',
         'slave.host', 'deploy.button_pin',
@@ -316,14 +316,14 @@ def set_config():
 
 @settings_bp.post('/settings/lights')
 def set_lights_backend():
-    """Change le driver lights à chaud (sans reboot). Body: {\"backend\": \"astropixels\"}"""
+    """Changes the lights driver at runtime (no reboot). Body: {\"backend\": \"astropixels\"}"""
     data    = request.get_json() or {}
     backend = data.get('backend', '').strip().lower()
     if backend not in {'teeces', 'astropixels'}:
-        return jsonify({'error': 'backend invalide. Valeurs: teeces, astropixels'}), 400
+        return jsonify({'error': 'invalid backend. Values: teeces, astropixels'}), 400
     _write_key('lights', 'backend', backend)
     result = _reload_lights_driver(backend)
     if not result['ok']:
         return jsonify({'status': 'error', **result}), 500
     return jsonify({'status': 'ok', 'backend': backend,
-                    'message': f'Driver lights rechargé: {backend}'})
+                    'message': f'Lights driver reloaded: {backend}'})

@@ -28,16 +28,16 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Blueprint API Bluetooth Controller — Config, statut et jumelage.
+Blueprint API Bluetooth Controller — Config, status and pairing.
 
 Endpoints:
-  GET  /bt/status            → état connexion + config actuelle
+  GET  /bt/status            → connection state + current config
   POST /bt/enable            {"enabled": bool}
   POST /bt/config            {"gamepad_type": str, "deadzone": float, "inactivity_timeout": int, "mappings": {...}}
-  POST /bt/estop_reset       → réarme après E-Stop (remet estop_active = False)
+  POST /bt/estop_reset       → re-arm after E-Stop (resets estop_active = False)
 
-  POST /bt/scan/start        → démarre scan BT 15 sec
-  GET  /bt/scan/devices      → liste des appareils découverts + jumelés
+  POST /bt/scan/start        → start 15-second BT scan
+  GET  /bt/scan/devices      → list of discovered + already-paired devices
   POST /bt/pair              {"address": "AA:BB:CC:DD:EE:FF"} → pair + trust + connect
   POST /bt/unpair            {"address": "AA:BB:CC:DD:EE:FF"} → remove
 """
@@ -50,7 +50,7 @@ import time
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 
-# ── État interne du scan ──────────────────────────────────────────
+# ── Internal scan state ───────────────────────────────────────────
 _scan_lock    = threading.Lock()
 _scan_active  = False
 _scan_devices: dict[str, str] = {}   # address → name
@@ -81,7 +81,7 @@ def bt_enable():
 def bt_config():
     body = request.get_json(silent=True) or {}
     if not reg.bt_ctrl:
-        return jsonify({'error': 'BTController non disponible'}), 503
+        return jsonify({'error': 'BTController not available'}), 503
 
     patch = {}
     if 'gamepad_type'       in body: patch['gamepad_type']       = str(body['gamepad_type'])
@@ -95,15 +95,15 @@ def bt_config():
 
 @bt_bp.post('/estop_reset')
 def bt_estop_reset():
-    """Réarme après E-Stop BT — remet le flag estop_active à False."""
+    """Re-arms after BT E-Stop — resets the estop_active flag to False."""
     reg.estop_active = False
     return jsonify({'status': 'ok'})
 
 
-# ── Jumelage BT ───────────────────────────────────────────────────
+# ── BT Pairing ────────────────────────────────────────────────────
 
 def _btctl(*args, timeout=8) -> tuple[bool, str]:
-    """Lance une commande bluetoothctl non-interactive. Retourne (ok, stdout)."""
+    """Runs a non-interactive bluetoothctl command. Returns (ok, stdout)."""
     try:
         r = subprocess.run(
             ['bluetoothctl', '--', *args],
@@ -116,7 +116,7 @@ def _btctl(*args, timeout=8) -> tuple[bool, str]:
 
 
 def _paired_devices() -> list[dict]:
-    """Retourne les devices déjà jumelés via bluetoothctl devices Paired."""
+    """Returns already-paired devices via bluetoothctl devices Paired."""
     try:
         r = subprocess.run(
             ['bluetoothctl', 'devices', 'Paired'],
@@ -140,7 +140,7 @@ def _strip_ansi(text: str) -> str:
 
 
 def _all_devices() -> dict[str, str]:
-    """Retourne tous les appareils connus de bluetoothctl (address → name)."""
+    """Returns all devices known to bluetoothctl (address → name)."""
     try:
         r = subprocess.run(
             ['bluetoothctl', 'devices'],
@@ -162,7 +162,7 @@ def _all_devices() -> dict[str, str]:
 def _scan_worker(duration: int):
     global _scan_active, _scan_devices
     try:
-        # Démarrer le scan via stdin pipe (sans lire stdout — bloc-buffered sans TTY)
+        # Start scan via stdin pipe (without reading stdout — block-buffered without TTY)
         proc = subprocess.Popen(
             ['bluetoothctl'],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
@@ -170,7 +170,7 @@ def _scan_worker(duration: int):
         )
         proc.stdin.write('scan on\n'); proc.stdin.flush()
 
-        # Poller bluetoothctl devices toutes les 2s pendant la durée du scan
+        # Poll bluetoothctl devices every 2s for the scan duration
         deadline = time.time() + duration
         while time.time() < deadline:
             time.sleep(2)
@@ -190,7 +190,7 @@ def _scan_worker(duration: int):
 
 @bt_bp.post('/scan/start')
 def bt_scan_start():
-    """Lance un scan Bluetooth de 15 secondes."""
+    """Starts a 15-second Bluetooth scan."""
     global _scan_active, _scan_devices
     with _scan_lock:
         if _scan_active:
@@ -203,24 +203,24 @@ def bt_scan_start():
 
 @bt_bp.get('/scan/devices')
 def bt_scan_devices():
-    """Retourne les appareils découverts + déjà jumelés."""
+    """Returns discovered devices + already-paired devices."""
     with _scan_lock:
         discovered = [{'address': a, 'name': n} for a, n in _scan_devices.items()]
         scanning   = _scan_active
     paired = _paired_devices()
     paired_addrs = {d['address'] for d in paired}
-    # Exclure les appareils déjà jumelés de la liste "découverts"
+    # Exclude already-paired devices from the "discovered" list
     discovered = [d for d in discovered if d['address'] not in paired_addrs]
     return jsonify({'scanning': scanning, 'discovered': discovered, 'paired': paired})
 
 
 @bt_bp.post('/pair')
 def bt_pair():
-    """Pair + trust + connect un appareil BT par adresse MAC."""
+    """Pair + trust + connect a BT device by MAC address."""
     body    = request.get_json(silent=True) or {}
     address = body.get('address', '').strip().upper()
     if not re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', address):
-        return jsonify({'error': 'adresse invalide'}), 400
+        return jsonify({'error': 'invalid address'}), 400
 
     def _do_pair():
         _btctl('pair',    address, timeout=20)
@@ -233,10 +233,10 @@ def bt_pair():
 
 @bt_bp.post('/unpair')
 def bt_unpair():
-    """Supprime un appareil BT jumelé."""
+    """Removes a paired BT device."""
     body    = request.get_json(silent=True) or {}
     address = body.get('address', '').strip().upper()
     if not re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', address):
-        return jsonify({'error': 'adresse invalide'}), 400
+        return jsonify({'error': 'invalid address'}), 400
     ok, out = _btctl('remove', address, timeout=5)
     return jsonify({'status': 'ok' if ok else 'error', 'detail': out.strip()})

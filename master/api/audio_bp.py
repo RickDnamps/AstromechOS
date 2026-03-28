@@ -29,13 +29,13 @@
 # ============================================================
 """
 Blueprint API Audio — Phase 4.
-Proxy les commandes audio vers le Slave via UART.
+Proxies audio commands to the Slave via UART.
 
 Endpoints:
   POST /audio/play          {"sound": "Happy001"}
   POST /audio/random        {"category": "happy"}
   POST /audio/stop
-  GET  /audio/categories    → liste des catégories
+  GET  /audio/categories    → list of categories
 """
 
 import json
@@ -49,7 +49,7 @@ _INDEX_FILE = os.path.join(
     os.path.dirname(__file__), '..', '..', 'slave', 'sounds', 'sounds_index.json'
 )
 
-# Index chargé une seule fois au démarrage
+# Index loaded once at startup
 _INDEX_CACHE: dict = {}
 
 
@@ -75,7 +75,7 @@ def _valid_category(cat: str) -> bool:
 
 @audio_bp.get('/categories')
 def get_categories():
-    """Liste des catégories avec nombre de sons."""
+    """List of categories with sound count."""
     try:
         cats = _get_index().get('categories', {})
         return jsonify({
@@ -88,31 +88,31 @@ def get_categories():
 
 @audio_bp.get('/index')
 def get_index():
-    """Retourne l'index complet {categories: {cat: [sounds]}}."""
+    """Returns the full index {categories: {cat: [sounds]}}."""
     return jsonify({'categories': _get_index().get('categories', {})})
 
 
 @audio_bp.get('/sounds')
 def get_sounds():
-    """Liste des sons d'une catégorie. Query: ?category=happy"""
+    """List of sounds for a category. Query: ?category=happy"""
     category = request.args.get('category', '').strip().lower()
     if not category:
-        return jsonify({'error': 'Paramètre "category" requis'}), 400
+        return jsonify({'error': 'Parameter "category" required'}), 400
     sounds = _get_index().get('categories', {}).get(category)
     if sounds is None:
-        return jsonify({'error': f'Catégorie inconnue: {category}'}), 404
+        return jsonify({'error': f'Unknown category: {category}'}), 404
     return jsonify({'category': category, 'sounds': sounds})
 
 
 @audio_bp.post('/play')
 def play_sound():
-    """Joue un son spécifique. Body: {"sound": "Happy001"}"""
+    """Plays a specific sound. Body: {"sound": "Happy001"}"""
     body = request.get_json(silent=True) or {}
     sound = body.get('sound', '').strip()
     if not sound:
-        return jsonify({'error': 'Champ "sound" requis'}), 400
+        return jsonify({'error': 'Field "sound" required'}), 400
     if not _valid_sound(sound):
-        return jsonify({'error': f'Son inconnu: {sound}'}), 404
+        return jsonify({'error': f'Unknown sound: {sound}'}), 404
     if reg.uart:
         reg.uart.send('S', sound)
     reg.audio_playing = True
@@ -122,11 +122,11 @@ def play_sound():
 
 @audio_bp.post('/random')
 def play_random():
-    """Joue un son aléatoire. Body: {"category": "happy"}"""
+    """Plays a random sound. Body: {"category": "happy"}"""
     body = request.get_json(silent=True) or {}
     category = body.get('category', 'happy').strip().lower()
     if not _valid_category(category):
-        return jsonify({'error': f'Catégorie inconnue: {category}'}), 404
+        return jsonify({'error': f'Unknown category: {category}'}), 404
     if reg.uart:
         reg.uart.send('S', f'RANDOM:{category}')
     reg.audio_playing = True
@@ -136,7 +136,7 @@ def play_random():
 
 @audio_bp.post('/stop')
 def stop_audio():
-    """Coupe le son en cours."""
+    """Stops the current sound."""
     if reg.uart:
         reg.uart.send('S', 'STOP')
     reg.audio_playing = False
@@ -146,18 +146,18 @@ def stop_audio():
 
 @audio_bp.get('/volume')
 def get_volume():
-    """Retourne le volume actuel (0-100)."""
+    """Returns the current volume (0-100)."""
     return jsonify({'volume': getattr(reg, 'audio_volume', 80)})
 
 
 @audio_bp.post('/volume')
 def set_volume():
-    """Règle le volume. Body: {"volume": 75}  (0-100)"""
+    """Sets the volume. Body: {"volume": 75}  (0-100)"""
     body = request.get_json(silent=True) or {}
     try:
         vol = max(0, min(100, int(body.get('volume', 80))))
     except (TypeError, ValueError):
-        return jsonify({'error': 'volume doit être un entier 0-100'}), 400
+        return jsonify({'error': 'volume must be an integer 0-100'}), 400
     reg.audio_volume = vol
     if reg.uart:
         reg.uart.send('VOL', str(vol))

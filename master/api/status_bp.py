@@ -29,11 +29,11 @@
 # ============================================================
 """
 Blueprint API Status — Phase 4.
-Remonte l'état système R2-D2 en temps réel.
+Reports R2-D2 system state in real time.
 
 Endpoints:
-  GET  /status              → état complet JSON
-  GET  /status/version      → versions Master + Slave
+  GET  /status              → full JSON state
+  GET  /status/version      → Master + Slave versions
   POST /system/reboot       → reboot Master
   POST /system/reboot_slave → reboot Slave (via UART)
 """
@@ -78,12 +78,12 @@ def _cpu_temp() -> float | None:
 
 @status_bp.get('/status')
 def get_status():
-    """État complet du système R2-D2."""
+    """Full R2-D2 system state."""
     _uart_serial = getattr(reg.uart, '_serial', None)
     uart_ready   = bool(_uart_serial and _uart_serial.is_open
                         and getattr(reg.uart, '_running', False))
-    # HB  = heartbeat applicatif App ↔ Master (AppWatchdog)
-    # UART = lien série Master ↔ Slave
+    # HB  = application heartbeat App ↔ Master (AppWatchdog)
+    # UART = serial link Master ↔ Slave
     heartbeat_ok = app_watchdog.is_connected
     # BT controller status
     bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
@@ -101,7 +101,7 @@ def get_status():
         'dome_servo_ready': bool(reg.dome_servo and reg.dome_servo.is_ready()),
         'scripts_running': reg.engine.list_running() if reg.engine else [],
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
-        'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # CRC invalides consécutifs côté Master
+        'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # consecutive invalid CRC on Master side
         'audio_playing':     reg.audio_playing,
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
@@ -113,27 +113,27 @@ def get_status():
 
 @status_bp.get('/status/version')
 def get_version():
-    """Versions Master et Slave."""
+    """Master and Slave versions."""
     return jsonify({'master': _read_version()})
 
 
 @status_bp.post('/system/update')
 def system_update():
-    """Force git pull + rsync Slave + reboot Slave (même chose que le bouton dôme)."""
+    """Forces git pull + rsync Slave + reboot Slave (same as the dome button)."""
     if not reg.deploy:
-        return jsonify({'error': 'DeployController non disponible'}), 503
+        return jsonify({'error': 'DeployController not available'}), 503
     import threading
     threading.Thread(target=reg.deploy.update_and_deploy, daemon=True).start()
-    return jsonify({'status': 'ok', 'message': 'Update en cours...'})
+    return jsonify({'status': 'ok', 'message': 'Update in progress...'})
 
 
 @status_bp.post('/lock/set')
 def lock_set():
-    """Définit le mode de verrouillage : 0=Normal, 1=Kids, 2=ChildLock."""
+    """Sets the lock mode: 0=Normal, 1=Kids, 2=ChildLock."""
     body = request.get_json(silent=True) or {}
     mode = int(body.get('mode', 0))
     if mode not in (0, 1, 2):
-        return jsonify({'error': 'mode invalide'}), 400
+        return jsonify({'error': 'invalid mode'}), 400
     reg.lock_mode = mode
     if 'kids_speed_limit' in body:
         reg.kids_speed_limit = max(0.0, min(1.0, float(body.get('kids_speed_limit', 0.5))))
@@ -143,8 +143,8 @@ def lock_set():
 @status_bp.post('/system/resync_slave')
 def system_resync_slave():
     """
-    Rsync + service install + restart Slave uniquement.
-    Appelé automatiquement par le Slave via HTTP quand il détecte un version mismatch au boot.
+    Rsync + service install + restart Slave only.
+    Called automatically by the Slave via HTTP when it detects a version mismatch at boot.
     """
     def do_resync():
         subprocess.run(
@@ -157,7 +157,7 @@ def system_resync_slave():
 
 @status_bp.post('/system/reboot')
 def system_reboot():
-    """Reboot le Master (Pi dôme)."""
+    """Reboots the Master (dome Pi)."""
     threading.Thread(
         target=lambda: subprocess.run(['sudo', 'reboot'], check=False),
         daemon=True
@@ -167,16 +167,16 @@ def system_reboot():
 
 @status_bp.post('/system/reboot_slave')
 def system_reboot_slave():
-    """Envoie une commande reboot au Slave via UART."""
+    """Sends a reboot command to the Slave via UART."""
     if reg.uart:
         reg.uart.send('REBOOT', '1')
         return jsonify({'status': 'ok'})
-    return jsonify({'error': 'UART non disponible'}), 503
+    return jsonify({'error': 'UART not available'}), 503
 
 
 @status_bp.post('/system/shutdown')
 def system_shutdown():
-    """Éteint le Master."""
+    """Shuts down the Master."""
     threading.Thread(
         target=lambda: subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False),
         daemon=True
@@ -187,18 +187,18 @@ def system_shutdown():
 @status_bp.post('/heartbeat')
 def app_heartbeat():
     """
-    Heartbeat applicatif — App → Master, toutes les 200ms.
-    Si ce heartbeat s'arrête pendant >600ms → arrêt d'urgence (AppWatchdog).
-    Endpoint ultra-léger : juste un timestamp update.
+    Application heartbeat — App → Master, every 200ms.
+    If this heartbeat stops for >600ms → emergency stop (AppWatchdog).
+    Ultra-lightweight endpoint: just a timestamp update.
     """
     app_watchdog.feed()
-    return '', 204   # No Content — réponse minimale
+    return '', 204   # No Content — minimal response
 
 
 @status_bp.post('/system/estop')
 def system_estop():
-    """Arrêt d'urgence servos — coupe PWM PCA9685 Master (0x40) + Slave (0x41) via smbus2."""
-    # Coupe via drivers actifs si disponibles
+    """Emergency stop servos — cuts PWM PCA9685 Master (0x40) + Slave (0x41) via smbus2."""
+    # Cut via active drivers if available
     if reg.dome_servo:
         try:
             reg.dome_servo.shutdown()
@@ -210,7 +210,7 @@ def system_estop():
         except Exception:
             pass
     reg.estop_active = True
-    # Fallback garanti : estop.py direct via subprocess
+    # Guaranteed fallback: estop.py directly via subprocess
     threading.Thread(
         target=lambda: subprocess.run(
             ['python3', '/home/artoo/r2d2/scripts/estop.py'], check=False
@@ -222,17 +222,17 @@ def system_estop():
 
 @status_bp.post('/system/estop_reset')
 def system_estop_reset():
-    """Réarme les drivers servo après un E-STOP — réinitialise PCA9685 sans redémarrer le service."""
+    """Re-arms servo drivers after an E-STOP — reinitializes PCA9685 without restarting the service."""
     import logging
     log = logging.getLogger(__name__)
     reg.estop_active = False
     results = {}
     if reg.dome_servo:
         ok = reg.dome_servo.setup()
-        results['dome_servo'] = 'ok' if ok else 'erreur'
+        results['dome_servo'] = 'ok' if ok else 'error'
         log.info("estop_reset: dome_servo setup → %s", results['dome_servo'])
     if reg.servo:
         ok = reg.servo.setup()
-        results['body_servo'] = 'ok' if ok else 'erreur'
+        results['body_servo'] = 'ok' if ok else 'error'
         log.info("estop_reset: body_servo setup → %s", results['body_servo'])
     return jsonify({'status': 'reset', 'drivers': results})

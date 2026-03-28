@@ -29,15 +29,15 @@
 # ============================================================
 """
 Blueprint API Teeces — Phase 4.
-Contrôle les LEDs Teeces32 (PSI, logics, FLD) via TeecesController local.
+Controls Teeces32 LEDs (PSI, logics, FLD) via local TeecesController.
 
 Endpoints:
-  POST /teeces/random           → mode aléatoire
-  POST /teeces/leia             → mode Leia
-  POST /teeces/off              → tout éteindre
+  POST /teeces/random           → random mode
+  POST /teeces/leia             → Leia mode
+  POST /teeces/off              → turn everything off
   POST /teeces/text             {"text": "HELLO"}
   POST /teeces/psi              {"mode": 1}
-  GET  /teeces/animations       → liste tous les T-codes connus
+  GET  /teeces/animations       → list all known T-codes
   POST /teeces/animation        {"mode": 11}
   POST /teeces/raw              {"cmd": "0T5"}
   GET  /teeces/state
@@ -53,7 +53,7 @@ _mode = 'random'
 
 @teeces_bp.post('/random')
 def teeces_random():
-    """Active le mode animation aléatoire Teeces."""
+    """Activates Teeces random animation mode."""
     global _mode
     _mode = 'random'
     if reg.teeces:
@@ -63,7 +63,7 @@ def teeces_random():
 
 @teeces_bp.post('/leia')
 def teeces_leia():
-    """Active le mode Leia (message holographique)."""
+    """Activates Leia mode (holographic message)."""
     global _mode
     _mode = 'leia'
     if reg.teeces:
@@ -73,7 +73,7 @@ def teeces_leia():
 
 @teeces_bp.post('/off')
 def teeces_off():
-    """Éteint toutes les LEDs Teeces."""
+    """Turns off all Teeces LEDs."""
     global _mode
     _mode = 'off'
     if reg.teeces:
@@ -83,7 +83,7 @@ def teeces_off():
 
 @teeces_bp.post('/text')
 def teeces_text():
-    """Affiche un texte sur FLD, RLD, ou les deux. Body: {"text": "HELLO", "display": "fld"}"""
+    """Displays text on FLD, RLD, or both. Body: {"text": "HELLO", "display": "fld"}"""
     body    = request.get_json(silent=True) or {}
     text    = body.get('text', '').strip()[:20]
     display = body.get('display', 'fld').lower()
@@ -94,7 +94,7 @@ def teeces_text():
 
 @teeces_bp.post('/psi')
 def teeces_psi():
-    """Contrôle les PSI. Body: {"mode": 1}"""
+    """Controls the PSIs. Body: {"mode": 1}"""
     body = request.get_json(silent=True) or {}
     mode = int(body.get('mode', 1))
     if reg.teeces:
@@ -143,7 +143,7 @@ def teeces_raw():
 
 @teeces_bp.get('/state')
 def teeces_state():
-    """État courant des Teeces."""
+    """Current Teeces state."""
     backend = type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none'
     return jsonify({
         'mode':    _mode,
