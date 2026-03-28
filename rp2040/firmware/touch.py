@@ -28,7 +28,7 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Touch handler — CST816S capacitif sur bus I2C.
+Touch handler — CST816S capacitive touchscreen on I2C bus.
 Gestures: TAP, SWIPE (4 directions), HOLD (2s), DOUBLE_TAP.
 """
 
@@ -43,7 +43,7 @@ REG_XPOS_L      = 0x04
 REG_YPOS_H      = 0x05
 REG_YPOS_L      = 0x06
 
-# Codes gestes renvoyés par le CST816S
+# Gesture codes returned by the CST816S
 GESTURE_NONE        = 0x00
 GESTURE_SWIPE_UP    = 0x01
 GESTURE_SWIPE_DOWN  = 0x02
@@ -70,12 +70,12 @@ class TouchHandler:
         }
 
     def on(self, event: str, callback) -> None:
-        """Enregistre un callback pour un événement tactile."""
+        """Registers a callback for a touch event."""
         if event in self._callbacks:
             self._callbacks[event].append(callback)
 
     def poll(self) -> None:
-        """À appeler régulièrement dans la boucle principale."""
+        """Must be called regularly in the main loop."""
         try:
             data = self._i2c.readfrom_mem(CST816S_ADDR, REG_GESTURE, 6)
         except OSError:
@@ -110,4 +110,4 @@ class TouchHandler:
             try:
                 cb(x, y)
             except Exception as e:
-                print(f"Touch callback erreur {event}: {e}")
+                print(f"Touch callback error {event}: {e}")

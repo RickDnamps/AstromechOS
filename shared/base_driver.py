@@ -27,18 +27,18 @@
 #  You should have received a copy of the GNU GPL along with
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-"""Interface commune pour tous les drivers hardware."""
+"""Common interface for all hardware drivers."""
 
 
 class BaseDriver:
     def setup(self) -> bool:
-        """Initialise le hardware. Retourne False si échec."""
+        """Initialises the hardware. Returns False on failure."""
         raise NotImplementedError
 
     def shutdown(self) -> None:
-        """Arrêt propre du driver."""
+        """Cleanly shuts down the driver."""
         raise NotImplementedError
 
     def is_ready(self) -> bool:
-        """Retourne True si le driver est opérationnel."""
+        """Returns True if the driver is operational."""
         raise NotImplementedError

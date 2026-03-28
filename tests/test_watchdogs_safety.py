@@ -1,10 +1,39 @@
+# ============================================================
+#  ██████╗ ██████╗       ██████╗ ██████╗
+#  ██╔══██╗╚════██╗      ██╔══██╗╚════██╗
+#  ██████╔╝ █████╔╝      ██║  ██║ █████╔╝
+#  ██╔══██╗██╔═══╝       ██║  ██║██╔═══╝
+#  ██║  ██║███████╗      ██████╔╝███████╗
+#  ╚═╝  ╚═╝╚══════╝      ╚═════╝ ╚══════╝
+#
+#  R2-D2 Control System — Distributed Robot Controller
+# ============================================================
+#  Copyright (C) 2025 RickDnamps
+#  https://github.com/RickDnamps/R2D2_Control
+#
+#  This file is part of R2D2_Control.
+#
+#  R2D2_Control is free software: you can redistribute it
+#  and/or modify it under the terms of the GNU General
+#  Public License as published by the Free Software
+#  Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  R2D2_Control is distributed in the hope that it will be
+#  useful, but WITHOUT ANY WARRANTY; without even the implied
+#  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE. See the GNU General Public License for details.
+#
+#  You should have received a copy of the GNU GPL along with
+#  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
+# ============================================================
 """
-Tests de sécurité — simulation de déconnexions App/Android/UART.
+Safety tests — simulates App/Android/UART disconnection scenarios.
 
-Vérifie les 3 watchdogs sans hardware :
-  - AppWatchdog    (600ms) : crash app / perte WiFi contrôleur
-  - MotionWatchdog (800ms) : commande drive sans suivi
-  - WatchdogController Slave (500ms) : perte heartbeat UART
+Verifies the 3 watchdogs without hardware:
+  - AppWatchdog    (600ms) : app crash / controller WiFi loss
+  - MotionWatchdog (800ms) : drive command with no follow-up
+  - WatchdogController Slave (500ms) : UART heartbeat loss
 
 Usage : python -m pytest tests/test_watchdogs_safety.py -v
 """
@@ -16,8 +45,8 @@ import types
 import unittest
 from unittest.mock import MagicMock
 
-# ── Mocks sys.modules AVANT tout import du code projet ───────────────────────
-# Permet d'importer les watchdogs sans Flask / drivers hardware connectés.
+# ── Mock sys.modules BEFORE any project code import ─────────────────────────
+# Allows importing the watchdogs without Flask / connected hardware drivers.
 
 _mock_stop_drive  = MagicMock(name='stop_drive')
 _mock_stop_dome   = MagicMock(name='stop_dome')
@@ -35,12 +64,12 @@ _safe_stop_mod.stop_drive  = _mock_stop_drive
 _safe_stop_mod.stop_dome   = _mock_stop_dome
 _safe_stop_mod.cancel_ramp = _mock_cancel_ramp
 
-# Ne PAS mocker le package 'master' lui-même — laisser Python le résoudre
-# comme namespace package. Mocker uniquement les sous-modules à dépendances hardware.
+# Do NOT mock the 'master' package itself — let Python resolve it
+# as a namespace package. Only mock sub-modules with hardware dependencies.
 sys.modules.setdefault('master.registry',  _registry_mod)
 sys.modules.setdefault('master.safe_stop', _safe_stop_mod)
 
-# Ajouter la racine projet au path Python
+# Add project root to Python path
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
@@ -48,7 +77,7 @@ if _PROJECT_ROOT not in sys.path:
 from master.app_watchdog    import AppWatchdog
 from master.motion_watchdog import MotionWatchdog
 
-# Slave watchdog — import direct pour éviter conflits de nommage
+# Slave watchdog — direct import to avoid naming conflicts
 import importlib.util as _ilu
 _slave_spec = _ilu.spec_from_file_location(
     'slave_watchdog',
@@ -66,14 +95,14 @@ def _reset_mocks():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# AppWatchdog — perte heartbeat applicatif (Android / navigateur)
+# AppWatchdog — application heartbeat loss (Android / browser)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestAppWatchdog(unittest.TestCase):
     """
-    Scénario : l'app Android ou le navigateur arrête d'envoyer POST /heartbeat.
-    Causes possibles : crash app, WiFi coupé, écran éteint (WebView en pause).
-    Attendu : arrêt d'urgence après 600ms.
+    Scenario: the Android app or browser stops sending POST /heartbeat.
+    Possible causes: app crash, WiFi lost, screen off (WebView paused).
+    Expected: emergency stop after 600ms.
     """
 
     def setUp(self):
@@ -85,33 +114,33 @@ class TestAppWatchdog(unittest.TestCase):
         self.wdog.stop()
 
     def test_initial_not_connected(self):
-        """Avant tout heartbeat, is_connected doit être False."""
+        """Before any heartbeat, is_connected must be False."""
         self.assertFalse(self.wdog.is_connected)
 
     def test_first_heartbeat_connects(self):
-        """Dès le premier heartbeat, is_connected passe à True."""
+        """On the first heartbeat, is_connected switches to True."""
         self.wdog.feed()
         self.assertTrue(self.wdog.is_connected)
 
     def test_no_emergency_stop_without_first_heartbeat(self):
         """
-        CRITIQUE : si aucune app ne s'est jamais connectée,
-        l'arrêt d'urgence NE doit PAS se déclencher (robot inerte au boot).
+        CRITICAL: if no app has ever connected,
+        the emergency stop must NOT trigger (robot idle at boot).
         """
-        time.sleep(1.0)  # attendre > 600ms timeout
+        time.sleep(1.0)  # wait > 600ms timeout
         _mock_stop_drive.assert_not_called()
         _mock_stop_dome.assert_not_called()
 
     def test_disconnect_triggers_emergency_stop(self):
         """
-        CRITIQUE : app connectée → perte WiFi → arrêt d'urgence après 600ms.
-        Simule : crash Android / fermeture onglet navigateur.
+        CRITICAL: app connected → WiFi lost → emergency stop after 600ms.
+        Simulates: Android crash / browser tab closed.
         """
         self.wdog.feed()
         self.assertTrue(self.wdog.is_connected)
 
-        # Silence — plus aucun heartbeat
-        time.sleep(1.0)  # 600ms timeout + 400ms marge
+        # Silence — no more heartbeats
+        time.sleep(1.0)  # 600ms timeout + 400ms margin
 
         _mock_stop_drive.assert_called_once()
         _mock_stop_dome.assert_called_once()
@@ -119,7 +148,7 @@ class TestAppWatchdog(unittest.TestCase):
 
     def test_continuous_heartbeats_no_stop(self):
         """
-        Heartbeats réguliers (toutes les 150ms < 600ms timeout) → aucun arrêt.
+        Regular heartbeats (every 150ms < 600ms timeout) → no stop.
         """
         for _ in range(6):
             self.wdog.feed()
@@ -131,58 +160,58 @@ class TestAppWatchdog(unittest.TestCase):
 
     def test_reconnect_rearms_watchdog(self):
         """
-        Après un timeout, l'app se reconnecte → is_connected=True.
-        Une deuxième déconnexion déclenche à nouveau l'arrêt.
+        After a timeout, the app reconnects → is_connected=True.
+        A second disconnection triggers the stop again.
         """
-        # Cycle 1 : déconnexion
+        # Cycle 1 : disconnection
         self.wdog.feed()
         time.sleep(1.0)
         self.assertFalse(self.wdog.is_connected)
 
         _reset_mocks()
 
-        # Reconnexion
+        # Reconnection
         self.wdog.feed()
         self.assertTrue(self.wdog.is_connected)
 
-        # Cycle 2 : deuxième déconnexion
+        # Cycle 2 : second disconnection
         time.sleep(1.0)
         _mock_stop_drive.assert_called_once()
 
     def test_emergency_stop_triggered_only_once_per_disconnect(self):
         """
-        L'arrêt d'urgence se déclenche exactement une fois par déconnexion,
-        pas en boucle à chaque cycle watchdog.
+        The emergency stop triggers exactly once per disconnection,
+        not in a loop on every watchdog cycle.
         """
         self.wdog.feed()
-        time.sleep(2.0)  # attendre 2+ cycles complets
+        time.sleep(2.0)  # wait 2+ full cycles
 
         self.assertEqual(_mock_stop_drive.call_count, 1,
-                         "stop_drive() doit être appelé exactement une fois")
+                         "stop_drive() must be called exactly once")
         self.assertEqual(_mock_stop_dome.call_count, 1,
-                         "stop_dome() doit être appelé exactement une fois")
+                         "stop_dome() must be called exactly once")
 
     def test_hb_age_minus_one_before_first(self):
-        """Avant le premier HB, last_hb_age_ms retourne -1 (pas de données)."""
+        """Before the first HB, last_hb_age_ms returns -1 (no data yet)."""
         self.assertEqual(self.wdog.last_hb_age_ms, -1.0)
 
     def test_hb_age_positive_after_heartbeat(self):
-        """Après un HB, l'âge est positif et inférieur au timeout."""
+        """After a HB, the age is positive and below the timeout."""
         self.wdog.feed()
         time.sleep(0.1)
         age = self.wdog.last_hb_age_ms
-        self.assertGreater(age, 0, "L'âge doit être positif")
-        self.assertLess(age, 600, "L'âge ne doit pas dépasser le timeout")
+        self.assertGreater(age, 0, "Age must be positive")
+        self.assertLess(age, 600, "Age must not exceed the timeout")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# MotionWatchdog — déconnexion pendant un mouvement actif
+# MotionWatchdog — disconnection during active movement
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestMotionWatchdog(unittest.TestCase):
     """
-    Scénario : l'app envoie une commande drive/dôme, puis se déconnecte.
-    Attendu : arrêt automatique après 800ms sans nouvelle commande.
+    Scenario: the app sends a drive/dome command, then disconnects.
+    Expected: automatic stop after 800ms with no new command.
     """
 
     def setUp(self):
@@ -194,14 +223,14 @@ class TestMotionWatchdog(unittest.TestCase):
         self.wdog.stop()
 
     def test_no_command_no_stop(self):
-        """Sans commande drive, aucun arrêt ne doit être déclenché."""
+        """Without a drive command, no stop must be triggered."""
         time.sleep(1.2)
         _mock_stop_drive.assert_not_called()
 
     def test_drive_timeout_triggers_stop(self):
         """
-        CRITIQUE : commande drive reçue, puis silence > 800ms → arrêt propulsion.
-        Simule : crash app Android en cours de marche.
+        CRITICAL: drive command received, then silence > 800ms → propulsion stop.
+        Simulates: Android app crash while moving.
         """
         self.wdog.feed_drive(0.5, 0.5)
         time.sleep(1.2)
@@ -209,14 +238,14 @@ class TestMotionWatchdog(unittest.TestCase):
 
     def test_dome_timeout_triggers_stop(self):
         """
-        CRITIQUE : commande dôme active, puis silence > 800ms → arrêt dôme.
+        CRITICAL: active dome command, then silence > 800ms → dome stop.
         """
         self.wdog.feed_dome(0.3)
         time.sleep(1.2)
         _mock_stop_dome.assert_called()
 
     def test_continuous_drive_no_stop(self):
-        """Commandes drive continues (toutes les 150ms) → aucun arrêt."""
+        """Continuous drive commands (every 150ms) → no stop."""
         for _ in range(6):
             self.wdog.feed_drive(0.5, 0.5)
             time.sleep(0.15)
@@ -224,8 +253,8 @@ class TestMotionWatchdog(unittest.TestCase):
 
     def test_explicit_stop_no_watchdog_trigger(self):
         """
-        Stop explicite via clear_drive() → le watchdog ne se déclenche pas.
-        Le stop vient de l'app, pas d'un timeout.
+        Explicit stop via clear_drive() → watchdog does not trigger.
+        The stop comes from the app, not a timeout.
         """
         self.wdog.feed_drive(0.5, 0.5)
         self.wdog.clear_drive()
@@ -233,7 +262,7 @@ class TestMotionWatchdog(unittest.TestCase):
         _mock_stop_drive.assert_not_called()
 
     def test_explicit_dome_stop_no_trigger(self):
-        """Stop explicite dôme → pas de trigger watchdog."""
+        """Explicit dome stop → no watchdog trigger."""
         self.wdog.feed_dome(0.3)
         self.wdog.clear_dome()
         time.sleep(1.2)
@@ -241,8 +270,8 @@ class TestMotionWatchdog(unittest.TestCase):
 
     def test_zero_speed_no_timeout(self):
         """
-        Commande drive avec vitesse 0 (dans la deadzone) → pas de timeout.
-        Le robot est déjà à l'arrêt.
+        Drive command with speed 0 (within deadzone) → no timeout.
+        The robot is already stopped.
         """
         self.wdog.feed_drive(0.0, 0.0)
         time.sleep(1.2)
@@ -250,48 +279,48 @@ class TestMotionWatchdog(unittest.TestCase):
 
     def test_cancel_ramp_on_new_drive_command(self):
         """
-        Nouvelle commande drive → cancel_ramp() appelé pour interrompre
-        tout arrêt progressif en cours (ex: app reconnectée).
+        New drive command → cancel_ramp() called to interrupt
+        any ongoing gradual stop (e.g. app reconnected).
         """
         self.wdog.feed_drive(0.5, 0.5)
         _mock_cancel_ramp.assert_called()
 
     def test_drive_timeout_only_once(self):
-        """Timeout propulsion déclenché exactement une fois, pas en boucle."""
+        """Propulsion timeout triggered exactly once, not in a loop."""
         self.wdog.feed_drive(0.8, 0.8)
         time.sleep(2.0)
         self.assertEqual(_mock_stop_drive.call_count, 1)
 
     def test_dome_drive_independent_timeouts(self):
         """
-        Timeout dôme et timeout propulsion sont indépendants.
-        Stop propulsion explicite n'affecte pas le timeout dôme.
+        Dome timeout and propulsion timeout are independent.
+        Explicit propulsion stop does not affect the dome timeout.
         """
         self.wdog.feed_drive(0.5, 0.5)
-        self.wdog.clear_drive()       # stop propulsion explicite
-        self.wdog.feed_dome(0.3)      # dôme actif
+        self.wdog.clear_drive()       # explicit propulsion stop
+        self.wdog.feed_dome(0.3)      # dome active
 
         time.sleep(1.2)
 
-        _mock_stop_drive.assert_not_called()   # propulsion : stop explicite
-        _mock_stop_dome.assert_called()        # dôme : timeout
+        _mock_stop_drive.assert_not_called()   # propulsion: explicit stop
+        _mock_stop_dome.assert_called()        # dome: timeout
 
     def test_reverse_drive_timeout(self):
-        """Commande drive en marche arrière déclenche aussi le timeout."""
+        """Reverse drive command also triggers the timeout."""
         self.wdog.feed_drive(-0.6, -0.6)
         time.sleep(1.2)
         _mock_stop_drive.assert_called()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# WatchdogController (Slave) — perte heartbeat UART Master→Slave
+# WatchdogController (Slave) — UART heartbeat loss Master→Slave
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestSlaveWatchdog(unittest.TestCase):
     """
-    Scénario : le lien UART entre Master et Slave est coupé.
-    Causes : câble slipring débranché, crash Master, alimentation dôme perdue.
-    Attendu : VESC coupé après 500ms sans heartbeat UART.
+    Scenario: the UART link between Master and Slave is cut.
+    Causes: slipring cable unplugged, Master crash, dome power lost.
+    Expected: VESC cut off after 500ms without UART heartbeat.
     """
 
     def setUp(self):
@@ -307,22 +336,22 @@ class TestSlaveWatchdog(unittest.TestCase):
 
     def test_no_immediate_stop_at_startup(self):
         """
-        Au démarrage, le watchdog initialise le timer à now().
-        Pas de déclenchement immédiat — laisser le temps au Master de booter.
+        At startup, the watchdog initialises the timer to now().
+        No immediate trigger — allow time for the Master to boot.
         """
         time.sleep(0.2)
         self.stop_cb.assert_not_called()
 
     def test_no_hb_triggers_vesc_cutoff(self):
         """
-        CRITIQUE : aucun heartbeat UART depuis le démarrage → coupure VESC.
-        Simule : câble slipring débranché avant boot, ou Master planté.
+        CRITICAL: no UART heartbeat since startup → VESC cutoff.
+        Simulates: slipring cable unplugged before boot, or Master hung.
         """
         time.sleep(0.8)
         self.stop_cb.assert_called_once()
 
     def test_regular_hb_prevents_cutoff(self):
-        """Heartbeats réguliers (toutes les 150ms < 500ms) → aucune coupure."""
+        """Regular heartbeats (every 150ms < 500ms) → no cutoff."""
         for _ in range(6):
             self.wdog.feed()
             time.sleep(0.15)
@@ -330,51 +359,51 @@ class TestSlaveWatchdog(unittest.TestCase):
 
     def test_resume_callback_on_uart_recovery(self):
         """
-        UART coupé → coupure VESC → UART reprend → réactivation VESC.
-        Simule : reconnexion slipring à chaud.
+        UART cut → VESC cutoff → UART resumes → VESC re-enabled.
+        Simulates: hot slipring reconnection.
         """
-        time.sleep(0.8)  # trigger coupure
+        time.sleep(0.8)  # trigger cutoff
         self.stop_cb.assert_called_once()
 
-        # Reprise UART
+        # UART recovery
         self.wdog.feed()
         time.sleep(0.1)
         self.resume_cb.assert_called_once()
 
     def test_stop_triggered_only_once_per_cutoff(self):
         """
-        La coupure VESC se déclenche exactement une fois par timeout,
-        pas en boucle (éviter flicker des VESCs).
+        VESC cutoff triggers exactly once per timeout,
+        not in a loop (avoids VESC flickering).
         """
         time.sleep(1.5)
         self.assertEqual(self.stop_cb.call_count, 1,
-                         "stop_callback doit être appelé exactement une fois")
+                         "stop_callback must be called exactly once")
 
     def test_multiple_disconnect_reconnect_cycles(self):
         """
-        Plusieurs cycles déconnexion/reconnexion → chaque déconnexion
-        déclenche une coupure, chaque reconnexion déclenche une reprise.
+        Multiple disconnect/reconnect cycles → each disconnection
+        triggers a cutoff, each reconnection triggers a resume.
         """
-        # Cycle 1 : coupure
+        # Cycle 1 : cutoff
         time.sleep(0.8)
         self.assertEqual(self.stop_cb.call_count, 1)
 
-        # Reconnexion
+        # Reconnection
         self.wdog.feed()
         time.sleep(0.1)
         self.assertEqual(self.resume_cb.call_count, 1)
 
-        # Cycle 2 : coupure
+        # Cycle 2 : cutoff
         time.sleep(0.8)
         self.assertEqual(self.stop_cb.call_count, 2)
 
-        # Reconnexion 2
+        # Reconnection 2
         self.wdog.feed()
         time.sleep(0.1)
         self.assertEqual(self.resume_cb.call_count, 2)
 
     def test_feed_clears_triggered_state(self):
-        """Après un trigger, feed() remet triggered à False."""
+        """After a trigger, feed() resets triggered to False."""
         time.sleep(0.8)
         self.assertTrue(self.wdog._triggered)
         self.wdog.feed()
@@ -383,10 +412,10 @@ class TestSlaveWatchdog(unittest.TestCase):
 
     def test_callback_exception_does_not_crash_watchdog(self):
         """
-        Un callback qui lève une exception ne doit pas crasher le watchdog.
-        Le watchdog doit rester fonctionnel.
+        A callback that raises an exception must not crash the watchdog.
+        The watchdog must remain functional.
         """
-        crash_cb = MagicMock(side_effect=RuntimeError("driver crash simulé"))
+        crash_cb = MagicMock(side_effect=RuntimeError("simulated driver crash"))
         safe_cb  = MagicMock()
 
         wdog = WatchdogController(timeout_s=0.3)
@@ -397,11 +426,11 @@ class TestSlaveWatchdog(unittest.TestCase):
         time.sleep(0.6)
 
         crash_cb.assert_called()
-        safe_cb.assert_called()   # doit être appelé malgré l'exception précédente
+        safe_cb.assert_called()   # must be called despite the previous exception
         wdog.stop()
 
     def test_custom_timeout_respected(self):
-        """Le timeout personnalisé est bien respecté."""
+        """The custom timeout is correctly honoured."""
         fast_wdog = WatchdogController(timeout_s=0.2)
         fast_cb = MagicMock()
         fast_wdog.register_stop_callback(fast_cb)

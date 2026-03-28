@@ -31,8 +31,8 @@
 """
 R2-D2 Joystick Stress Test + WiFi Monitor
 ==========================================
-Simule le comportement reel du joystick virtuel (mousemove rate) pendant N secondes
-et monitore simultanement le Pi pour identifier la cause du drop WiFi.
+Simulates the real behaviour of the virtual joystick (mousemove rate) for N seconds
+and simultaneously monitors the Pi to identify the cause of WiFi drops.
 
 Usage:
     python3 tools/stress_joystick.py [--host 192.168.2.104] [--duration 30] [--rate 60]
@@ -53,7 +53,7 @@ try:
     PARAMIKO_OK = True
 except ImportError:
     PARAMIKO_OK = False
-    print("[WARN] paramiko non installe -- monitoring SSH desactive")
+    print("[WARN] paramiko not installed -- SSH monitoring disabled")
 
 PI_HOST  = '192.168.2.104'
 PI_USER  = 'artoo'
@@ -97,9 +97,9 @@ def post(path, body, timeout=0.5):
 
 def joystick_thread(rate_hz, duration):
     """
-    Simule le joystick propulsion (arcade drive) :
-    - Cercle complet lent (4s/tour) pour reproduire mouvements diagonaux
-    - Fréquence = rate_hz (simule mousemove a N fps)
+    Simulates the propulsion joystick (arcade drive):
+    - Slow full circle (4s/revolution) to reproduce diagonal movements
+    - Frequency = rate_hz (simulates mousemove at N fps)
     """
     interval = 1.0 / rate_hz
     end_time = time.monotonic() + duration
@@ -221,7 +221,7 @@ def monitor_ssh_thread(duration):
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(PI_HOST, username=PI_USER, password=PI_PASS, timeout=10)
     except Exception as e:
-        print(f"[SSH] Connexion echouee: {e}")
+        print(f"[SSH] Connection failed: {e}")
         return []
 
     end_time = time.monotonic() + duration
@@ -273,19 +273,19 @@ def print_report(samples):
 
     elapsed = time.monotonic() - s['start_time']
     print("\n" + "=" * 65)
-    print("  RAPPORT FINAL")
+    print("  FINAL REPORT")
     print("=" * 65)
-    print(f"  Duree test         : {elapsed:.1f}s")
-    print(f"  Drive POST envoyes : {s['drive_sent']}")
+    print(f"  Test duration      : {elapsed:.1f}s")
+    print(f"  Drive POST sent    : {s['drive_sent']}")
     print(f"  Drive OK           : {s['drive_ok']} ({100*s['drive_ok']//max(1,s['drive_sent'])}%)")
-    print(f"  Drive erreurs      : {s['drive_err']}")
+    print(f"  Drive errors       : {s['drive_err']}")
     print(f"  Drive timeouts     : {s['drive_timeouts']}")
     if s['drive_sent'] > 0:
-        print(f"  Frequence reelle   : {s['drive_sent']/elapsed:.1f} req/s")
+        print(f"  Actual rate        : {s['drive_sent']/elapsed:.1f} req/s")
     if s['latencies_ms']:
         lats = s['latencies_ms']
         p95  = sorted(lats)[int(len(lats) * 0.95)]
-        print(f"  Latence drive      : min={min(lats):.0f}ms avg={statistics.mean(lats):.0f}ms max={max(lats):.0f}ms p95={p95:.0f}ms")
+        print(f"  Drive latency      : min={min(lats):.0f}ms avg={statistics.mean(lats):.0f}ms max={max(lats):.0f}ms p95={p95:.0f}ms")
     print(f"  Heartbeat OK       : {s['hb_ok']}/{s['hb_sent']}")
     print(f"  HB timeouts        : {s['hb_timeouts']}")
 
@@ -298,11 +298,11 @@ def print_report(samples):
         print(f"\n  CPU max/avg        : {max_cpu:.1f}% / {avg_cpu:.1f}%")
 
         if drops:
-            print(f"\n  !! wlan1 DROPS detectes : {len(drops)} echantillon(s) sans IP")
+            print(f"\n  !! wlan1 DROPS detected: {len(drops)} sample(s) without IP")
             for d in drops:
                 print(f"     -> t={d['ts']:.1f}s")
         else:
-            print(f"\n  OK wlan1 reste UP pendant tout le test")
+            print(f"\n  OK wlan1 stayed UP for the entire test")
 
         if wdogs:
             print(f"\n  !! Watchdog events:")
@@ -316,20 +316,20 @@ def print_report(samples):
                 for line in ev['wifi_events']:
                     print(f"     [{ev['ts']:.1f}s] {line[:100]}")
 
-    print("\n  DIAGNOSTIC:")
+    print("\n  DIAGNOSIS:")
     with lock:
         to_rate = stats['drive_timeouts'] / max(1, stats['drive_sent']) * 100
     if to_rate > 5:
-        print(f"  !! {to_rate:.1f}% des drive requests ont timeout -- Pi probablement sature")
+        print(f"  !! {to_rate:.1f}% of drive requests timed out -- Pi likely saturated")
     elif to_rate > 0:
         print(f"  OK {to_rate:.1f}% timeouts -- acceptable")
     else:
-        print(f"  OK 0 timeout -- Flask repond bien")
+        print(f"  OK 0 timeouts -- Flask responding well")
 
     if s['hb_timeouts'] > 0:
-        print(f"  !! {s['hb_timeouts']} heartbeat timeouts -- AppWatchdog aurait pu se declencher!")
+        print(f"  !! {s['hb_timeouts']} heartbeat timeouts -- AppWatchdog could have triggered!")
     else:
-        print(f"  OK heartbeat stable -- AppWatchdog n'aurait pas trigger")
+        print(f"  OK heartbeat stable -- AppWatchdog would not have triggered")
     print("=" * 65)
 
 
@@ -338,7 +338,7 @@ def main():
     parser.add_argument('--host',     default='192.168.2.104')
     parser.add_argument('--duration', type=int, default=30)
     parser.add_argument('--rate',     type=int, default=60,
-                        help='Frequence joystick req/s (default 60 = mousemove 60fps)')
+                        help='Joystick frequency req/s (default 60 = mousemove 60fps)')
     args = parser.parse_args()
 
     global BASE_URL
@@ -346,13 +346,13 @@ def main():
     BASE_URL = f'http://{PI_HOST}:5000'
 
     print(f"\nR2-D2 Joystick Stress Test + WiFi Monitor")
-    print(f"  Cible    : {BASE_URL}")
-    print(f"  Duree    : {args.duration}s")
+    print(f"  Target   : {BASE_URL}")
+    print(f"  Duration : {args.duration}s")
     print(f"  Rate     : {args.rate} req/s  (mousemove @ {args.rate}fps = {args.rate} POST/s)")
     print(f"  + HB     : 1 req / 200ms = 5/s")
-    print(f"  Total    : ~{args.rate + 5} req/s vers Flask")
-    print(f"  SSH mon  : {'actif' if PARAMIKO_OK else 'desactive'}")
-    print(f"\n  t=temps | CPU% | wlan0/1 etat+signal | TX-err | drive stats | Pi-side drive/3s")
+    print(f"  Total    : ~{args.rate + 5} req/s to Flask")
+    print(f"  SSH mon  : {'active' if PARAMIKO_OK else 'disabled'}")
+    print(f"\n  t=time | CPU% | wlan0/1 state+signal | TX-err | drive stats | Pi-side drive/3s")
     print("-" * 65)
 
     stats['start_time'] = time.monotonic()
@@ -377,7 +377,7 @@ def main():
         for t in threads:
             t.join(timeout=args.duration + 5)
     except KeyboardInterrupt:
-        print("\n[Interrompu]")
+        print("\n[Interrupted]")
         stop_event.set()
 
     stop_event.set()

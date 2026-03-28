@@ -106,7 +106,7 @@ class TestBaseController(unittest.TestCase):
 class TestTeecesDriver(unittest.TestCase):
 
     def _make_driver(self):
-        """Driver avec serial mocké, port déjà ouvert."""
+        """Driver with mocked serial, port already open."""
         cfg = _teeces_cfg()
         with patch('serial.Serial') as mock_cls:
             mock_serial = MagicMock()

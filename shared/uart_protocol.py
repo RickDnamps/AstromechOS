@@ -28,22 +28,22 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Protocole UART partagé Master ↔ Slave.
-Checksum = somme arithmétique de tous les bytes du payload, modulo 256.
-Format: TYPE:VALEUR:CS\n  (CS = 2 hex chars, ex: "B3")
+Shared UART protocol Master <-> Slave.
+Checksum = arithmetic sum of all payload bytes, modulo 256.
+Format: TYPE:VALUE:CS\n  (CS = 2 hex chars, e.g. "B3")
 
-Algorithme : (sum(bytes) + len(bytes)) % 256
+Algorithm: (sum(bytes) + len(bytes)) % 256
 
-Pourquoi pas XOR ?
-  - XOR : deux octets identiques s'annulent → aveugle aux rafales périodiques
-    (moteurs 24V + Tobsun génèrent des impulsions répétitives)
+Why not XOR?
+  - XOR: two identical bytes cancel each other out → blind to periodic bursts
+    (24V motors + Tobsun generate repetitive pulses)
 
-Pourquoi sum + len et pas juste sum ?
-  - sum seul : un octet nul (0x00) contribue 0 → inchangé si inséré dans la trame
-    → une condition UART BREAK (slipring) injecte 0x00 → passerait sans len
-  - sum + len : tout octet inséré change la longueur → checksum change
-  - Reste une limite : byte-swap de deux octets avec même somme (ex: 0xEE↔0xFF)
-    → collision. Acceptable pour bruit aléatoire — un CRC polynomial éliminerait ça.
+Why sum + len instead of just sum?
+  - sum alone: a null byte (0x00) contributes 0 → unchanged if inserted in the frame
+    → a UART BREAK condition (slipring) injects 0x00 → would pass without len
+  - sum + len: any inserted byte changes the length → checksum changes
+  - Remaining limitation: byte-swap of two bytes with the same sum (e.g. 0xEE<->0xFF)
+    → collision. Acceptable for random noise — a polynomial CRC would eliminate this.
 """
 
 import logging
@@ -57,26 +57,26 @@ BAUD_RATE = 115200
 
 def calc_crc(payload: str) -> str:
     """
-    Calcule le checksum : (somme des bytes + longueur) mod 256.
-    Retourne 2 caractères hex majuscules, ex: 'B6'.
-    +len() : un octet nul inséré change la longueur → checksum change.
-    Appelé 'calc_crc' pour compatibilité avec le reste du code.
+    Computes the checksum: (sum of bytes + length) mod 256.
+    Returns 2 uppercase hex characters, e.g. 'B6'.
+    +len(): a null byte inserted changes the length → checksum changes.
+    Named 'calc_crc' for compatibility with the rest of the codebase.
     """
     data = payload.encode('utf-8')
     return format((sum(data) + len(data)) % 256, '02X')
 
 
 def build_msg(msg_type: str, value: str) -> str:
-    """Construit un message avec checksum. Ex: build_msg('H', '1') → 'H:1:B3\\n'"""
+    """Builds a message with checksum. E.g. build_msg('H', '1') → 'H:1:B3\\n'"""
     payload = f"{msg_type}:{value}"
     return f"{payload}:{calc_crc(payload)}\n"
 
 
 def parse_msg(raw: str) -> tuple[str, str] | None:
     """
-    Parse et valide un message UART avec checksum.
-    Retourne (type, value) si checksum valide, None sinon (paquet ignoré).
-    Le dernier segment séparé par ':' est toujours le checksum.
+    Parses and validates a UART message with checksum.
+    Returns (type, value) if checksum is valid, None otherwise (packet discarded).
+    The last ':'-separated segment is always the checksum.
     """
     raw = raw.strip()
     if not raw:

@@ -28,20 +28,20 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Display renderer — ecran rond GC9A01 240x240.
+Display renderer — round GC9A01 240x240 screen.
 """
 
 import gc9a01
 import math
 
-# Couleurs RGB565
+# RGB565 colors
 BLACK      = gc9a01.color565(0,   0,   0)
 WHITE      = gc9a01.color565(255, 255, 255)
 RED        = gc9a01.color565(220, 50,  50)
 GREEN      = gc9a01.color565(50,  200, 80)
 ORANGE     = gc9a01.color565(255, 150, 0)
-ORANGE_MED = gc9a01.color565(180, 90,  0)   # comete milieu
-ORANGE_DIM = gc9a01.color565(90,  45,  0)   # comete queue
+ORANGE_MED = gc9a01.color565(180, 90,  0)   # comet mid
+ORANGE_DIM = gc9a01.color565(90,  45,  0)   # comet tail
 BLUE       = gc9a01.color565(0,   120, 220)
 GRAY       = gc9a01.color565(80,  80,  80)
 DK_GRAY    = gc9a01.color565(40,  40,  40)
@@ -52,7 +52,7 @@ CENTER_Y = 120
 
 _spin_frame = 0   # animation frame counter
 
-# Fontes russhughes
+# russhughes fonts
 try:
     import vga1_8x16 as _font16
 except ImportError:
@@ -107,38 +107,38 @@ STATUS_COLOR = {
 }
 
 # ------------------------------------------------------------------
-# Pre-calcul du cercle anime BOOTING — 12 points en comete
+# Pre-computed BOOTING animated circle — 12 comet dots
 # ------------------------------------------------------------------
 _N_TICKS   = 12
-_TICK_R    = 75   # rayon des points sur le cercle
-_TICK_SIZE = 8    # taille de chaque point (carré)
+_TICK_R    = 75   # radius of the dots on the circle
+_TICK_SIZE = 8    # size of each dot (square)
 
-# Couleurs de la comete : tete → queue (le dernier DK_GRAY efface la queue)
+# Comet colors: head -> tail (the last DK_GRAY erases the tail)
 _ARC_COLORS = [ORANGE, ORANGE_MED, ORANGE_DIM, DK_GRAY]
 
 _TICKS = []
 for _i in range(_N_TICKS):
-    _a = -math.pi / 2 + _i * 2 * math.pi / _N_TICKS   # depart haut, sens horaire
+    _a = -math.pi / 2 + _i * 2 * math.pi / _N_TICKS   # start top, clockwise
     _TICKS.append((
         int(CENTER_X + _TICK_R * math.cos(_a)) - _TICK_SIZE // 2,
         int(CENTER_Y + _TICK_R * math.sin(_a)) - _TICK_SIZE // 2,
         _TICK_SIZE, _TICK_SIZE,
     ))
 
-# Flags pour eviter le full-redraw a chaque frame d'animation
+# Flags to avoid full-redraw on every animation frame
 _booting_bg_drawn  = False
 _locked_bg_drawn   = False
-_ok_bg_drawn       = False   # securite : force full redraw si ecran efface par un autre etat
-_ok_prev_bus_color = None    # suivi couleur pour draw_ok() incremental
+_ok_bg_drawn       = False   # safety: forces full redraw if screen cleared by another state
+_ok_prev_bus_color = None    # color tracking for incremental draw_ok()
 
 
 def reset_animations():
-    """Appeler quand on quitte un etat anime pour forcer un full redraw au retour.
-    Doit etre appele par tous les ecrans qui font tft.fill(BLACK), sauf draw_ok lui-meme."""
+    """Call when leaving an animated state to force a full redraw on return.
+    Must be called by all screens that call tft.fill(BLACK), except draw_ok itself."""
     global _booting_bg_drawn, _locked_bg_drawn, _ok_bg_drawn
     _booting_bg_drawn = False
     _locked_bg_drawn  = False
-    _ok_bg_drawn      = False   # l'ecran OK devra etre redessinee en entier
+    _ok_bg_drawn      = False   # the OK screen will need to be fully redrawn
 
 
 # ------------------------------------------------------------------
@@ -163,7 +163,7 @@ def _text_center(tft, txt, y, color, font=None):
 
 
 def _draw_ring(tft, cx, cy, r, thickness, color):
-    """Anneau via fill_rect — utilise isqrt pour eviter math.sqrt."""
+    """Ring via fill_rect — uses isqrt to avoid math.sqrt."""
     r_inner = r - thickness
     r2_outer = r * r
     r2_inner = r_inner * r_inner
@@ -193,11 +193,11 @@ def _progress_bar(tft, x, y, w, h, pct, color):
 
 
 # ------------------------------------------------------------------
-# Ecrans
+# Screens
 # ------------------------------------------------------------------
 
 def draw_booting(tft, full=False):
-    """Cercle anime orange (comete 12 points) — full=True force redraw complet."""
+    """Animated orange circle (12-dot comet) — full=True forces complete redraw."""
     global _spin_frame, _booting_bg_drawn
     _spin_frame = (_spin_frame + 1) % _N_TICKS
 
@@ -210,15 +210,15 @@ def draw_booting(tft, full=False):
             tft.fill_rect(tx, ty, tw, th, DK_GRAY)
         _booting_bg_drawn = True
 
-    # Mise a jour incrementale — 4 fill_rect par frame
-    # Le dernier _ARC_COLORS est DK_GRAY => efface automatiquement la queue
+    # Incremental update — 4 fill_rect per frame
+    # The last _ARC_COLORS entry is DK_GRAY => automatically erases the tail
     for i, col in enumerate(_ARC_COLORS):
         tx, ty, tw, th = _TICKS[(_spin_frame - i) % _N_TICKS]
         tft.fill_rect(tx, ty, tw, th, col)
 
 
 def draw_locked(tft, full=False):
-    """Cadenas rouge clignotant — full=True force redraw complet."""
+    """Blinking red padlock — full=True forces complete redraw."""
     global _spin_frame, _locked_bg_drawn
     _spin_frame = (_spin_frame + 1) % 4
     visible     = _spin_frame < 2
@@ -226,14 +226,14 @@ def draw_locked(tft, full=False):
 
     if full or not _locked_bg_drawn:
         tft.fill(BLACK)
-        reset_animations()   # l'ecran OK devra etre redessinee en entier au prochain retour
+        reset_animations()   # the OK screen will need full redraw on next return
         _text_center(tft, 'SYSTEM STATUS:', 36, RED)
-        # Corps cadenas
+        # Padlock body
         tft.fill_rect(CENTER_X - 20, CENTER_Y - 8, 40, 30, RED)
         tft.fill_rect(CENTER_X - 13, CENTER_Y - 2, 26, 18, BLACK)
-        # Trou de serrure
+        # Keyhole
         tft.fill_rect(CENTER_X - 3, CENTER_Y + 2, 7, 10, RED)
-        # Anse
+        # Shackle
         arc_r = 16
         for dy in range(-arc_r, 0):
             r2 = arc_r * arc_r - dy * dy
@@ -247,20 +247,20 @@ def draw_locked(tft, full=False):
         _text_center(tft, 'MOTORS STOPPED',     CENTER_Y + 72, GRAY)
         _locked_bg_drawn = True
 
-    # Seul l'anneau clignote — mise a jour incrementale
+    # Only the ring blinks — incremental update
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, 8, ring_color)
 
 
 def draw_ok(tft, version, bus_pct=100.0, full=False):
-    """Redraw complet si full=True ou _ok_bg_drawn=False, sinon incremental (bus update).
-    NE PAS appeler reset_animations() ici — c'est le role des autres ecrans."""
+    """Full redraw if full=True or _ok_bg_drawn=False, otherwise incremental (bus update).
+    Do NOT call reset_animations() here — that is the role of the other screens."""
     global _ok_prev_bus_color, _ok_bg_drawn
     bus_color     = GREEN if bus_pct >= 80.0 else ORANGE
     color_changed = (bus_color != _ok_prev_bus_color)
     _ok_prev_bus_color = bus_color
 
     if full or not _ok_bg_drawn:
-        # Redraw complet — changement d'etat OU securite si ecran efface par un autre etat
+        # Full redraw — state change OR safety if screen cleared by another state
         tft.fill(BLACK)
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
         _text_center(tft, 'SYSTEM STATUS:', 50, GREEN)
@@ -273,56 +273,56 @@ def draw_ok(tft, version, bus_pct=100.0, full=False):
         _text_center(tft, '< swipe >  TELEM', 164, GRAY)
         _ok_bg_drawn = True
     elif color_changed:
-        # Couleur franchit le seuil 80% : redessiner anneau + label uniquement
+        # Color crosses the 80% threshold: redraw ring + label only
         _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, bus_color)
-        # Effacer seulement la largeur du texte "UART BUS HEALTH" (15c×8=120px, cx=120)
+        # Clear only the width of "UART BUS HEALTH" text (15c×8=120px, cx=120)
         tft.fill_rect(56, 106, 128, 9, BLACK)
         _text_center(tft, 'UART BUS HEALTH', 106, bus_color)
 
-    # Parties dynamiques : toujours mises a jour sans effacer tout l'ecran
+    # Dynamic parts: always updated without clearing the whole screen
     _progress_bar(tft, 34, 118, 172, 10, bus_pct / 100.0, bus_color)
     tft.fill_rect(CENTER_X - 24, 133, 48, 9, BLACK)
     _text_center(tft, '{:.0f}%'.format(bus_pct), 133, bus_color)
     if bus_pct < 80.0:
-        _text_center(tft, 'PARASITES DETECTES', 147, ORANGE)
+        _text_center(tft, 'INTERFERENCE DETECTED', 147, ORANGE)
     elif not full:
-        # Effacer seulement la largeur du texte "PARASITES DETECTES" (18c×8=144px, cx=120)
+        # Clear only the width of "INTERFERENCE DETECTED" text (18c×8=144px, cx=120)
         tft.fill_rect(44, 147, 152, 9, BLACK)
-    # NOTE: PAS de reset_animations() ici — draw_ok ne doit pas reset les flags des autres ecrans
+    # NOTE: NO reset_animations() here — draw_ok must not reset the other screens' flags
 
 
 def _draw_antenna(tft, cx, cy, color):
-    """Antenne avec 3 ondes — dessin en primitives."""
-    # Mat vertical
+    """Antenna with 3 waves — drawn with primitives."""
+    # Vertical mast
     tft.fill_rect(cx - 1, cy - 28, 3, 28, color)
-    # 3 arcs d'onde (approximes par des arcs de cercle horizontaux)
+    # 3 wave arcs (approximated by horizontal circle arcs)
     for r, dy_offset in [(10, -28), (17, -32), (24, -36)]:
         for dy in range(-r // 3, r // 3 + 1):
             dx = int((r * r - dy * dy * 9) ** 0.5) if r * r >= dy * dy * 9 else 0
             if dx > 0:
                 tft.fill_rect(cx - dx, cy + dy_offset + r // 3 + dy, dx * 2, 1, color)
                 break
-        # Approche plus simple : juste des barres horizontales etagees
+        # Simpler approach: just staggered horizontal bars
     tft.fill_rect(cx -  8, cy - 22, 16, 2, color)
     tft.fill_rect(cx - 14, cy - 28, 28, 2, color)
     tft.fill_rect(cx - 20, cy - 34, 40, 2, color)
-    # Point base
+    # Base point
     tft.fill_rect(cx - 3, cy, 7, 3, color)
 
 
 def draw_net(tft, sub_state):
     tft.fill(BLACK)
-    reset_animations()   # l'ecran OK devra etre redessinee en entier au prochain retour
+    reset_animations()   # the OK screen will need full redraw on next return
     parts = sub_state.split(':') if sub_state else []
     cmd   = parts[0].upper() if parts else ''
-    # Couleur selon etat : ORANGE pour HOME FALLBACK (mode degrade), BLUE pour reconnexion normale
+    # Color by state: ORANGE for HOME FALLBACK (degraded mode), BLUE for normal reconnection
     if cmd in ('HOME_TRY', 'HOME'):
         net_color = ORANGE
         ring_w    = 5
     elif cmd == 'OK':
         net_color = GREEN
         ring_w    = 5
-    else:   # SCANNING, AP, autre
+    else:   # SCANNING, AP, other
         net_color = BLUE
         ring_w    = 6
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, ring_w, net_color)
@@ -371,7 +371,7 @@ def draw_telemetry(tft, voltage, temp):
     tft.fill(BLACK)
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, 4, BLUE)
     _text_center(tft, 'TELEMETRY', 34, BLUE)
-    # Tension
+    # Voltage
     v_str     = '{:.1f}V'.format(voltage)
     _text_center(tft, v_str, 52, WHITE)
     v_pct     = max(0.0, min(1.0, (voltage - 20.0) / 9.4))
@@ -391,7 +391,7 @@ def draw_telemetry(tft, voltage, temp):
 
 
 def draw_boot(tft):
-    """Splash initial legacy."""
+    """Legacy initial splash screen."""
     tft.fill(BLACK)
     _draw_ring(tft, CENTER_X, CENTER_Y, 115, 6, ORANGE)
     tft.fill_rect(CENTER_X - 55, CENTER_Y - 75, 110, 60, WHITE)

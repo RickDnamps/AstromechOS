@@ -29,13 +29,13 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 Dashboard Preview — serveur local pour visualiser le dashboard sans Pi.
-Utilise uniquement la librairie standard Python (pas de Flask requis).
+R2-D2 Dashboard Preview — local server to visualise the dashboard without a Pi.
+Uses only the Python standard library (no Flask required).
 
 Usage:
     python preview.py
 
-Puis ouvrir http://localhost:5000 dans ton navigateur.
+Then open http://localhost:5000 in your browser.
 """
 
 import sys
@@ -50,7 +50,7 @@ TEMPLATE = os.path.join(BASE, 'master', 'templates', 'index.html')
 STATIC   = os.path.join(BASE, 'master', 'static')
 
 # ---------------------------------------------------------------------------
-# Fausses données API — simule le Pi Master
+# Fake API data — simulates the Pi Master
 # ---------------------------------------------------------------------------
 
 FAKE_STATUS = {
@@ -110,7 +110,7 @@ FAKE_SCRIPTS = {
     "scripts": ["patrol", "celebrate", "cantina", "leia"]
 }
 
-# Sons simulés — noms réels tirés de sounds_index.json (patterns CLAUDE.md)
+# Simulated sounds — real names taken from sounds_index.json (patterns CLAUDE.md)
 FAKE_SOUNDS = {
     "happy":   [f"Happy{i:03d}" for i in range(1, 21)],
     "sad":     [f"Sad__{i:03d}" for i in range(1, 21)],
@@ -152,7 +152,7 @@ FAKE_WIFI_NETWORKS = {
 class PreviewHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
-        # Afficher seulement les requêtes non-statiques
+        # Display only non-static requests
         if not self.path.startswith('/static'):
             print(f"  {self.command:4s} {self.path}")
 
@@ -166,7 +166,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_ok(self):
-        self.send_json({"ok": True, "message": "Preview mode — commande simulée"})
+        self.send_json({"ok": True, "message": "Preview mode — simulated command"})
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -183,7 +183,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif path.startswith('/static/'):
             self.serve_static(path[len('/static/'):])
         elif path == '/status':
-            # Simuler uptime dynamique
+            # Simulate dynamic uptime
             FAKE_STATUS['uptime'] = int(time.time()) % 86400
             self.send_json(FAKE_STATUS)
         elif path == '/audio/categories':
@@ -226,7 +226,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         except Exception:
             data = {}
 
-        # Simuler quelques réponses spécifiques
+        # Simulate a few specific responses
         if path == '/audio/play':
             self.send_json({"ok": True, "playing": data.get("sound", "unknown")})
         elif path == '/audio/random':
@@ -236,7 +236,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif path == '/teeces/text':
             self.send_json({"ok": True, "text": data.get("text", "")})
         elif path in ('/system/reboot', '/system/shutdown', '/system/reboot_slave'):
-            self.send_json({"ok": False, "message": "Preview mode — reboot désactivé"})
+            self.send_json({"ok": False, "message": "Preview mode — reboot disabled"})
         else:
             self.send_ok()
 
@@ -245,13 +245,13 @@ class PreviewHandler(BaseHTTPRequestHandler):
             with open(TEMPLATE, 'r', encoding='utf-8') as f:
                 html = f.read()
 
-            # Remplacer les appels Flask url_for par des chemins directs
+            # Replace Flask url_for calls with direct paths
             html = re.sub(
                 r"\{\{\s*url_for\(\s*'static'\s*,\s*filename\s*=\s*'([^']+)'\s*\)\s*\}\}",
                 r'/static/\1',
                 html
             )
-            # Remplacer aussi les variables Jinja2 restantes par des valeurs vides
+            # Also replace remaining Jinja2 variables with empty values
             html = re.sub(r"\{\{[^}]+\}\}", '', html)
             html = re.sub(r"\{%[^%]+%\}", '', html)
 
@@ -265,7 +265,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_response(500)
             self.end_headers()
-            msg = f"Fichier non trouvé: {TEMPLATE}".encode()
+            msg = f"File not found: {TEMPLATE}".encode()
             self.wfile.write(msg)
         except Exception as e:
             self.send_response(500)
@@ -273,7 +273,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self.wfile.write(str(e).encode())
 
     def serve_static(self, filepath):
-        # Sécurité : pas de path traversal
+        # Security: no path traversal
         filepath = filepath.replace('..', '').lstrip('/')
         full = os.path.join(STATIC, filepath.replace('/', os.sep))
 
@@ -312,14 +312,14 @@ if __name__ == '__main__':
     print("  ║   R2-D2 Dashboard — Preview      ║")
     print("  ╚══════════════════════════════════╝")
     print()
-    print(f"  Ouvre dans ton navigateur :")
+    print(f"  Open in your browser:")
     print(f"  → http://localhost:{port}")
     print()
-    print("  (Ctrl+C pour arrêter)")
+    print("  (Ctrl+C to stop)")
     print()
 
     server = HTTPServer(('localhost', port), PreviewHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n  Arrêté.")
+        print("\n  Stopped.")
