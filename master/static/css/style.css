@@ -33,6 +33,8 @@
 
 :root {
   --bg:        #080c14;
+  --bg2:       #0a1020;
+  --bg3:       #0c1428;
   --bg-card:   rgba(8, 18, 35, 0.92);
   --bg-hover:  rgba(0, 170, 255, 0.08);
   --blue:      #00aaff;
@@ -44,7 +46,9 @@
   --text:      #c8d8ea;
   --text-dim:  #4a6a8a;
   --border:    rgba(0, 170, 255, 0.18);
+  --border2:   rgba(0, 170, 255, 0.15);
   --border-hi: rgba(0, 170, 255, 0.45);
+  --amber:     #ffb300;
   --glow:      0 0 14px rgba(0, 170, 255, 0.35);
   --glow-cyan: 0 0 14px rgba(0, 255, 234, 0.3);
   --glow-red:  0 0 18px rgba(255, 34, 68, 0.6);
@@ -2487,3 +2491,220 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 /* Sortable drag ghost */
 .sortable-ghost { opacity: 0.3; }
 .sortable-chosen { box-shadow: 0 0 0 2px #00aaff55; }
+
+/* ================================================================
+   CHOREO TAB — Timeline Editor
+================================================================ */
+
+.chor-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.chor-topbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
+}
+
+.chor-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Track label column */
+.chor-labels {
+  width: 120px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+}
+.chor-label-spacer { height: 28px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.chor-track-label {
+  height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  border-bottom: 1px solid rgba(0,170,255,.07);
+  flex-shrink: 0;
+  gap: 5px;
+  cursor: default;
+}
+.chor-track-label-dome { height: 60px; }
+
+/* Scrollable timeline */
+.chor-scroll-wrap {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+}
+
+.chor-canvas {
+  position: relative;
+  min-width: 100%;
+  height: 100%;
+}
+
+/* Ruler */
+.chor-ruler {
+  height: 28px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  flex-shrink: 0;
+}
+.chor-tick {
+  position: absolute;
+  top: 0; bottom: 0;
+  border-left: 1px solid var(--border2);
+  padding: 4px 3px 0;
+  font-size: 8px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.chor-tick.major { border-left-color: var(--border); color: var(--text); }
+
+/* Track lanes */
+.chor-lane {
+  height: 36px;
+  position: relative;
+  border-bottom: 1px solid rgba(0,170,255,.07);
+  background: var(--bg2);
+  overflow: visible;
+}
+.chor-lane-dome { height: 60px; }
+
+/* Blocks */
+.chor-block {
+  position: absolute;
+  top: 4px; bottom: 4px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.1);
+  padding: 0 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  user-select: none;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 20px;
+  box-sizing: border-box;
+}
+.chor-block:active { cursor: grabbing; }
+.chor-block.selected { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+.chor-block[data-track="audio"]       { background: rgba(0,170,255,.18); color:#00aaff; border-color:rgba(0,170,255,.4); }
+.chor-block[data-track="lights"]      { background: rgba(255,179,0,.16);  color:#ffb300; border-color:rgba(255,179,0,.4); }
+.chor-block[data-track="lights"][data-mode="alarm"]  { background:rgba(255,51,85,.2);   color:#ff3355; border-color:rgba(255,51,85,.5); }
+.chor-block[data-track="lights"][data-mode="disco"]  { background:rgba(170,85,255,.2);  color:#aa55ff; border-color:rgba(170,85,255,.5); }
+.chor-block[data-track="servos"]      { background: rgba(0,255,136,.14);  color:#00ff88; border-color:rgba(0,255,136,.35); }
+.chor-block[data-track="propulsion"]  { background: rgba(255,119,0,.18);  color:#ff7700; border-color:rgba(255,119,0,.4); }
+
+/* Block resize handle */
+.chor-block-resize {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  background: rgba(255,255,255,.08);
+  border-radius: 0 3px 3px 0;
+  flex-shrink: 0;
+}
+
+/* Markers */
+.chor-marker {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 1px;
+  background: var(--amber);
+  opacity: .7;
+  pointer-events: none;
+  z-index: 5;
+}
+.chor-marker-label {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-size: 7px;
+  color: var(--amber);
+  letter-spacing: .8px;
+  white-space: nowrap;
+  text-shadow: 0 0 6px var(--amber);
+}
+
+/* Playhead */
+.chor-playhead {
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  width: 2px;
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  z-index: 10;
+  pointer-events: none;
+  left: 0;
+}
+.chor-playhead-head {
+  position: absolute;
+  top: -6px;
+  left: -5px;
+  width: 12px;
+  height: 6px;
+  background: var(--red);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+
+/* Properties panel */
+.chor-props {
+  width: 200px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-card);
+  overflow-y: auto;
+}
+.chor-props-title {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: var(--blue);
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.chor-prop-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(0,170,255,.06);
+  font-size: 10px;
+}
+.chor-prop-key { color: var(--text-dim); font-size: 8px; letter-spacing: 1px; }
+.chor-prop-val { color: var(--blue); font-family: monospace; font-size: 11px; }
+.chor-prop-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--blue);
+  font-family: monospace;
+  font-size: 11px;
+  padding: 2px 6px;
+  width: 80px;
+  text-align: right;
+}
