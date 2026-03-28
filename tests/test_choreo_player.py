@@ -258,3 +258,64 @@ def test_export_scr_propulsion():
     lines = [l for l in player.export_scr(chor).splitlines() if l and not l.startswith('#')]
     assert any('motion,0.5,0.5' in l for l in lines)
     assert 'motion,stop' in lines
+
+
+# ── Telemetry getter injection ─────────────────────────────────────────────────
+
+import configparser
+
+def _make_cfg(**overrides):
+    """ConfigParser with test-friendly choreo defaults."""
+    cfg = configparser.ConfigParser()
+    cfg['choreo'] = {
+        'audio_latency':        '0.0',
+        'telem_check_interval': '0.5',
+        'uart_fail_threshold':  '3',
+        'vesc_min_voltage':     '20.0',
+        'vesc_max_temp':        '80.0',
+        'vesc_max_current':     '30.0',
+        **{k: str(v) for k, v in overrides.items()},
+    }
+    return cfg
+
+
+def test_telem_getter_stored():
+    getter = lambda: {'L': None, 'R': None}
+    player = ChoreoPlayer(
+        cfg=None, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+        telem_getter=getter,
+    )
+    assert player._telem_getter is getter
+
+
+def test_threshold_defaults_when_cfg_none():
+    player = ChoreoPlayer(
+        cfg=None, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+    )
+    assert player._vesc_min_voltage  == pytest.approx(20.0)
+    assert player._vesc_max_temp     == pytest.approx(80.0)
+    assert player._vesc_max_current  == pytest.approx(30.0)
+    assert player._uart_fail_threshold == 3
+    assert player._telem_check_interval == pytest.approx(0.5)
+
+
+def test_threshold_read_from_cfg():
+    cfg = _make_cfg(vesc_min_voltage='18.0', vesc_max_temp='70.0', vesc_max_current='25.0')
+    player = ChoreoPlayer(
+        cfg=cfg, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+    )
+    assert player._vesc_min_voltage  == pytest.approx(18.0)
+    assert player._vesc_max_temp     == pytest.approx(70.0)
+    assert player._vesc_max_current  == pytest.approx(25.0)
+
+
+def test_get_status_has_abort_reason_and_telem_fields():
+    player = _make_player()
+    status = player.get_status()
+    assert 'abort_reason' in status
+    assert 'telem' in status
+    assert status['abort_reason'] is None
+    assert status['telem'] is None

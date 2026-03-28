@@ -56,7 +56,7 @@ class ChoreoPlayer:
     """
 
     def __init__(self, cfg, audio, teeces, dome_motor, dome_servo,
-                 body_servo, vesc=None, audio_latency=None):
+                 body_servo, vesc=None, telem_getter=None, audio_latency=None):
         # Resolve audio latency: explicit arg > cfg > default
         if audio_latency is not None:
             self._latency = float(audio_latency)
@@ -71,15 +71,38 @@ class ChoreoPlayer:
         self._dome_servo = dome_servo
         self._body_servo = body_servo
         self._vesc       = vesc
+        self._telem_getter = telem_getter
+
+        # Threshold config
+        if cfg is not None:
+            self._telem_check_interval = cfg.getfloat('choreo', 'telem_check_interval', fallback=0.5)
+            self._uart_fail_threshold  = cfg.getint('choreo',   'uart_fail_threshold',  fallback=3)
+            self._vesc_min_voltage     = cfg.getfloat('choreo', 'vesc_min_voltage',     fallback=20.0)
+            self._vesc_max_temp        = cfg.getfloat('choreo', 'vesc_max_temp',        fallback=80.0)
+            self._vesc_max_current     = cfg.getfloat('choreo', 'vesc_max_current',     fallback=30.0)
+        else:
+            self._telem_check_interval = 0.5
+            self._uart_fail_threshold  = 3
+            self._vesc_min_voltage     = 20.0
+            self._vesc_max_temp        = 80.0
+            self._vesc_max_current     = 30.0
+
+        # Runtime state — reset on each play()
+        self._drive_fail_count: int       = 0
+        self._abort_reason: str | None    = None
+        self._last_telem: dict | None     = None
+        self._last_telem_check: float     = 0.0
 
         self._stop_flag  = threading.Event()
         self._thread: threading.Thread | None = None
         self._status_lock = threading.Lock()
         self._status = {
-            'playing':  False,
-            'name':     None,
-            't_now':    0.0,
-            'duration': 0.0,
+            'playing':      False,
+            'name':         None,
+            't_now':        0.0,
+            'duration':     0.0,
+            'abort_reason': None,
+            'telem':        None,
         }
 
     # ── Public API ────────────────────────────────────────────────────────────
