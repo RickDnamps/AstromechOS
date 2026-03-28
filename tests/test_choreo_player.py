@@ -319,3 +319,99 @@ def test_get_status_has_abort_reason_and_telem_fields():
     assert 'telem' in status
     assert status['abort_reason'] is None
     assert status['telem'] is None
+
+
+# ── UART fail-safe ─────────────────────────────────────────────────────────────
+
+class _FailVesc:
+    """Mock VESC whose drive() always returns False."""
+    def drive(self, l, r): return False
+    def stop(self): pass
+
+
+class _OkVesc:
+    """Mock VESC whose drive() always returns True."""
+    def drive(self, l, r): return True
+    def stop(self): pass
+
+
+def _chor_with_propulsion(events_list, duration=5.0):
+    """Minimal .chor dict with the given propulsion events."""
+    return {
+        'meta': {'name': 'uart_test', 'duration': duration},
+        'tracks': {
+            'audio': [], 'lights': [], 'dome': [],
+            'servos': [], 'markers': [],
+            'propulsion': events_list,
+        },
+    }
+
+
+def test_uart_failsafe_aborts_after_threshold():
+    """3 consecutive drive() False → abort_reason='uart_loss'."""
+    player = ChoreoPlayer(
+        cfg=None, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+        vesc=_FailVesc(), audio_latency=0.0,
+    )
+    chor = _chor_with_propulsion([
+        {'t': 0.00, 'left': 0.3, 'right': 0.3},
+        {'t': 0.05, 'left': 0.3, 'right': 0.3},
+        {'t': 0.10, 'left': 0.3, 'right': 0.3},
+    ])
+    player.play(chor)
+    player._thread.join(timeout=2.0)
+
+    assert not player.is_playing()
+    assert player.get_status()['abort_reason'] == 'uart_loss'
+
+
+def test_uart_failsafe_resets_counter_on_success():
+    """2 failures then 1 success resets counter — no abort."""
+    call_count = {'n': 0}
+
+    class _FlakyVesc:
+        def drive(self, l, r):
+            call_count['n'] += 1
+            return call_count['n'] != 1 and call_count['n'] != 2  # fail on calls 1+2, succeed on 3+
+        def stop(self): pass
+
+    player = ChoreoPlayer(
+        cfg=None, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+        vesc=_FlakyVesc(), audio_latency=0.0,
+    )
+    chor = _chor_with_propulsion([
+        {'t': 0.00, 'left': 0.3, 'right': 0.3},
+        {'t': 0.05, 'left': 0.3, 'right': 0.3},
+        {'t': 0.10, 'left': 0.3, 'right': 0.3},
+    ], duration=0.3)
+    player.play(chor)
+    player._thread.join(timeout=2.0)
+
+    # Choreo ran to completion (duration 0.3s), not aborted
+    assert player.get_status()['abort_reason'] is None
+
+
+def test_abort_reason_resets_on_next_play():
+    """abort_reason from previous run is cleared on play()."""
+    player = ChoreoPlayer(
+        cfg=None, audio=None, teeces=None,
+        dome_motor=None, dome_servo=None, body_servo=None,
+        vesc=_FailVesc(), audio_latency=0.0,
+    )
+    chor = _chor_with_propulsion([
+        {'t': 0.00, 'left': 0.3, 'right': 0.3},
+        {'t': 0.05, 'left': 0.3, 'right': 0.3},
+        {'t': 0.10, 'left': 0.3, 'right': 0.3},
+    ])
+    player.play(chor)
+    player._thread.join(timeout=2.0)
+    assert player.get_status()['abort_reason'] == 'uart_loss'
+
+    # Second play with a working VESC
+    player._vesc = _OkVesc()
+    chor2 = _chor_with_propulsion([], duration=0.1)
+    player.play(chor2)
+    player._thread.join(timeout=2.0)
+    assert player.get_status()['abort_reason'] is None

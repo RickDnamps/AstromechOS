@@ -126,6 +126,10 @@ class ChoreoPlayer:
         if self.is_playing():
             log.warning("ChoreoPlayer: already playing, stop first")
             return False
+        self._drive_fail_count = 0
+        self._abort_reason     = None
+        self._last_telem       = None
+        self._last_telem_check = 0.0
         self._stop_flag.clear()
         self._thread = threading.Thread(
             target=self._run, args=(chor,),
@@ -240,9 +244,14 @@ class ChoreoPlayer:
 
             self._stop_flag.wait(timeout=TICK)
 
-        with self._status_lock:
-            self._status.update({'playing': False, 't_now': 0.0})
         self._safe_stop_all()
+        with self._status_lock:
+            self._status.update({
+                'playing':      False,
+                't_now':        0.0,
+                'abort_reason': self._abort_reason,
+                'telem':        self._last_telem,
+            })
 
     def _dispatch(self, ev: dict) -> None:
         try:
@@ -294,11 +303,23 @@ class ChoreoPlayer:
                     return
                 if ev.get('action') == 'stop':
                     self._vesc.drive(0.0, 0.0)
+                    self._drive_fail_count = 0
                 else:
-                    self._vesc.drive(
+                    ok = self._vesc.drive(
                         float(ev.get('left', 0.0)),
                         float(ev.get('right', 0.0)),
                     )
+                    if ok:
+                        self._drive_fail_count = 0
+                    else:
+                        self._drive_fail_count += 1
+                        if self._drive_fail_count >= self._uart_fail_threshold:
+                            log.error(
+                                f"ChoreoPlayer: UART lost — {self._drive_fail_count} consecutive "
+                                f"failures — ABORT [{self._status.get('name')}]"
+                            )
+                            self._abort_reason = 'uart_loss'
+                            self._stop_flag.set()
 
         except Exception as e:
             log.error(f"Choreo dispatch error [{ev.get('track')} t={ev.get('t')}]: {e}")
