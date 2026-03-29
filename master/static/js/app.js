@@ -4583,10 +4583,16 @@ const choreoEditor = (() => {
     const el = document.getElementById('chor-inspector-title');
     if (!el) return;
     const label = _inspectorLabel(track, item);
-    el.textContent = `${track.toUpperCase()} : ${label}`;
     const c = _TRACK_COLOR[track] || '#00ccff';
     el.style.color = c;
     el.style.textShadow = `0 0 10px ${c}88`;
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'space-between';
+    el.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${track.toUpperCase()} : ${label}</span>
+      <button onclick="choreoEditor._deleteSelected()"
+        style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
+        title="Delete block">✕</button>`;
   }
 
   function _clearInspectorTitle() {
@@ -4595,6 +4601,19 @@ const choreoEditor = (() => {
     el.textContent = 'NO BLOCK SELECTED';
     el.style.color = 'rgba(0,170,255,.25)';
     el.style.textShadow = 'none';
+  }
+
+  function _deleteBlock(track, idx) {
+    if (!_chor || !_chor.tracks[track] || _chor.tracks[track][idx] == null) return;
+    _chor.tracks[track].splice(idx, 1);
+    _dirty = true; _selected = null;
+    _clearInspectorTitle();
+    const panel = document.getElementById('chor-props-content');
+    if (panel) panel.innerHTML = '<span style="color:var(--text-dim);font-size:10px">Select a block to inspect.</span>';
+    const ew = document.getElementById('chor-easing-wrap');
+    if (ew) ew.style.display = 'none';
+    _renderTrack(track);
+    _refreshLayout();
   }
 
   function _renderDomeLane(keyframes) {
@@ -4763,14 +4782,32 @@ const choreoEditor = (() => {
 
   function _startDrag(e, block, track, idx) {
     const startX = e.clientX, startLeft = parseFloat(block.style.left) || 0;
+    const scroll = document.getElementById('chor-scroll');
     const onMove = e2 => {
       const newT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX)));
       block.style.left = _px(newT) + 'px';
       _chor.tracks[track][idx].t = newT;
       _dirty = true;
       _updatePropsPanel(track, idx);
+      // Visual cue: dim block when dragged outside lane area
+      if (scroll) {
+        const r = scroll.getBoundingClientRect();
+        block.style.opacity = (e2.clientY < r.top || e2.clientY > r.bottom) ? '0.3' : '1';
+      }
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _refreshLayout(); };
+    const onUp = e2 => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (scroll) {
+        const r = scroll.getBoundingClientRect();
+        if (e2.clientY < r.top || e2.clientY > r.bottom) {
+          _deleteBlock(track, idx);
+          return;
+        }
+      }
+      block.style.opacity = '1';
+      _refreshLayout();
+    };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
@@ -5068,6 +5105,16 @@ const choreoEditor = (() => {
       _initPalette();
       _addDropToLanes();
 
+      // Delete/Backspace removes the selected block (skip when typing in an input)
+      document.addEventListener('keydown', e => {
+        if (!_selected) return;
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          _deleteBlock(_selected.track, _selected.idx);
+        }
+      });
+
       // Pre-fetch dropdown data (non-blocking — failures are silent)
       Promise.all([
         // Audio: disk scan is authoritative; fall back to index for grouped display
@@ -5218,6 +5265,10 @@ const choreoEditor = (() => {
       if (track === 'dome' && _chor) _renderDomeLane(_chor.tracks.dome);
       if (_selected && _selected.track === track && _selected.idx === idx)
         _setInspectorTitle(track, item);
+    },
+
+    _deleteSelected() {
+      if (_selected) _deleteBlock(_selected.track, _selected.idx);
     },
 
     // Called from inline onchange on select elements
