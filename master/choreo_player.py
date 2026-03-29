@@ -28,28 +28,6 @@ def _ease(t: float, name: str) -> float:
     return _EASINGS.get(name, _EASINGS['linear'])(t)
 
 
-def _interpolate(t_now: float, keyframes: list) -> float:
-    """Interpolate power value from keyframe list at time t_now.
-    Keyframes must have 'power' (range -100..100) and 't' fields.
-    """
-    if not keyframes:
-        return 0.0
-    if t_now <= keyframes[0]['t']:
-        return float(keyframes[0].get('power', 0.0))
-    if t_now >= keyframes[-1]['t']:
-        return float(keyframes[-1].get('power', 0.0))
-    for i in range(len(keyframes) - 1):
-        kf0, kf1 = keyframes[i], keyframes[i + 1]
-        if kf0['t'] <= t_now <= kf1['t']:
-            span = kf1['t'] - kf0['t']
-            if span <= 0:
-                return float(kf1.get('power', 0.0))
-            p0 = kf0.get('power', 0.0)
-            p1 = kf1.get('power', 0.0)
-            progress = _ease((t_now - kf0['t']) / span, kf1.get('easing', 'linear'))
-            return p0 + (p1 - p0) * progress
-    return float(keyframes[-1].get('power', 0.0))
-
 
 # ── ChoreoPlayer ──────────────────────────────────────────────────────────────
 
@@ -177,6 +155,17 @@ class ChoreoPlayer:
                     'action': 'mode', 'mode': 'random', '_auto_restore': True,
                 })
 
+        # Dome — shifted; auto-stop after duration (ms → seconds)
+        for ev in tracks.get('dome', []):
+            events.append({**ev, 'track': 'dome', 't': ev['t'] + lat})
+            dur_ms = ev.get('duration', 0)
+            if dur_ms and dur_ms > 0:
+                events.append({
+                    'track': 'dome', 'power': 0.0,
+                    't': ev['t'] + (dur_ms / 1000.0) + lat,
+                    '_auto_stop': True,
+                })
+
         # Servos — shifted
         for ev in tracks.get('servos', []):
             events.append({**ev, 'track': 'servos', 't': ev['t'] + lat})
@@ -199,7 +188,6 @@ class ChoreoPlayer:
         name     = chor['meta']['name']
         duration = float(chor['meta']['duration'])
         events   = self._build_event_queue(tracks)
-        dome_kf  = tracks.get('dome', [])
 
         ev_idx = 0
 
@@ -215,15 +203,6 @@ class ChoreoPlayer:
             while ev_idx < len(events) and events[ev_idx]['t'] <= t_now:
                 self._dispatch(events[ev_idx])
                 ev_idx += 1
-
-            # Update dome motor (direct power interpolation, -100..100 → -1.0..1.0)
-            if dome_kf and self._dome_motor:
-                power_val = _interpolate(t_now, dome_kf)
-                speed = max(-1.0, min(1.0, power_val / 100.0))
-                try:
-                    self._dome_motor.set_speed(speed)
-                except Exception as e:
-                    log.warning(f"Choreo dome error: {e}")
 
             # Check telemetry thresholds
             if self._telem_getter and not self._stop_flag.is_set():
@@ -259,9 +238,17 @@ class ChoreoPlayer:
                 if not self._audio:
                     return
                 if ev['action'] == 'play':
-                    self._audio.play(ev['file'])
+                    # Send S:filename over UART → Slave plays via mpg123
+                    self._audio.send('S', ev.get('file', ''))
                 elif ev['action'] == 'stop':
-                    self._audio.stop()
+                    self._audio.send('S', 'STOP')
+
+            elif track == 'dome':
+                if not self._dome_motor:
+                    return
+                power_val = float(ev.get('power', 0.0))
+                speed = max(-1.0, min(1.0, power_val / 100.0))
+                self._dome_motor.set_speed(speed)
 
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
@@ -382,8 +369,9 @@ class ChoreoPlayer:
                 return
 
     def _safe_stop_all(self) -> None:
+        # NOTE: self._audio is UARTController — use send(), NEVER .stop() (that closes serial)
         for fn in [
-            lambda: self._audio.stop() if self._audio else None,
+            lambda: self._audio.send('S', 'STOP') if self._audio else None,
             lambda: self._teeces.all_off() if self._teeces else None,
             lambda: self._dome_motor.set_speed(0.0) if self._dome_motor else None,
             lambda: self._vesc.drive(0.0, 0.0) if self._vesc else None,

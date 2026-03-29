@@ -40,6 +40,7 @@ Endpoints:
 
 import json
 import os
+from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file, abort
 import master.registry as reg
 
@@ -136,6 +137,16 @@ def play_random():
     reg.audio_playing = True
     reg.audio_current = f'🎲 {category}'
     return jsonify({'status': 'ok', 'category': category})
+
+
+@audio_bp.get('/scan')
+def scan_sounds():
+    """Scan slave/sounds/ for all .mp3 files on disk — authoritative list regardless of index."""
+    try:
+        files = sorted(p.stem for p in Path(_SOUNDS_DIR).glob('*.mp3') if p.is_file())
+        return jsonify({'sounds': files, 'count': len(files)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @audio_bp.get('/file/<sound>')

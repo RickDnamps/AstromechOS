@@ -4098,7 +4098,8 @@ const choreoEditor = (() => {
   let _lastTelem   = null;
 
   // Cached data for inspector dropdowns — loaded once at init
-  let _audioIndex    = {};   // { category: [soundName, …] }
+  let _audioIndex    = {};   // { category: [soundName, …] } — from index
+  let _audioScanned  = [];   // [soundName, …] — from full disk scan (authoritative)
   let _servoList     = [];   // ['dome_panel_1', …]
   let _servoSettings = {};   // { 'dome_panel_1': {open:110, close:20, speed:10}, … }
   let _lightModes    = ['random','leia','alarm','disco','flash','off','scream','imperial'];
@@ -4112,7 +4113,7 @@ const choreoEditor = (() => {
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
     { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
-    { track:'dome',       label:'KF',     tpl:{ power:0, easing:'linear'                           } },
+    { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, easing:'linear'             } },
     { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
     { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
@@ -4710,8 +4711,12 @@ const choreoEditor = (() => {
 
     if (track === 'audio') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      // FILE — grouped dropdown from cached audio index
-      html += selectRow('FILE', 'file', _audioIndex, true);
+      // FILE — use disk scan (flat) when available, fall back to grouped index
+      if (_audioScanned.length) {
+        html += selectRow('FILE', 'file', Object.fromEntries(_audioScanned.map(s => [s, s])));
+      } else {
+        html += selectRow('FILE', 'file', _audioIndex, true);
+      }
       html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
 
     } else if (track === 'lights') {
@@ -4721,6 +4726,7 @@ const choreoEditor = (() => {
 
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
+      html += numRow('DURATION ms', 'duration', { min: 0, max: 10000, step: 100 });
       html += selectRow('EASING', 'easing', {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
       });
@@ -4917,15 +4923,18 @@ const choreoEditor = (() => {
 
       // Pre-fetch dropdown data (non-blocking — failures are silent)
       Promise.all([
+        // Audio: disk scan is authoritative; fall back to index for grouped display
+        api('/audio/scan').then(r => {
+          if (r && r.sounds) _audioScanned = r.sounds;
+        }).catch(() => {}),
         api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
         api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/settings').then(r => { if (r && r.panels) _servoSettings = r.panels; }),
+        // Lights: built-in JawaLite modes + custom .lseq files from disk
         api('/light/list').then(r => {
-          if (r && r.sequences && r.sequences.length) {
-            // Append custom .lseq names that aren't already in the built-in list
+          if (r && r.sequences && r.sequences.length)
             r.sequences.forEach(s => { if (!_lightModes.includes(s)) _lightModes.push(s); });
-          }
         }),
       ]).catch(() => {});
 
@@ -4951,7 +4960,7 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:30.0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], lights:[], dome:[{t:0,power:0,easing:'linear'},{t:30,power:0,easing:'linear'}], servos:[], propulsion:[], markers:[] }
+        tracks: { audio:[], lights:[], dome:[{t:0,power:0,duration:500,easing:'linear'},{t:30,power:0,duration:500,easing:'linear'}], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');
