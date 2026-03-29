@@ -4570,30 +4570,130 @@ const choreoEditor = (() => {
     const lane = _lane('dome');
     if (!lane) return;
     lane.innerHTML = '';
-    if (keyframes.length < 2) return;
+    if (!keyframes || keyframes.length < 2) return;
+
     const W = _px(_chor.meta.duration + 5), H = 56;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('width', W); svg.setAttribute('height', H);
-    svg.style.cssText = 'position:absolute;top:4px;left:0';
-    // Y-axis: power 0 → center, +100 → top, -100 → bottom
-    const pts = keyframes.map(kf => ({ x: _px(kf.t), y: H / 2 - ((kf.power ?? 0) / 100) * (H / 2 - 3) }));
-    let d = `M ${pts[0].x} ${pts[0].y}`;
-    for (let i = 1; i < pts.length; i++) {
-      const cp = (pts[i].x - pts[i - 1].x) / 2;
-      d += ` C ${pts[i-1].x + cp} ${pts[i-1].y} ${pts[i].x - cp} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;
+    svg.style.cssText = 'position:absolute;top:4px;left:0;overflow:visible';
+
+    // Y-axis: power 0 → center, +100 → top (y=3), -100 → bottom (y=H-3)
+    const powToY = p => H / 2 - (p / 100) * (H / 2 - 3);
+    const yToPow = y => Math.round(Math.max(-100, Math.min(100,
+      -(y - H / 2) / (H / 2 - 3) * 100)));
+
+    // Zero-power reference line (dashed)
+    const zl = document.createElementNS(NS, 'line');
+    zl.setAttribute('x1', 0); zl.setAttribute('y1', H / 2);
+    zl.setAttribute('x2', W); zl.setAttribute('y2', H / 2);
+    zl.setAttribute('stroke', 'rgba(204,68,255,0.22)');
+    zl.setAttribute('stroke-dasharray', '3 5');
+    svg.appendChild(zl);
+
+    // Build easing-aware path — cubic Bézier control points match CSS easing curves
+    function buildPath() {
+      const pts = keyframes.map(kf => [_px(kf.t), powToY(kf.power ?? 0)]);
+      let d = `M ${pts[0][0]} ${pts[0][1]}`;
+      for (let i = 1; i < pts.length; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        const dx = x1 - x0;
+        const ease = keyframes[i].easing || 'linear';
+        if (ease === 'linear') {
+          // Straight line — use L command (not C)
+          d += ` L ${x1} ${y1}`;
+        } else {
+          let cx1, cy1, cx2, cy2;
+          if      (ease === 'ease-in')     { cx1=x0+dx*0.42; cy1=y0; cx2=x1;         cy2=y1; }
+          else if (ease === 'ease-out')    { cx1=x0;         cy1=y0; cx2=x0+dx*0.58; cy2=y1; }
+          else /* ease-in-out (default) */ { cx1=x0+dx*0.42; cy1=y0; cx2=x0+dx*0.58; cy2=y1; }
+          d += ` C ${cx1} ${cy1} ${cx2} ${cy2} ${x1} ${y1}`;
+        }
+      }
+      return d;
     }
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d); path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', '#cc44ff'); path.setAttribute('stroke-width', '2');
-    svg.appendChild(path);
-    pts.forEach((p, i) => {
-      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', '5');
-      c.setAttribute('fill', '#cc44ff'); c.setAttribute('stroke', '#060910'); c.setAttribute('stroke-width', '2');
-      c.style.cursor = 'pointer';
+
+    // Glow halo behind the path
+    const pathGlow = document.createElementNS(NS, 'path');
+    pathGlow.setAttribute('fill', 'none');
+    pathGlow.setAttribute('stroke', 'rgba(204,68,255,0.18)');
+    pathGlow.setAttribute('stroke-width', '7');
+    pathGlow.setAttribute('d', buildPath());
+    svg.appendChild(pathGlow);
+
+    // Main power curve
+    const pathEl = document.createElementNS(NS, 'path');
+    pathEl.setAttribute('fill', 'none');
+    pathEl.setAttribute('stroke', '#cc44ff');
+    pathEl.setAttribute('stroke-width', '2');
+    pathEl.setAttribute('d', buildPath());
+    svg.appendChild(pathEl);
+
+    // Keyframe circles — vertically draggable, update power in real time
+    keyframes.forEach((kf, i) => {
+      const x = _px(kf.t);
+      const y = powToY(kf.power ?? 0);
+
+      // Power value label (shown above/below the circle)
+      const lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('x', x);
+      lbl.setAttribute('y', y - 8);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.setAttribute('fill', '#cc44ff');
+      lbl.setAttribute('font-size', '8');
+      lbl.setAttribute('font-family', 'Courier New');
+      lbl.textContent = `${kf.power ?? 0}%`;
+      svg.appendChild(lbl);
+
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', '5');
+      c.setAttribute('fill', '#cc44ff');
+      c.setAttribute('stroke', '#060910');
+      c.setAttribute('stroke-width', '2');
+      c.style.cursor = 'ns-resize';
+
+      c.addEventListener('mousedown', e => {
+        e.stopPropagation(); e.preventDefault();
+        const startMouseY = e.clientY;
+        const startPower  = kf.power ?? 0;
+        const startY      = powToY(startPower);
+        const svgRect     = svg.getBoundingClientRect();
+        const scale       = H / (svgRect.height || H);
+
+        const onMove = e2 => {
+          const dy       = (e2.clientY - startMouseY) * scale;
+          const newPower = yToPow(startY + dy);
+          kf.power       = newPower;
+          _dirty = true;
+
+          // Live update: move circle and label, redraw paths
+          const newY = powToY(newPower);
+          c.setAttribute('cy', newY);
+          lbl.setAttribute('y', newY - 8);
+          lbl.textContent = `${newPower}%`;
+          const d = buildPath();
+          pathEl.setAttribute('d', d);
+          pathGlow.setAttribute('d', d);
+
+          // Sync inspector if this KF is selected
+          if (_selected && _selected.track === 'dome' && _selected.idx === i)
+            _updatePropsPanel('dome', i);
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          _renderDomeLane(keyframes); // full re-render on release (clean state)
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+
+        _selectDomeKF(i);
+      });
+
       c.addEventListener('click', () => _selectDomeKF(i));
       svg.appendChild(c);
     });
+
     lane.appendChild(svg);
   }
 
