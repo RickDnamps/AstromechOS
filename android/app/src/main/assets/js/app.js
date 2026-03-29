@@ -4514,6 +4514,49 @@ const choreoEditor = (() => {
     return '?';
   }
 
+  // Per-track accent colours for the inspector title
+  const _TRACK_COLOR = {
+    audio:      '#00eeff',
+    lights:     '#ffcc00',
+    dome:       '#cc44ff',
+    servos:     '#00ff88',
+    propulsion: '#ff8800',
+  };
+
+  // Derive the short action label shown after the colon in the inspector header
+  function _inspectorLabel(track, item) {
+    if (track === 'audio') {
+      if (!item.file) return '?';
+      return item.file.replace(/\.[^.]+$/, ''); // strip extension
+    }
+    if (track === 'lights') return (item.mode || '?').toUpperCase();
+    if (track === 'dome')   return item.angle !== undefined ? `${item.angle}°` : 'KF';
+    if (track === 'servos') {
+      const name = (item.servo || '?').replace(/_/g, ' ');
+      return `${name} ${item.action || ''}`.trim().toUpperCase();
+    }
+    if (track === 'propulsion') return `L${item.left ?? '?'} R${item.right ?? '?'}`;
+    return '?';
+  }
+
+  function _setInspectorTitle(track, item) {
+    const el = document.getElementById('chor-inspector-title');
+    if (!el) return;
+    const label = _inspectorLabel(track, item);
+    el.textContent = `${track.toUpperCase()} : ${label}`;
+    const c = _TRACK_COLOR[track] || '#00ccff';
+    el.style.color = c;
+    el.style.textShadow = `0 0 10px ${c}88`;
+  }
+
+  function _clearInspectorTitle() {
+    const el = document.getElementById('chor-inspector-title');
+    if (!el) return;
+    el.textContent = 'NO BLOCK SELECTED';
+    el.style.color = 'rgba(0,170,255,.25)';
+    el.style.textShadow = 'none';
+  }
+
   function _renderDomeLane(keyframes) {
     const lane = _lane('dome');
     if (!lane) return;
@@ -4612,6 +4655,9 @@ const choreoEditor = (() => {
     const item = (_chor.tracks[track] || [])[idx];
     if (!item) return;
 
+    // Update the dynamic inspector header first
+    _setInspectorTitle(track, item);
+
     function row(key, field, type) {
       const val = item[field] !== undefined ? item[field] : '';
       return `<div class="chor-prop-row">
@@ -4624,8 +4670,8 @@ const choreoEditor = (() => {
       return `<div class="chor-prop-row"><span class="chor-prop-key">${key}</span><span class="chor-prop-val">${val}</span></div>`;
     }
 
-    let html = readRow('TRACK', track.toUpperCase());
-    html += row('START', 't');
+    // TRACK is now in the inspector title — omit it from the field list
+    let html = row('START', 't');
     if (item.duration !== undefined) html += row('DURATION', 'duration');
     if (track === 'audio')      html += row('FILE', 'file', 'text') + row('VOLUME', 'volume');
     if (track === 'lights')     html += readRow('MODE', (item.mode || '?').toUpperCase());
@@ -4801,7 +4847,7 @@ const choreoEditor = (() => {
       if (!name) return;
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
-      _chor = chor; _dirty = false; _selected = null;
+      _chor = chor; _dirty = false; _selected = null; _clearInspectorTitle();
       _renderAllTracks();
       toast(`Loaded: ${name}`, 'ok');
     },
@@ -4878,6 +4924,13 @@ const choreoEditor = (() => {
       if (block) {
         if (field === 't')        block.style.left  = _px(item.t)        + 'px';
         if (field === 'duration') block.style.width = _px(item.duration) + 'px';
+        // Refresh the block label (e.g. filename changed)
+        const labelEl = block.querySelector('span');
+        if (labelEl) labelEl.textContent = _blockLabel(track, item);
+      }
+      // Refresh inspector title on any field change that affects the label
+      if (_selected && _selected.track === track && _selected.idx === idx) {
+        _setInspectorTitle(track, item);
       }
     },
   };
