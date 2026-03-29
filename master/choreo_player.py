@@ -29,22 +29,26 @@ def _ease(t: float, name: str) -> float:
 
 
 def _interpolate(t_now: float, keyframes: list) -> float:
-    """Interpolate angle from keyframe list at time t_now."""
+    """Interpolate power value from keyframe list at time t_now.
+    Keyframes must have 'power' (range -100..100) and 't' fields.
+    """
     if not keyframes:
         return 0.0
     if t_now <= keyframes[0]['t']:
-        return float(keyframes[0]['angle'])
+        return float(keyframes[0].get('power', 0.0))
     if t_now >= keyframes[-1]['t']:
-        return float(keyframes[-1]['angle'])
+        return float(keyframes[-1].get('power', 0.0))
     for i in range(len(keyframes) - 1):
         kf0, kf1 = keyframes[i], keyframes[i + 1]
         if kf0['t'] <= t_now <= kf1['t']:
             span = kf1['t'] - kf0['t']
             if span <= 0:
-                return float(kf1['angle'])
+                return float(kf1.get('power', 0.0))
+            p0 = kf0.get('power', 0.0)
+            p1 = kf1.get('power', 0.0)
             progress = _ease((t_now - kf0['t']) / span, kf1.get('easing', 'linear'))
-            return kf0['angle'] + (kf1['angle'] - kf0['angle']) * progress
-    return float(keyframes[-1]['angle'])
+            return p0 + (p1 - p0) * progress
+    return float(keyframes[-1].get('power', 0.0))
 
 
 # ── ChoreoPlayer ──────────────────────────────────────────────────────────────
@@ -56,7 +60,8 @@ class ChoreoPlayer:
     """
 
     def __init__(self, cfg, audio, teeces, dome_motor, dome_servo,
-                 body_servo, vesc=None, telem_getter=None, audio_latency=None):
+                 body_servo, vesc=None, telem_getter=None, audio_latency=None,
+                 engine=None):
         # Resolve audio latency: explicit arg > cfg > default
         if audio_latency is not None:
             self._latency = float(audio_latency)
@@ -72,6 +77,7 @@ class ChoreoPlayer:
         self._body_servo = body_servo
         self._vesc       = vesc
         self._telem_getter = telem_getter
+        self._engine     = engine
 
         # Threshold config
         if cfg is not None:
@@ -195,9 +201,7 @@ class ChoreoPlayer:
         events   = self._build_event_queue(tracks)
         dome_kf  = tracks.get('dome', [])
 
-        ev_idx      = 0
-        last_angle  = float(dome_kf[0]['angle']) if dome_kf else 0.0
-        last_dome_t = 0.0
+        ev_idx = 0
 
         with self._status_lock:
             self._status.update({'playing': True, 'name': name, 'duration': duration, 't_now': 0.0})
@@ -212,26 +216,14 @@ class ChoreoPlayer:
                 self._dispatch(events[ev_idx])
                 ev_idx += 1
 
-            # Update dome (continuous interpolation → motor speed)
-            if dome_kf:
-                target = _interpolate(t_now, dome_kf)
-                dt = t_now - last_dome_t
-                if dt > 0:
-                    delta = target - last_angle
-                    if abs(delta) > 0.5:
-                        speed = max(-1.0, min(1.0, (delta / 360.0) / dt))
-                        if self._dome_motor:
-                            try:
-                                self._dome_motor.set_speed(speed)
-                            except Exception as e:
-                                log.warning(f"Choreo dome error: {e}")
-                    elif abs(delta) < 0.2 and self._dome_motor:
-                        try:
-                            self._dome_motor.set_speed(0.0)
-                        except Exception:
-                            pass
-                last_angle  = target
-                last_dome_t = t_now
+            # Update dome motor (direct power interpolation, -100..100 → -1.0..1.0)
+            if dome_kf and self._dome_motor:
+                power_val = _interpolate(t_now, dome_kf)
+                speed = max(-1.0, min(1.0, power_val / 100.0))
+                try:
+                    self._dome_motor.set_speed(speed)
+                except Exception as e:
+                    log.warning(f"Choreo dome error: {e}")
 
             # Check telemetry thresholds
             if self._telem_getter and not self._stop_flag.is_set():
@@ -272,8 +264,6 @@ class ChoreoPlayer:
                     self._audio.stop()
 
             elif track == 'lights':
-                if not self._teeces:
-                    return
                 mode = ev.get('mode') or ev.get('name', 'random')
                 _LIGHT_CMDS = {
                     'random':   '0T1\r',
@@ -285,12 +275,20 @@ class ChoreoPlayer:
                     'scream':   '0T5\r',
                     'imperial': '0T11\r',
                 }
-                cmd = _LIGHT_CMDS.get(mode, '0T1\r')
-                self._teeces.send_command(cmd)
+                if mode in _LIGHT_CMDS:
+                    if self._teeces:
+                        self._teeces.send_command(_LIGHT_CMDS[mode])
+                elif self._engine:
+                    # Custom .lseq sequence from light_sequences/
+                    try:
+                        self._engine.run_light(mode, loop=False)
+                    except Exception as e:
+                        log.warning(f"Choreo lights custom sequence '{mode}': {e}")
 
             elif track == 'servos':
                 action = ev.get('action', 'open')
                 servo  = ev.get('servo', '')
+                target = ev.get('target')   # optional numeric angle (degrees)
                 if not self._dome_servo and not self._body_servo:
                     return
                 if servo in ('all', 'all_dome') and self._dome_servo:
@@ -299,7 +297,11 @@ class ChoreoPlayer:
                     else:
                         self._dome_servo.close_all()
                 elif self._dome_servo:
-                    if action == 'open':
+                    if target is not None:
+                        # Numeric target — clamp to hardware limits (10–170°)
+                        angle = max(10.0, min(170.0, float(target)))
+                        self._dome_servo.open(servo, angle_deg=angle)
+                    elif action == 'open':
                         self._dome_servo.open(servo)
                     else:
                         self._dome_servo.close(servo)
@@ -381,7 +383,7 @@ class ChoreoPlayer:
 
     def _safe_stop_all(self) -> None:
         for fn in [
-            lambda: self._audio.send('S', 'STOP') if self._audio else None,
+            lambda: self._audio.stop() if self._audio else None,
             lambda: self._teeces.all_off() if self._teeces else None,
             lambda: self._dome_motor.set_speed(0.0) if self._dome_motor else None,
             lambda: self._vesc.drive(0.0, 0.0) if self._vesc else None,

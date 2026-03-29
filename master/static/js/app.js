@@ -4098,8 +4098,10 @@ const choreoEditor = (() => {
   let _lastTelem   = null;
 
   // Cached data for inspector dropdowns — loaded once at init
-  let _audioIndex  = {};   // { category: [soundName, …] }
-  let _servoList   = [];   // ['dome_panel_1', …]
+  let _audioIndex    = {};   // { category: [soundName, …] }
+  let _servoList     = [];   // ['dome_panel_1', …]
+  let _servoSettings = {};   // { 'dome_panel_1': {open:110, close:20, speed:10}, … }
+  let _lightModes    = ['random','leia','alarm','disco','flash','off','scream','imperial'];
 
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
@@ -4110,7 +4112,7 @@ const choreoEditor = (() => {
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
     { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
-    { track:'dome',       label:'KF',     tpl:{ angle:0, easing:'linear'                           } },
+    { track:'dome',       label:'KF',     tpl:{ power:0, easing:'linear'                           } },
     { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
     { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
@@ -4534,7 +4536,7 @@ const choreoEditor = (() => {
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
     if (track === 'lights') return (item.mode || '?').toUpperCase();
-    if (track === 'dome')   return item.angle !== undefined ? `${item.angle}°` : 'KF';
+    if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
       return `${name} ${item.action || ''}`.trim().toUpperCase();
@@ -4570,7 +4572,8 @@ const choreoEditor = (() => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', W); svg.setAttribute('height', H);
     svg.style.cssText = 'position:absolute;top:4px;left:0';
-    const pts = keyframes.map(kf => ({ x: _px(kf.t), y: H - (kf.angle / 360) * (H - 6) - 3 }));
+    // Y-axis: power 0 → center, +100 → top, -100 → bottom
+    const pts = keyframes.map(kf => ({ x: _px(kf.t), y: H / 2 - ((kf.power ?? 0) / 100) * (H / 2 - 3) }));
     let d = `M ${pts[0].x} ${pts[0].y}`;
     for (let i = 1; i < pts.length; i++) {
       const cp = (pts[i].x - pts[i - 1].x) / 2;
@@ -4713,12 +4716,11 @@ const choreoEditor = (() => {
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      html += selectRow('MODE', 'mode', {
-        random:'RANDOM', leia:'LEIA', alarm:'ALARM', disco:'DISCO', off:'OFF'
-      });
+      const lightOpts = Object.fromEntries(_lightModes.map(m => [m, m.toUpperCase()]));
+      html += selectRow('MODE', 'mode', lightOpts);
 
     } else if (track === 'dome') {
-      html += numRow('ANGLE °', 'angle', { min: 0, max: 360, step: 1 });
+      html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
       html += selectRow('EASING', 'easing', {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
       });
@@ -4728,6 +4730,8 @@ const choreoEditor = (() => {
       const servoOpts = Object.fromEntries(_servoList.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
       html += selectRow('SERVO', 'servo', servoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
+      // Optional numeric target angle (overrides OPEN/CLOSE when set, clamped 10–170°)
+      html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
 
     } else if (track === 'propulsion') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -4916,6 +4920,13 @@ const choreoEditor = (() => {
         api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
         api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
+        api('/servo/settings').then(r => { if (r && r.panels) _servoSettings = r.panels; }),
+        api('/light/list').then(r => {
+          if (r && r.sequences && r.sequences.length) {
+            // Append custom .lseq names that aren't already in the built-in list
+            r.sequences.forEach(s => { if (!_lightModes.includes(s)) _lightModes.push(s); });
+          }
+        }),
       ]).catch(() => {});
 
       const names = await api('/choreo/list');
@@ -4940,7 +4951,7 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:30.0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], lights:[], dome:[{t:0,angle:0,easing:'linear'},{t:30,angle:0,easing:'linear'}], servos:[], propulsion:[], markers:[] }
+        tracks: { audio:[], lights:[], dome:[{t:0,power:0,easing:'linear'},{t:30,power:0,easing:'linear'}], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');

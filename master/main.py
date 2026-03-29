@@ -248,6 +248,7 @@ def main() -> None:
         body_servo=reg.servo,
         vesc=reg.vesc,
         telem_getter=lambda: reg.vesc_telem,
+        engine=reg.engine,
     )
     reg.choreo.setup()
 
