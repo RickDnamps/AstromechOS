@@ -4092,9 +4092,26 @@ const choreoEditor = (() => {
   let _selected    = null;
   let _pollTimer   = null;
   let _dirty       = false;
+  let _lanesWired  = false;
   let _monitorRaf  = null;
   let _monitorTick = 0;
   let _lastTelem   = null;
+
+  // Block palette templates — one entry per draggable chip
+  const _PALETTE = [
+    { track:'audio',      label:'PLAY',   tpl:{ action:'play', file:'', volume:85,   duration:5   } },
+    { track:'audio',      label:'STOP',   tpl:{ action:'stop',                        duration:0.5 } },
+    { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                        duration:4   } },
+    { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                          duration:6   } },
+    { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
+    { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
+    { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
+    { track:'dome',       label:'KF',     tpl:{ angle:0, easing:'linear'                           } },
+    { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
+    { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
+    { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
+    { track:'propulsion', label:'STOP',   tpl:{ left:0,   right:0,                   duration:0.5 } },
+  ];
 
   // ── Snap helper ──────────────────────────────────────────────────
   function _snap(t) {
@@ -4119,6 +4136,7 @@ const choreoEditor = (() => {
       _monitorTick++;
       _drawFLD(_monitorTick);
       _drawRLD(_monitorTick);
+      _drawPSI(_monitorTick);
       _drawBattery(_lastTelem);
       _drawDomeCompass(_monitorTick);
       _monitorRaf = requestAnimationFrame(tick);
@@ -4252,6 +4270,109 @@ const choreoEditor = (() => {
     ctx.textBaseline = 'middle';
     [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', Math.PI * 1.5]].forEach(([label, a]) => {
       ctx.fillText(label, cx + Math.sin(a) * (r - 7), cy - Math.cos(a) * (r - 7));
+    });
+  }
+
+  // Animate PSI canvases — front (cyan) and rear (amber)
+  function _drawPSI(t) {
+    function drawOne(id, c1, c2, phase) {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 1;
+      ctx.clearRect(0, 0, W, H);
+      const blink = Math.sin(t * 0.12 + phase) > 0;
+      const activeColor = blink ? c1 : c2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = blink ? c1 + '33' : c2;
+      ctx.fill();
+      ctx.strokeStyle = activeColor;
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = blink ? 8 : 2;
+      ctx.shadowColor = c1;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
+      ctx.fillStyle = blink ? c1 : 'rgba(0,0,0,0)';
+      ctx.shadowBlur = blink ? 6 : 0;
+      ctx.shadowColor = activeColor;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    drawOne('chor-psi-f-canvas', '#00ffea', 'rgba(0,80,60,.3)', 0);
+    drawOne('chor-psi-r-canvas', '#ffaa00', 'rgba(80,40,0,.3)', Math.PI * 0.7);
+  }
+
+  // Populate the block palette and attach dragstart handlers
+  function _initPalette() {
+    const container = document.getElementById('chor-palette');
+    if (!container) return;
+    container.querySelectorAll('.chor-palette-section-label, .chor-palette-item').forEach(el => el.remove());
+    const tracks = ['audio', 'lights', 'dome', 'servos', 'propulsion'];
+    tracks.forEach(track => {
+      const items = _PALETTE.filter(p => p.track === track);
+      if (!items.length) return;
+      const lbl = document.createElement('span');
+      lbl.className = 'chor-palette-section-label';
+      lbl.textContent = track.toUpperCase();
+      container.appendChild(lbl);
+      items.forEach(def => {
+        const chip = document.createElement('div');
+        chip.className = 'chor-palette-item';
+        chip.dataset.track = track;
+        chip.textContent = def.label;
+        chip.draggable = true;
+        chip.addEventListener('dragstart', e => {
+          e.dataTransfer.effectAllowed = 'copy';
+          e.dataTransfer.setData('application/json', JSON.stringify({ track: def.track, tpl: def.tpl }));
+        });
+        chip.addEventListener('dragend', () => {
+          document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
+        });
+        container.appendChild(chip);
+      });
+    });
+  }
+
+  // Wire HTML5 drop targets on all timeline lanes
+  function _addDropToLanes() {
+    if (_lanesWired) return;
+    _lanesWired = true;
+    document.querySelectorAll('.chor-lane').forEach(lane => {
+      lane.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        lane.classList.add('drag-over');
+      });
+      lane.addEventListener('dragleave', e => {
+        if (!lane.contains(e.relatedTarget)) lane.classList.remove('drag-over');
+      });
+      lane.addEventListener('drop', e => {
+        e.preventDefault();
+        lane.classList.remove('drag-over');
+        if (!_chor) { toast('Load a choreography first', 'error'); return; }
+        let data;
+        try { data = JSON.parse(e.dataTransfer.getData('application/json')); } catch { return; }
+        const { track, tpl } = data;
+        const laneTrack = lane.dataset.track;
+        if (laneTrack !== track) { toast(`Drop a ${track} block on the ${track} lane`, 'error'); return; }
+        const scroll = document.getElementById('chor-scroll');
+        const scrollLeft = scroll ? scroll.scrollLeft : 0;
+        const rect = lane.getBoundingClientRect();
+        const t = _snap(_sec(Math.max(0, e.clientX - rect.left + scrollLeft)));
+        const newItem = { ...tpl, t };
+        if (!_chor.tracks[track]) _chor.tracks[track] = [];
+        _chor.tracks[track].push(newItem);
+        _chor.tracks[track].sort((a, b) => a.t - b.t);
+        _dirty = true;
+        _renderTrack(track);
+        const idx = _chor.tracks[track].indexOf(newItem);
+        if (track !== 'dome') _selectBlock(track, idx);
+        toast(`${track} block → ${t.toFixed(2)}s`, 'ok');
+      });
     });
   }
 
@@ -4517,22 +4638,42 @@ const choreoEditor = (() => {
       const vPct = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
       const vCol = vPct < 20 ? 'var(--red)' : vPct < 50 ? 'var(--amber)' : 'var(--green)';
       _setBar('chor-telem-v-bar', 'chor-telem-v', vPct, vMin.toFixed(1)+'V', vCol);
-      const battEl = document.getElementById('chor-stat-battery');
-      if (battEl) battEl.textContent = Math.round(vPct) + '%';
     }
     if (tVals.length) {
       const tMax = Math.max(...tVals);
       const tPct = Math.max(0, Math.min(100, (tMax / 80) * 100));
       const tCol = tPct > 87 ? 'var(--red)' : tPct > 62 ? 'var(--amber)' : 'var(--amber)';
       _setBar('chor-telem-t-bar', 'chor-telem-t', tPct, tVals.map(v=>v.toFixed(0)+'°').join('/'), tCol);
-      const tempEl = document.getElementById('chor-stat-temp');
-      if (tempEl) tempEl.textContent = Math.max(...tVals).toFixed(0) + '°C';
     }
     if (cVals.length) {
       const cMax = Math.max(...cVals);
       const cPct = Math.max(0, Math.min(100, (cMax / 30) * 100));
       const cCol = cPct > 87 ? 'var(--red)' : cPct > 62 ? 'var(--amber)' : 'var(--red)';
       _setBar('chor-telem-c-bar', 'chor-telem-c', cPct, cVals.map(v=>v.toFixed(1)+'A').join('/'), cCol);
+    }
+
+    // Update command bar gauges
+    const battEl = document.getElementById('chor-stat-battery');
+    const tempEl = document.getElementById('chor-stat-temp');
+    const currEl = document.getElementById('chor-stat-current');
+
+    if (battEl && vVals && vVals.length) {
+      const vMin = Math.min(...vVals);
+      const vPctLocal = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
+      battEl.textContent = vMin.toFixed(1) + 'V';
+      battEl.className = 'chor-cmd-gauge' + (vPctLocal < 20 ? ' crit' : vPctLocal < 50 ? ' warn' : '');
+    }
+    if (tempEl && tVals && tVals.length) {
+      const tMax = Math.max(...tVals);
+      const tPctLocal = Math.max(0, Math.min(100, (tMax / 80) * 100));
+      tempEl.textContent = tMax.toFixed(0) + '°C';
+      tempEl.className = 'chor-cmd-gauge' + (tPctLocal > 87 ? ' crit' : tPctLocal > 62 ? ' warn' : '');
+    }
+    if (currEl && cVals && cVals.length) {
+      const cMax = Math.max(...cVals);
+      const cPctLocal = Math.max(0, Math.min(100, (cMax / 30) * 100));
+      currEl.textContent = cMax.toFixed(1) + 'A';
+      currEl.className = 'chor-cmd-gauge' + (cPctLocal > 87 ? ' crit' : cPctLocal > 62 ? ' warn' : '');
     }
   }
 
@@ -4593,6 +4734,8 @@ const choreoEditor = (() => {
     async init() {
       _startMonitor();
       _syncSnapUI();
+      _initPalette();
+      _addDropToLanes();
       const names = await api('/choreo/list');
       const sel   = document.getElementById('chor-select');
       if (!sel || !names) return;
