@@ -2660,27 +2660,57 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   image-rendering: pixelated;
 }
 
-/* Inline track action chips (replaces separate palette) */
-.chor-chip {
-  display: inline-block;
-  font-size: 6px;
-  letter-spacing: .7px;
-  padding: 2px 4px;
-  border: 1px solid;
-  border-radius: 2px;
-  cursor: grab;
+/* ── Generic source buttons — one per track, Ultratime neon style ── */
+.chor-src-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  height: 26px;
+  font-size: 7px;
+  letter-spacing: 1.4px;
   font-family: 'Courier New', monospace;
+  font-weight: bold;
+  border: 1px solid;
+  border-radius: 3px;
+  cursor: grab;
   user-select: none;
-  transition: opacity .15s, box-shadow .15s;
+  background: rgba(0,0,0,.55);
+  transition: box-shadow .2s, opacity .15s, background .2s;
   white-space: nowrap;
 }
-.chor-chip:active { cursor: grabbing; opacity: .65; }
-.chor-chip:hover  { box-shadow: 0 0 5px currentColor; }
-.chor-chip[data-track="audio"]      { color:#00ccff; border-color:rgba(0,200,255,.4);  background:rgba(0,200,255,.08); }
-.chor-chip[data-track="lights"]     { color:#ffb800; border-color:rgba(255,180,0,.4);  background:rgba(255,180,0,.08); }
-.chor-chip[data-track="dome"]       { color:#cc44ff; border-color:rgba(200,60,255,.4); background:rgba(200,60,255,.06); }
-.chor-chip[data-track="servos"]     { color:#00ff88; border-color:rgba(0,255,120,.4);  background:rgba(0,255,120,.06); }
-.chor-chip[data-track="propulsion"] { color:#ff8800; border-color:rgba(255,120,0,.4);  background:rgba(255,120,0,.08); }
+.chor-src-btn:hover {
+  background: rgba(0,0,0,.3);
+  box-shadow: 0 0 10px currentColor, inset 0 0 6px rgba(255,255,255,.04);
+}
+.chor-src-btn:active { cursor: grabbing; opacity: .7; }
+
+/* Per-track neon colours */
+.chor-src-btn[data-track="audio"] {
+  color: #00eeff;
+  border-color: rgba(0,238,255,.55);
+  box-shadow: 0 0 6px rgba(0,238,255,.25);
+}
+.chor-src-btn[data-track="lights"] {
+  color: #ffcc00;
+  border-color: rgba(255,200,0,.55);
+  box-shadow: 0 0 6px rgba(255,200,0,.2);
+}
+.chor-src-btn[data-track="dome"] {
+  color: #cc44ff;
+  border-color: rgba(200,60,255,.55);
+  box-shadow: 0 0 6px rgba(200,60,255,.2);
+}
+.chor-src-btn[data-track="servos"] {
+  color: #00ff88;
+  border-color: rgba(0,255,136,.55);
+  box-shadow: 0 0 6px rgba(0,255,136,.2);
+}
+.chor-src-btn[data-track="propulsion"] {
+  color: #ff8800;
+  border-color: rgba(255,136,0,.55);
+  box-shadow: 0 0 6px rgba(255,136,0,.2);
+}
 
 /* FLD / RLD HTML dot grids in the choreo left panel */
 .chor-fld-grid,
@@ -2713,9 +2743,9 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   outline-offset: -1px;
 }
 
-/* ── Track labels + inline chips ─────────────────────────────── */
+/* ── Track labels + Ultratime source buttons ──────────────────── */
 .chor-labels {
-  width: 148px;
+  width: 156px;
   flex-shrink: 0;
   border-right: 1px solid rgba(0,170,255,.1);
   display: flex;
@@ -2723,32 +2753,29 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 }
 .chor-label-spacer { height: 28px; border-bottom: 1px solid rgba(0,170,255,.1); flex-shrink: 0; }
 
-/* Track row: label text + draggable chips side-by-side */
+/* Track row: name (left) + one source button (right, flex fills) */
 .chor-track-row {
   height: 44px;
-  padding: 0 4px 0 6px;
+  padding: 0 6px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   border-bottom: 1px solid rgba(0,170,255,.07);
   flex-shrink: 0;
   overflow: hidden;
 }
-.chor-track-row-dome { height: 64px; align-items: flex-start; padding-top: 10px; }
+.chor-track-row-dome { height: 64px; align-items: center; }
+
+/* Track name — tight width, uppercase mono */
 .chor-track-name {
   font-size: 7px;
-  letter-spacing: 1.2px;
-  color: var(--text-dim);
-  width: 36px;
+  letter-spacing: 1.5px;
+  color: rgba(0,200,255,.55);
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  width: 52px;
   flex-shrink: 0;
   white-space: nowrap;
-}
-.chor-track-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  align-content: center;
-  flex: 1;
 }
 
 /* ── Scrollable timeline ──────────────────────────────────────── */

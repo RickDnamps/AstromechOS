@@ -4347,16 +4347,36 @@ const choreoEditor = (() => {
   }
 
   // Populate the block palette and attach dragstart handlers
-  // Wire the inline track chips (chips are already in HTML, just attach dragstart)
+  // Wire the Ultratime source buttons (one per track, already in HTML)
   function _initPalette() {
-    document.querySelectorAll('.chor-chip').forEach(chip => {
-      chip.addEventListener('dragstart', e => {
+    document.querySelectorAll('.chor-src-btn').forEach(btn => {
+      // Build a colour-matched drag ghost image
+      btn.addEventListener('dragstart', e => {
         let tpl;
-        try { tpl = JSON.parse(chip.dataset.tpl); } catch { return; }
+        try { tpl = JSON.parse(btn.dataset.tpl); } catch { return; }
+        const track = btn.dataset.track;
         e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('application/json', JSON.stringify({ track: chip.dataset.track, tpl }));
+        e.dataTransfer.setData('application/json', JSON.stringify({ track, tpl }));
+
+        // Ghost: a mini coloured badge that follows the cursor
+        const ghost = document.createElement('div');
+        ghost.textContent = btn.textContent;
+        ghost.style.cssText = `
+          position:fixed; top:-200px; left:-200px;
+          font:bold 9px/22px 'Courier New',monospace;
+          padding:0 10px; border-radius:3px;
+          border:1px solid currentColor; background:rgba(0,0,0,.8);
+          letter-spacing:1.4px; white-space:nowrap;
+          color:${getComputedStyle(btn).color};
+          border-color:${getComputedStyle(btn).borderTopColor};
+          box-shadow:0 0 10px ${getComputedStyle(btn).color};
+        `;
+        document.body.appendChild(ghost);
+        e.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, 11);
+        setTimeout(() => ghost.remove(), 0);
       });
-      chip.addEventListener('dragend', () => {
+
+      btn.addEventListener('dragend', () => {
         document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
       });
     });

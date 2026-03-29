@@ -810,50 +810,43 @@
       </div><!-- /chor-left-panel -->
 
       <!-- Track label column -->
-      <!-- Track labels + inline draggable chips (replaces separate palette) -->
+      <!-- Track labels + one generic source button per track (Ultratime style) -->
       <div class="chor-labels" id="chor-labels">
         <div class="chor-label-spacer"></div>
 
         <div class="chor-track-row" data-track="audio">
           <span class="chor-track-name">AUDIO</span>
-          <div class="chor-track-chips">
-            <div class="chor-chip" data-track="audio" data-tpl='{"action":"play","file":"","volume":85,"duration":5}' draggable="true">PLAY</div>
-            <div class="chor-chip" data-track="audio" data-tpl='{"action":"stop","duration":0.5}' draggable="true">STOP</div>
-          </div>
+          <div class="chor-src-btn" data-track="audio"
+               data-tpl='{"action":"play","file":"","volume":85,"duration":5}'
+               draggable="true">+ AUDIO</div>
         </div>
 
         <div class="chor-track-row" data-track="lights">
           <span class="chor-track-name">LIGHTS</span>
-          <div class="chor-track-chips">
-            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"random","duration":4}' draggable="true">RND</div>
-            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"leia","duration":6}' draggable="true">LEIA</div>
-            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"alarm","duration":3}' draggable="true">ALM</div>
-            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"off","duration":2}' draggable="true">OFF</div>
-          </div>
+          <div class="chor-src-btn" data-track="lights"
+               data-tpl='{"mode":"random","duration":4}'
+               draggable="true">+ LIGHT</div>
         </div>
 
         <div class="chor-track-row chor-track-row-dome" data-track="dome">
           <span class="chor-track-name">DOME °</span>
-          <div class="chor-track-chips">
-            <div class="chor-chip" data-track="dome" data-tpl='{"angle":0,"easing":"linear"}' draggable="true">KF</div>
-            <div class="chor-chip" data-track="dome" data-tpl='{"angle":180,"easing":"ease-in-out"}' draggable="true">180</div>
-          </div>
+          <div class="chor-src-btn" data-track="dome"
+               data-tpl='{"angle":0,"easing":"linear"}'
+               draggable="true">+ DOME</div>
         </div>
 
         <div class="chor-track-row" data-track="servos">
           <span class="chor-track-name">SERVOS</span>
-          <div class="chor-track-chips">
-            <div class="chor-chip" data-track="servos" data-tpl='{"servo":"","action":"open","duration":1}' draggable="true">OPEN</div>
-            <div class="chor-chip" data-track="servos" data-tpl='{"servo":"","action":"close","duration":1}' draggable="true">CLOSE</div>
-          </div>
+          <div class="chor-src-btn" data-track="servos"
+               data-tpl='{"servo":"","action":"open","duration":1}'
+               draggable="true">+ SERVO</div>
         </div>
 
         <div class="chor-track-row" data-track="propulsion">
-          <span class="chor-track-name">PROP</span>
-          <div class="chor-track-chips">
-            <div class="chor-chip" data-track="propulsion" data-tpl='{"left":0.5,"right":0.5,"duration":3}' draggable="true">DRIVE</div>
-            <div class="chor-chip" data-track="propulsion" data-tpl='{"left":0,"right":0,"duration":0.5}' draggable="true">STOP</div>
-          </div>
+          <span class="chor-track-name">PROPULSION</span>
+          <div class="chor-src-btn" data-track="propulsion"
+               data-tpl='{"left":0.5,"right":0.5,"duration":3}'
+               draggable="true">+ DRIVE</div>
         </div>
 
       </div>
