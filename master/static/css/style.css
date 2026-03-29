@@ -2665,8 +2665,8 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   display: flex;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  height: 26px;
+  width: 100%;
+  height: 28px;
   font-size: 7px;
   letter-spacing: 1.4px;
   font-family: 'Courier New', monospace;
@@ -2743,40 +2743,27 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   outline-offset: -1px;
 }
 
-/* ── Track labels + Ultratime source buttons ──────────────────── */
+/* ── Track source buttons column (buttons only, no text labels) ── */
 .chor-labels {
-  width: 156px;
+  width: 82px;
   flex-shrink: 0;
-  border-right: 1px solid rgba(0,170,255,.1);
+  border-right: 1px solid rgba(0,170,255,.15);
   display: flex;
   flex-direction: column;
 }
 .chor-label-spacer { height: 28px; border-bottom: 1px solid rgba(0,170,255,.1); flex-shrink: 0; }
 
-/* Track row: name (left) + one source button (right, flex fills) */
+/* Track row: full-width, centres the single source button */
 .chor-track-row {
   height: 44px;
   padding: 0 6px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
   border-bottom: 1px solid rgba(0,170,255,.07);
   flex-shrink: 0;
-  overflow: hidden;
 }
-.chor-track-row-dome { height: 64px; align-items: center; }
-
-/* Track name — tight width, uppercase mono */
-.chor-track-name {
-  font-size: 7px;
-  letter-spacing: 1.5px;
-  color: rgba(0,200,255,.55);
-  font-family: 'Courier New', monospace;
-  text-transform: uppercase;
-  width: 52px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
+.chor-track-row-dome { height: 64px; }
 
 /* ── Scrollable timeline ──────────────────────────────────────── */
 .chor-scroll-wrap {
