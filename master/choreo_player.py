@@ -155,16 +155,18 @@ class ChoreoPlayer:
                     'action': 'mode', 'mode': 'random', '_auto_restore': True,
                 })
 
-        # Dome — shifted; auto-stop after duration (ms → seconds)
+        # Dome — shifted; auto-stop always injected after duration (ms → seconds)
+        # Fail-safe: events without a valid duration get a 50ms burst to prevent infinite rotation
         for ev in tracks.get('dome', []):
             events.append({**ev, 'track': 'dome', 't': ev['t'] + lat})
             dur_ms = ev.get('duration', 0)
-            if dur_ms and dur_ms > 0:
-                events.append({
-                    'track': 'dome', 'power': 0.0,
-                    't': ev['t'] + (dur_ms / 1000.0) + lat,
-                    '_auto_stop': True,
-                })
+            if not dur_ms or dur_ms <= 0:
+                dur_ms = 50   # fail-safe burst — no open-ended motor command
+            events.append({
+                'track': 'dome', 'power': 0.0,
+                't': ev['t'] + (dur_ms / 1000.0) + lat,
+                '_auto_stop': True,
+            })
 
         # Servos — shifted
         for ev in tracks.get('servos', []):

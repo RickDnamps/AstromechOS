@@ -4605,7 +4605,7 @@ const choreoEditor = (() => {
 
       if (totalW < 1) return `M ${xA} ${yMid} L ${xA} ${yP}`;   // degenerate: needle
 
-      const accel = kf.accel ?? 0.5;
+      const accel = kf.accel ?? 1.0;   // legacy .chor files without accel → smooth bell curve
       const rampW = Math.max(6, totalW * (accel / 2));
       const xRise = xA + rampW;
       const xFall = xB - rampW;
@@ -4839,7 +4839,7 @@ const choreoEditor = (() => {
 
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
-      html += numRow('DURATION ms', 'duration', { min: 0, max: 10000, step: 100 });
+      html += numRow('DURATION ms', 'duration', { min: 200, max: 10000, step: 100 });
       html += numRow('ACCEL FACTOR', 'accel', { min: 0.1, max: 1.0, step: 0.05 });
       html += selectRow('EASING', 'easing', {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
@@ -5070,9 +5070,34 @@ const choreoEditor = (() => {
       if (!name) return;
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
-      _chor = chor; _dirty = false; _selected = null; _clearInspectorTitle();
+      _chor = chor;
+      // Normalize dome KFs — legacy files may be missing accel or duration
+      (_chor.tracks.dome || []).forEach(kf => {
+        if (kf.accel == null) kf.accel = 1.0;
+        if (!kf.duration || kf.duration < 200) kf.duration = 200;
+      });
+      _dirty = false; _selected = null; _clearInspectorTitle();
       _renderAllTracks();
       toast(`Loaded: ${name}`, 'ok');
+    },
+
+    async deleteChor() {
+      if (!_chor) { toast('No choreography loaded', 'error'); return; }
+      const name = _chor.meta.name;
+      if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+      const resp = await fetch(`/choreo/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!resp.ok) { toast(`Delete failed (${resp.status})`, 'error'); return; }
+      _chor = null; _dirty = false; _selected = null; _clearInspectorTitle();
+      _renderAllTracks();
+      const names = await api('/choreo/list');
+      const sel = document.getElementById('chor-select');
+      if (sel && names) {
+        sel.innerHTML = '<option value="">— select choreography —</option>' +
+          names.map(n => `<option value="${n}">${n}</option>`).join('');
+        sel.onchange = () => this.load(sel.value);
+        if (names.length > 0) { sel.value = names[0]; await this.load(names[0]); }
+      }
+      toast(`Deleted: ${name}`, 'ok');
     },
 
     newChor() {
@@ -5143,6 +5168,8 @@ const choreoEditor = (() => {
       const item = (_chor.tracks[track] || [])[idx];
       if (!item) return;
       const num = parseFloat(rawVal); item[field] = isNaN(num) ? rawVal : num; _dirty = true;
+      // Dome duration must be >= 200ms — no open-ended motor pulses
+      if (track === 'dome' && field === 'duration' && item.duration < 200) item.duration = 200;
       const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
       if (block) {
         if (field === 't')        block.style.left  = _px(item.t)        + 'px';

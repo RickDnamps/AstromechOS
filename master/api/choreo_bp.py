@@ -59,6 +59,20 @@ def choreo_save():
     return jsonify({'status': 'ok', 'name': name})
 
 
+@choreo_bp.delete('/choreo/<name>')
+def choreo_delete(name: str):
+    """Delete a choreography file by name."""
+    path = _choreo_path(name)
+    if not os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+    try:
+        os.remove(path)
+        log.info(f"Choreo deleted: {name}")
+        return jsonify({'status': 'ok', 'name': name})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @choreo_bp.post('/choreo/play')
 def choreo_play():
     if not reg.choreo:
