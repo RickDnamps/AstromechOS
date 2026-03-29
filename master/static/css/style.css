@@ -2765,7 +2765,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   padding-left: 2px;
   font-family: 'Courier New', monospace;
 }
-.chor-tick.major { border-left-color: rgba(0,170,255,.25); color: rgba(0,200,255,.7); }
+.chor-tick.major { background: rgba(0,170,255,.25); color: rgba(0,200,255,.7); }
 
 /* ── Track lanes ──────────────────────────────────────────────── */
 .chor-lane {
@@ -2952,7 +2952,6 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 }
 #modal-chor-abort .admin-modal-card {
   border-color: var(--red) !important;
-  box-shadow: 0 0 40px rgba(255,34,68,.5), 0 0 80px rgba(255,34,68,.2);
   animation: abort-pulse 1s ease-in-out infinite alternate;
 }
 @keyframes abort-pulse {
