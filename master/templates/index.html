@@ -719,78 +719,83 @@
 <div class="tab-content" id="tab-choreo">
   <div class="chor-layout">
 
-    <!-- ── Ultratime header ────────────────────────────────────── -->
-    <div class="chor-header">
-      <div class="chor-header-title">R2-D2 — MASTER CHOREOGRAPHER — <span style="color:var(--cyan)">ULTRATIME EDITION</span></div>
-      <div class="chor-header-timecode" id="chor-timecode">00:00.000</div>
-      <div class="chor-header-stats">
-        <span class="chor-stat" id="chor-stat-battery">—%</span>
-        <span class="chor-stat-sep">·</span>
-        <span class="chor-stat" id="chor-stat-temp">—°C</span>
-        <span class="chor-stat-sep">·</span>
-        <span class="chor-stat" id="chor-stat-dur"><span id="chor-duration">—</span></span>
-        <span class="chor-stat-sep">·</span>
-        <span class="chor-conn" id="chor-conn">● CONNECTED</span>
+    <!-- ── Single Command Bar ─────────────────────────────────────── -->
+    <div class="chor-command-bar">
+      <div class="chor-cmd-brand">R2-D2 — <span style="color:var(--cyan)">ULTRATIME</span></div>
+      <div class="chor-cmd-timecode" id="chor-timecode">00:00.000</div>
+      <div class="chor-cmd-sep"></div>
+      <div class="chor-cmd-gauges">
+        <span class="chor-cmd-gauge" id="chor-stat-battery" title="Battery voltage">—V</span>
+        <span class="chor-cmd-gauge-sep">·</span>
+        <span class="chor-cmd-gauge" id="chor-stat-temp" title="VESC temperature">—°C</span>
+        <span class="chor-cmd-gauge-sep">·</span>
+        <span class="chor-cmd-gauge" id="chor-stat-current" title="VESC current">—A</span>
+        <span class="chor-cmd-gauge-sep">·</span>
+        <span class="chor-cmd-gauge dim"><span id="chor-duration">—</span></span>
       </div>
-    </div>
-
-    <!-- ── Transport bar ───────────────────────────────────────── -->
-    <div class="chor-topbar">
-      <select id="chor-select" class="input-select-sm" style="width:170px">
-        <option value="">— select choreography —</option>
+      <div class="chor-cmd-sep"></div>
+      <select id="chor-select" class="input-select-sm" style="width:150px">
+        <option value="">— select —</option>
       </select>
       <button class="btn btn-sm" onclick="choreoEditor.newChor()">+ NEW</button>
-      <div class="chor-sep"></div>
+      <div class="chor-cmd-sep"></div>
       <button class="btn btn-active btn-sm" id="chor-btn-play" onclick="choreoEditor.play()">▶ PLAY</button>
       <button class="btn btn-danger btn-sm" id="chor-btn-stop" onclick="choreoEditor.stop()">⏹ STOP</button>
-      <div class="chor-sep"></div>
-      <!-- Snap toggle -->
-      <span style="font-size:8px;letter-spacing:1.5px;color:var(--text-dim)">SNAP</span>
+      <div class="chor-cmd-sep"></div>
+      <span class="chor-cmd-label">SNAP</span>
       <button class="chor-snap-btn active" id="chor-snap-01" onclick="choreoEditor.setSnap(0.1)">0.1s</button>
       <button class="chor-snap-btn" id="chor-snap-05" onclick="choreoEditor.setSnap(0.5)">0.5s</button>
       <button class="chor-snap-btn" id="chor-snap-off" onclick="choreoEditor.setSnap(0)">OFF</button>
-      <!-- Zoom -->
-      <div class="chor-sep"></div>
-      <span style="font-size:8px;letter-spacing:1.5px;color:var(--text-dim)">ZOOM</span>
+      <div class="chor-cmd-sep"></div>
+      <span class="chor-cmd-label">ZOOM</span>
       <button class="btn btn-sm" onclick="choreoEditor.zoom(-10)">−</button>
       <button class="btn btn-sm" onclick="choreoEditor.zoom(10)">+</button>
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
         <button class="btn btn-sm" onclick="choreoEditor.save()">💾 SAVE</button>
         <button class="btn btn-sm" onclick="choreoEditor.exportScr()">📄 .SCR</button>
+        <div class="chor-conn" id="chor-conn">● CONNECTED</div>
       </div>
     </div>
 
-    <!-- ── Body: monitor | labels | timeline | props ───────────── -->
+    <!-- ── Body ──────────────────────────────────────────────────── -->
     <div class="chor-body">
 
-      <!-- Left: Live Monitor Panel -->
-      <div class="chor-monitor" id="chor-monitor">
-        <div class="chor-monitor-title">LIVE MONITOR</div>
+      <!-- LEFT PANEL: monitors (top) + palette (bottom) -->
+      <div class="chor-left-panel" id="chor-monitor">
 
-        <!-- Front Logic Display -->
-        <div class="chor-monitor-section">
-          <div class="chor-monitor-label">FRONT LOGIC</div>
-          <canvas id="chor-fld-canvas" class="chor-pixel-canvas" width="108" height="44"></canvas>
+        <!-- Top half: Live Monitors (FLD / RLD / PSI) -->
+        <div class="chor-monitors">
+          <div class="chor-monitor-title">LIVE MONITOR</div>
+
+          <div class="chor-monitor-section">
+            <div class="chor-monitor-label">FLD</div>
+            <canvas id="chor-fld-canvas" class="chor-pixel-canvas" width="108" height="44"></canvas>
+          </div>
+
+          <div class="chor-monitor-section">
+            <div class="chor-monitor-label">RLD</div>
+            <canvas id="chor-rld-canvas" class="chor-pixel-canvas" width="108" height="26"></canvas>
+          </div>
+
+          <div class="chor-monitor-section chor-psi-row">
+            <div class="chor-psi-item">
+              <div class="chor-monitor-label">PSI·F</div>
+              <canvas id="chor-psi-f-canvas" class="chor-psi-canvas" width="24" height="24"></canvas>
+            </div>
+            <div class="chor-psi-item">
+              <div class="chor-monitor-label">PSI·R</div>
+              <canvas id="chor-psi-r-canvas" class="chor-psi-canvas" width="24" height="24"></canvas>
+            </div>
+          </div>
+        </div><!-- /chor-monitors -->
+
+        <!-- Bottom half: Block Palette -->
+        <div class="chor-palette" id="chor-palette">
+          <div class="chor-palette-title">PALETTE</div>
+          <!-- Populated by choreoEditor._initPalette() -->
         </div>
 
-        <!-- Rear Logic Display -->
-        <div class="chor-monitor-section">
-          <div class="chor-monitor-label">REAR LOGIC</div>
-          <canvas id="chor-rld-canvas" class="chor-pixel-canvas" width="108" height="26"></canvas>
-        </div>
-
-        <!-- Battery arc gauge -->
-        <div class="chor-monitor-section" style="align-items:center">
-          <div class="chor-monitor-label">BATTERY</div>
-          <canvas id="chor-battery-canvas" width="90" height="56"></canvas>
-        </div>
-
-        <!-- Dome compass -->
-        <div class="chor-monitor-section" style="align-items:center">
-          <div class="chor-monitor-label">DOME</div>
-          <canvas id="chor-dome-canvas" width="80" height="80"></canvas>
-        </div>
-      </div>
+      </div><!-- /chor-left-panel -->
 
       <!-- Track label column -->
       <div class="chor-labels" id="chor-labels">
@@ -802,37 +807,31 @@
         <div class="chor-track-label" data-track="propulsion">PROPULSION</div>
       </div>
 
-      <!-- Scrollable timeline canvas -->
+      <!-- Scrollable timeline -->
       <div class="chor-scroll-wrap" id="chor-scroll">
         <div class="chor-canvas" id="chor-canvas">
-          <!-- Ruler -->
           <div class="chor-ruler" id="chor-ruler"></div>
-          <!-- Audio lane (with waveform canvas underneath blocks) -->
           <div class="chor-lane chor-lane-audio" id="chor-lane-audio" data-track="audio">
             <canvas class="chor-waveform-canvas" id="chor-waveform-canvas"></canvas>
           </div>
-          <!-- Other lanes -->
           <div class="chor-lane" id="chor-lane-lights"     data-track="lights"></div>
           <div class="chor-lane chor-lane-dome" id="chor-lane-dome" data-track="dome"></div>
           <div class="chor-lane" id="chor-lane-servos"     data-track="servos"></div>
           <div class="chor-lane" id="chor-lane-propulsion" data-track="propulsion"></div>
-          <!-- High-visibility playhead -->
           <div class="chor-playhead" id="chor-playhead">
             <div class="chor-playhead-head"></div>
           </div>
         </div>
       </div>
 
-      <!-- Right: Properties + Telemetry Panel -->
+      <!-- Right: Properties + Telemetry -->
       <div class="chor-props" id="chor-props">
 
-        <!-- Alarms indicator -->
         <div class="chor-alarms" id="chor-alarms">
           <span class="chor-alarms-dot ok" id="chor-alarms-dot">●</span>
           <span id="chor-alarms-text" style="font-size:8px;letter-spacing:1.5px">NO ALARMS</span>
         </div>
 
-        <!-- VESC telemetry compact values -->
         <div class="chor-telem-compact" id="chor-telem-section" style="display:none">
           <div class="chor-telem-row">
             <span class="chor-telem-key">VOLT</span>
@@ -841,26 +840,25 @@
           </div>
           <div class="chor-telem-row">
             <span class="chor-telem-key">TEMP</span>
-            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-t-bar" style="background:var(--amber)"></div></div>
+            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-t-bar"></div></div>
             <span class="chor-telem-val" id="chor-telem-t">—</span>
           </div>
           <div class="chor-telem-row">
             <span class="chor-telem-key">CURR</span>
-            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-c-bar" style="background:var(--red)"></div></div>
+            <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-c-bar"></div></div>
             <span class="chor-telem-val" id="chor-telem-c">—</span>
           </div>
         </div>
 
-        <!-- Selected block properties -->
         <div class="chor-props-title">SELECTED BLOCK</div>
         <div id="chor-props-content" style="color:var(--text-dim);font-size:10px;padding:10px 8px">
           Select a block to inspect.
         </div>
 
-        <!-- Easing curve preview (shown when dome KF or block with easing selected) -->
         <div id="chor-easing-wrap" style="display:none;padding:0 8px 8px">
           <div class="chor-props-title" style="border:none;margin-bottom:4px">EASING</div>
-          <canvas id="chor-easing-canvas" width="184" height="70" style="width:100%;border:1px solid var(--border);border-radius:3px;background:var(--bg3)"></canvas>
+          <canvas id="chor-easing-canvas" width="184" height="70"
+            style="width:100%;border:1px solid var(--border);border-radius:3px;background:var(--bg3)"></canvas>
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
             <button class="chor-ease-btn" onclick="choreoEditor.setEasing('linear')">LINEAR</button>
             <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-in')">EASE IN</button>
