@@ -4137,6 +4137,32 @@ const choreoEditor = (() => {
     const sec = (s % 60).toFixed(3).padStart(6, '0');
     return `${String(m).padStart(2, '0')}:${sec}`;
   }
+
+  // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
+  function _calcTotalDuration() {
+    if (!_chor) return 10.0;
+    let max = 0;
+    for (const [track, events] of Object.entries(_chor.tracks || {})) {
+      for (const ev of (events || [])) {
+        const t   = ev.t || 0;
+        const dur = (track === 'dome') ? ((ev.duration || 0) / 1000) : (ev.duration || 0);
+        if (t + dur > max) max = t + dur;
+      }
+    }
+    return Math.max(max + 2.0, 5.0);
+  }
+
+  // Update ruler + canvas width + duration display without full re-render
+  function _refreshLayout() {
+    if (!_chor) return;
+    const dur = _calcTotalDuration();
+    _chor.meta.duration = dur;
+    _renderRuler(dur);
+    _drawWaveform();
+    const durEl = document.getElementById('chor-duration');
+    if (durEl) durEl.textContent = _fmtTime(dur);
+  }
+
   function _lane(track) { return document.getElementById(`chor-lane-${track}`); }
 
   // ── Monitor canvas animations ─────────────────────────────────────
@@ -4424,6 +4450,7 @@ const choreoEditor = (() => {
         _chor.tracks[track].sort((a, b) => a.t - b.t);
         _dirty = true;
         _renderTrack(track);
+        _refreshLayout();
         const idx = _chor.tracks[track].indexOf(newItem);
         if (track !== 'dome') _selectBlock(track, idx);
         toast(`${track} block → ${t.toFixed(2)}s`, 'ok');
@@ -4436,7 +4463,7 @@ const choreoEditor = (() => {
     const canvas = document.getElementById('chor-waveform-canvas');
     const lane   = _lane('audio');
     if (!canvas || !lane || !_chor) return;
-    const totalSec = _chor.meta.duration + 5;
+    const totalSec = _chor.meta.duration + 3;
     const W = _px(totalSec) + 100;
     const H = lane.clientHeight || 44;
     canvas.width = W; canvas.height = H;
@@ -4482,10 +4509,12 @@ const choreoEditor = (() => {
     if (!_chor) return;
     ['audio', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
-    _renderRuler(_chor.meta.duration);
+    const dur = _calcTotalDuration();
+    _chor.meta.duration = dur;
+    _renderRuler(dur);
     _drawWaveform();
     const durEl = document.getElementById('chor-duration');
-    if (durEl) durEl.textContent = _fmtTime(_chor.meta.duration);
+    if (durEl) durEl.textContent = _fmtTime(dur);
   }
 
   function _renderTrack(track) {
@@ -4507,11 +4536,12 @@ const choreoEditor = (() => {
     block.dataset.idx   = idx;
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
-    const dur = item.duration || (track === 'audio' ? (_chor.meta.duration - t) : 2);
+    const dur = item.duration || (track === 'audio' ? 5.0 : 2.0);
+    const isAudioLocked = track === 'audio' && item.duration > 0;
     block.style.left  = _px(t)   + 'px';
     block.style.width = _px(dur) + 'px';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
-                       <div class="chor-block-resize" data-resize="true"></div>`;
+                       ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
     return block;
   }
@@ -4573,7 +4603,7 @@ const choreoEditor = (() => {
     lane.innerHTML = '';
     if (!keyframes || !keyframes.length) return;
 
-    const W = _px(_chor.meta.duration + 5), H = 56;
+    const W = _px(_chor.meta.duration + 3), H = 56;
     const NS  = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('width', W); svg.setAttribute('height', H);
@@ -4740,7 +4770,7 @@ const choreoEditor = (() => {
       _dirty = true;
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _refreshLayout(); };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
@@ -4753,7 +4783,7 @@ const choreoEditor = (() => {
       _dirty = true;
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _refreshLayout(); };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
@@ -4877,7 +4907,8 @@ const choreoEditor = (() => {
       if (audio.duration && isFinite(audio.duration)) {
         const dur = Math.ceil(audio.duration * 10) / 10;
         choreoEditor._setProp(track, idx, 'duration', dur);
-        // Refresh the panel so the DURATION field shows the new value
+        _renderTrack('audio');   // rebuild block — locks resize handle
+        _refreshLayout();
         if (_selected && _selected.track === track && _selected.idx === idx)
           _updatePropsPanel(track, idx);
       }
@@ -5111,8 +5142,8 @@ const choreoEditor = (() => {
       const name = prompt('Choreography name:', 'my_show');
       if (!name) return;
       _chor = {
-        meta:   { name, version:'1.0', duration:30.0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], lights:[], dome:[{t:0,power:0,duration:500,accel:0.5,easing:'ease-in-out'},{t:30,power:0,duration:500,accel:0.5,easing:'ease-in-out'}], servos:[], propulsion:[], markers:[] }
+        meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
+        tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');

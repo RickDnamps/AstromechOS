@@ -721,18 +721,9 @@
 
     <!-- ── Single Command Bar ─────────────────────────────────────── -->
     <div class="chor-command-bar">
-      <div class="chor-cmd-brand">R2-D2 — <span style="color:var(--cyan)">ULTRATIME</span></div>
       <div class="chor-cmd-timecode" id="chor-timecode">00:00.000</div>
       <div class="chor-cmd-sep"></div>
-      <div class="chor-cmd-gauges">
-        <span class="chor-cmd-gauge" id="chor-stat-battery" title="Battery voltage">—V</span>
-        <span class="chor-cmd-gauge-sep">·</span>
-        <span class="chor-cmd-gauge" id="chor-stat-temp" title="VESC temperature">—°C</span>
-        <span class="chor-cmd-gauge-sep">·</span>
-        <span class="chor-cmd-gauge" id="chor-stat-current" title="VESC current">—A</span>
-        <span class="chor-cmd-gauge-sep">·</span>
-        <span class="chor-cmd-gauge dim"><span id="chor-duration">—</span></span>
-      </div>
+      <span class="chor-cmd-gauge dim"><span id="chor-duration">—</span></span>
       <div class="chor-cmd-sep"></div>
       <select id="chor-select" class="input-select-sm" style="width:150px">
         <option value="">— select —</option>
@@ -754,7 +745,6 @@
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
         <button class="btn btn-sm" onclick="choreoEditor.save()">💾 SAVE</button>
         <button class="btn btn-sm" onclick="choreoEditor.exportScr()">📄 .SCR</button>
-        <div class="chor-conn" id="chor-conn">● CONNECTED</div>
       </div>
     </div>
 
