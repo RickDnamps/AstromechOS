@@ -2978,6 +2978,35 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 }
 .chor-prop-input:focus { border-color: var(--blue); background: rgba(0,170,255,.1); }
 
+/* Inspector dropdown (select) — matches input styling */
+.chor-prop-select {
+  background: rgba(0,170,255,.06);
+  border: 1px solid rgba(0,170,255,.2);
+  border-radius: 2px;
+  color: #00ccff;
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  padding: 2px 4px;
+  width: 100%;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.chor-prop-select:focus { border-color: var(--blue); background: rgba(0,170,255,.1); }
+.chor-prop-select option { background: #060e1a; color: #00ccff; }
+.chor-prop-select optgroup { color: rgba(0,170,255,.5); font-size: 8px; }
+
+/* Full-width prop row variant (for selects that span the whole row) */
+.chor-prop-row-full {
+  padding: 4px 10px;
+  border-bottom: 1px solid rgba(0,170,255,.04);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chor-prop-row-full .chor-prop-key { margin-bottom: 1px; }
+
 /* Easing buttons */
 .chor-ease-btn {
   font-size: 7px;

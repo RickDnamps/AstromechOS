@@ -40,8 +40,12 @@ Endpoints:
 
 import json
 import os
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file, abort
 import master.registry as reg
+
+_SOUNDS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', '..', 'slave', 'sounds')
+)
 
 audio_bp = Blueprint('audio', __name__, url_prefix='/audio')
 
@@ -132,6 +136,18 @@ def play_random():
     reg.audio_playing = True
     reg.audio_current = f'🎲 {category}'
     return jsonify({'status': 'ok', 'category': category})
+
+
+@audio_bp.get('/file/<sound>')
+def stream_sound_file(sound):
+    """Serve an MP3 from slave/sounds/ so the browser can read its duration.
+    Only used by the Choreo editor — not for playback (playback goes through UART)."""
+    if not sound.replace('_', '').replace('-', '').isalnum():
+        abort(400)
+    filepath = os.path.join(_SOUNDS_DIR, sound + '.mp3')
+    if not os.path.isfile(filepath):
+        abort(404)
+    return send_file(filepath, mimetype='audio/mpeg', conditional=True)
 
 
 @audio_bp.post('/stop')

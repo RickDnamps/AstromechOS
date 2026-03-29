@@ -4097,6 +4097,10 @@ const choreoEditor = (() => {
   let _monitorTick = 0;
   let _lastTelem   = null;
 
+  // Cached data for inspector dropdowns — loaded once at init
+  let _audioIndex  = {};   // { category: [soundName, …] }
+  let _servoList   = [];   // ['dome_panel_1', …]
+
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
     { track:'audio',      label:'PLAY',   tpl:{ action:'play', file:'', volume:85,   duration:5   } },
@@ -4655,34 +4659,105 @@ const choreoEditor = (() => {
     const item = (_chor.tracks[track] || [])[idx];
     if (!item) return;
 
-    // Update the dynamic inspector header first
     _setInspectorTitle(track, item);
 
-    function row(key, field, type) {
+    // ── Helpers ─────────────────────────────────────────────────────
+    const set = (field, val) => choreoEditor._setProp(track, idx, field, val);
+
+    function numRow(key, field, { min, max, step } = {}) {
       const val = item[field] !== undefined ? item[field] : '';
+      const attrs = [
+        min  !== undefined ? `min="${min}"`   : '',
+        max  !== undefined ? `max="${max}"`   : '',
+        step !== undefined ? `step="${step}"` : '',
+      ].filter(Boolean).join(' ');
       return `<div class="chor-prop-row">
         <span class="chor-prop-key">${key}</span>
-        <input class="chor-prop-input" type="${type || 'number'}" value="${val}"
-          onchange="choreoEditor._setProp('${track}',${idx},'${field}',this.value)" style="width:70px">
+        <input class="chor-prop-input" type="number" value="${val}" ${attrs}
+          onchange="choreoEditor._setProp('${track}',${idx},'${field}',this.value)" style="width:68px">
       </div>`;
     }
-    function readRow(key, val) {
-      return `<div class="chor-prop-row"><span class="chor-prop-key">${key}</span><span class="chor-prop-val">${val}</span></div>`;
+
+    function selectRow(key, field, options, grouped = false) {
+      const current = item[field] || '';
+      let opts = '';
+      if (grouped) {
+        for (const [grp, names] of Object.entries(options)) {
+          opts += `<optgroup label="${grp.toUpperCase()}">`;
+          for (const n of names)
+            opts += `<option value="${n}"${n === current ? ' selected' : ''}>${n}</option>`;
+          opts += '</optgroup>';
+        }
+      } else {
+        opts += `<option value="">—</option>`;
+        for (const [val, label] of Object.entries(options))
+          opts += `<option value="${val}"${val === current ? ' selected' : ''}>${label}</option>`;
+      }
+      return `<div class="chor-prop-row-full">
+        <span class="chor-prop-key">${key}</span>
+        <select class="chor-prop-select"
+          onchange="choreoEditor._setProp('${track}',${idx},'${field}',this.value);choreoEditor._onFieldChange('${track}',${idx},'${field}',this.value)">
+          ${opts}
+        </select>
+      </div>`;
     }
 
-    // TRACK is now in the inspector title — omit it from the field list
-    let html = row('START', 't');
-    if (item.duration !== undefined) html += row('DURATION', 'duration');
-    if (track === 'audio')      html += row('FILE', 'file', 'text') + row('VOLUME', 'volume');
-    if (track === 'lights')     html += readRow('MODE', (item.mode || '?').toUpperCase());
-    if (track === 'dome')       html += row('ANGLE', 'angle');
-    if (track === 'servos')     html += readRow('SERVO', item.servo || '?') + readRow('ACTION', item.action || '?');
-    if (track === 'propulsion') html += row('LEFT', 'left') + row('RIGHT', 'right');
+    // ── Build field list by track ────────────────────────────────────
+    let html = numRow('START', 't', { min: 0, step: 0.1 });
+
+    if (track === 'audio') {
+      if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
+      // FILE — grouped dropdown from cached audio index
+      html += selectRow('FILE', 'file', _audioIndex, true);
+      html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
+
+    } else if (track === 'lights') {
+      if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
+      html += selectRow('MODE', 'mode', {
+        random:'RANDOM', leia:'LEIA', alarm:'ALARM', disco:'DISCO', off:'OFF'
+      });
+
+    } else if (track === 'dome') {
+      html += numRow('ANGLE °', 'angle', { min: 0, max: 360, step: 1 });
+      html += selectRow('EASING', 'easing', {
+        'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
+      });
+
+    } else if (track === 'servos') {
+      if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
+      const servoOpts = Object.fromEntries(_servoList.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
+      html += selectRow('SERVO', 'servo', servoOpts);
+      html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
+
+    } else if (track === 'propulsion') {
+      if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
+      html += numRow('LEFT', 'left',   { min: -1, max: 1, step: 0.05 });
+      html += numRow('RIGHT', 'right', { min: -1, max: 1, step: 0.05 });
+    }
+
     panel.innerHTML = html;
 
-    const showEasing = track === 'dome' || !!item.easing;
+    // Easing preview — only for dome, integrated in fields above; hide old wrap
     const wrap = document.getElementById('chor-easing-wrap');
-    if (wrap) { wrap.style.display = showEasing ? 'block' : 'none'; if (showEasing) _drawEasingPreview(item.easing || 'linear'); }
+    if (wrap) wrap.style.display = 'none';
+  }
+
+  // Called after a select changes — handles side-effects (audio duration)
+  function _onFieldChange(track, idx, field, value) {
+    if (track !== 'audio' || field !== 'file' || !value) return;
+    // Auto-detect duration via an Audio element + /audio/file/<sound>
+    const audio = new Audio(`/audio/file/${encodeURIComponent(value)}`);
+    audio.addEventListener('loadedmetadata', () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        const dur = Math.ceil(audio.duration * 10) / 10;
+        choreoEditor._setProp(track, idx, 'duration', dur);
+        // Refresh the panel so the DURATION field shows the new value
+        if (_selected && _selected.track === track && _selected.idx === idx)
+          _updatePropsPanel(track, idx);
+      }
+    });
+    audio.preload = 'metadata';
+    audio.load();
   }
 
   function _drawEasingPreview(name) {
@@ -4835,6 +4910,14 @@ const choreoEditor = (() => {
       _syncSnapUI();
       _initPalette();
       _addDropToLanes();
+
+      // Pre-fetch dropdown data (non-blocking — failures are silent)
+      Promise.all([
+        api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
+        api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
+        api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
+      ]).catch(() => {});
+
       const names = await api('/choreo/list');
       const sel   = document.getElementById('chor-select');
       if (!sel || !names) return;
@@ -4924,14 +5007,16 @@ const choreoEditor = (() => {
       if (block) {
         if (field === 't')        block.style.left  = _px(item.t)        + 'px';
         if (field === 'duration') block.style.width = _px(item.duration) + 'px';
-        // Refresh the block label (e.g. filename changed)
         const labelEl = block.querySelector('span');
         if (labelEl) labelEl.textContent = _blockLabel(track, item);
       }
-      // Refresh inspector title on any field change that affects the label
-      if (_selected && _selected.track === track && _selected.idx === idx) {
+      if (_selected && _selected.track === track && _selected.idx === idx)
         _setInspectorTitle(track, item);
-      }
+    },
+
+    // Called from inline onchange on select elements
+    _onFieldChange(track, idx, field, value) {
+      _onFieldChange(track, idx, field, value);
     },
   };
 })();
