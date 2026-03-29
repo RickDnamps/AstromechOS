@@ -4102,7 +4102,9 @@ const choreoEditor = (() => {
   let _audioScanned  = [];   // [soundName, …] — from full disk scan (authoritative)
   let _servoList     = [];   // ['dome_panel_1', …]
   let _servoSettings = {};   // { 'dome_panel_1': {open:110, close:20, speed:10}, … }
-  let _lightModes    = ['random','leia','alarm','disco','flash','off','scream','imperial'];
+  // Light modes: keyed object { 't1': 'Random', 't6': 'Leia Message', …, 'my_seq': 'my_seq' }
+  // Populated at init from /teeces/animations (T-codes) + /light/list (.lseq files)
+  let _lightModes    = { t1:'Random', t6:'Leia Message', t3:'Alarm', t13:'Disco', t20:'Off' };
 
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
@@ -4515,7 +4517,7 @@ const choreoEditor = (() => {
 
   function _blockLabel(track, item) {
     if (track === 'audio')      return item.file || '?';
-    if (track === 'lights')     return (item.mode || item.name || '?').toUpperCase();
+    if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     if (track === 'servos')     return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
@@ -4536,7 +4538,7 @@ const choreoEditor = (() => {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
-    if (track === 'lights') return (item.mode || '?').toUpperCase();
+    if (track === 'lights') return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
@@ -4721,8 +4723,8 @@ const choreoEditor = (() => {
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      const lightOpts = Object.fromEntries(_lightModes.map(m => [m, m.toUpperCase()]));
-      html += selectRow('MODE', 'mode', lightOpts);
+      // _lightModes is already a {key: label} object — pass directly
+      html += selectRow('MODE', 'mode', _lightModes);
 
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
@@ -4931,10 +4933,16 @@ const choreoEditor = (() => {
         api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/settings').then(r => { if (r && r.panels) _servoSettings = r.panels; }),
-        // Lights: built-in JawaLite modes + custom .lseq files from disk
+        // Lights: full T-code list from Animations panel + custom .lseq files
+        api('/teeces/animations').then(r => {
+          if (r && r.animations) {
+            _lightModes = {};
+            r.animations.forEach(a => { _lightModes[`t${a.mode}`] = a.name; });
+          }
+        }).catch(() => {}),
         api('/light/list').then(r => {
-          if (r && r.sequences && r.sequences.length)
-            r.sequences.forEach(s => { if (!_lightModes.includes(s)) _lightModes.push(s); });
+          if (r && r.sequences)
+            r.sequences.forEach(s => { if (!_lightModes[s]) _lightModes[s] = s; });
         }),
       ]).catch(() => {});
 

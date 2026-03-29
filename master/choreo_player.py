@@ -252,25 +252,33 @@ class ChoreoPlayer:
 
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
-                _LIGHT_CMDS = {
-                    'random':   '0T1\r',
-                    'leia':     '0T6\r',
-                    'alarm':    '0T3\r',
-                    'flash':    '0T2\r',
-                    'disco':    '0T13\r',
-                    'off':      '0T20\r',
-                    'scream':   '0T5\r',
-                    'imperial': '0T11\r',
+                # Named → T-code lookup (backward compat for old .chor files)
+                _NAMED_CODES: dict[str, int] = {
+                    'random': 1,  'flash': 2,       'alarm': 3,   'short_circuit': 4,
+                    'scream': 5,  'leia': 6,         'i_heart_u': 7, 'panel_sweep': 8,
+                    'pulse_monitor': 9, 'star_wars': 10, 'imperial': 11, 'disco_timed': 12,
+                    'disco': 13,  'rebel': 14,       'knight_rider': 15, 'test_white': 16,
+                    'red_on': 17, 'green_on': 18,   'lightsaber': 19, 'off': 20,
+                    'vu_timed': 21, 'vu': 92,
                 }
-                if mode in _LIGHT_CMDS:
-                    if self._teeces:
-                        self._teeces.send_command(_LIGHT_CMDS[mode])
+                if self._teeces:
+                    # Preferred format: 't1'..'t21', 't92'
+                    if mode.startswith('t') and mode[1:].isdigit():
+                        self._teeces.animation(int(mode[1:]))
+                    elif mode in _NAMED_CODES:
+                        self._teeces.animation(_NAMED_CODES[mode])
+                    else:
+                        log.debug(f"Choreo lights: unknown mode '{mode}' — trying as .lseq")
+                        if self._engine:
+                            try:
+                                self._engine.run_light(mode, loop=False)
+                            except Exception as e:
+                                log.warning(f"Choreo lights .lseq '{mode}': {e}")
                 elif self._engine:
-                    # Custom .lseq sequence from light_sequences/
                     try:
                         self._engine.run_light(mode, loop=False)
                     except Exception as e:
-                        log.warning(f"Choreo lights custom sequence '{mode}': {e}")
+                        log.warning(f"Choreo lights .lseq '{mode}': {e}")
 
             elif track == 'servos':
                 action = ev.get('action', 'open')
