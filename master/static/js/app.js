@@ -4115,7 +4115,7 @@ const choreoEditor = (() => {
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
     { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
-    { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, easing:'linear'             } },
+    { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
     { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
@@ -4605,7 +4605,8 @@ const choreoEditor = (() => {
 
       if (totalW < 1) return `M ${xA} ${yMid} L ${xA} ${yP}`;   // degenerate: needle
 
-      const rampW = Math.min(8, totalW * 0.4);
+      const accel = kf.accel ?? 0.5;
+      const rampW = Math.max(6, totalW * (accel / 2));
       const xRise = xA + rampW;
       const xFall = xB - rampW;
 
@@ -4839,6 +4840,7 @@ const choreoEditor = (() => {
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
       html += numRow('DURATION ms', 'duration', { min: 0, max: 10000, step: 100 });
+      html += numRow('ACCEL FACTOR', 'accel', { min: 0.1, max: 1.0, step: 0.05 });
       html += selectRow('EASING', 'easing', {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
       });
@@ -5078,7 +5080,7 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:30.0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], lights:[], dome:[{t:0,power:0,duration:500,easing:'linear'},{t:30,power:0,duration:500,easing:'linear'}], servos:[], propulsion:[], markers:[] }
+        tracks: { audio:[], lights:[], dome:[{t:0,power:0,duration:500,accel:0.5,easing:'ease-in-out'},{t:30,power:0,duration:500,accel:0.5,easing:'ease-in-out'}], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');
@@ -5148,6 +5150,7 @@ const choreoEditor = (() => {
         const labelEl = block.querySelector('span');
         if (labelEl) labelEl.textContent = _blockLabel(track, item);
       }
+      if (track === 'dome' && _chor) _renderDomeLane(_chor.tracks.dome);
       if (_selected && _selected.track === track && _selected.idx === idx)
         _setInspectorTitle(track, item);
     },
