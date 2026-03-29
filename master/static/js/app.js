@@ -4118,6 +4118,7 @@ const choreoEditor = (() => {
     { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
     { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
+    { track:'servos',     label:'DEGREE', tpl:{ servo:'', action:'degree', target:90, duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
     { track:'propulsion', label:'STOP',   tpl:{ left:0,   right:0,                   duration:0.5 } },
   ];
@@ -4849,9 +4850,10 @@ const choreoEditor = (() => {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
       const servoOpts = Object.fromEntries(_servoList.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
       html += selectRow('SERVO', 'servo', servoOpts);
-      html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
-      // Optional numeric target angle (overrides OPEN/CLOSE when set, clamped 10–170°)
+      html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
+      // TARGET° required for DEGREE; optional override for OPEN/CLOSE
       html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
+      html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
 
     } else if (track === 'propulsion') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -5075,6 +5077,11 @@ const choreoEditor = (() => {
       (_chor.tracks.dome || []).forEach(kf => {
         if (kf.accel == null) kf.accel = 1.0;
         if (!kf.duration || kf.duration < 200) kf.duration = 200;
+      });
+      // Normalize servo KFs — legacy files may be missing duration or easing
+      (_chor.tracks.servos || []).forEach(ev => {
+        if (!ev.duration || ev.duration <= 0) ev.duration = 1.0;
+        if (!ev.easing) ev.easing = 'ease-in-out';
       });
       _dirty = false; _selected = null; _clearInspectorTitle();
       _renderAllTracks();

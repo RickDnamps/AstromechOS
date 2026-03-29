@@ -79,6 +79,7 @@ class ChoreoPlayer:
 
         self._stop_flag  = threading.Event()
         self._thread: threading.Thread | None = None
+        self._servo_pos: dict[str, float] = {}   # last commanded angle per servo (for slew start)
         self._status_lock = threading.Lock()
         self._status = {
             'playing':      False,
@@ -283,25 +284,68 @@ class ChoreoPlayer:
                         log.warning(f"Choreo lights .lseq '{mode}': {e}")
 
             elif track == 'servos':
-                action = ev.get('action', 'open')
-                servo  = ev.get('servo', '')
-                target = ev.get('target')   # optional numeric angle (degrees)
-                if not self._dome_servo and not self._body_servo:
+                action  = ev.get('action', 'open')
+                servo   = ev.get('servo', '')
+                target  = ev.get('target')
+                dur_s   = float(ev.get('duration', 0) or 0)
+                easing  = ev.get('easing', 'ease-in-out')
+
+                is_body     = servo.startswith('body_')
+                is_all_dome = servo in ('all', 'all_dome')
+                is_all_body = servo == 'all_body'
+
+                driver = self._body_servo if is_body else self._dome_servo
+                if not driver:
                     return
-                if servo in ('all', 'all_dome') and self._dome_servo:
+
+                # Bulk dispatch — no slewing
+                if is_all_dome and self._dome_servo:
                     if action == 'open':
                         self._dome_servo.open_all()
                     else:
                         self._dome_servo.close_all()
-                elif self._dome_servo:
-                    if target is not None:
-                        # Numeric target — clamp to hardware limits (10–170°)
-                        angle = max(10.0, min(170.0, float(target)))
-                        self._dome_servo.open(servo, angle_deg=angle)
-                    elif action == 'open':
-                        self._dome_servo.open(servo)
-                    else:
-                        self._dome_servo.close(servo)
+                    return
+                if is_all_body:
+                    return   # no open_all on body servo yet
+
+                # Resolve target angle for 'degree' action or explicit target
+                if target is not None:
+                    angle = max(10.0, min(170.0, float(target)))
+                else:
+                    angle = None   # driver uses calibrated open/close angle
+
+                # Duration-based slewing — runs in daemon thread, does not block event loop
+                if dur_s > 0 and angle is not None:
+                    start_a = float(self._servo_pos.get(servo, 20.0))
+                    self._servo_pos[servo] = angle
+
+                    def _slew(drv, name, a0, a1, dur, ease):
+                        steps = max(3, int(dur * 25))   # ~40ms per step at 25 steps/s
+                        for i in range(steps + 1):
+                            prog = _ease(i / steps, ease)
+                            a    = a0 + (a1 - a0) * prog
+                            try:
+                                drv.open(name, angle_deg=a, speed=10)
+                            except Exception:
+                                pass
+                            if i < steps:
+                                time.sleep(dur / steps)
+
+                    threading.Thread(
+                        target=_slew,
+                        args=(driver, servo, start_a, angle, dur_s, easing),
+                        daemon=True,
+                    ).start()
+                    return
+
+                # Instant dispatch (no duration or no explicit angle)
+                if angle is not None:
+                    driver.open(servo, angle_deg=angle)
+                    self._servo_pos[servo] = angle
+                elif action == 'open':
+                    driver.open(servo)
+                else:
+                    driver.close(servo)
 
             elif track == 'propulsion':
                 if not self._vesc:
