@@ -760,23 +760,30 @@
     <!-- ── Body ──────────────────────────────────────────────────── -->
     <div class="chor-body">
 
-      <!-- LEFT PANEL: monitors (top) + palette (bottom) -->
+      <!-- LEFT PANEL: live monitors (no palette — chips are inline with track labels) -->
       <div class="chor-left-panel" id="chor-monitor">
-
-        <!-- Top half: Live Monitors (FLD / RLD / PSI) -->
         <div class="chor-monitors">
           <div class="chor-monitor-title">LIVE MONITOR</div>
 
+          <!-- Audio mini-waveform -->
+          <div class="chor-monitor-section">
+            <div class="chor-monitor-label">AUDIO</div>
+            <canvas id="chor-mini-wave" class="chor-mini-wave" width="120" height="22"></canvas>
+          </div>
+
+          <!-- FLD — HTML dot grid (re-uses lights-tab logic-display style) -->
           <div class="chor-monitor-section">
             <div class="chor-monitor-label">FLD</div>
-            <canvas id="chor-fld-canvas" class="chor-pixel-canvas" width="108" height="44"></canvas>
+            <div class="logic-display chor-fld-grid" id="chor-fld-grid"></div>
           </div>
 
+          <!-- RLD — HTML dot grid -->
           <div class="chor-monitor-section">
             <div class="chor-monitor-label">RLD</div>
-            <canvas id="chor-rld-canvas" class="chor-pixel-canvas" width="108" height="26"></canvas>
+            <div class="logic-display chor-rld-grid" id="chor-rld-grid"></div>
           </div>
 
+          <!-- PSI row -->
           <div class="chor-monitor-section chor-psi-row">
             <div class="chor-psi-item">
               <div class="chor-monitor-label">PSI·F</div>
@@ -787,24 +794,68 @@
               <canvas id="chor-psi-r-canvas" class="chor-psi-canvas" width="24" height="24"></canvas>
             </div>
           </div>
+
+          <!-- Battery arc gauge -->
+          <div class="chor-monitor-section" style="align-items:center">
+            <canvas id="chor-battery-canvas" width="120" height="64"></canvas>
+          </div>
+
+          <!-- Dome top-view compass -->
+          <div class="chor-monitor-section chor-dome-section">
+            <div class="chor-monitor-label">DOME</div>
+            <canvas id="chor-dome-canvas" width="80" height="72"></canvas>
+          </div>
+
         </div><!-- /chor-monitors -->
-
-        <!-- Bottom half: Block Palette -->
-        <div class="chor-palette" id="chor-palette">
-          <div class="chor-palette-title">PALETTE</div>
-          <!-- Populated by choreoEditor._initPalette() -->
-        </div>
-
       </div><!-- /chor-left-panel -->
 
       <!-- Track label column -->
+      <!-- Track labels + inline draggable chips (replaces separate palette) -->
       <div class="chor-labels" id="chor-labels">
         <div class="chor-label-spacer"></div>
-        <div class="chor-track-label" data-track="audio">AUDIO</div>
-        <div class="chor-track-label" data-track="lights">LIGHTS</div>
-        <div class="chor-track-label chor-track-label-dome" data-track="dome">DOME °</div>
-        <div class="chor-track-label" data-track="servos">SERVOS</div>
-        <div class="chor-track-label" data-track="propulsion">PROPULSION</div>
+
+        <div class="chor-track-row" data-track="audio">
+          <span class="chor-track-name">AUDIO</span>
+          <div class="chor-track-chips">
+            <div class="chor-chip" data-track="audio" data-tpl='{"action":"play","file":"","volume":85,"duration":5}' draggable="true">PLAY</div>
+            <div class="chor-chip" data-track="audio" data-tpl='{"action":"stop","duration":0.5}' draggable="true">STOP</div>
+          </div>
+        </div>
+
+        <div class="chor-track-row" data-track="lights">
+          <span class="chor-track-name">LIGHTS</span>
+          <div class="chor-track-chips">
+            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"random","duration":4}' draggable="true">RND</div>
+            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"leia","duration":6}' draggable="true">LEIA</div>
+            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"alarm","duration":3}' draggable="true">ALM</div>
+            <div class="chor-chip" data-track="lights" data-tpl='{"mode":"off","duration":2}' draggable="true">OFF</div>
+          </div>
+        </div>
+
+        <div class="chor-track-row chor-track-row-dome" data-track="dome">
+          <span class="chor-track-name">DOME °</span>
+          <div class="chor-track-chips">
+            <div class="chor-chip" data-track="dome" data-tpl='{"angle":0,"easing":"linear"}' draggable="true">KF</div>
+            <div class="chor-chip" data-track="dome" data-tpl='{"angle":180,"easing":"ease-in-out"}' draggable="true">180</div>
+          </div>
+        </div>
+
+        <div class="chor-track-row" data-track="servos">
+          <span class="chor-track-name">SERVOS</span>
+          <div class="chor-track-chips">
+            <div class="chor-chip" data-track="servos" data-tpl='{"servo":"","action":"open","duration":1}' draggable="true">OPEN</div>
+            <div class="chor-chip" data-track="servos" data-tpl='{"servo":"","action":"close","duration":1}' draggable="true">CLOSE</div>
+          </div>
+        </div>
+
+        <div class="chor-track-row" data-track="propulsion">
+          <span class="chor-track-name">PROP</span>
+          <div class="chor-track-chips">
+            <div class="chor-chip" data-track="propulsion" data-tpl='{"left":0.5,"right":0.5,"duration":3}' draggable="true">DRIVE</div>
+            <div class="chor-chip" data-track="propulsion" data-tpl='{"left":0,"right":0,"duration":0.5}' draggable="true">STOP</div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Scrollable timeline -->
@@ -832,7 +883,7 @@
           <span id="chor-alarms-text" style="font-size:8px;letter-spacing:1.5px">NO ALARMS</span>
         </div>
 
-        <div class="chor-telem-compact" id="chor-telem-section" style="display:none">
+        <div class="chor-telem-compact" id="chor-telem-section">
           <div class="chor-telem-row">
             <span class="chor-telem-key">VOLT</span>
             <div class="chor-telem-bar-wrap"><div class="chor-telem-bar" id="chor-telem-v-bar"></div></div>

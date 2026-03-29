@@ -4134,6 +4134,7 @@ const choreoEditor = (() => {
     if (_monitorRaf) return;
     const tick = () => {
       _monitorTick++;
+      _drawMiniWave(_monitorTick);
       _drawFLD(_monitorTick);
       _drawRLD(_monitorTick);
       _drawPSI(_monitorTick);
@@ -4147,54 +4148,93 @@ const choreoEditor = (() => {
     if (_monitorRaf) { cancelAnimationFrame(_monitorRaf); _monitorRaf = null; }
   }
 
-  // Front Logic Display — 9×5 top grid + 9×5 bottom grid in cyan
+  // Front Logic Display — HTML dot grid (re-uses .logic-display / .sim-dot from lights tab)
   function _drawFLD(t) {
-    const canvas = document.getElementById('chor-fld-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    const cols = 9, rows = 5, pw = 9, ph = 7, gap = 3;
-    function drawGrid(yOffset, color, phase) {
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const lit = Math.sin(t * 0.07 + (r * cols + c) * 0.73 + phase) > 0.1;
-          const x = c * (pw + 1) + 1;
-          const y = yOffset + r * (ph + 1) + 1;
-          ctx.beginPath();
-          ctx.arc(x + pw / 2, y + ph / 2, pw / 2, 0, Math.PI * 2);
-          ctx.fillStyle = lit ? color : 'rgba(0,150,200,0.06)';
-          ctx.shadowBlur = lit ? 5 : 0;
-          ctx.shadowColor = color;
-          ctx.fill();
+    const grid = document.getElementById('chor-fld-grid');
+    if (!grid) return;
+    // Build rows once
+    if (!grid.children.length) {
+      for (let r = 0; r < 5; r++) {
+        const row = document.createElement('div');
+        row.className = 'logic-row';
+        for (let c = 0; c < 9; c++) {
+          const dot = document.createElement('div');
+          dot.className = 'sim-dot dot-fld';
+          row.appendChild(dot);
         }
+        grid.appendChild(row);
+      }
+      // Second sub-grid (darker cyan band)
+      const sep = document.createElement('div');
+      sep.style.cssText = 'height:2px';
+      grid.appendChild(sep);
+      for (let r = 0; r < 5; r++) {
+        const row = document.createElement('div');
+        row.className = 'logic-row';
+        for (let c = 0; c < 9; c++) {
+          const dot = document.createElement('div');
+          dot.className = 'sim-dot dot-fld';
+          row.appendChild(dot);
+        }
+        grid.appendChild(row);
       }
     }
-    drawGrid(0, '#00ccff', 0);
-    drawGrid(rows * (ph + 1) + gap, '#0088cc', Math.PI * 0.6);
-    ctx.shadowBlur = 0;
+    const dots = grid.querySelectorAll('.dot-fld');
+    dots.forEach((dot, i) => {
+      const phase = i < 45 ? 0 : Math.PI * 0.6;
+      const lit = Math.sin(t * 0.07 + i * 0.73 + phase) > 0.1;
+      const color = i < 45 ? '#00ccff' : '#0088cc';
+      dot.style.background = lit ? color : 'rgba(0,150,200,0.06)';
+      dot.style.boxShadow  = lit ? `0 0 4px ${color}` : 'none';
+    });
   }
 
-  // Rear Logic Display — 27×4 orange sweep on canvas
+  // Rear Logic Display — HTML dot grid (orange sweep)
   function _drawRLD(t) {
-    const canvas = document.getElementById('chor-rld-canvas');
+    const grid = document.getElementById('chor-rld-grid');
+    if (!grid) return;
+    const COLS = 14, ROWS = 3;
+    if (!grid.children.length) {
+      for (let r = 0; r < ROWS; r++) {
+        const row = document.createElement('div');
+        row.className = 'logic-row';
+        for (let c = 0; c < COLS; c++) {
+          const dot = document.createElement('div');
+          dot.className = 'sim-dot dot-rld';
+          row.appendChild(dot);
+        }
+        grid.appendChild(row);
+      }
+    }
+    const sw = Math.floor(t * 0.08) % COLS;
+    const dots = grid.querySelectorAll('.dot-rld');
+    dots.forEach((dot, i) => {
+      const c = i % COLS;
+      const lit = Math.abs(c - sw) < 2 || Math.sin(t * 0.05 + i * 0.45) > 0.35;
+      dot.style.background = lit ? '#ff8800' : 'rgba(180,80,0,0.07)';
+      dot.style.boxShadow  = lit ? '0 0 3px #ff8800' : 'none';
+    });
+  }
+
+  // Audio mini-waveform in left panel — animated noise pattern
+  function _drawMiniWave(t) {
+    const canvas = document.getElementById('chor-mini-wave');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
-    const cols = 27, rows = 4;
-    const pw = Math.floor((W - cols) / cols);
-    const ph = Math.floor((H - rows) / rows);
-    const sw = Math.floor(t * 0.08) % cols;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const lit = Math.abs(c - sw) < 3 || Math.sin(t * 0.05 + (r * cols + c) * 0.45) > 0.3;
-        ctx.fillStyle = lit ? '#ff8800' : 'rgba(180,80,0,0.07)';
-        ctx.shadowBlur = lit ? 4 : 0;
-        ctx.shadowColor = '#ff8800';
-        ctx.fillRect(c * (pw + 1), r * (ph + 1), pw, ph);
-      }
+    ctx.strokeStyle = '#00ccff';
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = '#00ccff';
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const amp = 0.35 + 0.15 * Math.sin(x * 0.12 + t * 0.04);
+      const y = H / 2 + Math.sin(x * 0.25 + t * 0.05) * H * amp * 0.4
+                       + Math.sin(x * 0.5  + t * 0.09) * H * amp * 0.2;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
+    ctx.stroke();
     ctx.shadowBlur = 0;
   }
 
@@ -4307,32 +4347,17 @@ const choreoEditor = (() => {
   }
 
   // Populate the block palette and attach dragstart handlers
+  // Wire the inline track chips (chips are already in HTML, just attach dragstart)
   function _initPalette() {
-    const container = document.getElementById('chor-palette');
-    if (!container) return;
-    container.querySelectorAll('.chor-palette-section-label, .chor-palette-item').forEach(el => el.remove());
-    const tracks = ['audio', 'lights', 'dome', 'servos', 'propulsion'];
-    tracks.forEach(track => {
-      const items = _PALETTE.filter(p => p.track === track);
-      if (!items.length) return;
-      const lbl = document.createElement('span');
-      lbl.className = 'chor-palette-section-label';
-      lbl.textContent = track.toUpperCase();
-      container.appendChild(lbl);
-      items.forEach(def => {
-        const chip = document.createElement('div');
-        chip.className = 'chor-palette-item';
-        chip.dataset.track = track;
-        chip.textContent = def.label;
-        chip.draggable = true;
-        chip.addEventListener('dragstart', e => {
-          e.dataTransfer.effectAllowed = 'copy';
-          e.dataTransfer.setData('application/json', JSON.stringify({ track: def.track, tpl: def.tpl }));
-        });
-        chip.addEventListener('dragend', () => {
-          document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
-        });
-        container.appendChild(chip);
+    document.querySelectorAll('.chor-chip').forEach(chip => {
+      chip.addEventListener('dragstart', e => {
+        let tpl;
+        try { tpl = JSON.parse(chip.dataset.tpl); } catch { return; }
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/json', JSON.stringify({ track: chip.dataset.track, tpl }));
+      });
+      chip.addEventListener('dragend', () => {
+        document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
       });
     });
   }
@@ -4626,8 +4651,16 @@ const choreoEditor = (() => {
     _lastTelem = telem;
     const section = document.getElementById('chor-telem-section');
     if (!section) return;
-    if (!telem || (!telem.L && !telem.R)) { section.style.display = 'none'; return; }
-    section.style.display = 'block';
+    // Telemetry section is always visible — show dashes when no data
+    if (!telem || (!telem.L && !telem.R)) {
+      ['chor-telem-v','chor-telem-t','chor-telem-c'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.textContent = '—';
+      });
+      ['chor-telem-v-bar','chor-telem-t-bar','chor-telem-c-bar'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.style.width = '0%';
+      });
+      return;
+    }
 
     const vVals = [telem.L && telem.L.v_in, telem.R && telem.R.v_in].filter(Boolean);
     const tVals = [telem.L && telem.L.temp, telem.R && telem.R.temp].filter(Boolean);
@@ -4642,13 +4675,13 @@ const choreoEditor = (() => {
     if (tVals.length) {
       const tMax = Math.max(...tVals);
       const tPct = Math.max(0, Math.min(100, (tMax / 80) * 100));
-      const tCol = tPct > 87 ? 'var(--red)' : tPct > 62 ? 'var(--amber)' : 'var(--amber)';
+      const tCol = tPct > 87 ? 'var(--red)' : tPct > 62 ? 'var(--amber)' : 'var(--green)';
       _setBar('chor-telem-t-bar', 'chor-telem-t', tPct, tVals.map(v=>v.toFixed(0)+'°').join('/'), tCol);
     }
     if (cVals.length) {
       const cMax = Math.max(...cVals);
       const cPct = Math.max(0, Math.min(100, (cMax / 30) * 100));
-      const cCol = cPct > 87 ? 'var(--red)' : cPct > 62 ? 'var(--amber)' : 'var(--red)';
+      const cCol = cPct > 87 ? 'var(--red)' : cPct > 62 ? 'var(--amber)' : 'var(--green)';
       _setBar('chor-telem-c-bar', 'chor-telem-c', cPct, cVals.map(v=>v.toFixed(1)+'A').join('/'), cCol);
     }
 
@@ -4778,7 +4811,7 @@ const choreoEditor = (() => {
       _stopPolling(); _updateAlarms(null);
       const ph = document.getElementById('chor-playhead'); if (ph) ph.style.left = '0px';
       const tc = document.getElementById('chor-timecode'); if (tc) tc.textContent = '00:00.000';
-      const section = document.getElementById('chor-telem-section'); if (section) section.style.display = 'none';
+      _updateTelem(null);
       toast('Choreo stopped', 'ok');
     },
 

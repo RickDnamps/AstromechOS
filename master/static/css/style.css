@@ -2660,49 +2660,51 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   image-rendering: pixelated;
 }
 
-/* Bottom half — Block Palette */
-.chor-palette {
-  flex-shrink: 0;
-  padding: 6px;
-  overflow-y: auto;
-  min-height: 90px;
-  max-height: 45%;
-}
-.chor-palette-title {
-  font-size: 7px;
-  letter-spacing: 2px;
-  color: rgba(0,170,255,.35);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.chor-palette-section-label {
-  display: block;
-  font-size: 6px;
-  letter-spacing: 1px;
-  color: rgba(0,170,255,.25);
-  margin-top: 5px;
-  margin-bottom: 2px;
-  text-transform: uppercase;
-}
-.chor-palette-item {
+/* Inline track action chips (replaces separate palette) */
+.chor-chip {
   display: inline-block;
-  font-size: 7px;
-  letter-spacing: .8px;
-  padding: 2px 5px;
+  font-size: 6px;
+  letter-spacing: .7px;
+  padding: 2px 4px;
   border: 1px solid;
   border-radius: 2px;
   cursor: grab;
-  margin: 1px;
   font-family: 'Courier New', monospace;
   user-select: none;
-  transition: opacity .15s;
+  transition: opacity .15s, box-shadow .15s;
+  white-space: nowrap;
 }
-.chor-palette-item:active { cursor: grabbing; opacity: .7; }
-.chor-palette-item[data-track="audio"]      { color:#00ccff; border-color:rgba(0,200,255,.4);  background:rgba(0,200,255,.08); }
-.chor-palette-item[data-track="lights"]     { color:#ffb800; border-color:rgba(255,180,0,.4);  background:rgba(255,180,0,.08); }
-.chor-palette-item[data-track="dome"]       { color:#cc44ff; border-color:rgba(200,60,255,.4); background:rgba(200,60,255,.06); }
-.chor-palette-item[data-track="servos"]     { color:#00ff88; border-color:rgba(0,255,120,.4);  background:rgba(0,255,120,.06); }
-.chor-palette-item[data-track="propulsion"] { color:#ff8800; border-color:rgba(255,120,0,.4);  background:rgba(255,120,0,.08); }
+.chor-chip:active { cursor: grabbing; opacity: .65; }
+.chor-chip:hover  { box-shadow: 0 0 5px currentColor; }
+.chor-chip[data-track="audio"]      { color:#00ccff; border-color:rgba(0,200,255,.4);  background:rgba(0,200,255,.08); }
+.chor-chip[data-track="lights"]     { color:#ffb800; border-color:rgba(255,180,0,.4);  background:rgba(255,180,0,.08); }
+.chor-chip[data-track="dome"]       { color:#cc44ff; border-color:rgba(200,60,255,.4); background:rgba(200,60,255,.06); }
+.chor-chip[data-track="servos"]     { color:#00ff88; border-color:rgba(0,255,120,.4);  background:rgba(0,255,120,.06); }
+.chor-chip[data-track="propulsion"] { color:#ff8800; border-color:rgba(255,120,0,.4);  background:rgba(255,120,0,.08); }
+
+/* FLD / RLD HTML dot grids in the choreo left panel */
+.chor-fld-grid,
+.chor-rld-grid {
+  padding: 4px 5px;
+  max-width: 120px;
+}
+.chor-fld-grid .logic-row { gap: 2px; margin-bottom: 2px; }
+.chor-rld-grid .logic-row { gap: 2px; margin-bottom: 2px; }
+
+/* Audio mini-waveform in left panel */
+.chor-mini-wave {
+  border-radius: 2px;
+  max-width: 120px;
+  opacity: .75;
+  display: block;
+}
+
+/* Dome compass section in left panel */
+.chor-dome-section {
+  flex: 1;
+  justify-content: center;
+  align-items: center;
+}
 
 /* Drop-target highlight when dragging over a lane */
 .chor-lane.drag-over {
@@ -2711,27 +2713,43 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   outline-offset: -1px;
 }
 
-/* ── Track labels ─────────────────────────────────────────────── */
+/* ── Track labels + inline chips ─────────────────────────────── */
 .chor-labels {
-  width: 88px;
+  width: 148px;
   flex-shrink: 0;
   border-right: 1px solid rgba(0,170,255,.1);
   display: flex;
   flex-direction: column;
 }
 .chor-label-spacer { height: 28px; border-bottom: 1px solid rgba(0,170,255,.1); flex-shrink: 0; }
-.chor-track-label {
+
+/* Track row: label text + draggable chips side-by-side */
+.chor-track-row {
   height: 44px;
-  padding: 0 8px;
+  padding: 0 4px 0 6px;
   display: flex;
   align-items: center;
-  font-size: 8px;
-  letter-spacing: 1.5px;
-  color: var(--text-dim);
+  gap: 5px;
   border-bottom: 1px solid rgba(0,170,255,.07);
   flex-shrink: 0;
+  overflow: hidden;
 }
-.chor-track-label-dome { height: 64px; }
+.chor-track-row-dome { height: 64px; align-items: flex-start; padding-top: 10px; }
+.chor-track-name {
+  font-size: 7px;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+  width: 36px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.chor-track-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-content: center;
+  flex: 1;
+}
 
 /* ── Scrollable timeline ──────────────────────────────────────── */
 .chor-scroll-wrap {
