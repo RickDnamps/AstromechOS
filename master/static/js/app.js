@@ -4092,6 +4092,7 @@ const choreoEditor = (() => {
   let _selected    = null;
   let _pollTimer   = null;
   let _dirty       = false;
+  let _lanesWired  = false;
   let _monitorRaf  = null;
   let _monitorTick = 0;
   let _lastTelem   = null;
@@ -4282,11 +4283,12 @@ const choreoEditor = (() => {
       const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 1;
       ctx.clearRect(0, 0, W, H);
       const blink = Math.sin(t * 0.12 + phase) > 0;
+      const activeColor = blink ? c1 : c2;
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = blink ? c1 + '33' : 'rgba(0,0,0,.5)';
+      ctx.fillStyle = blink ? c1 + '33' : c2;
       ctx.fill();
-      ctx.strokeStyle = c1;
+      ctx.strokeStyle = activeColor;
       ctx.lineWidth = 1.5;
       ctx.shadowBlur = blink ? 8 : 2;
       ctx.shadowColor = c1;
@@ -4296,7 +4298,7 @@ const choreoEditor = (() => {
       ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
       ctx.fillStyle = blink ? c1 : 'rgba(0,0,0,0)';
       ctx.shadowBlur = blink ? 6 : 0;
-      ctx.shadowColor = c1;
+      ctx.shadowColor = activeColor;
       ctx.fill();
       ctx.shadowBlur = 0;
     }
@@ -4327,6 +4329,9 @@ const choreoEditor = (() => {
           e.dataTransfer.effectAllowed = 'copy';
           e.dataTransfer.setData('application/json', JSON.stringify({ track: def.track, tpl: def.tpl }));
         });
+        chip.addEventListener('dragend', () => {
+          document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
+        });
         container.appendChild(chip);
       });
     });
@@ -4334,13 +4339,17 @@ const choreoEditor = (() => {
 
   // Wire HTML5 drop targets on all timeline lanes
   function _addDropToLanes() {
+    if (_lanesWired) return;
+    _lanesWired = true;
     document.querySelectorAll('.chor-lane').forEach(lane => {
       lane.addEventListener('dragover', e => {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
         lane.classList.add('drag-over');
       });
-      lane.addEventListener('dragleave', () => lane.classList.remove('drag-over'));
+      lane.addEventListener('dragleave', e => {
+        if (!lane.contains(e.relatedTarget)) lane.classList.remove('drag-over');
+      });
       lane.addEventListener('drop', e => {
         e.preventDefault();
         lane.classList.remove('drag-over');
