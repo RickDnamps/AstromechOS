@@ -171,9 +171,10 @@ class ChoreoPlayer:
                 '_auto_stop': True,
             })
 
-        # Servos — shifted
-        for ev in tracks.get('servos', []):
-            events.append({**ev, 'track': 'servos', 't': ev['t'] + lat})
+        # Servos — shifted (legacy 'servos' + new split tracks all route to servo dispatch)
+        for src in ('servos', 'dome_servos', 'body_servos', 'arm_servos'):
+            for ev in tracks.get(src, []):
+                events.append({**ev, 'track': 'servos', 't': ev['t'] + lat})
 
         # Propulsion — shifted; auto-stop at end of each block
         for ev in tracks.get('propulsion', []):
