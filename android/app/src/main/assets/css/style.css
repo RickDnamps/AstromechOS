@@ -66,8 +66,8 @@ body {
   color: var(--text);
   font-family: var(--font);
   font-size: 13px;
-  min-height: 100vh;
-  overflow-x: hidden;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
 }
 
