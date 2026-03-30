@@ -5012,8 +5012,10 @@ const choreoEditor = (() => {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
       html += selectRow('SERVO', 'servo', servoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
-      html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
-      html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
+      if (item.action === 'degree') {
+        html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
+        html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
+      }
 
     } else if (track === 'propulsion') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -5399,8 +5401,14 @@ const choreoEditor = (() => {
         if (labelEl) labelEl.textContent = _blockLabel(track, item);
       }
       if (track === 'dome' && _chor) _renderDomeLane(_chor.tracks.dome);
-      if (_selected && _selected.track === track && _selected.idx === idx)
+      const _isServo = ['dome_servos', 'body_servos', 'arm_servos'].includes(track);
+      if (_isServo && field === 'action') {
+        if (rawVal === 'degree' && !item.easing) item.easing = 'ease-in-out';
+        if (_selected && _selected.track === track && _selected.idx === idx)
+          _updatePropsPanel(track, idx);
+      } else if (_selected && _selected.track === track && _selected.idx === idx) {
         _setInspectorTitle(track, item);
+      }
     },
 
     _deleteSelected() {
