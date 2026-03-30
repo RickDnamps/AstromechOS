@@ -322,10 +322,16 @@ body::after {
   height: 100%;
 }
 
-/* Tighten center column spacing so it never overflows */
-#tab-drive .drive-center {
-  gap: 10px;
-}
+/* ── Drive tab vertical compression — scoped to #tab-drive ──────── */
+#tab-drive .drive-layout        { justify-content: space-evenly; }
+#tab-drive .drive-center        { gap: 8px; }
+#tab-drive .gauge-card          { padding: 6px 10px; }
+#tab-drive .estop-btn,
+#tab-drive .estop-reset-btn     { padding: 9px 18px; font-size: 11px; }
+#tab-drive .estop-icon          { font-size: 14px; }
+#tab-drive .drive-controls-row  { gap: 10px; }
+#tab-drive .kbd-indicator       { gap: 2px; }
+#tab-drive .joystick-panel      { gap: 6px; }
 
 .joystick-panel {
   flex: 0 0 auto;
