@@ -4458,7 +4458,7 @@ const choreoEditor = (() => {
     const ruler = document.getElementById('chor-ruler');
     if (!ruler) return;
     ruler.innerHTML = '';
-    const total = Math.ceil(duration) + 5;
+    const total = Math.ceil(duration);
     for (let s = 0; s <= total; s++) {
       const major = s % 5 === 0;
       const tick  = document.createElement('div');
@@ -4468,7 +4468,7 @@ const choreoEditor = (() => {
       ruler.appendChild(tick);
     }
     const canvas = document.getElementById('chor-canvas');
-    if (canvas) canvas.style.width = (_px(total) + 100) + 'px';
+    if (canvas) canvas.style.width = (_px(duration) + 40) + 'px';
   }
 
   // ── Track rendering ───────────────────────────────────────────────
