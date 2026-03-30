@@ -306,14 +306,25 @@ body::after {
 /* ================================================================
    DRIVE TAB
 ================================================================ */
+
+/* Clip the drive tab to the viewport — no body scroll */
+#tab-drive {
+  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
+  overflow: hidden;
+}
+
 .drive-layout {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   padding: 16px;
-  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
-  min-height: 360px;
+  height: 100%;
+}
+
+/* Tighten center column spacing so it never overflows */
+#tab-drive .drive-center {
+  gap: 10px;
 }
 
 .joystick-panel {
