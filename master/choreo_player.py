@@ -48,6 +48,13 @@ class ChoreoPlayer:
         else:
             self._latency = 0.10
 
+        # Body servo UART compensation: advance body servo events by this amount
+        # so the command arrives at the Slave in sync with dome servo I2C pulses.
+        self._body_uart_lat = (
+            cfg.getfloat('choreo', 'body_servo_uart_lat', fallback=0.025)
+            if cfg is not None else 0.025
+        )
+
         self._audio      = audio
         self._teeces     = teeces
         self._dome_motor = dome_motor
@@ -171,10 +178,21 @@ class ChoreoPlayer:
                 '_auto_stop': True,
             })
 
-        # Servos — shifted (legacy 'servos' + new split tracks all route to servo dispatch)
-        for src in ('servos', 'dome_servos', 'body_servos', 'arm_servos'):
-            for ev in tracks.get(src, []):
-                events.append({**ev, 'track': 'servos', 't': ev['t'] + lat})
+        # Servos — shifted
+        # dome_servos: direct I2C on Master → no extra compensation
+        # body_servos / arm_servos: travel via UART to Slave → fire early by body_uart_lat
+        # legacy 'servos' track: detect by servo name prefix
+        body_adv = self._body_uart_lat
+        for ev in tracks.get('dome_servos', []):
+            events.append({**ev, 'track': 'servos', 't': ev['t'] + lat})
+        for ev in tracks.get('body_servos', []):
+            events.append({**ev, 'track': 'servos', 't': max(0.0, ev['t'] + lat - body_adv)})
+        for ev in tracks.get('arm_servos', []):
+            events.append({**ev, 'track': 'servos', 't': max(0.0, ev['t'] + lat - body_adv)})
+        for ev in tracks.get('servos', []):
+            is_body = ev.get('servo', '').startswith('body_') or ev.get('servo', '').startswith('arm_')
+            shift = body_adv if is_body else 0.0
+            events.append({**ev, 'track': 'servos', 't': max(0.0, ev['t'] + lat - shift)})
 
         # Propulsion — shifted; auto-stop at end of each block
         for ev in tracks.get('propulsion', []):
