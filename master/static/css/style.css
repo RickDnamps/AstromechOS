@@ -1266,6 +1266,17 @@ body::after {
   padding: 16px;
   height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,170,255,.25) transparent;
+}
+.sequences-layout::-webkit-scrollbar { width: 4px; }
+.sequences-layout::-webkit-scrollbar-track { background: transparent; }
+.sequences-layout::-webkit-scrollbar-thumb {
+  background: rgba(0,170,255,.25);
+  border-radius: 2px;
+}
+.sequences-layout::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,170,255,.5);
 }
 
 .sequences-header {
