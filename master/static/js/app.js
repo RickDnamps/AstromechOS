@@ -4516,19 +4516,48 @@ const choreoEditor = (() => {
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
 
+  // Block cascade constants
+  const _BLOCK_H    = 26;   // px — block height per layer
+  const _LAYER_STEP = 30;   // px — _BLOCK_H + 4px gap between layers
+  const _LANE_PAD   = 5;    // px — top/bottom padding inside lane
+  const _LANE_MIN_H = 44;   // px — minimum lane height (single layer)
+
+  function _computeLayers(items, track) {
+    const isAudioTrack = track === 'audio' || track === 'audio2';
+    const layerEnds = [];   // layerEnds[i] = end time of last block placed in layer i
+    return items.map(item => {
+      const t   = item.t || 0;
+      const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
+      const end = t + dur;
+      let layer = layerEnds.findIndex(e => e <= t);
+      if (layer === -1) layer = layerEnds.length;
+      layerEnds[layer] = end;
+      return layer;
+    });
+  }
+
+  function _syncTrackRow(track, heightPx) {
+    const row = document.querySelector(`.chor-track-row[data-track="${track}"]`);
+    if (row) row.style.height = heightPx + 'px';
+  }
+
   function _renderTrack(track) {
     const lane = _lane(track);
     if (!lane) return;
     lane.querySelectorAll('.chor-block').forEach(b => b.remove());
     const items = _chor.tracks[track] || [];
-    items.forEach((item, idx) => {
-      if (track === 'dome') return;
-      lane.appendChild(_makeBlock(track, item, idx));
-    });
-    if (track === 'dome') _renderDomeLane(items);
+    if (track === 'dome') { _renderDomeLane(items); return; }
+
+    const layers   = _computeLayers(items, track);
+    const maxLayer = layers.length > 0 ? Math.max(...layers) : 0;
+    const laneH    = Math.max(_LANE_MIN_H, 6 + (maxLayer + 1) * _LAYER_STEP);
+    lane.style.height = laneH + 'px';
+    _syncTrackRow(track, laneH);
+
+    items.forEach((item, idx) => lane.appendChild(_makeBlock(track, item, idx, layers[idx])));
   }
 
-  function _makeBlock(track, item, idx) {
+  function _makeBlock(track, item, idx, layer = 0) {
     const block = document.createElement('div');
     block.className = 'chor-block';
     block.dataset.track = track;
@@ -4538,8 +4567,11 @@ const choreoEditor = (() => {
     const isAudioTrack = track === 'audio' || track === 'audio2';
     const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
     const isAudioLocked = isAudioTrack && item.duration > 0;
-    block.style.left  = _px(t)   + 'px';
-    block.style.width = _px(dur) + 'px';
+    block.style.left   = _px(t)   + 'px';
+    block.style.width  = _px(dur) + 'px';
+    block.style.top    = (_LANE_PAD + layer * _LAYER_STEP) + 'px';
+    block.style.height = _BLOCK_H + 'px';
+    block.style.bottom = 'auto';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
@@ -4816,6 +4848,8 @@ const choreoEditor = (() => {
         }
       }
       block.style.opacity = '1';
+      _renderTrack(track);
+      _selectBlock(track, idx);
       _refreshLayout();
     };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
@@ -4830,7 +4864,7 @@ const choreoEditor = (() => {
       _dirty = true;
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _refreshLayout(); };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 

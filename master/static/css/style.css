@@ -2767,6 +2767,19 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   outline-offset: -1px;
 }
 
+/* ── Shared vertical-scroll wrapper (labels + timeline) ──────── */
+.chor-tracks-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+.chor-tracks-body::-webkit-scrollbar { width: 4px; }
+.chor-tracks-body::-webkit-scrollbar-track { background: transparent; }
+.chor-tracks-body::-webkit-scrollbar-thumb { background: rgba(0,170,255,.25); border-radius: 2px; }
+
 /* ── Track source buttons column (buttons only, no text labels) ── */
 .chor-labels {
   width: 82px;
@@ -2775,17 +2788,27 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   display: flex;
   flex-direction: column;
 }
-.chor-label-spacer { height: 28px; border-bottom: 1px solid rgba(0,170,255,.1); flex-shrink: 0; }
+.chor-label-spacer {
+  height: 28px;
+  border-bottom: 1px solid rgba(0,170,255,.1);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  background: #060910;
+}
 
 /* Track row: full-width, centres the single source button */
 .chor-track-row {
   height: 44px;
   padding: 0 6px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  padding-top: 7px;
   justify-content: center;
   border-bottom: 1px solid rgba(0,170,255,.07);
   flex-shrink: 0;
+  transition: height .12s ease;
 }
 .chor-track-row-dome { height: 64px; }
 
@@ -2793,13 +2816,13 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 .chor-scroll-wrap {
   flex: 1;
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: visible;
   position: relative;
 }
 .chor-canvas {
   position: relative;
   min-width: 100%;
-  height: 100%;
+  height: auto;
 }
 
 /* ── Ruler ────────────────────────────────────────────────────── */
@@ -2807,7 +2830,9 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   height: 28px;
   background: #060910;
   border-bottom: 1px solid rgba(0,170,255,.12);
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 6;
   flex-shrink: 0;
 }
 .chor-tick {
@@ -2844,7 +2869,8 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 /* ── Blocks ───────────────────────────────────────────────────── */
 .chor-block {
   position: absolute;
-  top: 5px; bottom: 5px;
+  top: 5px;
+  height: 26px;
   min-width: 20px;
   border: 1px solid;
   border-radius: 3px;
