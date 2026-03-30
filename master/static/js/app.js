@@ -4716,18 +4716,30 @@ const choreoEditor = (() => {
 
       handle.addEventListener('mousedown', e => {
         e.stopPropagation(); e.preventDefault();
-        const startMouseY = e.clientY;
+        const startMouseX = e.clientX, startMouseY = e.clientY;
+        const startT      = kf.t;
         const startPower  = kf.power ?? 0;
         const startY      = powToY(startPower);
         const svgRect     = svg.getBoundingClientRect();
-        const scale       = H / (svgRect.height || H);
+        const scaleY      = H / (svgRect.height || H);
+        const scaleX      = W / (svgRect.width  || W);
 
         const onMove = e2 => {
-          const newPower = yToPow(startY + (e2.clientY - startMouseY) * scale);
-          kf.power = newPower; _dirty = true;
-          const newYP = powToY(newPower);
-          handle.setAttribute('cy', newYP);
-          lbl.setAttribute('y', newYP - 7); lbl.textContent = `${newPower}%`;
+          // Horizontal → time (snapped, clamped to ≥ 0)
+          const rawT  = startT + _sec((e2.clientX - startMouseX) * scaleX);
+          const newT  = Math.max(0, _snap(rawT));
+          kf.t = newT; _dirty = true;
+          // Vertical → power
+          const newPower = yToPow(startY + (e2.clientY - startMouseY) * scaleY);
+          kf.power = newPower;
+          // Recompute geometry
+          const durSec = (kf.duration || 0) / 1000;
+          const newXA  = _px(newT), newXB = _px(newT + durSec);
+          const newXM  = (newXA + newXB) / 2;
+          const newYP  = powToY(newPower);
+          handle.setAttribute('cx', newXM); handle.setAttribute('cy', newYP);
+          lbl.setAttribute('x', newXM); lbl.setAttribute('y', newYP - 7);
+          lbl.textContent = `${newPower}%`;
           const d = pulsePath(kf);
           fill.setAttribute('d', d); glow.setAttribute('d', d); stroke.setAttribute('d', d);
           if (_selected && _selected.track === 'dome' && _selected.idx === i)
@@ -4736,7 +4748,9 @@ const choreoEditor = (() => {
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
+          keyframes.sort((a, b) => a.t - b.t);
           _renderDomeLane(keyframes);
+          _refreshLayout();
         };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
