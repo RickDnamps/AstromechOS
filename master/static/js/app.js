@@ -4310,10 +4310,16 @@ const choreoEditor = (() => {
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
     _renderRuler(dur);
+    _syncLaneWidths(dur);
     _drawWaveform();
     _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
+  }
+
+  function _syncLaneWidths(duration) {
+    const w = (_px(duration) + 40) + 'px';
+    document.querySelectorAll('.chor-lane').forEach(l => l.style.width = w);
   }
 
   function _lane(track) { return document.getElementById(`chor-lane-${track}`); }
@@ -4403,8 +4409,7 @@ const choreoEditor = (() => {
     const canvas = document.getElementById('chor-waveform-canvas');
     const lane   = _lane('audio');
     if (!canvas || !lane || !_chor) return;
-    const totalSec = _chor.meta.duration + 3;
-    const W = _px(totalSec) + 100;
+    const W = _px(_chor.meta.duration) + 40;
     const H = lane.clientHeight || 44;
     canvas.width = W; canvas.height = H;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -4430,8 +4435,7 @@ const choreoEditor = (() => {
     const canvas = document.getElementById('chor-waveform-canvas2');
     const lane   = _lane('audio2');
     if (!canvas || !lane || !_chor) return;
-    const totalSec = _chor.meta.duration + 3;
-    const W = _px(totalSec) + 100;
+    const W = _px(_chor.meta.duration) + 40;
     const H = lane.clientHeight || 44;
     canvas.width = W; canvas.height = H;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -4479,6 +4483,7 @@ const choreoEditor = (() => {
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
     _renderRuler(dur);
+    _syncLaneWidths(dur);
     _drawWaveform();
     _drawWaveform2();
     const durEl = document.getElementById('chor-duration');

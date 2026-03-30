@@ -2807,7 +2807,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   height: 44px;
   position: relative;
   border-bottom: 1px solid rgba(0,170,255,.07);
-  overflow: visible;
+  overflow: hidden;
 }
 .chor-lane-audio { height: 44px; }
 .chor-lane-dome  { height: 64px; }
