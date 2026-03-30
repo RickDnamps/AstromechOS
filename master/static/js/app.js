@@ -4317,8 +4317,16 @@ const choreoEditor = (() => {
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
 
+  // Returns the full canvas width: liquid-fills the viewport when content is short,
+  // expands beyond it (triggering scrollbar) when content is long.
+  function _liquidWidth(duration) {
+    const wrap = document.getElementById('chor-scroll');
+    const containerW = wrap ? wrap.clientWidth : 0;
+    return Math.max(_px(duration) + 40, containerW);
+  }
+
   function _syncLaneWidths(duration) {
-    const w = (_px(duration) + 40) + 'px';
+    const w = _liquidWidth(duration) + 'px';
     document.querySelectorAll('.chor-lane').forEach(l => l.style.width = w);
   }
 
@@ -4462,7 +4470,9 @@ const choreoEditor = (() => {
     const ruler = document.getElementById('chor-ruler');
     if (!ruler) return;
     ruler.innerHTML = '';
-    const total = Math.ceil(duration);
+    const fullW  = _liquidWidth(duration);
+    // Ticks cover the full liquid width so grid never leaves a blank strip
+    const total  = Math.ceil(_sec(fullW));
     for (let s = 0; s <= total; s++) {
       const major = s % 5 === 0;
       const tick  = document.createElement('div');
@@ -4472,7 +4482,7 @@ const choreoEditor = (() => {
       ruler.appendChild(tick);
     }
     const canvas = document.getElementById('chor-canvas');
-    if (canvas) canvas.style.width = (_px(duration) + 40) + 'px';
+    if (canvas) canvas.style.width = fullW + 'px';
   }
 
   // ── Track rendering ───────────────────────────────────────────────
@@ -5106,6 +5116,12 @@ const choreoEditor = (() => {
       _initPalette();
       _addDropToLanes();
 
+      // Re-render on container resize so liquid fill stays accurate
+      const scrollWrap = document.getElementById('chor-scroll');
+      if (scrollWrap && window.ResizeObserver) {
+        new ResizeObserver(() => { if (_chor) _refreshLayout(); }).observe(scrollWrap);
+      }
+
       // Delete/Backspace removes the selected block (skip when typing in an input)
       document.addEventListener('keydown', e => {
         if (!_selected) return;
@@ -5244,7 +5260,11 @@ const choreoEditor = (() => {
 
     setSnap(val) { _snapVal = val; _syncSnapUI(); },
 
-    zoom(delta) { _pxPerSec = Math.max(10, Math.min(200, _pxPerSec + delta)); if (_chor) _renderAllTracks(); },
+    zoom(delta) {
+      const factor = delta > 0 ? 1.25 : 0.8;
+      _pxPerSec = Math.max(10, Math.min(200, Math.round(_pxPerSec * factor)));
+      if (_chor) _renderAllTracks();
+    },
 
     setEasing(name) {
       if (!_selected || _selected.track !== 'dome') return;
