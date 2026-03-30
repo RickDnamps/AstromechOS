@@ -4240,6 +4240,7 @@ const choreoEditor = (() => {
   // ── State ────────────────────────────────────────────────────────
   let _chor        = null;
   let _pxPerSec    = 30;
+  let _zoomFactor  = 1.0;   // 1.0 = fit-to-screen, >1 = zoomed in
   let _snapVal     = 0.1;
   let _selected    = null;
   let _pollTimer   = null;
@@ -4307,6 +4308,7 @@ const choreoEditor = (() => {
   // Update ruler + canvas width + duration display without full re-render
   function _refreshLayout() {
     if (!_chor) return;
+    _fitToScreen();
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
     _renderRuler(dur);
@@ -4317,12 +4319,22 @@ const choreoEditor = (() => {
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
 
-  // Returns the full canvas width: liquid-fills the viewport when content is short,
-  // expands beyond it (triggering scrollbar) when content is long.
+  // Fit pxPerSec so that total duration exactly fills the scroll-wrap width.
+  // _zoomFactor > 1 zooms in (content wider than container — clips without scroll).
+  function _fitToScreen() {
+    const wrap = document.getElementById('chor-scroll');
+    if (!wrap) return;
+    const containerW = wrap.clientWidth;
+    if (containerW <= 0) return;
+    const dur = _calcTotalDuration();
+    if (dur <= 0) return;
+    _pxPerSec = Math.max(5, (containerW / dur) * _zoomFactor);
+  }
+
+  // Always returns the scroll-wrap client width — content is always fit-to-screen.
   function _liquidWidth(duration) {
     const wrap = document.getElementById('chor-scroll');
-    const containerW = wrap ? wrap.clientWidth : 0;
-    return Math.max(_px(duration) + 40, containerW);
+    return wrap ? Math.max(wrap.clientWidth, 100) : Math.max(_px(duration) + 40, 100);
   }
 
   function _syncLaneWidths(duration) {
@@ -4417,7 +4429,7 @@ const choreoEditor = (() => {
     const canvas = document.getElementById('chor-waveform-canvas');
     const lane   = _lane('audio');
     if (!canvas || !lane || !_chor) return;
-    const W = _px(_chor.meta.duration) + 40;
+    const W = _liquidWidth(_chor.meta.duration);
     const H = lane.clientHeight || 44;
     canvas.width = W; canvas.height = H;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -4443,7 +4455,7 @@ const choreoEditor = (() => {
     const canvas = document.getElementById('chor-waveform-canvas2');
     const lane   = _lane('audio2');
     if (!canvas || !lane || !_chor) return;
-    const W = _px(_chor.meta.duration) + 40;
+    const W = _liquidWidth(_chor.meta.duration);
     const H = lane.clientHeight || 44;
     canvas.width = W; canvas.height = H;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -4488,6 +4500,7 @@ const choreoEditor = (() => {
   // ── Track rendering ───────────────────────────────────────────────
   function _renderAllTracks() {
     if (!_chor) return;
+    _fitToScreen();
     ['audio', 'audio2', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const dur = _calcTotalDuration();
@@ -5180,7 +5193,7 @@ const choreoEditor = (() => {
         if (!ev.duration || ev.duration <= 0) ev.duration = 1.0;
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
-      _dirty = false; _selected = null; _clearInspectorTitle();
+      _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
       _renderAllTracks();
       toast(`Loaded: ${name}`, 'ok');
     },
@@ -5262,7 +5275,7 @@ const choreoEditor = (() => {
 
     zoom(delta) {
       const factor = delta > 0 ? 1.25 : 0.8;
-      _pxPerSec = Math.max(10, Math.min(200, Math.round(_pxPerSec * factor)));
+      _zoomFactor = Math.max(0.1, Math.min(10, _zoomFactor * factor));
       if (_chor) _renderAllTracks();
     },
 

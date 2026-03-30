@@ -2771,7 +2771,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 /* ── Scrollable timeline ──────────────────────────────────────── */
 .chor-scroll-wrap {
   flex: 1;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
   position: relative;
 }

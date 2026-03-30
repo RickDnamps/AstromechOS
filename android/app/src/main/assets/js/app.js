@@ -940,6 +940,158 @@ function resetPSICustom() {
   _domeSim.resetPSICustom();
 }
 
+// ================================================================
+// _chorMon — Independent photorealistic display engine for the
+// Choreo left panel. Targets chor-prefixed element IDs so it
+// never interferes with the Light tab's _domeSim instance.
+// Driven by the lights track timeline, NOT by the Light tab controls.
+// ================================================================
+const _chorMon = (() => {
+  const FONT5 = {
+    'A':[2,5,7,5,5],'B':[6,5,6,5,6],'C':[3,4,4,4,3],'D':[6,5,5,5,6],'E':[7,4,6,4,7],
+    'F':[7,4,6,4,4],'G':[3,4,5,5,3],'H':[5,5,7,5,5],'I':[7,2,2,2,7],'J':[1,1,1,5,2],
+    'K':[5,5,6,5,5],'L':[4,4,4,4,7],'M':[5,7,7,5,5],'N':[5,7,5,5,5],'O':[2,5,5,5,2],
+    'P':[6,5,6,4,4],'Q':[2,5,5,7,3],'R':[6,5,6,5,5],'S':[3,4,2,1,6],'T':[7,2,2,2,2],
+    'U':[5,5,5,5,2],'V':[5,5,5,5,2],'W':[5,5,7,7,5],'X':[5,5,2,5,5],'Y':[5,5,2,2,2],
+    'Z':[7,1,2,4,7],'0':[2,5,5,5,2],'1':[2,6,2,2,7],'2':[6,1,2,4,7],'3':[6,1,2,1,6],
+    '4':[5,5,7,1,1],'5':[7,4,6,1,6],'6':[3,4,6,5,2],'7':[7,1,2,2,2],'8':[2,5,2,5,2],
+    '9':[2,5,3,1,6],' ':[0,0,0,0,0],'!':[2,2,2,0,2],'?':[6,1,2,0,2],'.':[0,0,0,0,2],
+    '-':[0,0,7,0,0],':':[0,2,0,2,0],'+':[0,2,7,2,0],'♥':[0,5,7,2,0],'#':[5,7,5,7,5],
+  };
+  const FONT4 = {
+    'A':[2,5,7,5],'B':[6,6,5,6],'C':[3,4,4,3],'D':[6,5,5,6],'E':[7,6,4,7],
+    'F':[7,6,4,4],'G':[3,4,5,3],'H':[5,7,5,5],'I':[7,2,2,7],'J':[1,1,5,2],
+    'K':[5,6,6,5],'L':[4,4,4,7],'M':[5,7,5,5],'N':[5,7,5,5],'O':[2,5,5,2],
+    'P':[6,5,6,4],'Q':[2,5,7,3],'R':[6,5,6,5],'S':[3,2,1,6],'T':[7,2,2,2],
+    'U':[5,5,5,2],'V':[5,5,5,2],'W':[5,5,7,5],'X':[5,2,2,5],'Y':[5,5,2,2],
+    'Z':[7,2,4,7],'0':[2,5,5,2],'1':[2,6,2,7],'2':[6,2,4,7],'3':[6,2,1,6],
+    '4':[5,7,1,1],'5':[7,6,1,6],'6':[3,6,5,2],'7':[7,1,2,2],'8':[2,2,5,2],
+    '9':[2,5,3,1],' ':[0,0,0,0],'!':[2,2,0,2],'?':[6,2,0,2],'.':[0,0,0,2],
+    '-':[0,7,0,0],':':[2,0,2,0],'+':[0,7,2,0],'♥':[5,7,2,0],
+  };
+  const CFG = {
+    'chor-fld-top': { rows:5, cols:9, cls:'dot-fld' },
+    'chor-fld-bot': { rows:5, cols:9, cls:'dot-fld' },
+    'chor-rld':     { rows:4, cols:27, cls:'dot-rld' },
+  };
+  const MODE_MAP = {
+    1:'random',2:'flash',3:'alarm',4:'short',5:'scream',
+    6:'leia',7:'love',8:'sweep',9:'pulse',10:'starwars',
+    11:'imperial',12:'disco',13:'disco',14:'alarm',15:'sweep',
+    16:'white',17:'redon',18:'greenon',19:'saber',20:'off',
+    21:'pulse',92:'pulse',
+  };
+  let _tick=0, _mode='off', _lastShort=0, _running=false;
+  const _textState = {
+    'chor-fld-top': { buf:null, scroll:0, color:'#00ffea', active:false },
+    'chor-fld-bot': { buf:null, scroll:0, color:'#00aaff', active:false },
+    'chor-rld':     { buf:null, scroll:0, color:'#ff8800', active:false },
+  };
+
+  function _buildBuf(text, rows, font) {
+    const buf = Array.from({ length: rows }, () => []);
+    (text.toUpperCase() + '   ').split('').forEach(ch => {
+      const g = font[ch] || font[' '];
+      for (let c=0;c<3;c++) for (let r=0;r<rows;r++) buf[r].push((g[r]>>(2-c))&1);
+      for (let r=0;r<rows;r++) buf[r].push(0);
+    });
+    return buf;
+  }
+  function _getDots(id) { const e=document.getElementById(id); return e?Array.from(e.querySelectorAll('.sim-dot')):[]; }
+  function _lit(d,c)  { if(!d)return; d.style.background=c; d.style.boxShadow=`0 0 4px ${c}`; }
+  function _dim(d)    { if(!d)return; d.style.background='rgba(0,170,255,0.07)'; d.style.boxShadow='none'; }
+  function _setPSI(front, rear) {
+    const pf=document.getElementById('chor-psi-front'), pr=document.getElementById('chor-psi-rear');
+    if(pf){pf.style.background=front; pf.style.boxShadow=`0 0 14px ${front}`;}
+    if(pr){pr.style.background=rear;  pr.style.boxShadow=`0 0 14px ${rear}`;}
+  }
+  function _renderText(id) {
+    const st=_textState[id]; if(!st.buf)return;
+    const{rows,cols}=CFG[id]; const dots=_getDots(id); const bufLen=st.buf[0]?.length||1;
+    st.scroll=(st.scroll+1)%(bufLen+cols);
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+      const bIdx=c+st.scroll-cols; const on=bIdx>=0&&bIdx<bufLen&&st.buf[r]&&st.buf[r][bIdx];
+      on?_lit(dots[r*cols+c],st.color):_dim(dots[r*cols+c]);
+    }
+  }
+  const IDS = ['chor-fld-top','chor-fld-bot','chor-rld'];
+  const _modes = {
+    random(t) {
+      IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.07+(r*cols+c+si*23)*0.73)>0.1?_lit(dots[r*cols+c],'#00aaff'):_dim(dots[r*cols+c]);});_setPSI('#00aaff','#0077cc');
+    },
+    flash(t){const on=Math.floor(t/5)%2===0;IDS.forEach(id=>_getDots(id).forEach(d=>on?_lit(d,'#ffcc00'):_dim(d)));_setPSI(on?'#ffcc00':'#221100',on?'#ffaa00':'#110800');},
+    alarm(t){
+      const sw=Math.floor(t*0.1)%9;
+      ['chor-fld-top','chor-fld-bot'].forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.abs(c-sw)<2?_lit(dots[r*cols+c],'#ff2244'):_dim(dots[r*cols+c]);});
+      const sw2=Math.floor(t*0.1)%27;const{rows:rr,cols:rc}=CFG['chor-rld'];const rd=_getDots('chor-rld');for(let r=0;r<rr;r++)for(let c=0;c<rc;c++)Math.abs(c-sw2)<3?_lit(rd[r*rc+c],'#ff2244'):_dim(rd[r*rc+c]);_setPSI('#ff2244','#ff0022');
+    },
+    short(t){const cs=['#ff2244','#ffcc00','#00ffea','#ff8800','#aa66ff','#00cc66','#fff'];IDS.forEach(id=>_getDots(id).forEach(d=>Math.random()>0.65?_lit(d,cs[Math.floor(Math.random()*cs.length)]):_dim(d)));_setPSI(cs[Math.floor(t*0.18)%cs.length],cs[(Math.floor(t*0.18)+3)%cs.length]);},
+    scream(t){IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.14+(r*cols+c+si*11)*0.4)*0.5+0.5>0.35?_lit(dots[r*cols+c],'#00ffea'):_dim(dots[r*cols+c]);});_setPSI('#00ffea','#009988');},
+    leia(t){const wave=(t*0.03)%1;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const frac=c/cols,dist=Math.min(Math.abs(frac-wave),1-Math.abs(frac-wave));dist<0.22?_lit(dots[r*cols+c],'#9955ff'):_dim(dots[r*cols+c]);}});_setPSI('#9955ff','#7733bb');},
+    love(t){const beat=Math.sin(t*0.14)*0.5+0.5>0.35;IDS.forEach(id=>_getDots(id).forEach(d=>beat?_lit(d,'#ff66cc'):_dim(d)));_setPSI(beat?'#ff66cc':'#330011',beat?'#ff44aa':'#220011');},
+    sweep(t){const pos=Math.sin(t*0.04)*0.5+0.5;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.abs(c/cols-pos)<0.12?_lit(dots[r*cols+c],'#00aaff'):_dim(dots[r*cols+c]);});_setPSI('#00aaff','#0066aa');},
+    pulse(t){const v=Math.sin(t*0.09)*0.5+0.5;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)c/cols<v?_lit(dots[r*cols+c],'#00cc66'):_dim(dots[r*cols+c]);});_setPSI('#00cc66','#009944');},
+    starwars(t){IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);const sp=Math.floor(t*0.07);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)(c+sp)%cols<3?_lit(dots[r*cols+c],'#ffdd00'):_dim(dots[r*cols+c]);});_setPSI('#ffdd00','#bb9900');},
+    imperial(t){const beat=Math.sin(t*0.22)*0.5+0.5>0.55;IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.18+(r*cols+c+si*7)*0.45)*0.5+0.5*(beat?1:0.3)>0.4?_lit(dots[r*cols+c],'#ff8800'):_dim(dots[r*cols+c]);});_setPSI(beat?'#ff8800':'#331100',beat?'#ff6600':'#221100');},
+    disco(t){const cs=['#ff2244','#ffcc00','#00ffea','#ff66cc','#8844ff','#00cc66','#ff8800'];IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)_lit(dots[r*cols+c],cs[(Math.floor(t*0.09)+(r*cols+c+si*5))%cs.length]);});_setPSI(cs[Math.floor(t*0.12)%cs.length],cs[(Math.floor(t*0.12)+3)%cs.length]);},
+    saber(t){const pos=Math.sin(t*0.05)*0.5+0.5;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)c/cols<pos?_lit(dots[r*cols+c],'#44ff88'):_dim(dots[r*cols+c]);});_setPSI('#44ff88','#22cc55');},
+    redon()  {IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#ff2244')));_setPSI('#ff2244','#cc0022');},
+    greenon(){IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#00cc66')));_setPSI('#00cc66','#009944');},
+    white()  {IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#eef2ff')));_setPSI('#ffffff','#ccddff');},
+    off()    {IDS.forEach(id=>_getDots(id).forEach(d=>_dim(d)));_setPSI('#0a0e14','#0a0e14');},
+    text(t) {
+      if(t%8===0) IDS.forEach(id=>{
+        if(_textState[id].active){_renderText(id);}
+        else{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.07+(r*cols+c)*0.5)>0.1?_lit(dots[r*cols+c],'rgba(0,170,255,0.3)'):_dim(dots[r*cols+c]);}
+      });
+      _setPSI('#00ffea','#ff8800');
+    },
+  };
+
+  function _loop() {
+    _tick++;
+    if(_mode==='short'){if(_tick-_lastShort>=3){_modes.short(_tick);_lastShort=_tick;}}
+    else{(_modes[_mode]||_modes.off)(_tick);}
+    requestAnimationFrame(_loop);
+  }
+
+  return {
+    init() {
+      if(_running) return;
+      Object.entries(CFG).forEach(([id,c])=>{
+        const e=document.getElementById(id); if(!e||e.querySelector('.sim-dot'))return;
+        for(let r=0;r<c.rows;r++){
+          const row=document.createElement('div'); row.className='logic-row';
+          for(let col=0;col<c.cols;col++){const d=document.createElement('div');d.className=`sim-dot ${c.cls}`;row.appendChild(d);}
+          e.appendChild(row);
+        }
+      });
+      _running=true; _loop();
+    },
+    setModeNum(num){ this.setMode(MODE_MAP[num]||'random'); },
+    setMode(key) {
+      if(_mode===key) return;
+      _mode=key; _tick=0;
+      if(key!=='text') Object.keys(_textState).forEach(k=>{_textState[k].active=false;_textState[k].buf=null;});
+    },
+    setText(target, text, color) {
+      if(!text) return;
+      if(target==='fld'||target==='both'){
+        ['chor-fld-top','chor-fld-bot'].forEach(id=>{
+          _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
+          if(color)_textState[id].color=color;
+        });
+      }
+      if(target==='rld'||target==='both'){
+        _textState['chor-rld'].buf=_buildBuf(text,4,FONT4);_textState['chor-rld'].scroll=0;_textState['chor-rld'].active=true;
+        if(color)_textState['chor-rld'].color=color;
+      }
+      _mode='text'; _tick=0;
+    },
+    updatePSI(color){ _setPSI(color,color); },
+  };
+})();
+
 function setSpeed(val) {
   _speedLimit = val / 100;
   el('speed-val').textContent = val + '%';
@@ -4088,31 +4240,38 @@ const choreoEditor = (() => {
   // ── State ────────────────────────────────────────────────────────
   let _chor        = null;
   let _pxPerSec    = 30;
+  let _zoomFactor  = 1.0;   // 1.0 = fit-to-screen, >1 = zoomed in
   let _snapVal     = 0.1;
   let _selected    = null;
   let _pollTimer   = null;
   let _dirty       = false;
   let _lanesWired  = false;
-  let _monitorRaf  = null;
-  let _monitorTick = 0;
   let _lastTelem   = null;
 
   // Cached data for inspector dropdowns — loaded once at init
-  let _audioIndex  = {};   // { category: [soundName, …] }
-  let _servoList   = [];   // ['dome_panel_1', …]
+  let _audioIndex    = {};   // { category: [soundName, …] } — from index
+  let _audioScanned  = [];   // [soundName, …] — from full disk scan (authoritative)
+  let _servoList     = [];   // ['dome_panel_1', …]
+  let _servoSettings = {};   // { 'dome_panel_1': {open:110, close:20, speed:10}, … }
+  // Light modes: keyed object { 't1': 'Random', 't6': 'Leia Message', …, 'my_seq': 'my_seq' }
+  // Populated at init from /teeces/animations (T-codes) + /light/list (.lseq files)
+  let _lightModes    = { t1:'Random', t6:'Leia Message', t3:'Alarm', t13:'Disco', t20:'Off' };
 
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
     { track:'audio',      label:'PLAY',   tpl:{ action:'play', file:'', volume:85,   duration:5   } },
     { track:'audio',      label:'STOP',   tpl:{ action:'stop',                        duration:0.5 } },
+    { track:'audio2',     label:'PLAY 2', tpl:{ action:'play', file:'', volume:85,   duration:5   } },
+    { track:'audio2',     label:'STOP 2', tpl:{ action:'stop',                        duration:0.5 } },
     { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                        duration:4   } },
     { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                          duration:6   } },
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
     { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
-    { track:'dome',       label:'KF',     tpl:{ angle:0, easing:'linear'                           } },
+    { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
     { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
+    { track:'servos',     label:'DEGREE', tpl:{ servo:'', action:'degree', target:90, duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
     { track:'propulsion', label:'STOP',   tpl:{ left:0,   right:0,                   duration:0.5 } },
   ];
@@ -4131,224 +4290,63 @@ const choreoEditor = (() => {
     const sec = (s % 60).toFixed(3).padStart(6, '0');
     return `${String(m).padStart(2, '0')}:${sec}`;
   }
+
+  // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
+  function _calcTotalDuration() {
+    if (!_chor) return 10.0;
+    let max = 0;
+    for (const [track, events] of Object.entries(_chor.tracks || {})) {
+      for (const ev of (events || [])) {
+        const t   = ev.t || 0;
+        const dur = (track === 'dome') ? ((ev.duration || 0) / 1000) : (ev.duration || 0);
+        if (t + dur > max) max = t + dur;
+      }
+    }
+    return Math.max(max + 2.0, 5.0);
+  }
+
+  // Update ruler + canvas width + duration display without full re-render
+  function _refreshLayout() {
+    if (!_chor) return;
+    _fitToScreen();
+    const dur = _calcTotalDuration();
+    _chor.meta.duration = dur;
+    _renderRuler(dur);
+    _syncLaneWidths(dur);
+    _drawWaveform();
+    _drawWaveform2();
+    const durEl = document.getElementById('chor-duration');
+    if (durEl) durEl.textContent = _fmtTime(dur);
+  }
+
+  // Fit pxPerSec so that total duration exactly fills the scroll-wrap width.
+  // _zoomFactor > 1 zooms in (content wider than container — clips without scroll).
+  function _fitToScreen() {
+    const wrap = document.getElementById('chor-scroll');
+    if (!wrap) return;
+    const containerW = wrap.clientWidth;
+    if (containerW <= 0) return;
+    const dur = _calcTotalDuration();
+    if (dur <= 0) return;
+    _pxPerSec = Math.max(5, (containerW / dur) * _zoomFactor);
+  }
+
+  // Always returns the scroll-wrap client width — content is always fit-to-screen.
+  function _liquidWidth(duration) {
+    const wrap = document.getElementById('chor-scroll');
+    return wrap ? Math.max(wrap.clientWidth, 100) : Math.max(_px(duration) + 40, 100);
+  }
+
+  function _syncLaneWidths(duration) {
+    const w = _liquidWidth(duration) + 'px';
+    document.querySelectorAll('.chor-lane').forEach(l => l.style.width = w);
+  }
+
   function _lane(track) { return document.getElementById(`chor-lane-${track}`); }
 
-  // ── Monitor canvas animations ─────────────────────────────────────
-  function _startMonitor() {
-    if (_monitorRaf) return;
-    const tick = () => {
-      _monitorTick++;
-      _drawMiniWave(_monitorTick);
-      _drawFLD(_monitorTick);
-      _drawRLD(_monitorTick);
-      _drawPSI(_monitorTick);
-      _drawBattery(_lastTelem);
-      _drawDomeCompass(_monitorTick);
-      _monitorRaf = requestAnimationFrame(tick);
-    };
-    _monitorRaf = requestAnimationFrame(tick);
-  }
-  function _stopMonitor() {
-    if (_monitorRaf) { cancelAnimationFrame(_monitorRaf); _monitorRaf = null; }
-  }
-
-  // Front Logic Display — HTML dot grid (re-uses .logic-display / .sim-dot from lights tab)
-  function _drawFLD(t) {
-    const grid = document.getElementById('chor-fld-grid');
-    if (!grid) return;
-    // Build rows once
-    if (!grid.children.length) {
-      for (let r = 0; r < 5; r++) {
-        const row = document.createElement('div');
-        row.className = 'logic-row';
-        for (let c = 0; c < 9; c++) {
-          const dot = document.createElement('div');
-          dot.className = 'sim-dot dot-fld';
-          row.appendChild(dot);
-        }
-        grid.appendChild(row);
-      }
-      // Second sub-grid (darker cyan band)
-      const sep = document.createElement('div');
-      sep.style.cssText = 'height:2px';
-      grid.appendChild(sep);
-      for (let r = 0; r < 5; r++) {
-        const row = document.createElement('div');
-        row.className = 'logic-row';
-        for (let c = 0; c < 9; c++) {
-          const dot = document.createElement('div');
-          dot.className = 'sim-dot dot-fld';
-          row.appendChild(dot);
-        }
-        grid.appendChild(row);
-      }
-    }
-    const dots = grid.querySelectorAll('.dot-fld');
-    dots.forEach((dot, i) => {
-      const phase = i < 45 ? 0 : Math.PI * 0.6;
-      const lit = Math.sin(t * 0.07 + i * 0.73 + phase) > 0.1;
-      const color = i < 45 ? '#00ccff' : '#0088cc';
-      dot.style.background = lit ? color : 'rgba(0,150,200,0.06)';
-      dot.style.boxShadow  = lit ? `0 0 4px ${color}` : 'none';
-    });
-  }
-
-  // Rear Logic Display — HTML dot grid (orange sweep)
-  function _drawRLD(t) {
-    const grid = document.getElementById('chor-rld-grid');
-    if (!grid) return;
-    const COLS = 14, ROWS = 3;
-    if (!grid.children.length) {
-      for (let r = 0; r < ROWS; r++) {
-        const row = document.createElement('div');
-        row.className = 'logic-row';
-        for (let c = 0; c < COLS; c++) {
-          const dot = document.createElement('div');
-          dot.className = 'sim-dot dot-rld';
-          row.appendChild(dot);
-        }
-        grid.appendChild(row);
-      }
-    }
-    const sw = Math.floor(t * 0.08) % COLS;
-    const dots = grid.querySelectorAll('.dot-rld');
-    dots.forEach((dot, i) => {
-      const c = i % COLS;
-      const lit = Math.abs(c - sw) < 2 || Math.sin(t * 0.05 + i * 0.45) > 0.35;
-      dot.style.background = lit ? '#ff8800' : 'rgba(180,80,0,0.07)';
-      dot.style.boxShadow  = lit ? '0 0 3px #ff8800' : 'none';
-    });
-  }
-
-  // Audio mini-waveform in left panel — animated noise pattern
-  function _drawMiniWave(t) {
-    const canvas = document.getElementById('chor-mini-wave');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.strokeStyle = '#00ccff';
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 4;
-    ctx.shadowColor = '#00ccff';
-    ctx.beginPath();
-    for (let x = 0; x < W; x++) {
-      const amp = 0.35 + 0.15 * Math.sin(x * 0.12 + t * 0.04);
-      const y = H / 2 + Math.sin(x * 0.25 + t * 0.05) * H * amp * 0.4
-                       + Math.sin(x * 0.5  + t * 0.09) * H * amp * 0.2;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // Battery arc gauge
-  function _drawBattery(telem) {
-    const canvas = document.getElementById('chor-battery-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    const cx = W / 2, cy = H * 0.72, r = Math.min(W, H) * 0.38;
-    const startA = Math.PI * 0.85, endA = Math.PI * 2.15;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startA, endA);
-    ctx.strokeStyle = 'rgba(0,170,255,0.1)';
-    ctx.lineWidth = 7;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    let pct = 0, voltage = null;
-    if (telem) {
-      const vals = [telem.L ? telem.L.v_in : null, telem.R ? telem.R.v_in : null].filter(v => v !== null);
-      if (vals.length) { voltage = Math.min(...vals); pct = Math.max(0, Math.min(1, (voltage - 20) / 9.4)); }
-    }
-    const color = pct < 0.2 ? '#ff2244' : pct < 0.5 ? '#ffb300' : '#00cc66';
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startA, startA + (endA - startA) * pct);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 7;
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = color;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = color;
-    ctx.font = 'bold 12px Courier New';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(voltage !== null ? Math.round(pct * 100) + '%' : '—', cx, cy - 4);
-    ctx.font = '7px Courier New';
-    ctx.fillStyle = 'rgba(0,170,255,0.4)';
-    ctx.fillText(voltage !== null ? voltage.toFixed(1) + 'V' : 'NO TELEM', cx, cy + 10);
-  }
-
-  // Dome compass with rotating needle
-  function _drawDomeCompass(t) {
-    const canvas = document.getElementById('chor-dome-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    const cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.42;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,170,255,0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    const angle = (t * 0.015) % (Math.PI * 2);
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.sin(angle) * (r - 12), cy - Math.cos(angle) * (r - 12));
-    ctx.strokeStyle = '#00eeff';
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = '#00eeff';
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#00eeff';
-    ctx.fill();
-    ctx.fillStyle = 'rgba(0,170,255,0.25)';
-    ctx.font = '7px Courier New';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', Math.PI * 1.5]].forEach(([label, a]) => {
-      ctx.fillText(label, cx + Math.sin(a) * (r - 7), cy - Math.cos(a) * (r - 7));
-    });
-  }
-
-  // Animate PSI canvases — front (cyan) and rear (amber)
-  function _drawPSI(t) {
-    function drawOne(id, c1, c2, phase) {
-      const canvas = document.getElementById(id);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 1;
-      ctx.clearRect(0, 0, W, H);
-      const blink = Math.sin(t * 0.12 + phase) > 0;
-      const activeColor = blink ? c1 : c2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = blink ? c1 + '33' : c2;
-      ctx.fill();
-      ctx.strokeStyle = activeColor;
-      ctx.lineWidth = 1.5;
-      ctx.shadowBlur = blink ? 8 : 2;
-      ctx.shadowColor = c1;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-      ctx.fillStyle = blink ? c1 : 'rgba(0,0,0,0)';
-      ctx.shadowBlur = blink ? 6 : 0;
-      ctx.shadowColor = activeColor;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-    drawOne('chor-psi-f-canvas', '#00ffea', 'rgba(0,80,60,.3)', 0);
-    drawOne('chor-psi-r-canvas', '#ffaa00', 'rgba(80,40,0,.3)', Math.PI * 0.7);
-  }
+  // ── Monitor — delegates to _chorMon photorealistic engine ────────
+  function _startMonitor() { _chorMon.init(); }
+  function _stopMonitor()  { /* _chorMon rAF loop continues — driven by timeline */ }
 
   // Populate the block palette and attach dragstart handlers
   // Wire the Ultratime source buttons (one per track, already in HTML)
@@ -4418,6 +4416,7 @@ const choreoEditor = (() => {
         _chor.tracks[track].sort((a, b) => a.t - b.t);
         _dirty = true;
         _renderTrack(track);
+        _refreshLayout();
         const idx = _chor.tracks[track].indexOf(newItem);
         if (track !== 'dome') _selectBlock(track, idx);
         toast(`${track} block → ${t.toFixed(2)}s`, 'ok');
@@ -4430,8 +4429,7 @@ const choreoEditor = (() => {
     const canvas = document.getElementById('chor-waveform-canvas');
     const lane   = _lane('audio');
     if (!canvas || !lane || !_chor) return;
-    const totalSec = _chor.meta.duration + 5;
-    const W = _px(totalSec) + 100;
+    const W = _liquidWidth(_chor.meta.duration);
     const H = lane.clientHeight || 44;
     canvas.width = W; canvas.height = H;
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
@@ -4453,12 +4451,40 @@ const choreoEditor = (() => {
     }
   }
 
+  function _drawWaveform2() {
+    const canvas = document.getElementById('chor-waveform-canvas2');
+    const lane   = _lane('audio2');
+    if (!canvas || !lane || !_chor) return;
+    const W = _liquidWidth(_chor.meta.duration);
+    const H = lane.clientHeight || 44;
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    const name  = ((_chor.tracks.audio2 || [])[0] || {}).file || 'audio2';
+    const barW  = 2, barGap = 1;
+    const nBars = Math.floor(W / (barW + barGap));
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, 'rgba(255,153,0,0.85)');
+    grad.addColorStop(1, 'rgba(180,80,0,0.15)');
+    ctx.fillStyle = grad;
+    for (let i = 0; i < nBars; i++) {
+      hash = ((hash * 1664525) + 1013904223) | 0;
+      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
+      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
+    }
+  }
+
   // ── Ruler ─────────────────────────────────────────────────────────
   function _renderRuler(duration) {
     const ruler = document.getElementById('chor-ruler');
     if (!ruler) return;
     ruler.innerHTML = '';
-    const total = Math.ceil(duration) + 5;
+    const fullW  = _liquidWidth(duration);
+    // Ticks cover the full liquid width so grid never leaves a blank strip
+    const total  = Math.ceil(_sec(fullW));
     for (let s = 0; s <= total; s++) {
       const major = s % 5 === 0;
       const tick  = document.createElement('div');
@@ -4468,18 +4494,23 @@ const choreoEditor = (() => {
       ruler.appendChild(tick);
     }
     const canvas = document.getElementById('chor-canvas');
-    if (canvas) canvas.style.width = (_px(total) + 100) + 'px';
+    if (canvas) canvas.style.width = fullW + 'px';
   }
 
   // ── Track rendering ───────────────────────────────────────────────
   function _renderAllTracks() {
     if (!_chor) return;
-    ['audio', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
+    _fitToScreen();
+    ['audio', 'audio2', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
-    _renderRuler(_chor.meta.duration);
+    const dur = _calcTotalDuration();
+    _chor.meta.duration = dur;
+    _renderRuler(dur);
+    _syncLaneWidths(dur);
     _drawWaveform();
+    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
-    if (durEl) durEl.textContent = _fmtTime(_chor.meta.duration);
+    if (durEl) durEl.textContent = _fmtTime(dur);
   }
 
   function _renderTrack(track) {
@@ -4501,18 +4532,20 @@ const choreoEditor = (() => {
     block.dataset.idx   = idx;
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
-    const dur = item.duration || (track === 'audio' ? (_chor.meta.duration - t) : 2);
+    const isAudioTrack = track === 'audio' || track === 'audio2';
+    const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
+    const isAudioLocked = isAudioTrack && item.duration > 0;
     block.style.left  = _px(t)   + 'px';
     block.style.width = _px(dur) + 'px';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
-                       <div class="chor-block-resize" data-resize="true"></div>`;
+                       ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
     return block;
   }
 
   function _blockLabel(track, item) {
-    if (track === 'audio')      return item.file || '?';
-    if (track === 'lights')     return (item.mode || item.name || '?').toUpperCase();
+    if (track === 'audio' || track === 'audio2') return item.file || '?';
+    if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     if (track === 'servos')     return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
@@ -4521,6 +4554,7 @@ const choreoEditor = (() => {
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
     audio:      '#00eeff',
+    audio2:     '#ff9900',
     lights:     '#ffcc00',
     dome:       '#cc44ff',
     servos:     '#00ff88',
@@ -4529,12 +4563,12 @@ const choreoEditor = (() => {
 
   // Derive the short action label shown after the colon in the inspector header
   function _inspectorLabel(track, item) {
-    if (track === 'audio') {
+    if (track === 'audio' || track === 'audio2') {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
-    if (track === 'lights') return (item.mode || '?').toUpperCase();
-    if (track === 'dome')   return item.angle !== undefined ? `${item.angle}°` : 'KF';
+    if (track === 'lights') return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
       return `${name} ${item.action || ''}`.trim().toUpperCase();
@@ -4547,10 +4581,16 @@ const choreoEditor = (() => {
     const el = document.getElementById('chor-inspector-title');
     if (!el) return;
     const label = _inspectorLabel(track, item);
-    el.textContent = `${track.toUpperCase()} : ${label}`;
     const c = _TRACK_COLOR[track] || '#00ccff';
     el.style.color = c;
     el.style.textShadow = `0 0 10px ${c}88`;
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'space-between';
+    el.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${track.toUpperCase()} : ${label}</span>
+      <button onclick="choreoEditor._deleteSelected()"
+        style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
+        title="Delete block">✕</button>`;
   }
 
   function _clearInspectorTitle() {
@@ -4561,33 +4601,164 @@ const choreoEditor = (() => {
     el.style.textShadow = 'none';
   }
 
+  function _deleteBlock(track, idx) {
+    if (!_chor || !_chor.tracks[track] || _chor.tracks[track][idx] == null) return;
+    _chor.tracks[track].splice(idx, 1);
+    _dirty = true; _selected = null;
+    _clearInspectorTitle();
+    const panel = document.getElementById('chor-props-content');
+    if (panel) panel.innerHTML = '<span style="color:var(--text-dim);font-size:10px">Select a block to inspect.</span>';
+    const ew = document.getElementById('chor-easing-wrap');
+    if (ew) ew.style.display = 'none';
+    _renderTrack(track);
+    _refreshLayout();
+  }
+
   function _renderDomeLane(keyframes) {
     const lane = _lane('dome');
     if (!lane) return;
     lane.innerHTML = '';
-    if (keyframes.length < 2) return;
-    const W = _px(_chor.meta.duration + 5), H = 56;
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    if (!keyframes || !keyframes.length) return;
+
+    const W = _px(_chor.meta.duration + 3), H = 56;
+    const NS  = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
     svg.setAttribute('width', W); svg.setAttribute('height', H);
-    svg.style.cssText = 'position:absolute;top:4px;left:0';
-    const pts = keyframes.map(kf => ({ x: _px(kf.t), y: H - (kf.angle / 360) * (H - 6) - 3 }));
-    let d = `M ${pts[0].x} ${pts[0].y}`;
-    for (let i = 1; i < pts.length; i++) {
-      const cp = (pts[i].x - pts[i - 1].x) / 2;
-      d += ` C ${pts[i-1].x + cp} ${pts[i-1].y} ${pts[i].x - cp} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;
+    svg.style.cssText = 'position:absolute;top:4px;left:0;overflow:visible';
+
+    // Y-axis: power=0 → center (y=H/2), +100 → near top, -100 → near bottom
+    const yMid  = H / 2;
+    const ySpan = H / 2 - 3;
+    const powToY = p => yMid - (p / 100) * ySpan;
+    const yToPow = y => Math.round(Math.max(-100, Math.min(100, -(y - yMid) / ySpan * 100)));
+
+    // Build the PWM pulse path for one event:
+    //   flat 0 → easing rise to POWER → hold → easing fall to 0
+    // Easing ramps occupy min(8px, 40% of event width) each side.
+    function pulsePath(kf) {
+      const durSec = (kf.duration || 0) / 1000;
+      const xA = _px(kf.t);
+      const xB = _px(kf.t + durSec);
+      const totalW = xB - xA;
+      const yP = powToY(kf.power ?? 0);
+      const ease = kf.easing || 'ease-in-out';
+
+      if (totalW < 1) return `M ${xA} ${yMid} L ${xA} ${yP}`;   // degenerate: needle
+
+      const accel = kf.accel ?? 1.0;   // legacy .chor files without accel → smooth bell curve
+      const rampW = Math.max(6, totalW * (accel / 2));
+      const xRise = xA + rampW;
+      const xFall = xB - rampW;
+
+      // When pulse is too narrow for a flat hold (rampW×2 ≥ totalW), merge into one S-arch
+      if (xRise >= xFall) {
+        const xMid2 = (xA + xB) / 2, hw = (xB - xA) / 2;
+        if (ease === 'linear') return `M ${xA} ${yMid} L ${xMid2} ${yP} L ${xB} ${yMid} Z`;
+        return `M ${xA} ${yMid}` +
+          ` C ${xA+hw*0.42} ${yMid} ${xA+hw*0.58} ${yP} ${xMid2} ${yP}` +
+          ` C ${xMid2+hw*0.42} ${yP} ${xMid2+hw*0.58} ${yMid} ${xB} ${yMid} Z`;
+      }
+
+      // Full pulse: rise ramp → hold plateau → fall ramp
+      let riseC, fallC;
+      if (ease === 'linear') {
+        riseC = `L ${xRise} ${yP}`;
+        fallC = `L ${xB} ${yMid}`;
+      } else { // ease-in-out (and ease-in/ease-out share this default)
+        riseC = `C ${xA+rampW*0.42} ${yMid} ${xA+rampW*0.58} ${yP} ${xRise} ${yP}`;
+        fallC = `C ${xFall+rampW*0.42} ${yP} ${xFall+rampW*0.58} ${yMid} ${xB} ${yMid}`;
+      }
+      return `M ${xA} ${yMid} ${riseC} L ${xFall} ${yP} ${fallC} Z`;
     }
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', d); path.setAttribute('fill', 'none');
-    path.setAttribute('stroke', '#cc44ff'); path.setAttribute('stroke-width', '2');
-    svg.appendChild(path);
-    pts.forEach((p, i) => {
-      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', '5');
-      c.setAttribute('fill', '#cc44ff'); c.setAttribute('stroke', '#060910'); c.setAttribute('stroke-width', '2');
-      c.style.cursor = 'pointer';
-      c.addEventListener('click', () => _selectDomeKF(i));
-      svg.appendChild(c);
+
+    keyframes.forEach((kf, i) => {
+      const durSec = (kf.duration || 0) / 1000;
+      const xA   = _px(kf.t);
+      const xB   = _px(kf.t + durSec);
+      const xMid = (xA + xB) / 2;
+      const yP   = powToY(kf.power ?? 0);
+
+      // Draw: filled area, glow halo, main stroke
+      const d0 = pulsePath(kf);
+      const fill = document.createElementNS(NS, 'path');
+      fill.setAttribute('d', d0); fill.setAttribute('fill', 'rgba(204,68,255,0.10)');
+      fill.setAttribute('stroke', 'none');
+      svg.appendChild(fill);
+
+      const glow = document.createElementNS(NS, 'path');
+      glow.setAttribute('d', d0); glow.setAttribute('fill', 'none');
+      glow.setAttribute('stroke', 'rgba(204,68,255,0.2)'); glow.setAttribute('stroke-width', '6');
+      svg.appendChild(glow);
+
+      const stroke = document.createElementNS(NS, 'path');
+      stroke.setAttribute('d', d0); stroke.setAttribute('fill', 'none');
+      stroke.setAttribute('stroke', '#cc44ff'); stroke.setAttribute('stroke-width', '2');
+      svg.appendChild(stroke);
+
+      // Power % label at the pulse peak
+      const lbl = document.createElementNS(NS, 'text');
+      lbl.setAttribute('x', xMid); lbl.setAttribute('y', yP - 7);
+      lbl.setAttribute('text-anchor', 'middle');
+      lbl.setAttribute('fill', '#cc44ff'); lbl.setAttribute('font-size', '8');
+      lbl.setAttribute('font-family', 'Courier New');
+      lbl.textContent = `${kf.power ?? 0}%`;
+      svg.appendChild(lbl);
+
+      // Draggable handle at the pulse peak
+      const handle = document.createElementNS(NS, 'circle');
+      handle.setAttribute('cx', xMid); handle.setAttribute('cy', yP);
+      handle.setAttribute('r', '5');
+      handle.setAttribute('fill', '#cc44ff');
+      handle.setAttribute('stroke', '#060910'); handle.setAttribute('stroke-width', '2');
+      handle.style.cursor = 'ns-resize';
+
+      handle.addEventListener('mousedown', e => {
+        e.stopPropagation(); e.preventDefault();
+        const startMouseX = e.clientX, startMouseY = e.clientY;
+        const startT      = kf.t;
+        const startPower  = kf.power ?? 0;
+        const startY      = powToY(startPower);
+        const svgRect     = svg.getBoundingClientRect();
+        const scaleY      = H / (svgRect.height || H);
+        const scaleX      = W / (svgRect.width  || W);
+
+        const onMove = e2 => {
+          // Horizontal → time (snapped, clamped to ≥ 0)
+          const rawT  = startT + _sec((e2.clientX - startMouseX) * scaleX);
+          const newT  = Math.max(0, _snap(rawT));
+          kf.t = newT; _dirty = true;
+          // Vertical → power
+          const newPower = yToPow(startY + (e2.clientY - startMouseY) * scaleY);
+          kf.power = newPower;
+          // Recompute geometry
+          const durSec = (kf.duration || 0) / 1000;
+          const newXA  = _px(newT), newXB = _px(newT + durSec);
+          const newXM  = (newXA + newXB) / 2;
+          const newYP  = powToY(newPower);
+          handle.setAttribute('cx', newXM); handle.setAttribute('cy', newYP);
+          lbl.setAttribute('x', newXM); lbl.setAttribute('y', newYP - 7);
+          lbl.textContent = `${newPower}%`;
+          const d = pulsePath(kf);
+          fill.setAttribute('d', d); glow.setAttribute('d', d); stroke.setAttribute('d', d);
+          if (_selected && _selected.track === 'dome' && _selected.idx === i)
+            _updatePropsPanel('dome', i);
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          keyframes.sort((a, b) => a.t - b.t);
+          _renderDomeLane(keyframes);
+          _refreshLayout();
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        _selectDomeKF(i);
+      });
+
+      handle.addEventListener('click', () => _selectDomeKF(i));
+      svg.appendChild(handle);
     });
+
     lane.appendChild(svg);
   }
 
@@ -4615,14 +4786,32 @@ const choreoEditor = (() => {
 
   function _startDrag(e, block, track, idx) {
     const startX = e.clientX, startLeft = parseFloat(block.style.left) || 0;
+    const scroll = document.getElementById('chor-scroll');
     const onMove = e2 => {
       const newT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX)));
       block.style.left = _px(newT) + 'px';
       _chor.tracks[track][idx].t = newT;
       _dirty = true;
       _updatePropsPanel(track, idx);
+      // Visual cue: dim block when dragged outside lane area
+      if (scroll) {
+        const r = scroll.getBoundingClientRect();
+        block.style.opacity = (e2.clientY < r.top || e2.clientY > r.bottom) ? '0.3' : '1';
+      }
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = e2 => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (scroll) {
+        const r = scroll.getBoundingClientRect();
+        if (e2.clientY < r.top || e2.clientY > r.bottom) {
+          _deleteBlock(track, idx);
+          return;
+        }
+      }
+      block.style.opacity = '1';
+      _refreshLayout();
+    };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
@@ -4635,7 +4824,7 @@ const choreoEditor = (() => {
       _dirty = true;
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _refreshLayout(); };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
@@ -4705,20 +4894,25 @@ const choreoEditor = (() => {
     // ── Build field list by track ────────────────────────────────────
     let html = numRow('START', 't', { min: 0, step: 0.1 });
 
-    if (track === 'audio') {
+    if (track === 'audio' || track === 'audio2') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      // FILE — grouped dropdown from cached audio index
-      html += selectRow('FILE', 'file', _audioIndex, true);
+      // FILE — use disk scan (flat) when available, fall back to grouped index
+      if (_audioScanned.length) {
+        html += selectRow('FILE', 'file', Object.fromEntries(_audioScanned.map(s => [s, s])));
+      } else {
+        html += selectRow('FILE', 'file', _audioIndex, true);
+      }
       html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      html += selectRow('MODE', 'mode', {
-        random:'RANDOM', leia:'LEIA', alarm:'ALARM', disco:'DISCO', off:'OFF'
-      });
+      // _lightModes is already a {key: label} object — pass directly
+      html += selectRow('MODE', 'mode', _lightModes);
 
     } else if (track === 'dome') {
-      html += numRow('ANGLE °', 'angle', { min: 0, max: 360, step: 1 });
+      html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
+      html += numRow('DURATION ms', 'duration', { min: 200, max: 10000, step: 100 });
+      html += numRow('ACCEL FACTOR', 'accel', { min: 0.1, max: 1.0, step: 0.05 });
       html += selectRow('EASING', 'easing', {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
       });
@@ -4727,7 +4921,10 @@ const choreoEditor = (() => {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
       const servoOpts = Object.fromEntries(_servoList.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
       html += selectRow('SERVO', 'servo', servoOpts);
-      html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
+      html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
+      // TARGET° required for DEGREE; optional override for OPEN/CLOSE
+      html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
+      html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
 
     } else if (track === 'propulsion') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -4744,20 +4941,21 @@ const choreoEditor = (() => {
 
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
-    if (track !== 'audio' || field !== 'file' || !value) return;
+    if ((track !== 'audio' && track !== 'audio2') || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
-    const audio = new Audio(`/audio/file/${encodeURIComponent(value)}`);
-    audio.addEventListener('loadedmetadata', () => {
-      if (audio.duration && isFinite(audio.duration)) {
-        const dur = Math.ceil(audio.duration * 10) / 10;
+    const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
+    audioEl.addEventListener('loadedmetadata', () => {
+      if (audioEl.duration && isFinite(audioEl.duration)) {
+        const dur = Math.ceil(audioEl.duration * 10) / 10;
         choreoEditor._setProp(track, idx, 'duration', dur);
-        // Refresh the panel so the DURATION field shows the new value
+        _renderTrack(track);   // rebuild block — locks resize handle
+        _refreshLayout();
         if (_selected && _selected.track === track && _selected.idx === idx)
           _updatePropsPanel(track, idx);
       }
     });
-    audio.preload = 'metadata';
-    audio.load();
+    audioEl.preload = 'metadata';
+    audioEl.load();
   }
 
   function _drawEasingPreview(name) {
@@ -4869,6 +5067,25 @@ const choreoEditor = (() => {
   }
 
   // ── Playhead polling ─────────────────────────────────────────────
+  // Sync the live monitor to the active lights block at t_now
+  function _syncChorMonitor(t_now) {
+    if (!_chor) { _chorMon.setMode('random'); return; }
+    const lights = _chor.tracks.lights || [];
+    let activeEv = null;
+    for (const ev of lights) {
+      const s = ev.t || 0;
+      if (t_now >= s && t_now < s + (ev.duration || 0)) { activeEv = ev; break; }
+    }
+    if (!activeEv) { _chorMon.setMode('off'); return; }
+    const mode = activeEv.mode || 'random';
+    if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
+      _chorMon.setModeNum(parseInt(mode.slice(1), 10));
+    } else {
+      _chorMon.setMode(mode);
+    }
+    if (activeEv.text) _chorMon.setText(activeEv.target || 'both', activeEv.text, activeEv.color);
+  }
+
   function _startPolling() {
     _stopPolling();
     _pollTimer = setInterval(async () => {
@@ -4878,6 +5095,7 @@ const choreoEditor = (() => {
       if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
       const tc = document.getElementById('chor-timecode');
       if (tc) tc.textContent = _fmtTime(status.t_now || 0);
+      _syncChorMonitor(status.t_now || 0);
       _updateTelem(status.telem || null);
       _updateAlarms(status.abort_reason || null);
       if (status.abort_reason) { _stopPolling(); _showAbortModal(status.abort_reason); return; }
@@ -4911,11 +5129,43 @@ const choreoEditor = (() => {
       _initPalette();
       _addDropToLanes();
 
+      // Re-render on container resize so liquid fill stays accurate
+      const scrollWrap = document.getElementById('chor-scroll');
+      if (scrollWrap && window.ResizeObserver) {
+        new ResizeObserver(() => { if (_chor) _refreshLayout(); }).observe(scrollWrap);
+      }
+
+      // Delete/Backspace removes the selected block (skip when typing in an input)
+      document.addEventListener('keydown', e => {
+        if (!_selected) return;
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault();
+          _deleteBlock(_selected.track, _selected.idx);
+        }
+      });
+
       // Pre-fetch dropdown data (non-blocking — failures are silent)
       Promise.all([
+        // Audio: disk scan is authoritative; fall back to index for grouped display
+        api('/audio/scan').then(r => {
+          if (r && r.sounds) _audioScanned = r.sounds;
+        }).catch(() => {}),
         api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
         api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
+        api('/servo/settings').then(r => { if (r && r.panels) _servoSettings = r.panels; }),
+        // Lights: full T-code list from Animations panel + custom .lseq files
+        api('/teeces/animations').then(r => {
+          if (r && r.animations) {
+            _lightModes = {};
+            r.animations.forEach(a => { _lightModes[`t${a.mode}`] = a.name; });
+          }
+        }).catch(() => {}),
+        api('/light/list').then(r => {
+          if (r && r.sequences)
+            r.sequences.forEach(s => { if (!_lightModes[s]) _lightModes[s] = s; });
+        }),
       ]).catch(() => {});
 
       const names = await api('/choreo/list');
@@ -4930,17 +5180,49 @@ const choreoEditor = (() => {
       if (!name) return;
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
-      _chor = chor; _dirty = false; _selected = null; _clearInspectorTitle();
+      _chor = chor;
+      // Ensure audio2 track exists in legacy files
+      if (!_chor.tracks.audio2) _chor.tracks.audio2 = [];
+      // Normalize dome KFs — legacy files may be missing accel or duration
+      (_chor.tracks.dome || []).forEach(kf => {
+        if (kf.accel == null) kf.accel = 1.0;
+        if (!kf.duration || kf.duration < 200) kf.duration = 200;
+      });
+      // Normalize servo KFs — legacy files may be missing duration or easing
+      (_chor.tracks.servos || []).forEach(ev => {
+        if (!ev.duration || ev.duration <= 0) ev.duration = 1.0;
+        if (!ev.easing) ev.easing = 'ease-in-out';
+      });
+      _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
       _renderAllTracks();
       toast(`Loaded: ${name}`, 'ok');
+    },
+
+    async deleteChor() {
+      if (!_chor) { toast('No choreography loaded', 'error'); return; }
+      const name = _chor.meta.name;
+      if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+      const resp = await fetch(`/choreo/${encodeURIComponent(name)}`, { method: 'DELETE' });
+      if (!resp.ok) { toast(`Delete failed (${resp.status})`, 'error'); return; }
+      _chor = null; _dirty = false; _selected = null; _clearInspectorTitle();
+      _renderAllTracks();
+      const names = await api('/choreo/list');
+      const sel = document.getElementById('chor-select');
+      if (sel && names) {
+        sel.innerHTML = '<option value="">— select choreography —</option>' +
+          names.map(n => `<option value="${n}">${n}</option>`).join('');
+        sel.onchange = () => this.load(sel.value);
+        if (names.length > 0) { sel.value = names[0]; await this.load(names[0]); }
+      }
+      toast(`Deleted: ${name}`, 'ok');
     },
 
     newChor() {
       const name = prompt('Choreography name:', 'my_show');
       if (!name) return;
       _chor = {
-        meta:   { name, version:'1.0', duration:30.0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], lights:[], dome:[{t:0,angle:0,easing:'linear'},{t:30,angle:0,easing:'linear'}], servos:[], propulsion:[], markers:[] }
+        meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
+        tracks: { audio:[], audio2:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');
@@ -4961,6 +5243,7 @@ const choreoEditor = (() => {
       const ph = document.getElementById('chor-playhead'); if (ph) ph.style.left = '0px';
       const tc = document.getElementById('chor-timecode'); if (tc) tc.textContent = '00:00.000';
       _updateTelem(null);
+      _chorMon.setMode('random');
       toast('Choreo stopped', 'ok');
     },
 
@@ -4990,7 +5273,11 @@ const choreoEditor = (() => {
 
     setSnap(val) { _snapVal = val; _syncSnapUI(); },
 
-    zoom(delta) { _pxPerSec = Math.max(10, Math.min(200, _pxPerSec + delta)); if (_chor) _renderAllTracks(); },
+    zoom(delta) {
+      const factor = delta > 0 ? 1.25 : 0.8;
+      _zoomFactor = Math.max(0.1, Math.min(10, _zoomFactor * factor));
+      if (_chor) _renderAllTracks();
+    },
 
     setEasing(name) {
       if (!_selected || _selected.track !== 'dome') return;
@@ -5003,6 +5290,8 @@ const choreoEditor = (() => {
       const item = (_chor.tracks[track] || [])[idx];
       if (!item) return;
       const num = parseFloat(rawVal); item[field] = isNaN(num) ? rawVal : num; _dirty = true;
+      // Dome duration must be >= 200ms — no open-ended motor pulses
+      if (track === 'dome' && field === 'duration' && item.duration < 200) item.duration = 200;
       const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
       if (block) {
         if (field === 't')        block.style.left  = _px(item.t)        + 'px';
@@ -5010,8 +5299,13 @@ const choreoEditor = (() => {
         const labelEl = block.querySelector('span');
         if (labelEl) labelEl.textContent = _blockLabel(track, item);
       }
+      if (track === 'dome' && _chor) _renderDomeLane(_chor.tracks.dome);
       if (_selected && _selected.track === track && _selected.idx === idx)
         _setInspectorTitle(track, item);
+    },
+
+    _deleteSelected() {
+      if (_selected) _deleteBlock(_selected.track, _selected.idx);
     },
 
     // Called from inline onchange on select elements
