@@ -10,8 +10,9 @@
 [![Android](https://img.shields.io/badge/Android-App%20included-3DDC84?logo=android&logoColor=white)](android/compiled/)
 [![Sounds](https://img.shields.io/badge/Sounds-317%20R2--D2%20audio%20files-blueviolet)](slave/sounds/)
 [![Sequences](https://img.shields.io/badge/Sequences-40%20behavioral-blue)](master/sequences/)
+[![API](https://img.shields.io/badge/API-60%2B%20endpoints-orange)](master/api/)
 
-*Two Raspberry Pi 4B · UART through slip ring · Web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences*
+*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Visual sequence & light editors · Kids Lock · Child Lock*
 
 </div>
 
@@ -21,11 +22,11 @@
 
 Most R2-D2 builders end up with a pile of shell scripts, a half-working web interface, and a robot that does one thing at a time. **This isn't that.**
 
-This system was built from the ground up to make R2-D2 feel **alive** — not just remote-controlled. Every subsystem talks to every other subsystem. A single button press can trigger coordinated sound + dome rotation + panel choreography + light sequence simultaneously. The safety system has three independent watchdog layers so the robot *cannot* run away. And the whole thing deploys itself from a single button press on the dome.
+This system was built from the ground up to make R2-D2 feel **alive** — not just remote-controlled. A single button press triggers coordinated sound + dome rotation + panel choreography + light sequence simultaneously. The safety system has three independent watchdog layers so the robot *cannot* run away. Kids Lock limits speed for young pilots. Child Lock blocks all motion when R2 is on display. Everything deploys itself from a single button press on the dome.
 
-If you're building a full-scale R2-D2 and you want a control system that's actually worthy of the build — **this is it**.
+If you're building a full-scale R2-D2 and you want a control system actually worthy of the build — **this is it**.
 
-> ⚠️ **Work in Progress** — Software is fully functional and battle-tested on bench. Physical assembly (3D parts, slip ring, wiring) still in progress. No camera stream yet.
+> ⚠️ **Work in Progress** — Software fully functional and battle-tested on bench. Physical assembly in progress (3D parts printing, slip ring ordered). No camera stream yet.
 
 ---
 
@@ -33,11 +34,11 @@ If you're building a full-scale R2-D2 and you want a control system that's actua
 
 A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 40 expressive behavioral sequences that give R2-D2 a real personality.
 
-- **Master Pi** (dome, rotates) — web server, dome servos, LED logics, sequence engine, deploy system, BT gamepad
-- **Slave Pi** (body, fixed) — drive motors, body servos, dome rotation motor, 317-sound audio system, diagnostic LCD
-- If the link drops for more than 500ms, drive motors **cut immediately** — no runaway robot, ever
+- **Master Pi 4B** (dome, rotates) — Flask REST API, web dashboard, dome servos & panels, LED logics, visual editors, BT gamepad
+- **Slave Pi 4B** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 317-sound audio system, RP2040 diagnostic LCD
+- If the UART link drops for more than 500ms, drive motors **cut immediately** — no runaway robot, ever
 
-The dashboard runs on the Master Pi and is reachable from any phone, tablet, or browser on the local Wi-Fi hotspot. An Android app wraps the same interface with offline detection and network auto-discovery. Or just grab a Bluetooth controller and go.
+The dashboard runs on the Master Pi and is reachable from any phone, tablet, or browser on the local Wi-Fi hotspot. An Android app wraps the same interface with offline detection and network auto-discovery. A Bluetooth gamepad pairs directly to the Pi — no phone middleman, zero lag.
 
 ---
 
@@ -48,17 +49,35 @@ The dashboard runs on the Master Pi and is reachable from any phone, tablet, or 
 <td align="center" width="50%">
 
 ### 🕹️ Drive
-Dual joystick · WASD keyboard · Emergency stop · Live battery gauge
+Dual joystick · WASD keyboard · Emergency stop · Live battery gauge · Speed limiter
 
-![Drive Interface](Screenshots/Drive_web_interface.jpg)
+![Drive Interface](Screenshots/Drive.png)
 
 </td>
 <td align="center" width="50%">
 
 ### 🔊 Audio
-317 R2-D2 sounds · 14 mood categories · Random or specific track
+317 R2-D2 sounds · 14 mood categories · Animated waveform · Volume with perceptual curve
 
-![Audio Interface](Screenshots/Audio_web_interface.jpg)
+![Audio Interface](Screenshots/Audio.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🟡 Kids Lock
+Speed capped at configurable % — great for shows with young pilots
+
+![Kids Lock Mode](Screenshots/Drive_kidsmode.png)
+
+</td>
+<td align="center" width="50%">
+
+### 🔴 Child Lock
+All motion blocked — R2 on display safely, lights & sounds still work
+
+![Child Lock Mode](Screenshots/Drive_Childsmode.png)
 
 </td>
 </tr>
@@ -66,177 +85,328 @@ Dual joystick · WASD keyboard · Emergency stop · Live battery gauge
 <td align="center" width="50%">
 
 ### 🎬 Sequences
-40 behavioral sequences · Loop mode · Emotions, Star Wars themes, patrol…
+40 behavioral sequences · Custom sequences · Loop mode · Running status
 
-![Sequences Interface](Screenshots/Sequences_web_interface.jpg)
+![Sequences Interface](Screenshots/Sequences.png)
 
 </td>
 <td align="center" width="50%">
 
-### ⚙️ Systems — Panels & Bluetooth
-MG90S 180° servos · Per-panel O° / C° / S calibration · BT controller mapping
+### 💡 Lights
+Teeces32 or AstroPixels+ · 22 animations · FLD/RLD/BOTH text · PSI picker · Light sequences
 
-![Systems Interface](Screenshots/Systems_TemporaryServos_web_interface.jpg)
+![Lights Interface](Screenshots/Light.png)
 
 </td>
 </tr>
 <tr>
 <td align="center" width="50%">
 
-### 💡 Lights
-Teeces32 or AstroPixels+ · FLD/RLD/BOTH text · PSI color picker · Light sequences
+### ✏️ Sequence Editor (admin)
+Drag-and-drop step builder · Command palette · Per-command builders · Test without saving
+
+![Sequence Editor](Screenshots/Sequence_Editor_admin.png)
 
 </td>
 <td align="center" width="50%">
 
-### 🔧 Configuration
-Wi-Fi hotspot · Auto-deploy · Git branch · System reboot/shutdown
+### 🌈 Light Editor (admin)
+Build light choreographies · Step-by-step · FLD/RLD/BOTH target · Parallel playback
 
-![Config Interface](Screenshots/Config_web_interface.jpg)
+![Light Editor](Screenshots/Sequence__LightEditor_admin.png)
 
 </td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🎼 Choreography Timeline Editor
+Multi-track timeline · Drag-and-drop blocks · Digital Twin monitor · VESC telemetry gauges
+
+![Choreo Timeline Editor](Screenshots/Choreo_Sequence_Editor.png)
+
+</td>
+<td align="center" width="50%">
+
+### 🦾 Servo Calibration
+Per-panel open/close angle · Speed ramp · Live test · Saved to robot-specific JSON
+
+![Servo Calibration](Screenshots/Servos_Config_open_close_position.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🔧 Config — Bluetooth & Gamepad
+BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout
+
+![Config Bluetooth](Screenshots/Config_Menu_Bluetooth.png)
+
+</td>
+<td align="center" width="50%">
+
+### ⚙️ Config — Wi-Fi & Others
+Hotspot · Home Wi-Fi · Lights driver hot-swap · Auto-deploy · Git branch
+
+![Config WiFi](Screenshots/Config_Menu_Wifi_Others.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 📊 VESC Minimal Config
+Voltage · temperature · RPM · duty · fault codes — minimal setup reference
+
+![VESC Config](Screenshots/VESC_MinimalConfig.png)
+
+</td>
+<td align="center"></td>
 </tr>
 </table>
 
 ---
 
-## Features
+## Features at a Glance
 
-### 🎭 Expressive Behavioral Sequences
+| | |
+|---|---|
+| 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights |
+| ✏️ **Visual sequence editor** | Drag-and-drop, no coding required |
+| 💡 **Visual light editor** | Build light choreographies step by step |
+| 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
+| 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag |
+| 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
+| 🔒 **Kids Lock / Child Lock** | Speed cap or full motion block, password-protected |
+| 🛡️ **Triple watchdog** | App 600ms · Drive 800ms · UART 500ms |
+| 🚨 **E-Stop** | Space bar shortcut · hard-cuts all PWM instantly |
+| 🚀 **One-button deploy** | Dome button → git pull + rsync Slave + reboot |
+| 🌐 **60+ REST endpoints** | Full API for every subsystem |
+| 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
+| 🦾 **22 servo panels** | Per-panel open/close/speed ramp calibration |
+| 📊 **VESC telemetry** | Voltage · temp · RPM · duty · fault codes live |
+| 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
-This is where R2-D2 comes alive. 40 sequences combine sounds, servo panels, dome rotation, and lights into **coordinated emotional performances**:
+---
+
+## 🎭 Expressive Behavioral Sequences
+
+This is where R2-D2 comes alive. 40 sequences combine sounds, servo panels, dome rotation, and lights into **coordinated emotional performances** — all running in synchronized background threads:
 
 | Sequence | What R2 does |
 |----------|-------------|
-| `scared` | Panels **tremble** at small angles (35°, speed 8) — nervous micro-movements, not full open |
-| `excited` | Panels **snap open and shut** at speed 9, rapid alternating combos, triumphant slow wide open |
-| `curious` | Panels **creep open slowly** (speed 2, ~50°) while dome turns — deliberate, peeking |
-| `angry` | Panels **slam** instantaneously (speed 10), aggressive clack-clack, then slow menacing close (speed 3) |
-| `celebrate` | Dramatic **wave** across panels (speed 4), body + dome panels flowing in sequence |
-| `patrol` | Dome wanders randomly, panels peek, random sounds — R2 feels alive on its own |
-| `leia` | Full Leia mode (Teeces + iconic sound) |
-| `cantina` | Full Cantina Band sequence |
-| + 32 more | `march`, `evil`, `malfunction`, `birthday`, `disco`, `dance`, `taunt`, `scan`… |
+| `scared` | Panels **tremble** at 35° (speed 8) — nervous micro-movements |
+| `excited` | Panels **snap** open/shut at speed 9, rapid alternating combos |
+| `curious` | Panels **creep** open (speed 2, ~50°) while dome turns — deliberate peeking |
+| `angry` | Panels **slam** at speed 10, aggressive clack-clack, slow menacing close |
+| `celebrate` | Dramatic **wave** across panels, body + dome flowing in sequence |
+| `patrol` | Dome wanders randomly, panels peek, random sounds — R2 feels alive |
+| `leia` | Full Leia hologram mode — Teeces + iconic audio |
+| `cantina` | Full Cantina Band routine |
+| `march` | Imperial March with lights and dome movements |
+| `malfunction` | Alarm animations + panic sounds + dome spins |
+| + 30 more | `evil`, `birthday`, `disco`, `dance`, `taunt`, `scan`, `startup`… |
 
-**Sequences use per-panel calibrated angles automatically** — no magic numbers in the scripts. You calibrate once in the UI, every sequence respects it. And you can override angle and speed inline for mood-specific movement:
+Sequences **use per-panel calibrated angles automatically** — calibrate once in the UI, every sequence respects it. Override angle and speed inline for mood-specific choreography:
 
 ```
 servo,dome_panel_1,open,40,8    # open to 40° at speed 8 — nervous peek
 servo,dome_panel_1,close,20,9   # snap shut at speed 9
-servo,dome_panel_2,open         # use calibrated angle + speed from settings
+servo,all,open                  # all 11 dome panels simultaneously
+lseq,alarm_flash,false          # trigger a light sequence in parallel
+wait_light,alarm_flash          # wait for it to finish before continuing
 ```
 
-Custom sequences and light sequences can be created directly from the **in-browser editor** — drag-and-drop steps, no file editing required.
+---
+
+## ✏️ Visual Sequence Editor
+
+Build and edit behavioral sequences directly in the browser — no SSH, no file editing.
+
+- **Drag-and-drop** step reordering
+- **Command palette** with all available actions
+- **Per-command builders** — sound picker, servo selector, throttle sliders, animation picker
+- **Built-in sequences are protected** — read-only, can't be accidentally overwritten
+- **Save as new** — user sequences live alongside built-ins
+- **Test without saving** — run directly from the editor to verify timing
+
+**Available commands in the editor:**
+
+| Command | What it does |
+|---------|-------------|
+| `sleep` | Pause (fixed seconds or random range min–max) |
+| `sound` | Play a specific file or random from a category |
+| `servo` | Open/close a panel (or all) at calibrated or override angle + speed |
+| `dome` | Turn, stop, center, or enable random autonomous wander |
+| `motion` | Drive left + right at a throttle for a duration |
+| `teeces` | Random · Leia · Off · specific animation · scrolling text · raw JawaLite |
+| `lseq` | Launch a light sequence in parallel (doesn't pause the main sequence) |
+| `wait_light` | Block until a named light sequence finishes |
 
 ---
 
-### 🦾 Per-Panel Servo Calibration with Speed Ramp
+## 💡 Visual Light Editor + 22 Animations
 
-Every one of the 22 servo panels (11 dome + 11 body) has three independent parameters:
+Build light choreographies with the dedicated **Light Editor** — same drag-and-drop interface as the sequence editor, lights-only focus.
 
-| Field | Description |
-|-------|-------------|
-| **O°** | Open angle (10–170°) |
-| **C°** | Close angle (10–170°) |
-| **S**  | Speed 1–10 (1 = slow sweep ~1.2s, 10 = instant) |
+**Saved as `.lseq` files**, light sequences run **in parallel** to behavioral sequences — a `patrol` can play while a custom light show loops, independently.
 
-The speed ramp is implemented in software — the driver steps 2° at a time with a configurable delay, giving smooth, cinematic movement. `open_all()` / `close_all()` run all panels **in parallel threads** so a full-dome open happens simultaneously, not sequentially.
+### 22 Built-in T-code Animations — one click away in the Lights tab:
 
-Settings are saved to two JSON files (`master/config/dome_angles.json` and `slave/config/servo_angles.json`) — each Pi reads its own file at boot, independently of the other. No dependency on network sync at startup.
+| # | Animation | # | Animation |
+|---|-----------|---|-----------|
+| 1 | Random | 12 | Disco (timed) |
+| 2 | Flash | 13 | Disco |
+| 3 | Alarm | 14 | Rebel Symbol |
+| 4 | Short Circuit | 15 | Knight Rider |
+| 5 | Scream | 16 | Test White |
+| 6 | Leia Message | 17 | Red On |
+| 7 | I Heart U | 18 | Green On |
+| 8 | Panel Sweep | 19 | Lightsaber |
+| 9 | Pulse Monitor | 20 | Off |
+| 10 | Star Wars Scroll | 21 | VU Meter (timed) |
+| 11 | Imperial March | 92 | VU Meter |
 
----
-
-### 🕹️ Control — Every Way You Want
-
-- **Web dashboard** — dark blue R2-D2 theme, 6 tabs, mobile-first responsive layout
-- **Android app** — native offline banner, IP auto-discovery (mDNS → saved IP → 192.168.4.1 → subnet scan), haptic feedback
-- **WASD / arrow keys** — full keyboard driving from any browser on any OS
-- **Bluetooth gamepad** — pair directly to the Pi (no phone middleman), configurable button/axis mapping, deadzone, three speed modes (Normal / Kids / Child Lock), inactivity timeout, fully manageable from the UI (scan · pair · unpair — no SSH needed)
-
-The gamepad connects **directly to the Master Pi via Bluetooth** and is read via Linux evdev — no lag, no browser dependency. Works with Xbox, PS4/PS5, NVIDIA Shield, 8BitDo, and any standard HID gamepad. Press and hold Y to open dome panels, release to close. X for body panels. B for a random R2-D2 sound. Home button triggers E-STOP.
-
----
-
-### 🔊 Audio
-
-- **317 R2-D2 sounds** in 14 emotional categories — happy, sad, razz, proc, hum, whistle, alarm, scream, ooh, sent, quote, special, extra…
-- Playback via `mpg123` on the Pi's native 3.5mm jack
-- Volume control with a **perceptual cubic curve** — 50% slider = 79% ALSA (sounds natural, not logarithmic)
-- Random-by-category or specific track, STOP command, all controllable from sequences
+**Text display** — send scrolling text to **FLD**, **RLD**, or **BOTH** displays. Full FLD/RLD/BOTH target selector inline in the Lights tab, same as in the light editor.
 
 ---
 
-### 💡 Lights
+## 🔌 Plug-in Light Drivers
 
-- **Plugin driver architecture** — swap between **Teeces32** (JawaLite protocol) and **AstroPixels+** (@ commands) without rebooting, from the Config tab
-- **Live FLD preview** in the dashboard — animated dot grid, card title adapts to active driver
-- **Text on FLD / RLD / BOTH** — inline selector in the Lights tab, same as in the sequence editor
-- **PSI color swatches** — 8 colors, live preview dots
-- **Light sequences** — create choreographed light shows in the visual editor (drag-and-drop, same interface as behavioral sequences), run them from the Lights tab or the Sequences tab
-- **RP2040 round LCD** (240×240, GC9A01) — MicroPython firmware, 6 diagnostic screens driven entirely by `DISP:` commands from the Slave Pi:
+The lights system uses a **driver plugin architecture** — swap hardware without touching the code.
 
-| Screen | Ring | Content | Triggered by |
-|--------|------|---------|--------------|
-| **STARTING UP** | 🟠 Orange thick | Spinner + "STARTING UP" | `DISP:BOOT:START` |
-| **OPERATIONAL** | 🟢 Green thin | "SYSTEM STATUS: OPERATIONAL" · version · UART bus health bar + % | `DISP:READY:v<hash>` + `DISP:BUS:<pct>` |
-| **BUS WARNING** | 🟠 Orange thin | Same + "PARASITES DETECTES" in orange | `DISP:BUS:<pct>` when pct < 80% |
-| **NETWORK** | 🔵 Blue / 🟠 Orange | Antenna icon · SCANNING… / CONNECTING / HOME WIFI ACTIVE + IP | `DISP:NET:SCANNING:1` · `DISP:NET:AP:3` · `DISP:NET:HOME:<ip>` |
-| **SYSTEM LOCKED** | 🔴 Red flashing | Lock icon · "WATCHDOG TRIGGERED · MOTORS STOPPED" | `DISP:LOCKED` |
-| **TELEMETRY** | 🔵 Blue thin | Voltage + LiPo % bar · Temperature + bar *(swipe from OPERATIONAL)* | `DISP:TELEM:24.5V:45C` |
+| Driver | Protocol | Command |
+|--------|----------|---------|
+| **Teeces32** | JawaLite serial (9600 baud) | `0T{n}\r`, `1M{text}\r` |
+| **AstroPixels+** | @ commands (USB serial) | `@0T{n}\r`, `@3M{text}\r` |
 
-  Swipe left/right navigates between OPERATIONAL and TELEMETRY. All other states block navigation.
-  Screen design reference: [`docs/rp2040-mockup.html`](docs/rp2040-mockup.html)
+Switch drivers **hot**, from the Config tab — no reboot, no SSH. The old driver shuts down cleanly, the new one initializes and starts in random mode.
 
 ---
 
-### 🛡️ Safety — Three Independent Watchdog Layers + E-STOP
+## 🎮 Bluetooth Gamepad — Direct to Pi
+
+The gamepad connects **directly to the Master Pi via Bluetooth** using Linux evdev — no phone relay, no extra hardware, zero lag.
+
+Compatible with Xbox Series, PS4/PS5, Nintendo Switch Pro, NVIDIA Shield, 8BitDo, and any standard HID gamepad.
+
+**Default mapping:**
+
+| Input | Action |
+|-------|--------|
+| Left stick Y | Forward / reverse propulsion |
+| Left stick X | Left / right steering |
+| Right stick X | Dome rotation |
+| Hold Y (□) | Open dome panels → release to close |
+| Hold X (△) | Open body panels → release to close |
+| B (○) | Random R2-D2 sound |
+| Home / Options | Emergency stop |
+| R1 (turbo) | Speed boost multiplier |
+
+**Fully configurable from the web UI** — remap any button, adjust deadzone, set inactivity timeout (auto-stop after N seconds idle), all without SSH.
+
+---
+
+## 🔒 Kids Lock & Child Lock
+
+Three operating modes, switchable from the dashboard header (password-protected):
+
+| Mode | Icon | Effect |
+|------|------|--------|
+| **Normal** | 🟢 | Full speed, all controls active |
+| **Kids** | 🟡 | Speed capped (configurable, default 50%) — great for shows with young pilots |
+| **Child Lock** | 🔴 | All motion completely blocked — R2 can be displayed safely, lights & sounds still work |
+
+- Lock/unlock from the UI **or from the BT gamepad**
+- Lock mode applies to **both web and Bluetooth** inputs simultaneously
+- Servos, audio, and lights remain fully operational in all modes
+
+---
+
+## 🛡️ Safety — Triple Watchdog + E-STOP
 
 No single point of failure can leave the robot moving uncontrolled:
 
 | Layer | Timeout | Triggers when |
 |-------|---------|---------------|
 | **App watchdog** | 600 ms | Browser closed, phone screen off, Wi-Fi drop |
-| **Drive timeout** | 800 ms | No drive command while moving |
-| **UART watchdog** | 500 ms | Master crash, slip ring disconnected |
+| **Drive timeout** | 800 ms | No drive command received while motors are spinning |
+| **UART watchdog** | 500 ms | Master crash, slip ring disconnected, Slave offline |
 
-All three trigger a **graceful decel ramp** — velocity proportional to current speed (max 400 ms at full speed), never an abrupt stop that could tip the robot.
+All three trigger a **graceful decel ramp** — velocity proportional to current speed (max 400ms at full speed), never an abrupt stop that could tip the robot.
 
-**Emergency Stop button** (always visible, Space bar shortcut) instantly cuts all servo PWM by putting both PCA9685 chips to SLEEP. A **RESET E-STOP** button re-arms the drivers without restarting the service — servos are operational again in under a second.
-
----
-
-### 🚀 Deployment System
-
-```
-Dome button short press  →  git pull + rsync Slave + reboot
-Dome button long press   →  git rollback (HEAD^) + rsync + reboot
-Double press             →  display current version on Teeces + RP2040
-```
-
-On boot, the Slave requests the Master's git hash over UART and re-syncs if there's a mismatch. The whole two-Pi update cycle is fully automatic and requires no SSH access.
+**Emergency Stop** (red button, always visible — or press Space):
+- Instantly puts both PCA9685 chips to SLEEP → hard-cuts all servo PWM
+- `RESET E-STOP` button re-arms the drivers in under a second — no service restart needed
 
 ---
 
-### Architecture
+## 📱 Android App
+
+A native Android app wraps the full dashboard with mobile-optimized extras:
+
+- **Full-screen immersive mode** — hides navigation bars, swipe to reveal
+- **Offline banner** — immediate visual feedback when connection drops
+- **Auto-discovery** — tries mDNS → saved IP → 192.168.4.1 → subnet scan
+- **Configurable host** — long-press to change Master IP
+- **Haptic feedback** on key actions
+- **Works offline** — all assets bundled locally, no internet required on the phone
+
+Download [`android/compiled/R2-D2_Control.apk`](android/compiled/R2-D2_Control.apk) — enable *Install from unknown sources*, install, launch.
+
+---
+
+## 🚀 Deployment System
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  📱 Phone / PC  ←── Wi-Fi (192.168.4.1:5000) ──→  🎩 MASTER Pi  │
-│                                                                  │
-│  R2-MASTER (Dome — rotates)          R2-SLAVE (Body — fixed)    │
-│  ├─ Flask REST API :5000             ├─ UART listener            │
-│  ├─ Script engine (40 sequences)     ├─ Watchdog 500ms → VESCs  │
-│  ├─ Dome servos   I2C 0x40          ├─ Body servos  I2C 0x41   │
-│  ├─ Lights plugin (Teeces/AstroP.)  ├─ Dome motor   I2C 0x40   │
-│  └─ Deploy controller               ├─ Drive VESCs  USB ×2     │
-│                                     ├─ Audio        3.5mm jack  │
-│         UART 115200 baud            └─ RP2040 LCD   USB        │
-│    ←─── through slip ring ────►                                 │
-│    (heartbeat every 200ms + CRC checksum)                       │
-└─────────────────────────────────────────────────────────────────┘
+Dome button — short press  →  git pull (if internet) + rsync Slave + reboot
+Dome button — long press   →  rollback to previous commit + rsync + reboot
+Dome button — double press →  display current git hash on Teeces LEDs
 ```
 
-### Hardware at a glance
+**`update.sh`** — the same full update cycle from the command line:
+1. Backup custom sequences
+2. `git pull` (skipped if wlan1 not available)
+3. Restore custom sequences
+4. Verify Slave is reachable
+5. `rsync slave/ + shared/ + scripts/ + rp2040/ + VERSION` → Slave
+6. Restart Slave service
+7. Restart Master service
+8. Verify both services healthy + API responding
+
+The Slave checks version on boot — if it mismatches, it requests a resync automatically.
+
+---
+
+## Architecture
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  📱 Phone / Tablet / PC  ←── Wi-Fi (192.168.4.1:5000)             │
+│  🤖 Android App          ←── IP auto-discovery                     │
+│  🎮 BT Gamepad           ←── Bluetooth (evdev, direct to Pi)       │
+│                                                                     │
+│  ┌──────────────────────────┐   ┌───────────────────────────────┐  │
+│  │  R2-MASTER (Dome)        │   │  R2-SLAVE (Body)              │  │
+│  │  Pi 4B — 4GB             │   │  Pi 4B — 2GB                  │  │
+│  │                          │   │                               │  │
+│  │  Flask REST API :5000    │   │  UART listener + CRC          │  │
+│  │  Script engine           │   │  Watchdog 500ms → VESCs       │  │
+│  │  Light engine (parallel) │   │  Body servos PCA9685 @0x41    │  │
+│  │  Dome servos @0x40       │   │  Dome motor TB6612 @0x40      │  │
+│  │  Lights plugin           │   │  Drive VESCs (dual USB)       │  │
+│  │  BT Controller (evdev)   │   │  Audio mpg123 (317 sounds)    │  │
+│  │  Deploy controller       │   │  RP2040 GC9A01 LCD (USB)      │  │
+│  └──────────────────────────┘   └───────────────────────────────┘  │
+│              │                               │                      │
+│              └── UART 115200 baud ──────────►│                      │
+│                  through slip ring           │                      │
+│                  heartbeat 200ms + CRC       │                      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Hardware at a Glance
 
 | | **Master Pi 4B 4GB** (Dome) | **Slave Pi 4B 2GB** (Body) |
 |---|---|---|
@@ -244,12 +414,29 @@ On boot, the Slave requests the Master's git hash over UART and re-syncs if ther
 | **Motors** | — | 2× 250W hub motors via 2× FSESC Mini 6.7 PRO |
 | **Dome motor** | — | DC motor via TB6612 HAT @ I2C 0x40 |
 | **LEDs** | Teeces32 or AstroPixels+ via USB | — |
-| **Audio** | — | 317 sounds, 3.5mm jack, mpg123 |
-| **Diagnostic display** | — | RP2040 Waveshare 1.28" 240×240 round LCD |
+| **Audio** | — | 317 MP3 sounds · 3.5mm jack · mpg123 |
+| **Display** | — | RP2040 Waveshare 1.28" 240×240 round LCD |
 | **Power** | 5V/10A Tobsun buck → GPIO 2&4 | 5V/10A + 12V/10A Tobsun bucks |
 | **Battery** | ← 24V via slip ring (3 wires parallel) | 6S LiPo 22.2V — XT90-S anti-spark |
 
-📐 **[Full electronics diagrams, power wiring & protocol reference →](ELECTRONICS.md)**
+📐 **[Full electronics diagrams, power wiring & I2C/GPIO reference →](ELECTRONICS.md)**
+
+---
+
+## RP2040 Diagnostic LCD
+
+The Slave drives a 240×240 GC9A01 round display via MicroPython firmware. Six distinct screens, all controlled remotely by UART `DISP:` commands from the Master — no display logic runs on the Slave CPU:
+
+| Screen | Ring | Content |
+|--------|------|---------|
+| **STARTING UP** | 🟠 Orange thick | Spinner + "STARTING UP" |
+| **OPERATIONAL** | 🟢 Green thin | "SYSTEM STATUS: OPERATIONAL" · version · UART bus health bar |
+| **BUS WARNING** | 🟠 Orange thin | Same + "PARASITES DETECTES" when CRC health < 80% |
+| **NETWORK** | 🔵/🟠 | SCANNING · CONNECTING · HOME WIFI ACTIVE + IP |
+| **SYSTEM LOCKED** | 🔴 Flashing | "WATCHDOG TRIGGERED · MOTORS STOPPED" |
+| **TELEMETRY** | 🔵 Blue | Voltage + LiPo % · Temperature bar *(swipe from OPERATIONAL)* |
+
+Swipe left/right navigates between OPERATIONAL and TELEMETRY. All other states block navigation until cleared.
 
 ---
 
@@ -257,84 +444,72 @@ On boot, the Slave requests the Master's git hash over UART and re-syncs if ther
 
 ### Prerequisites
 
-- 2× Raspberry Pi 4B (username: `artoo` — configure in Raspberry Pi Imager)
+- 2× Raspberry Pi 4B (username: `artoo` — set in Raspberry Pi Imager)
 - Both running **Raspberry Pi OS Trixie** (64-bit)
 - USB Wi-Fi dongle on the Master Pi (internet on wlan1 while hosting hotspot on wlan0)
-- Both Pis connected to your home Wi-Fi for initial setup
+- Both Pis on your home Wi-Fi for first-time setup
 
-### Installation
-
-The entire setup is automated. Two scripts, each run once per Pi.
+### Installation — Two Scripts, Fully Automated
 
 #### Step 1 — Master Pi
 
-Connect the Master Pi to your home Wi-Fi, then run:
+Connect the Master to your home Wi-Fi, then run one command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_master.sh | sudo bash
 ```
 
-This script handles everything automatically:
-- System update + package installation
-- Git clone of this repo to `/home/artoo/r2d2`
-- UART fix (`dtoverlay=miniuart-bt` — keeps BT working for the gamepad)
+**What it does automatically:**
+- System update + all package dependencies
+- `git clone` this repo to `/home/artoo/r2d2`
+- UART fix (`dtoverlay=miniuart-bt` — Bluetooth stays active for the gamepad)
 - Hardware UART + I2C activation via `raspi-config`
-- Python dependencies (`master/requirements.txt`)
-- Hotspot configuration (wlan0 = `R2D2_Control` @ 192.168.4.1, wlan1 = home internet)
+- Python dependencies from `master/requirements.txt`
+- Hotspot setup (wlan0 = `R2D2_Control` @ 192.168.4.1 · wlan1 = home internet)
 - SSH key generation for passwordless Slave deploy
-- systemd services (`r2d2-master`, `r2d2-monitor`) enabled and ready
+- `r2d2-master` + `r2d2-monitor` systemd services — enabled and ready
 - Reboot
 
 #### Step 2 — Slave Pi
 
-Connect the Slave Pi to your home Wi-Fi (or to the Master's hotspot after step 1), then run:
+Connect the Slave to your home Wi-Fi (or directly to the Master's hotspot), then:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_slave.sh | sudo bash
 ```
 
-This script handles:
-- System update + package installation (`mpg123` for MP3 playback)
+**What it does automatically:**
+- System update + `mpg123` for MP3 playback
 - UART fix (`dtoverlay=disable-bt`)
 - Hardware UART + I2C activation
-- Network setup (wlan0 connects to `R2D2_Control` hotspot)
-- ALSA audio config (3.5mm jack, volume 100%)
+- Network setup (connects to `R2D2_Control` hotspot)
+- ALSA audio config — 3.5mm jack, volume 100%
 - Reboot
 
-#### Step 3 — First Deploy (from Master)
+#### Step 3 — First Deploy (from Master, once)
 
-Once the Slave has rebooted and connected to the hotspot, run this once from the Master:
+After the Slave reboots and connects to the hotspot:
 
 ```bash
-# Copy SSH key to Slave (passwordless deploy)
+# Authorize passwordless SSH from Master → Slave
 ssh-copy-id artoo@192.168.4.171
 
-# First deployment: rsync code + install Python deps + install systemd services
+# First deploy: rsync code + Python deps (offline from local cache) + systemd services
 bash /home/artoo/r2d2/scripts/deploy.sh --first-install
 ```
 
-This rsync's all the code to the Slave, installs Python dependencies offline (from a local vendor cache pre-built on the Master), installs and starts `r2d2-slave.service`.
-
-#### Done
-
-Access the dashboard at **`http://192.168.4.1:5000`** from any device connected to the `R2D2_Control` hotspot.
+**Done.** Open **`http://192.168.4.1:5000`** on any device connected to `R2D2_Control`.
 
 📖 **[Full installation guide (English) →](HOWTO_EN.md)** · [Guide d'installation (Français) →](HOWTO.md)
 
 ### Updates
 
-To update both Pis to the latest version:
-
 ```bash
-# On the Master — git pull + rsync Slave + restart everything
+# On the Master — full update cycle in one command
 bash /home/artoo/r2d2/scripts/update.sh
 ```
 
-Or press the physical dome button (short press). The system updates itself over-the-air without any SSH.
-
-### Android App
-
-Download [`android/compiled/R2-D2_Control.apk`](android/compiled/R2-D2_Control.apk), enable *Install from unknown sources*, install and launch. The app auto-discovers the Master Pi — tries mDNS first, then saved IP, then scans the subnet.
+Or press the physical dome button (short press). The system updates itself over-the-air — no SSH required.
 
 ---
 
@@ -343,67 +518,78 @@ Download [`android/compiled/R2-D2_Control.apk`](android/compiled/R2-D2_Control.a
 ```
 r2d2/
 ├── master/
-│   ├── main.py              — Boot sequence + service init
-│   ├── script_engine.py     — Sequence runner (background threads)
-│   ├── lights/              — Plugin driver system
-│   │   ├── base_controller.py — Abstract interface (BaseLightsController)
-│   │   ├── teeces.py          — Teeces32 JawaLite driver
-│   │   └── astropixels.py     — AstroPixels+ @ command driver
-│   ├── drivers/             — DomeServoDriver, DomeMotorDriver (speed ramp, I2C smbus2)
-│   ├── api/                 — Flask blueprints: audio, motion, servo, sequences, lights, status
-│   ├── sequences/           — 40 behavioral sequences (.scr CSV format)
-│   ├── light_sequences/     — Custom light show sequences (.lseq CSV format)
+│   ├── main.py                    — Boot sequence + service orchestration
+│   ├── script_engine.py           — Multi-threaded sequence runner
+│   ├── lights/                    — Plugin driver system
+│   │   ├── base_controller.py     — Abstract interface (22 animations, backward compat)
+│   │   ├── teeces.py              — Teeces32 JawaLite driver
+│   │   └── astropixels.py         — AstroPixels+ @ command driver
+│   ├── drivers/
+│   │   ├── dome_servo_driver.py   — PCA9685 @ 0x40, speed ramp, per-panel calibration
+│   │   ├── body_servo_driver.py   — Body panels via UART SRV: commands
+│   │   ├── dome_motor_driver.py   — Dome rotation via UART D: commands
+│   │   └── bt_controller_driver.py — Linux evdev BT gamepad, Kids/Child Lock
+│   ├── api/                       — 8 Flask blueprints (60+ endpoints)
+│   │   ├── audio_bp.py            — 317 sounds, categories, volume
+│   │   ├── motion_bp.py           — Drive + dome + lock mode enforcement
+│   │   ├── script_bp.py           — Sequences CRUD + run/stop
+│   │   ├── light_bp.py            — Light sequences CRUD + run/stop
+│   │   ├── teeces_bp.py           — Lights control + animation trigger
+│   │   ├── servo_bp.py            — 22 panels open/close + calibration save
+│   │   ├── settings_bp.py         — WiFi, hotspot, config, lights hot-swap
+│   │   ├── status_bp.py           — System status, e-stop, lock, reboot
+│   │   └── vesc_bp.py             — VESC telemetry, power scale, CAN scan
+│   ├── sequences/                 — 40 built-in behavioral sequences (.scr)
+│   ├── light_sequences/           — Custom light choreographies (.lseq)
 │   ├── config/
-│   │   ├── dome_angles.json — Per-panel open/close/speed — read at boot, written by web UI
-│   │   └── main.cfg / local.cfg
-│   ├── templates/           — Web dashboard (dark blue R2-D2 theme)
-│   └── static/              — CSS + JavaScript (same files bundled in Android app)
+│   │   ├── main.cfg               — Default configuration
+│   │   ├── local.cfg              — Local overrides (gitignored)
+│   │   └── dome_angles.json       — Per-panel calibration (gitignored)
+│   ├── templates/index.html       — Web dashboard (6 public + 2 admin tabs)
+│   └── static/                    — CSS + JS (same files in Android assets)
 ├── slave/
 │   ├── main.py
-│   ├── watchdog.py          — UART heartbeat watchdog → cuts VESCs at 500ms
-│   ├── drivers/             — BodyServoDriver (speed ramp), VescDriver, AudioDriver, DisplayDriver
-│   ├── config/
-│   │   └── servo_angles.json — Body panel open/close/speed — independent from Master
-│   └── sounds/              — sounds_index.json (317 MP3 files gitignored — stored on Pi)
+│   ├── watchdog.py                — UART heartbeat watchdog → cuts VESCs at 500ms
+│   └── drivers/
+│       ├── audio_driver.py        — mpg123 + sounds_index.json (317 sounds)
+│       ├── vesc_driver.py         — pyvesc propulsion
+│       ├── body_servo_driver.py   — PCA9685 @ 0x41
+│       └── display_driver.py      — RP2040 GC9A01 LCD via /dev/ttyACM*
 ├── shared/
-│   └── uart_protocol.py     — CRC checksum, build_msg(), parse_msg()
-├── rp2040/firmware/         — MicroPython: GC9A01 display, OPERATIONAL/LOCKED/TELEM screens
+│   └── uart_protocol.py           — CRC checksum, build_msg(), parse_msg()
+├── rp2040/firmware/               — MicroPython: 6-screen GC9A01 display
 ├── android/
-│   ├── app/src/main/assets/ — Bundled web assets (works offline from file://)
-│   └── compiled/            — R2-D2_Control.apk ← ready to install
+│   ├── app/src/main/assets/       — Bundled web assets (offline-capable)
+│   └── compiled/R2-D2_Control.apk — Ready to install
 └── scripts/
-    ├── setup_master.sh      — Full Master installation (one command)
-    ├── setup_slave.sh       — Full Slave installation (one command)
-    ├── deploy.sh            — First Slave deploy (rsync + deps + services)
-    └── update.sh            — Ongoing updates (git pull + rsync + restart)
+    ├── setup_master.sh            — Full Master install (one curl command)
+    ├── setup_slave.sh             — Full Slave install (one curl command)
+    ├── deploy.sh                  — First Slave deploy + --first-install
+    └── update.sh                  — Ongoing updates (git pull + rsync + restart)
 ```
 
 ---
 
 ## Sequence Format
 
-Sequences are plain `.scr` CSV files in `master/sequences/` — easy to read, write, and share. Light sequences use `.lseq` files in `master/light_sequences/` (same format, lights-only commands):
+Plain `.scr` CSV files — easy to read, write, and share. Light sequences use `.lseq` files (same format, lights-only):
 
 ```
-# This is a comment
-sound,RANDOM,happy                       # random sound from a category
-sound,Theme001                           # specific sound file
-servo,dome_panel_1,open                  # use calibrated angle + speed
-servo,dome_panel_1,open,40,8            # override angle (40°) and speed (8)
-servo,dome_panel_1,close,20,9           # close to 20° at speed 9
-servo,all,open                           # all panels simultaneously (parallel)
-dome,turn,0.5                            # dome rotation -1.0…+1.0
-dome,random,on                           # autonomous dome wander
-teeces,random                            # lights: random animations
-teeces,text,HELLO WORLD,fld             # text on FLD (or rld / both)
-teeces,psi,1                             # PSI mode
-teeces,anim,11                           # specific T-code animation
-sleep,1.5                                # pause (seconds, float)
-sleep,random,0.5,2.0                     # random pause between min and max
-motion,STOP                              # emergency stop propulsion
+# Full sequence example
+sound,RANDOM,happy                       # random happy sound
+servo,dome_panel_1,open,40,8            # open to 40° at speed 8
+teeces,anim,11                           # Imperial March animation
+sleep,1.5                                # wait 1.5 seconds
+lseq,alarm_flash,false                   # start light sequence (parallel)
+servo,all,open                           # all dome panels simultaneously
+sleep,random,0.5,2.0                     # random pause 0.5–2s
+teeces,text,R2-D2,both                  # scroll text on FLD + RLD
+wait_light,alarm_flash                   # wait for light sequence to finish
+servo,all,close                          # close everything
+motion,STOP                              # ensure motors stopped
 ```
 
-Both sequence types can be **created and edited visually** in the Editor tab — drag-and-drop command palette, no file editing required.
+Both types are **created visually in the in-browser Editor** — no file editing required.
 
 ---
 
@@ -411,21 +597,26 @@ Both sequence types can be **created and edited visually** in the Editor tab —
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| **1** | Infrastructure: UART + CRC, heartbeat watchdog, audio, Teeces32, RP2040 display, auto-deploy | ✅ Complete |
-| **2** | Propulsion: VESCs, dome motor, MG90S servo panels with speed ramp | 🔧 Code complete — hardware assembly in progress |
-| **3** | Script engine: 40 expressive behavioral sequences | ✅ Active |
-| **4** | REST API + Web dashboard (6 tabs) + Android app | ✅ Active |
-| **4+** | Servo calibration UI · Sequence editor · Light editor · Lights plugin (Teeces/AstroPixels+) · Bluetooth gamepad (evdev) · BT pairing UI | ✅ Active |
-| **5** | Vision: USB camera stream, person tracking | 📋 Planned |
+| **1** | UART + CRC · heartbeat watchdog · audio · Teeces32 · RP2040 display · auto-deploy | ✅ Complete |
+| **2** | VESCs · dome motor · MG90S servo panels with speed ramp | 🔧 Code complete — hardware assembly in progress |
+| **3** | Script engine — 40 expressive behavioral sequences | ✅ Active |
+| **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
+| **4+** | Visual sequence & light editors · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry + CAN scan | ✅ Active |
+| **5** | Vision — USB camera stream, person tracking | 📋 Planned |
 
-> Physical assembly in progress — 3D parts printing, slip ring ordered. All testing currently on bench with direct BCM14/15 UART wiring.
+> Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.
 
 ---
 
 ## Credits & Inspiration
 
-- Sound library and `.scr` script format inspired by **[r2_control by dpoulson](https://github.com/dpoulson/r2_control)** — 306 R2-D2 sounds + the original script thread concept
-- R2-D2 Builders Club community for hardware knowledge and dome geometry
+- **[r2_control by dpoulson](https://github.com/dpoulson/r2_control)** — Original `.scr` script format concept and R2-D2 sound library. The script thread idea that inspired this entire engine.
+
+- **[Michael Baddeley](https://www.patreon.com/m/Galactic_Armory)** — A special thank you to Michael for his absolutely incredible **R2-D2 MK4** 3D model. Without his extraordinary work and passion for the R2-D2 builder community, this project simply would not exist. His model is the physical soul of this build. 🙏⭐
+
+- **R2-D2 Builders Club** — Community knowledge on dome geometry, slip ring wiring, and hardware gotchas accumulated over decades of builder experience.
+
+---
 
 ## License
 
@@ -436,7 +627,7 @@ Free to use, modify and share — keep it open source.
 
 <div align="center">
 
-**Built for builders who won't settle for half-measures.**
+**Built for builders who refuse to settle for half-measures.**
 
 *May the Force be with you.* 🌟
 
