@@ -4578,6 +4578,9 @@ const choreoEditor = (() => {
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
+    block.addEventListener('mouseenter', e => _showTooltip(e, track, item));
+    block.addEventListener('mousemove',  e => _positionTooltip(e));
+    block.addEventListener('mouseleave', ()  => _hideTooltip());
     return block;
   }
 
@@ -4602,7 +4605,7 @@ const choreoEditor = (() => {
     propulsion:  '#ff8800',
   };
 
-  // Derive the short action label shown after the colon in the inspector header
+  // Full label for block tooltip and inspector
   function _inspectorLabel(track, item) {
     if (track === 'audio' || track === 'audio2') {
       if (!item.file) return '?';
@@ -4618,20 +4621,61 @@ const choreoEditor = (() => {
     return '?';
   }
 
+  // ── Floating tooltip ──────────────────────────────────────────────
+  function _getTooltip() {
+    let t = document.getElementById('chor-block-tooltip');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'chor-block-tooltip';
+      t.style.cssText = [
+        'position:fixed', 'z-index:9999', 'pointer-events:none',
+        'font-family:Courier New,monospace', 'font-size:11px', 'letter-spacing:1.5px',
+        'text-transform:uppercase', 'padding:4px 10px', 'border-radius:3px',
+        'background:#060910', 'white-space:nowrap', 'display:none',
+      ].join(';');
+      document.body.appendChild(t);
+    }
+    return t;
+  }
+
+  function _showTooltip(e, track, item) {
+    const t = _getTooltip();
+    const label = _inspectorLabel(track, item);
+    const c = _TRACK_COLOR[track] || '#00ccff';
+    t.textContent = label;
+    t.style.color = c;
+    t.style.border = `1px solid ${c}`;
+    t.style.boxShadow = `0 2px 10px ${c}33`;
+    t.style.display = 'block';
+    _positionTooltip(e);
+  }
+
+  function _positionTooltip(e) {
+    const t = document.getElementById('chor-block-tooltip');
+    if (!t || t.style.display === 'none') return;
+    t.style.left = (e.clientX + 14) + 'px';
+    t.style.top  = (e.clientY - 32) + 'px';
+  }
+
+  function _hideTooltip() {
+    const t = document.getElementById('chor-block-tooltip');
+    if (t) t.style.display = 'none';
+  }
+
+  // ── Inspector title — two-line layout ────────────────────────────
   function _setInspectorTitle(track, item) {
     const el = document.getElementById('chor-inspector-title');
     if (!el) return;
     const label = _inspectorLabel(track, item);
     const c = _TRACK_COLOR[track] || '#00ccff';
-    el.style.color = c;
-    el.style.textShadow = `0 0 10px ${c}88`;
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'space-between';
-    el.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${track.toUpperCase()} : ${label}</span>
-      <button onclick="choreoEditor._deleteSelected()"
-        style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
-        title="Delete block">✕</button>`;
+    el.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:space-between">
+         <span style="font-size:8px;letter-spacing:2px;color:rgba(0,170,255,.4);font-weight:normal">${track.toUpperCase()} :</span>
+         <button onclick="choreoEditor._deleteSelected()"
+           style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0;line-height:1"
+           title="Delete block">✕</button>
+       </div>
+       <div style="color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${label}</div>`;
   }
 
   function _clearInspectorTitle() {
