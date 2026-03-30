@@ -2844,8 +2844,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 /* ── Blocks ───────────────────────────────────────────────────── */
 .chor-block {
   position: absolute;
-  top: 5px;
-  height: 30px;
+  top: 5px; bottom: 5px;
   min-width: 20px;
   border: 1px solid;
   border-radius: 3px;
