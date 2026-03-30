@@ -4110,6 +4110,8 @@ const choreoEditor = (() => {
   const _PALETTE = [
     { track:'audio',      label:'PLAY',   tpl:{ action:'play', file:'', volume:85,   duration:5   } },
     { track:'audio',      label:'STOP',   tpl:{ action:'stop',                        duration:0.5 } },
+    { track:'audio2',     label:'PLAY 2', tpl:{ action:'play', file:'', volume:85,   duration:5   } },
+    { track:'audio2',     label:'STOP 2', tpl:{ action:'stop',                        duration:0.5 } },
     { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                        duration:4   } },
     { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                          duration:6   } },
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
@@ -4159,6 +4161,7 @@ const choreoEditor = (() => {
     _chor.meta.duration = dur;
     _renderRuler(dur);
     _drawWaveform();
+    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
@@ -4171,6 +4174,7 @@ const choreoEditor = (() => {
     const tick = () => {
       _monitorTick++;
       _drawMiniWave(_monitorTick);
+      _drawMiniWave2(_monitorTick);
       _drawFLD(_monitorTick);
       _drawRLD(_monitorTick);
       _drawPSI(_monitorTick);
@@ -4263,6 +4267,28 @@ const choreoEditor = (() => {
     ctx.lineWidth = 1;
     ctx.shadowBlur = 4;
     ctx.shadowColor = '#00ccff';
+    ctx.beginPath();
+    for (let x = 0; x < W; x++) {
+      const amp = 0.35 + 0.15 * Math.sin(x * 0.12 + t * 0.04);
+      const y = H / 2 + Math.sin(x * 0.25 + t * 0.05) * H * amp * 0.4
+                       + Math.sin(x * 0.5  + t * 0.09) * H * amp * 0.2;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  // Audio 2 mini-waveform in left panel — orange animated noise pattern
+  function _drawMiniWave2(t) {
+    const canvas = document.getElementById('chor-mini-wave2');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = '#ff9900';
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 4;
+    ctx.shadowColor = '#ff9900';
     ctx.beginPath();
     for (let x = 0; x < W; x++) {
       const amp = 0.35 + 0.15 * Math.sin(x * 0.12 + t * 0.04);
@@ -4486,6 +4512,33 @@ const choreoEditor = (() => {
     }
   }
 
+  function _drawWaveform2() {
+    const canvas = document.getElementById('chor-waveform-canvas2');
+    const lane   = _lane('audio2');
+    if (!canvas || !lane || !_chor) return;
+    const totalSec = _chor.meta.duration + 3;
+    const W = _px(totalSec) + 100;
+    const H = lane.clientHeight || 44;
+    canvas.width = W; canvas.height = H;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    const name  = ((_chor.tracks.audio2 || [])[0] || {}).file || 'audio2';
+    const barW  = 2, barGap = 1;
+    const nBars = Math.floor(W / (barW + barGap));
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, 'rgba(255,153,0,0.85)');
+    grad.addColorStop(1, 'rgba(180,80,0,0.15)');
+    ctx.fillStyle = grad;
+    for (let i = 0; i < nBars; i++) {
+      hash = ((hash * 1664525) + 1013904223) | 0;
+      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
+      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
+    }
+  }
+
   // ── Ruler ─────────────────────────────────────────────────────────
   function _renderRuler(duration) {
     const ruler = document.getElementById('chor-ruler');
@@ -4507,12 +4560,13 @@ const choreoEditor = (() => {
   // ── Track rendering ───────────────────────────────────────────────
   function _renderAllTracks() {
     if (!_chor) return;
-    ['audio', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
+    ['audio', 'audio2', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
     _renderRuler(dur);
     _drawWaveform();
+    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
@@ -4536,8 +4590,9 @@ const choreoEditor = (() => {
     block.dataset.idx   = idx;
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
-    const dur = item.duration || (track === 'audio' ? 5.0 : 2.0);
-    const isAudioLocked = track === 'audio' && item.duration > 0;
+    const isAudioTrack = track === 'audio' || track === 'audio2';
+    const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
+    const isAudioLocked = isAudioTrack && item.duration > 0;
     block.style.left  = _px(t)   + 'px';
     block.style.width = _px(dur) + 'px';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
@@ -4547,7 +4602,7 @@ const choreoEditor = (() => {
   }
 
   function _blockLabel(track, item) {
-    if (track === 'audio')      return item.file || '?';
+    if (track === 'audio' || track === 'audio2') return item.file || '?';
     if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     if (track === 'servos')     return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
@@ -4557,6 +4612,7 @@ const choreoEditor = (() => {
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
     audio:      '#00eeff',
+    audio2:     '#ff9900',
     lights:     '#ffcc00',
     dome:       '#cc44ff',
     servos:     '#00ff88',
@@ -4565,7 +4621,7 @@ const choreoEditor = (() => {
 
   // Derive the short action label shown after the colon in the inspector header
   function _inspectorLabel(track, item) {
-    if (track === 'audio') {
+    if (track === 'audio' || track === 'audio2') {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
@@ -4896,7 +4952,7 @@ const choreoEditor = (() => {
     // ── Build field list by track ────────────────────────────────────
     let html = numRow('START', 't', { min: 0, step: 0.1 });
 
-    if (track === 'audio') {
+    if (track === 'audio' || track === 'audio2') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
       // FILE — use disk scan (flat) when available, fall back to grouped index
       if (_audioScanned.length) {
@@ -4943,21 +4999,21 @@ const choreoEditor = (() => {
 
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
-    if (track !== 'audio' || field !== 'file' || !value) return;
+    if ((track !== 'audio' && track !== 'audio2') || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
-    const audio = new Audio(`/audio/file/${encodeURIComponent(value)}`);
-    audio.addEventListener('loadedmetadata', () => {
-      if (audio.duration && isFinite(audio.duration)) {
-        const dur = Math.ceil(audio.duration * 10) / 10;
+    const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
+    audioEl.addEventListener('loadedmetadata', () => {
+      if (audioEl.duration && isFinite(audioEl.duration)) {
+        const dur = Math.ceil(audioEl.duration * 10) / 10;
         choreoEditor._setProp(track, idx, 'duration', dur);
-        _renderTrack('audio');   // rebuild block — locks resize handle
+        _renderTrack(track);   // rebuild block — locks resize handle
         _refreshLayout();
         if (_selected && _selected.track === track && _selected.idx === idx)
           _updatePropsPanel(track, idx);
       }
     });
-    audio.preload = 'metadata';
-    audio.load();
+    audioEl.preload = 'metadata';
+    audioEl.load();
   }
 
   function _drawEasingPreview(name) {
@@ -5157,6 +5213,8 @@ const choreoEditor = (() => {
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
+      // Ensure audio2 track exists in legacy files
+      if (!_chor.tracks.audio2) _chor.tracks.audio2 = [];
       // Normalize dome KFs — legacy files may be missing accel or duration
       (_chor.tracks.dome || []).forEach(kf => {
         if (kf.accel == null) kf.accel = 1.0;
@@ -5196,7 +5254,7 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
+        tracks: { audio:[], audio2:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');

@@ -143,9 +143,11 @@ class ChoreoPlayer:
         events = []
         lat = self._latency
 
-        # Audio — NOT shifted (audio fires first, everything else follows)
+        # Audio tracks — NOT shifted (audio fires first, everything else follows)
         for ev in tracks.get('audio', []):
             events.append({**ev, 'track': 'audio'})
+        for ev in tracks.get('audio2', []):
+            events.append({**ev, 'track': 'audio2'})
 
         # Lights — shifted; auto-restore to random at end of each block
         for ev in tracks.get('lights', []):
@@ -241,10 +243,17 @@ class ChoreoPlayer:
                 if not self._audio:
                     return
                 if ev['action'] == 'play':
-                    # Send S:filename over UART → Slave plays via mpg123
                     self._audio.send('S', ev.get('file', ''))
                 elif ev['action'] == 'stop':
                     self._audio.send('S', 'STOP')
+
+            elif track == 'audio2':
+                if not self._audio:
+                    return
+                if ev['action'] == 'play':
+                    self._audio.send('S2', ev.get('file', ''))
+                elif ev['action'] == 'stop':
+                    self._audio.send('S2', 'STOP')
 
             elif track == 'dome':
                 if not self._dome_motor:
@@ -426,6 +435,7 @@ class ChoreoPlayer:
         # NOTE: self._audio is UARTController — use send(), NEVER .stop() (that closes serial)
         for fn in [
             lambda: self._audio.send('S', 'STOP') if self._audio else None,
+            lambda: self._audio.send('S2', 'STOP') if self._audio else None,
             lambda: self._teeces.all_off() if self._teeces else None,
             lambda: self._dome_motor.set_speed(0.0) if self._dome_motor else None,
             lambda: self._vesc.drive(0.0, 0.0) if self._vesc else None,
@@ -472,6 +482,12 @@ class ChoreoPlayer:
                 events.append((ev['t'], f"sound,{ev['file']}"))
             elif ev.get('action') == 'stop':
                 events.append((ev['t'], 'audio,stop'))
+
+        for ev in tracks.get('audio2', []):
+            if ev.get('action') == 'play':
+                events.append((ev['t'], f"sound2,{ev['file']}"))
+            elif ev.get('action') == 'stop':
+                events.append((ev['t'], 'audio2,stop'))
 
         for ev in tracks.get('lights', []):
             mode = ev.get('mode', 'random')

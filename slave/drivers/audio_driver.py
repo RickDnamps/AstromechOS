@@ -28,12 +28,17 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Slave audio driver.
+Slave audio driver — dual-channel polyphony.
 Plays MP3 sounds via mpg123 (native 3.5mm jack Pi 4B).
+Two independent channels run simultaneously (channel 0 = AUDIO_1, channel 1 = AUDIO_2).
+
 UART commands:
-  S:Happy001          → plays the specific file
-  S:RANDOM:happy      → plays a random sound from the category
-  S:STOP              → stops the current sound
+  S:Happy001          → channel 0: play specific file
+  S:RANDOM:happy      → channel 0: play random from category
+  S:STOP              → channel 0: stop
+  S2:Happy001         → channel 1: play specific file
+  S2:RANDOM:happy     → channel 1: play random from category
+  S2:STOP             → channel 1: stop
 
 Prerequisite: sudo apt install -y mpg123
 """
@@ -59,7 +64,7 @@ class AudioDriver(BaseDriver):
     def __init__(self, sounds_dir: str = _SOUNDS_DIR):
         self._sounds_dir = os.path.abspath(sounds_dir)
         self._index: dict[str, list[str]] = {}
-        self._proc: subprocess.Popen | None = None
+        self._procs: list[subprocess.Popen | None] = [None, None]   # channel 0 and 1
         self._lock = threading.Lock()
         self._ready = False
 
@@ -84,7 +89,7 @@ class AudioDriver(BaseDriver):
             return False
 
     def shutdown(self) -> None:
-        self.stop()
+        self.stop()   # stops all channels
         self._ready = False
 
     def is_ready(self) -> bool:
@@ -94,8 +99,8 @@ class AudioDriver(BaseDriver):
     # Public API
     # ------------------------------------------------------------------
 
-    def play(self, filename: str) -> bool:
-        """Plays an MP3 file by name (without extension)."""
+    def play(self, filename: str, channel: int = 0) -> bool:
+        """Plays an MP3 file by name (without extension) on the given channel (0 or 1)."""
         if not filename or any(c in filename for c in ('/', '\\', '..')):
             log.warning(f"Audio filename rejected (path traversal): {filename!r}")
             return False
@@ -103,25 +108,29 @@ class AudioDriver(BaseDriver):
         if not os.path.isfile(path):
             log.warning(f"Sound not found: {path}")
             return False
-        self._launch(path)
+        self._launch(path, channel)
         return True
 
-    def play_random(self, category: str) -> bool:
-        """Plays a random sound from the given category."""
+    def play_random(self, category: str, channel: int = 0) -> bool:
+        """Plays a random sound from the given category on the given channel."""
         sounds = self._index.get(category.lower())
         if not sounds:
             log.warning(f"Unknown audio category: {category!r}")
             return False
         filename = random.choice(sounds)
-        return self.play(filename)
+        return self.play(filename, channel)
 
-    def stop(self) -> None:
-        """Stops the currently playing sound."""
+    def stop(self, channel: int | None = None) -> None:
+        """Stops channel 0, channel 1, or both (channel=None)."""
+        channels = [0, 1] if channel is None else [channel]
         with self._lock:
-            if self._proc and self._proc.poll() is None:
-                self._proc.terminate()
-                log.debug("Sound stopped")
-            self._proc = None
+            for ch in channels:
+                if 0 <= ch < len(self._procs):
+                    proc = self._procs[ch]
+                    if proc and proc.poll() is None:
+                        proc.terminate()
+                        log.debug(f"Sound stopped (ch{ch})")
+                    self._procs[ch] = None
 
     def set_volume(self, volume: int) -> None:
         """Sets ALSA volume (0-100) on the 3.5mm jack (card 0)."""
@@ -144,38 +153,50 @@ class AudioDriver(BaseDriver):
 
     def handle_uart(self, value: str) -> None:
         """
-        Callback for UART S: messages.
-        Expected formats:
-          - 'Happy001'          → play specific
-          - 'RANDOM:happy'      → play random category
-          - 'STOP'              → stop
+        Callback for UART S: messages (channel 0).
+          - 'Happy001'       → play specific on ch0
+          - 'RANDOM:happy'   → play random on ch0
+          - 'STOP'           → stop ch0
         """
+        self._handle_channel(value, channel=0)
+
+    def handle_uart2(self, value: str) -> None:
+        """
+        Callback for UART S2: messages (channel 1).
+          - 'Happy001'       → play specific on ch1
+          - 'RANDOM:happy'   → play random on ch1
+          - 'STOP'           → stop ch1
+        """
+        self._handle_channel(value, channel=1)
+
+    def _handle_channel(self, value: str, channel: int) -> None:
         if value == 'STOP':
-            self.stop()
+            self.stop(channel)
             return
         if value.startswith('RANDOM:'):
-            category = value[7:]
-            self.play_random(category)
+            self.play_random(value[7:], channel)
         else:
-            self.play(value)
+            self.play(value, channel)
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
-    def _launch(self, path: str) -> None:
-        """Launches mpg123 in the background, stopping the previous sound."""
+    def _launch(self, path: str, channel: int = 0) -> None:
+        """Launches mpg123 on the given channel, stopping whatever was on that channel."""
         with self._lock:
-            if self._proc and self._proc.poll() is None:
-                self._proc.terminate()
+            proc = self._procs[channel] if 0 <= channel < len(self._procs) else None
+            if proc and proc.poll() is None:
+                proc.terminate()
             try:
-                self._proc = subprocess.Popen(
+                new_proc = subprocess.Popen(
                     ['mpg123', '-q', path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-                log.info(f"Audio: {os.path.basename(path)}")
+                self._procs[channel] = new_proc
+                log.info(f"Audio ch{channel}: {os.path.basename(path)}")
             except FileNotFoundError:
                 log.error("mpg123 not found — sudo apt install -y mpg123")
             except Exception as e:
-                log.error(f"Audio launch error: {e}")
+                log.error(f"Audio launch error (ch{channel}): {e}")

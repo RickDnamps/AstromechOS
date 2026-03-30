@@ -163,6 +163,7 @@ def main() -> None:
     audio = AudioDriver()
     if audio.setup():
         uart.register_callback('S',   audio.handle_uart)
+        uart.register_callback('S2',  audio.handle_uart2)
         uart.register_callback('VOL', audio.handle_volume)
         display.boot_ok('AUDIO')
     else:
