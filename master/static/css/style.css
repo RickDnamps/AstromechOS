@@ -301,11 +301,7 @@ body::after {
    TAB CONTENT
 ================================================================ */
 .tab-content { display: none; position: relative; z-index: 1; }
-.tab-content.active {
-  display: block;
-  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
-  overflow: hidden;
-}
+.tab-content.active { display: block; }
 
 /* ================================================================
    DRIVE TAB
@@ -316,8 +312,8 @@ body::after {
   justify-content: space-between;
   gap: 16px;
   padding: 16px;
-  height: 100%;
-  overflow: hidden;
+  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
+  min-height: 360px;
 }
 
 .joystick-panel {
@@ -677,7 +673,7 @@ body::after {
 .audio-layout {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
   overflow: hidden;
 }
 
@@ -740,14 +736,10 @@ body::after {
 .audio-sounds-wrap {
   flex: 1;
   overflow-y: auto;
-  min-height: 0;
   padding: 0 16px 8px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0,170,255,.2) transparent;
+  scrollbar-color: var(--border) transparent;
 }
-.audio-sounds-wrap::-webkit-scrollbar { width: 3px; }
-.audio-sounds-wrap::-webkit-scrollbar-track { background: transparent; }
-.audio-sounds-wrap::-webkit-scrollbar-thumb { background: rgba(0,170,255,.2); border-radius: 2px; }
 
 .audio-sounds-wrap h4 {
   font-size: 11px;
@@ -1271,11 +1263,9 @@ body::after {
    SEQUENCES TAB
 ================================================================ */
 .sequences-layout {
-  padding: 16px 16px 0;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  padding: 16px;
+  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
+  overflow-y: auto;
 }
 
 .sequences-header {
@@ -1285,24 +1275,13 @@ body::after {
   margin-bottom: 16px;
   flex-wrap: wrap;
   gap: 8px;
-  flex-shrink: 0;
 }
 
 .scripts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-bottom: 8px;
-  align-content: start;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0,170,255,.2) transparent;
 }
-.scripts-grid::-webkit-scrollbar { width: 4px; }
-.scripts-grid::-webkit-scrollbar-track { background: transparent; }
-.scripts-grid::-webkit-scrollbar-thumb { background: rgba(0,170,255,.2); border-radius: 2px; }
 
 .script-card {
   background: var(--bg-card);
@@ -1517,10 +1496,7 @@ body::after {
 }
 
 .running-list-wrap {
-  margin-top: 8px;
-  padding: 6px 0;
-  flex-shrink: 0;
-  border-top: 1px solid rgba(0,170,255,.08);
+  margin-top: 16px;
   font-size: 11px;
   color: var(--text-dim);
 }
@@ -2313,12 +2289,6 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 }
 
 /* ─── Sequence Editor ─────────────────────────────────── */
-
-/* Editor tab: flex column filling the full tab-content height */
-#tab-editor { display: flex; flex-direction: column; }
-#editor-panel-sequence { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
-#editor-panel-light    { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
-
 
 .editor-section-label {
   font-size: 8px;
