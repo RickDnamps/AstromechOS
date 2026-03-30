@@ -828,10 +828,22 @@
                draggable="true">+ DOME</div>
         </div>
 
-        <div class="chor-track-row" data-track="servos">
-          <div class="chor-src-btn" data-track="servos"
-               data-tpl='{"servo":"","action":"open","duration":1}'
-               draggable="true">+ SERVO</div>
+        <div class="chor-track-row" data-track="dome_servos">
+          <div class="chor-src-btn" data-track="dome_servos"
+               data-tpl='{"servo":"","action":"open","duration":1,"group":"dome"}'
+               draggable="true">+ DOME SRV</div>
+        </div>
+
+        <div class="chor-track-row" data-track="body_servos">
+          <div class="chor-src-btn" data-track="body_servos"
+               data-tpl='{"servo":"","action":"open","duration":1,"group":"body"}'
+               draggable="true">+ BODY SRV</div>
+        </div>
+
+        <div class="chor-track-row" data-track="arm_servos">
+          <div class="chor-src-btn" data-track="arm_servos"
+               data-tpl='{"servo":"","action":"open","duration":1,"group":"arms"}'
+               draggable="true">+ ARM SRV</div>
         </div>
 
         <div class="chor-track-row" data-track="propulsion">
@@ -854,7 +866,9 @@
           </div>
           <div class="chor-lane" id="chor-lane-lights"     data-track="lights"></div>
           <div class="chor-lane chor-lane-dome" id="chor-lane-dome" data-track="dome"></div>
-          <div class="chor-lane" id="chor-lane-servos"     data-track="servos"></div>
+          <div class="chor-lane" id="chor-lane-dome_servos" data-track="dome_servos"></div>
+          <div class="chor-lane" id="chor-lane-body_servos" data-track="body_servos"></div>
+          <div class="chor-lane" id="chor-lane-arm_servos"  data-track="arm_servos"></div>
           <div class="chor-lane" id="chor-lane-propulsion" data-track="propulsion"></div>
           <div class="chor-playhead" id="chor-playhead">
             <div class="chor-playhead-head"></div>

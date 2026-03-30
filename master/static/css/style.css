@@ -2710,9 +2710,9 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   box-shadow: 0 0 6px rgba(0,238,255,.25);
 }
 .chor-src-btn[data-track="audio2"] {
-  color: #ff9900;
-  border-color: rgba(255,153,0,.55);
-  box-shadow: 0 0 6px rgba(255,153,0,.2);
+  color: #007bff;
+  border-color: rgba(0,123,255,.55);
+  box-shadow: 0 0 6px rgba(0,123,255,.2);
 }
 .chor-src-btn[data-track="lights"] {
   color: #ffcc00;
@@ -2724,10 +2724,20 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   border-color: rgba(200,60,255,.55);
   box-shadow: 0 0 6px rgba(200,60,255,.2);
 }
-.chor-src-btn[data-track="servos"] {
+.chor-src-btn[data-track="dome_servos"] {
   color: #00ff88;
   border-color: rgba(0,255,136,.55);
   box-shadow: 0 0 6px rgba(0,255,136,.2);
+}
+.chor-src-btn[data-track="body_servos"] {
+  color: #198754;
+  border-color: rgba(25,135,84,.6);
+  box-shadow: 0 0 6px rgba(25,135,84,.25);
+}
+.chor-src-btn[data-track="arm_servos"] {
+  color: #2da05a;
+  border-color: rgba(45,160,90,.55);
+  box-shadow: 0 0 6px rgba(45,160,90,.2);
 }
 .chor-src-btn[data-track="propulsion"] {
   color: #ff8800;
@@ -2856,13 +2866,16 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   outline-offset: 1px;
   box-shadow: 0 0 10px rgba(0,238,255,.4);
 }
-.chor-block[data-track="audio"]      { background:rgba(0,200,255,.2);  color:#00ccff; border-color:rgba(0,200,255,.5); }
-.chor-block[data-track="lights"]     { background:rgba(255,180,0,.18); color:#ffb800; border-color:rgba(255,180,0,.45); }
+.chor-block[data-track="audio"]       { background:rgba(0,200,255,.2);   color:#00ccff; border-color:rgba(0,200,255,.5); }
+.chor-block[data-track="audio2"]      { background:rgba(0,123,255,.18);  color:#007bff; border-color:rgba(0,123,255,.5); }
+.chor-block[data-track="lights"]      { background:rgba(255,180,0,.18);  color:#ffb800; border-color:rgba(255,180,0,.45); }
 .chor-block[data-track="lights"][data-mode="alarm"] { background:rgba(255,40,80,.22); color:#ff2855; border-color:rgba(255,40,80,.55); }
 .chor-block[data-track="lights"][data-mode="disco"] { background:rgba(160,80,255,.22); color:#b055ff; border-color:rgba(160,80,255,.55); }
-.chor-block[data-track="servos"]     { background:rgba(0,255,120,.16); color:#00ff88; border-color:rgba(0,255,120,.4); }
-.chor-block[data-track="propulsion"] { background:rgba(255,120,0,.2);  color:#ff8800; border-color:rgba(255,120,0,.5); }
-.chor-block[data-track="dome"]       { background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
+.chor-block[data-track="dome_servos"] { background:rgba(0,255,136,.16);  color:#00ff88; border-color:rgba(0,255,136,.4); }
+.chor-block[data-track="body_servos"] { background:rgba(25,135,84,.18);  color:#198754; border-color:rgba(25,135,84,.5); }
+.chor-block[data-track="arm_servos"]  { background:rgba(45,160,90,.16);  color:#2da05a; border-color:rgba(45,160,90,.45); }
+.chor-block[data-track="propulsion"]  { background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
+.chor-block[data-track="dome"]        { background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
 
 /* Block resize handle */
 .chor-block-resize {

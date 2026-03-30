@@ -4269,9 +4269,12 @@ const choreoEditor = (() => {
     { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
     { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
-    { track:'servos',     label:'OPEN',   tpl:{ servo:'', action:'open',              duration:1   } },
-    { track:'servos',     label:'CLOSE',  tpl:{ servo:'', action:'close',             duration:1   } },
-    { track:'servos',     label:'DEGREE', tpl:{ servo:'', action:'degree', target:90, duration:1   } },
+    { track:'dome_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'dome', duration:1   } },
+    { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
+    { track:'body_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'body', duration:1   } },
+    { track:'body_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'body', duration:1   } },
+    { track:'arm_servos',  label:'OPEN',   tpl:{ servo:'', action:'open',  group:'arms', duration:1   } },
+    { track:'arm_servos',  label:'CLOSE',  tpl:{ servo:'', action:'close', group:'arms', duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
     { track:'propulsion', label:'STOP',   tpl:{ left:0,   right:0,                   duration:0.5 } },
   ];
@@ -4501,7 +4504,7 @@ const choreoEditor = (() => {
   function _renderAllTracks() {
     if (!_chor) return;
     _fitToScreen();
-    ['audio', 'audio2', 'lights', 'dome', 'servos', 'propulsion'].forEach(t => _renderTrack(t));
+    ['audio', 'audio2', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
@@ -4546,19 +4549,22 @@ const choreoEditor = (() => {
   function _blockLabel(track, item) {
     if (track === 'audio' || track === 'audio2') return item.file || '?';
     if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
-    if (track === 'servos')     return `${item.servo || '?'} ${item.action || ''}`;
+    if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
+      return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
   }
 
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
-    audio:      '#00eeff',
-    audio2:     '#ff9900',
-    lights:     '#ffcc00',
-    dome:       '#cc44ff',
-    servos:     '#00ff88',
-    propulsion: '#ff8800',
+    audio:       '#00eeff',
+    audio2:      '#007bff',
+    lights:      '#ffcc00',
+    dome:        '#cc44ff',
+    dome_servos: '#00ff88',
+    body_servos: '#198754',
+    arm_servos:  '#2da05a',
+    propulsion:  '#ff8800',
   };
 
   // Derive the short action label shown after the colon in the inspector header
@@ -4569,7 +4575,7 @@ const choreoEditor = (() => {
     }
     if (track === 'lights') return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
-    if (track === 'servos') {
+    if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
       return `${name} ${item.action || ''}`.trim().toUpperCase();
     }
@@ -4917,12 +4923,14 @@ const choreoEditor = (() => {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
       });
 
-    } else if (track === 'servos') {
+    } else if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
+      const prefix = track === 'dome_servos' ? 'dome_' : track === 'body_servos' ? 'body_' : 'arm_';
+      const filtered = _servoList.filter(s => s.startsWith(prefix));
+      const pool = filtered.length ? filtered : _servoList;
+      const servoOpts = Object.fromEntries(pool.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
-      const servoOpts = Object.fromEntries(_servoList.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
       html += selectRow('SERVO', 'servo', servoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
-      // TARGET° required for DEGREE; optional override for OPEN/CLOSE
       html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
       html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
 
@@ -5183,6 +5191,16 @@ const choreoEditor = (() => {
       _chor = chor;
       // Ensure audio2 track exists in legacy files
       if (!_chor.tracks.audio2) _chor.tracks.audio2 = [];
+      // Migrate legacy generic "servos" track → body_servos
+      if (_chor.tracks.servos && _chor.tracks.servos.length) {
+        if (!_chor.tracks.body_servos) _chor.tracks.body_servos = [];
+        _chor.tracks.body_servos.push(..._chor.tracks.servos.map(ev => ({ ...ev, group: 'body' })));
+        delete _chor.tracks.servos;
+      }
+      // Ensure all three servo tracks exist
+      if (!_chor.tracks.dome_servos) _chor.tracks.dome_servos = [];
+      if (!_chor.tracks.body_servos) _chor.tracks.body_servos = [];
+      if (!_chor.tracks.arm_servos)  _chor.tracks.arm_servos  = [];
       // Normalize dome KFs — legacy files may be missing accel or duration
       (_chor.tracks.dome || []).forEach(kf => {
         if (kf.accel == null) kf.accel = 1.0;
