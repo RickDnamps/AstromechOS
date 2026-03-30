@@ -2599,7 +2599,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 
 /* ── Left Panel ───────────────────────────────────────────────── */
 .chor-left-panel {
-  width: 132px;
+  width: 200px;
   flex-shrink: 0;
   border-right: 1px solid rgba(0,170,255,.1);
   display: flex;
@@ -2610,19 +2610,26 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 /* Top half — Live Monitors */
 .chor-monitors {
   flex: 1;
-  padding: 6px;
-  overflow: hidden;
+  padding: 8px 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
   border-bottom: 1px solid rgba(0,170,255,.1);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
+/* Discrete scrollbar for the monitor panel */
+.chor-monitors::-webkit-scrollbar { width: 3px; }
+.chor-monitors::-webkit-scrollbar-track { background: transparent; }
+.chor-monitors::-webkit-scrollbar-thumb { background: rgba(0,170,255,.2); border-radius: 2px; }
 .chor-monitor-title {
   font-size: 7px;
   letter-spacing: 2.5px;
   color: rgba(0,170,255,.35);
   text-transform: uppercase;
   flex-shrink: 0;
+  width: 100%;
 }
 .chor-monitor-section {
   display: flex;
@@ -2691,6 +2698,11 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   border-color: rgba(0,238,255,.55);
   box-shadow: 0 0 6px rgba(0,238,255,.25);
 }
+.chor-src-btn[data-track="audio2"] {
+  color: #ff9900;
+  border-color: rgba(255,153,0,.55);
+  box-shadow: 0 0 6px rgba(255,153,0,.2);
+}
 .chor-src-btn[data-track="lights"] {
   color: #ffcc00;
   border-color: rgba(255,200,0,.55);
@@ -2712,29 +2724,20 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   box-shadow: 0 0 6px rgba(255,136,0,.2);
 }
 
-/* FLD / RLD HTML dot grids in the choreo left panel */
-.chor-fld-grid,
-.chor-rld-grid {
-  padding: 4px 5px;
-  max-width: 120px;
-}
-.chor-fld-grid .logic-row { gap: 2px; margin-bottom: 2px; }
-.chor-rld-grid .logic-row { gap: 2px; margin-bottom: 2px; }
-
-/* Audio mini-waveform in left panel */
-.chor-mini-wave {
-  border-radius: 2px;
-  max-width: 120px;
-  opacity: .75;
-  display: block;
-}
-
-/* Dome compass section in left panel */
-.chor-dome-section {
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-}
+/* ── Choreo monitor — photorealistic Digital Twin (scoped overrides) ──
+   Scale dot sizes so the full RLD (27 cols) fits in the 200px panel.  */
+#chor-monitor .dot-fld       { width: 5px; height: 5px; }
+#chor-monitor .dot-rld       { width: 4px; height: 4px; }
+#chor-monitor .logic-row     { gap: 1px; margin-bottom: 1px; }
+#chor-monitor .logic-display { padding: 4px 5px; }
+#chor-monitor .front-inner   { gap: 6px; }
+#chor-monitor .rear-inner    { gap: 6px; }
+#chor-monitor .fld-stack     { gap: 3px; }
+#chor-monitor .dome-side     { width: 100%; align-items: center; }
+#chor-monitor .psi-circle    { width: 14px; height: 14px; }
+#chor-monitor .psi-wrap      { gap: 2px; }
+#chor-monitor .panel-label   { margin-bottom: 2px; }
+#chor-monitor .dome-side-label { margin-bottom: 2px; font-size: 8px; }
 
 /* Drop-target highlight when dragging over a lane */
 .chor-lane.drag-over {
