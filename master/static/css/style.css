@@ -1279,6 +1279,21 @@ body::after {
   background: rgba(0,170,255,.5);
 }
 
+/* Editor left panels (Sequence + Light) — same thin holographic scrollbar */
+#editor-left, #light-left {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,170,255,.25) transparent;
+}
+#editor-left::-webkit-scrollbar, #light-left::-webkit-scrollbar { width: 4px; }
+#editor-left::-webkit-scrollbar-track, #light-left::-webkit-scrollbar-track { background: transparent; }
+#editor-left::-webkit-scrollbar-thumb, #light-left::-webkit-scrollbar-thumb {
+  background: rgba(0,170,255,.25);
+  border-radius: 2px;
+}
+#editor-left::-webkit-scrollbar-thumb:hover, #light-left::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,170,255,.5);
+}
+
 .sequences-header {
   display: flex;
   align-items: center;
