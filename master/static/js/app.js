@@ -4634,14 +4634,6 @@ const choreoEditor = (() => {
     const powToY = p => yMid - (p / 100) * ySpan;
     const yToPow = y => Math.round(Math.max(-100, Math.min(100, -(y - yMid) / ySpan * 100)));
 
-    // Zero-power reference line (dashed, full width)
-    const zl = document.createElementNS(NS, 'line');
-    zl.setAttribute('x1', 0);   zl.setAttribute('y1', yMid);
-    zl.setAttribute('x2', W);   zl.setAttribute('y2', yMid);
-    zl.setAttribute('stroke', 'rgba(204,68,255,0.22)');
-    zl.setAttribute('stroke-dasharray', '3 5');
-    svg.appendChild(zl);
-
     // Build the PWM pulse path for one event:
     //   flat 0 → easing rise to POWER → hold → easing fall to 0
     // Easing ramps occupy min(8px, 40% of event width) each side.
