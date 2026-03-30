@@ -940,6 +940,158 @@ function resetPSICustom() {
   _domeSim.resetPSICustom();
 }
 
+// ================================================================
+// _chorMon — Independent photorealistic display engine for the
+// Choreo left panel. Targets chor-prefixed element IDs so it
+// never interferes with the Light tab's _domeSim instance.
+// Driven by the lights track timeline, NOT by the Light tab controls.
+// ================================================================
+const _chorMon = (() => {
+  const FONT5 = {
+    'A':[2,5,7,5,5],'B':[6,5,6,5,6],'C':[3,4,4,4,3],'D':[6,5,5,5,6],'E':[7,4,6,4,7],
+    'F':[7,4,6,4,4],'G':[3,4,5,5,3],'H':[5,5,7,5,5],'I':[7,2,2,2,7],'J':[1,1,1,5,2],
+    'K':[5,5,6,5,5],'L':[4,4,4,4,7],'M':[5,7,7,5,5],'N':[5,7,5,5,5],'O':[2,5,5,5,2],
+    'P':[6,5,6,4,4],'Q':[2,5,5,7,3],'R':[6,5,6,5,5],'S':[3,4,2,1,6],'T':[7,2,2,2,2],
+    'U':[5,5,5,5,2],'V':[5,5,5,5,2],'W':[5,5,7,7,5],'X':[5,5,2,5,5],'Y':[5,5,2,2,2],
+    'Z':[7,1,2,4,7],'0':[2,5,5,5,2],'1':[2,6,2,2,7],'2':[6,1,2,4,7],'3':[6,1,2,1,6],
+    '4':[5,5,7,1,1],'5':[7,4,6,1,6],'6':[3,4,6,5,2],'7':[7,1,2,2,2],'8':[2,5,2,5,2],
+    '9':[2,5,3,1,6],' ':[0,0,0,0,0],'!':[2,2,2,0,2],'?':[6,1,2,0,2],'.':[0,0,0,0,2],
+    '-':[0,0,7,0,0],':':[0,2,0,2,0],'+':[0,2,7,2,0],'♥':[0,5,7,2,0],'#':[5,7,5,7,5],
+  };
+  const FONT4 = {
+    'A':[2,5,7,5],'B':[6,6,5,6],'C':[3,4,4,3],'D':[6,5,5,6],'E':[7,6,4,7],
+    'F':[7,6,4,4],'G':[3,4,5,3],'H':[5,7,5,5],'I':[7,2,2,7],'J':[1,1,5,2],
+    'K':[5,6,6,5],'L':[4,4,4,7],'M':[5,7,5,5],'N':[5,7,5,5],'O':[2,5,5,2],
+    'P':[6,5,6,4],'Q':[2,5,7,3],'R':[6,5,6,5],'S':[3,2,1,6],'T':[7,2,2,2],
+    'U':[5,5,5,2],'V':[5,5,5,2],'W':[5,5,7,5],'X':[5,2,2,5],'Y':[5,5,2,2],
+    'Z':[7,2,4,7],'0':[2,5,5,2],'1':[2,6,2,7],'2':[6,2,4,7],'3':[6,2,1,6],
+    '4':[5,7,1,1],'5':[7,6,1,6],'6':[3,6,5,2],'7':[7,1,2,2],'8':[2,2,5,2],
+    '9':[2,5,3,1],' ':[0,0,0,0],'!':[2,2,0,2],'?':[6,2,0,2],'.':[0,0,0,2],
+    '-':[0,7,0,0],':':[2,0,2,0],'+':[0,7,2,0],'♥':[5,7,2,0],
+  };
+  const CFG = {
+    'chor-fld-top': { rows:5, cols:9, cls:'dot-fld' },
+    'chor-fld-bot': { rows:5, cols:9, cls:'dot-fld' },
+    'chor-rld':     { rows:4, cols:27, cls:'dot-rld' },
+  };
+  const MODE_MAP = {
+    1:'random',2:'flash',3:'alarm',4:'short',5:'scream',
+    6:'leia',7:'love',8:'sweep',9:'pulse',10:'starwars',
+    11:'imperial',12:'disco',13:'disco',14:'alarm',15:'sweep',
+    16:'white',17:'redon',18:'greenon',19:'saber',20:'off',
+    21:'pulse',92:'pulse',
+  };
+  let _tick=0, _mode='off', _lastShort=0, _running=false;
+  const _textState = {
+    'chor-fld-top': { buf:null, scroll:0, color:'#00ffea', active:false },
+    'chor-fld-bot': { buf:null, scroll:0, color:'#00aaff', active:false },
+    'chor-rld':     { buf:null, scroll:0, color:'#ff8800', active:false },
+  };
+
+  function _buildBuf(text, rows, font) {
+    const buf = Array.from({ length: rows }, () => []);
+    (text.toUpperCase() + '   ').split('').forEach(ch => {
+      const g = font[ch] || font[' '];
+      for (let c=0;c<3;c++) for (let r=0;r<rows;r++) buf[r].push((g[r]>>(2-c))&1);
+      for (let r=0;r<rows;r++) buf[r].push(0);
+    });
+    return buf;
+  }
+  function _getDots(id) { const e=document.getElementById(id); return e?Array.from(e.querySelectorAll('.sim-dot')):[]; }
+  function _lit(d,c)  { if(!d)return; d.style.background=c; d.style.boxShadow=`0 0 4px ${c}`; }
+  function _dim(d)    { if(!d)return; d.style.background='rgba(0,170,255,0.07)'; d.style.boxShadow='none'; }
+  function _setPSI(front, rear) {
+    const pf=document.getElementById('chor-psi-front'), pr=document.getElementById('chor-psi-rear');
+    if(pf){pf.style.background=front; pf.style.boxShadow=`0 0 14px ${front}`;}
+    if(pr){pr.style.background=rear;  pr.style.boxShadow=`0 0 14px ${rear}`;}
+  }
+  function _renderText(id) {
+    const st=_textState[id]; if(!st.buf)return;
+    const{rows,cols}=CFG[id]; const dots=_getDots(id); const bufLen=st.buf[0]?.length||1;
+    st.scroll=(st.scroll+1)%(bufLen+cols);
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+      const bIdx=c+st.scroll-cols; const on=bIdx>=0&&bIdx<bufLen&&st.buf[r]&&st.buf[r][bIdx];
+      on?_lit(dots[r*cols+c],st.color):_dim(dots[r*cols+c]);
+    }
+  }
+  const IDS = ['chor-fld-top','chor-fld-bot','chor-rld'];
+  const _modes = {
+    random(t) {
+      IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.07+(r*cols+c+si*23)*0.73)>0.1?_lit(dots[r*cols+c],'#00aaff'):_dim(dots[r*cols+c]);});_setPSI('#00aaff','#0077cc');
+    },
+    flash(t){const on=Math.floor(t/5)%2===0;IDS.forEach(id=>_getDots(id).forEach(d=>on?_lit(d,'#ffcc00'):_dim(d)));_setPSI(on?'#ffcc00':'#221100',on?'#ffaa00':'#110800');},
+    alarm(t){
+      const sw=Math.floor(t*0.1)%9;
+      ['chor-fld-top','chor-fld-bot'].forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.abs(c-sw)<2?_lit(dots[r*cols+c],'#ff2244'):_dim(dots[r*cols+c]);});
+      const sw2=Math.floor(t*0.1)%27;const{rows:rr,cols:rc}=CFG['chor-rld'];const rd=_getDots('chor-rld');for(let r=0;r<rr;r++)for(let c=0;c<rc;c++)Math.abs(c-sw2)<3?_lit(rd[r*rc+c],'#ff2244'):_dim(rd[r*rc+c]);_setPSI('#ff2244','#ff0022');
+    },
+    short(t){const cs=['#ff2244','#ffcc00','#00ffea','#ff8800','#aa66ff','#00cc66','#fff'];IDS.forEach(id=>_getDots(id).forEach(d=>Math.random()>0.65?_lit(d,cs[Math.floor(Math.random()*cs.length)]):_dim(d)));_setPSI(cs[Math.floor(t*0.18)%cs.length],cs[(Math.floor(t*0.18)+3)%cs.length]);},
+    scream(t){IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.14+(r*cols+c+si*11)*0.4)*0.5+0.5>0.35?_lit(dots[r*cols+c],'#00ffea'):_dim(dots[r*cols+c]);});_setPSI('#00ffea','#009988');},
+    leia(t){const wave=(t*0.03)%1;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const frac=c/cols,dist=Math.min(Math.abs(frac-wave),1-Math.abs(frac-wave));dist<0.22?_lit(dots[r*cols+c],'#9955ff'):_dim(dots[r*cols+c]);}});_setPSI('#9955ff','#7733bb');},
+    love(t){const beat=Math.sin(t*0.14)*0.5+0.5>0.35;IDS.forEach(id=>_getDots(id).forEach(d=>beat?_lit(d,'#ff66cc'):_dim(d)));_setPSI(beat?'#ff66cc':'#330011',beat?'#ff44aa':'#220011');},
+    sweep(t){const pos=Math.sin(t*0.04)*0.5+0.5;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.abs(c/cols-pos)<0.12?_lit(dots[r*cols+c],'#00aaff'):_dim(dots[r*cols+c]);});_setPSI('#00aaff','#0066aa');},
+    pulse(t){const v=Math.sin(t*0.09)*0.5+0.5;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)c/cols<v?_lit(dots[r*cols+c],'#00cc66'):_dim(dots[r*cols+c]);});_setPSI('#00cc66','#009944');},
+    starwars(t){IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);const sp=Math.floor(t*0.07);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)(c+sp)%cols<3?_lit(dots[r*cols+c],'#ffdd00'):_dim(dots[r*cols+c]);});_setPSI('#ffdd00','#bb9900');},
+    imperial(t){const beat=Math.sin(t*0.22)*0.5+0.5>0.55;IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.18+(r*cols+c+si*7)*0.45)*0.5+0.5*(beat?1:0.3)>0.4?_lit(dots[r*cols+c],'#ff8800'):_dim(dots[r*cols+c]);});_setPSI(beat?'#ff8800':'#331100',beat?'#ff6600':'#221100');},
+    disco(t){const cs=['#ff2244','#ffcc00','#00ffea','#ff66cc','#8844ff','#00cc66','#ff8800'];IDS.forEach((id,si)=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)_lit(dots[r*cols+c],cs[(Math.floor(t*0.09)+(r*cols+c+si*5))%cs.length]);});_setPSI(cs[Math.floor(t*0.12)%cs.length],cs[(Math.floor(t*0.12)+3)%cs.length]);},
+    saber(t){const pos=Math.sin(t*0.05)*0.5+0.5;IDS.forEach(id=>{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)c/cols<pos?_lit(dots[r*cols+c],'#44ff88'):_dim(dots[r*cols+c]);});_setPSI('#44ff88','#22cc55');},
+    redon()  {IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#ff2244')));_setPSI('#ff2244','#cc0022');},
+    greenon(){IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#00cc66')));_setPSI('#00cc66','#009944');},
+    white()  {IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#eef2ff')));_setPSI('#ffffff','#ccddff');},
+    off()    {IDS.forEach(id=>_getDots(id).forEach(d=>_dim(d)));_setPSI('#0a0e14','#0a0e14');},
+    text(t) {
+      if(t%8===0) IDS.forEach(id=>{
+        if(_textState[id].active){_renderText(id);}
+        else{const{rows,cols}=CFG[id];const dots=_getDots(id);for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)Math.sin(t*0.07+(r*cols+c)*0.5)>0.1?_lit(dots[r*cols+c],'rgba(0,170,255,0.3)'):_dim(dots[r*cols+c]);}
+      });
+      _setPSI('#00ffea','#ff8800');
+    },
+  };
+
+  function _loop() {
+    _tick++;
+    if(_mode==='short'){if(_tick-_lastShort>=3){_modes.short(_tick);_lastShort=_tick;}}
+    else{(_modes[_mode]||_modes.off)(_tick);}
+    requestAnimationFrame(_loop);
+  }
+
+  return {
+    init() {
+      if(_running) return;
+      Object.entries(CFG).forEach(([id,c])=>{
+        const e=document.getElementById(id); if(!e||e.querySelector('.sim-dot'))return;
+        for(let r=0;r<c.rows;r++){
+          const row=document.createElement('div'); row.className='logic-row';
+          for(let col=0;col<c.cols;col++){const d=document.createElement('div');d.className=`sim-dot ${c.cls}`;row.appendChild(d);}
+          e.appendChild(row);
+        }
+      });
+      _running=true; _loop();
+    },
+    setModeNum(num){ this.setMode(MODE_MAP[num]||'random'); },
+    setMode(key) {
+      if(_mode===key) return;
+      _mode=key; _tick=0;
+      if(key!=='text') Object.keys(_textState).forEach(k=>{_textState[k].active=false;_textState[k].buf=null;});
+    },
+    setText(target, text, color) {
+      if(!text) return;
+      if(target==='fld'||target==='both'){
+        ['chor-fld-top','chor-fld-bot'].forEach(id=>{
+          _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
+          if(color)_textState[id].color=color;
+        });
+      }
+      if(target==='rld'||target==='both'){
+        _textState['chor-rld'].buf=_buildBuf(text,4,FONT4);_textState['chor-rld'].scroll=0;_textState['chor-rld'].active=true;
+        if(color)_textState['chor-rld'].color=color;
+      }
+      _mode='text'; _tick=0;
+    },
+    updatePSI(color){ _setPSI(color,color); },
+  };
+})();
+
 function setSpeed(val) {
   _speedLimit = val / 100;
   el('speed-val').textContent = val + '%';
@@ -4093,8 +4245,6 @@ const choreoEditor = (() => {
   let _pollTimer   = null;
   let _dirty       = false;
   let _lanesWired  = false;
-  let _monitorRaf  = null;
-  let _monitorTick = 0;
   let _lastTelem   = null;
 
   // Cached data for inspector dropdowns — loaded once at init
@@ -4168,245 +4318,9 @@ const choreoEditor = (() => {
 
   function _lane(track) { return document.getElementById(`chor-lane-${track}`); }
 
-  // ── Monitor canvas animations ─────────────────────────────────────
-  function _startMonitor() {
-    if (_monitorRaf) return;
-    const tick = () => {
-      _monitorTick++;
-      _drawMiniWave(_monitorTick);
-      _drawMiniWave2(_monitorTick);
-      _drawFLD(_monitorTick);
-      _drawRLD(_monitorTick);
-      _drawPSI(_monitorTick);
-      _drawBattery(_lastTelem);
-      _drawDomeCompass(_monitorTick);
-      _monitorRaf = requestAnimationFrame(tick);
-    };
-    _monitorRaf = requestAnimationFrame(tick);
-  }
-  function _stopMonitor() {
-    if (_monitorRaf) { cancelAnimationFrame(_monitorRaf); _monitorRaf = null; }
-  }
-
-  // Front Logic Display — HTML dot grid (re-uses .logic-display / .sim-dot from lights tab)
-  function _drawFLD(t) {
-    const grid = document.getElementById('chor-fld-grid');
-    if (!grid) return;
-    // Build rows once
-    if (!grid.children.length) {
-      for (let r = 0; r < 5; r++) {
-        const row = document.createElement('div');
-        row.className = 'logic-row';
-        for (let c = 0; c < 9; c++) {
-          const dot = document.createElement('div');
-          dot.className = 'sim-dot dot-fld';
-          row.appendChild(dot);
-        }
-        grid.appendChild(row);
-      }
-      // Second sub-grid (darker cyan band)
-      const sep = document.createElement('div');
-      sep.style.cssText = 'height:2px';
-      grid.appendChild(sep);
-      for (let r = 0; r < 5; r++) {
-        const row = document.createElement('div');
-        row.className = 'logic-row';
-        for (let c = 0; c < 9; c++) {
-          const dot = document.createElement('div');
-          dot.className = 'sim-dot dot-fld';
-          row.appendChild(dot);
-        }
-        grid.appendChild(row);
-      }
-    }
-    const dots = grid.querySelectorAll('.dot-fld');
-    dots.forEach((dot, i) => {
-      const phase = i < 45 ? 0 : Math.PI * 0.6;
-      const lit = Math.sin(t * 0.07 + i * 0.73 + phase) > 0.1;
-      const color = i < 45 ? '#00ccff' : '#0088cc';
-      dot.style.background = lit ? color : 'rgba(0,150,200,0.06)';
-      dot.style.boxShadow  = lit ? `0 0 4px ${color}` : 'none';
-    });
-  }
-
-  // Rear Logic Display — HTML dot grid (orange sweep)
-  function _drawRLD(t) {
-    const grid = document.getElementById('chor-rld-grid');
-    if (!grid) return;
-    const COLS = 14, ROWS = 3;
-    if (!grid.children.length) {
-      for (let r = 0; r < ROWS; r++) {
-        const row = document.createElement('div');
-        row.className = 'logic-row';
-        for (let c = 0; c < COLS; c++) {
-          const dot = document.createElement('div');
-          dot.className = 'sim-dot dot-rld';
-          row.appendChild(dot);
-        }
-        grid.appendChild(row);
-      }
-    }
-    const sw = Math.floor(t * 0.08) % COLS;
-    const dots = grid.querySelectorAll('.dot-rld');
-    dots.forEach((dot, i) => {
-      const c = i % COLS;
-      const lit = Math.abs(c - sw) < 2 || Math.sin(t * 0.05 + i * 0.45) > 0.35;
-      dot.style.background = lit ? '#ff8800' : 'rgba(180,80,0,0.07)';
-      dot.style.boxShadow  = lit ? '0 0 3px #ff8800' : 'none';
-    });
-  }
-
-  // Audio mini-waveform in left panel — animated noise pattern
-  function _drawMiniWave(t) {
-    const canvas = document.getElementById('chor-mini-wave');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.strokeStyle = '#00ccff';
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 4;
-    ctx.shadowColor = '#00ccff';
-    ctx.beginPath();
-    for (let x = 0; x < W; x++) {
-      const amp = 0.35 + 0.15 * Math.sin(x * 0.12 + t * 0.04);
-      const y = H / 2 + Math.sin(x * 0.25 + t * 0.05) * H * amp * 0.4
-                       + Math.sin(x * 0.5  + t * 0.09) * H * amp * 0.2;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // Audio 2 mini-waveform in left panel — orange animated noise pattern
-  function _drawMiniWave2(t) {
-    const canvas = document.getElementById('chor-mini-wave2');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    ctx.strokeStyle = '#ff9900';
-    ctx.lineWidth = 1;
-    ctx.shadowBlur = 4;
-    ctx.shadowColor = '#ff9900';
-    ctx.beginPath();
-    for (let x = 0; x < W; x++) {
-      const amp = 0.35 + 0.15 * Math.sin(x * 0.12 + t * 0.04);
-      const y = H / 2 + Math.sin(x * 0.25 + t * 0.05) * H * amp * 0.4
-                       + Math.sin(x * 0.5  + t * 0.09) * H * amp * 0.2;
-      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  // Battery arc gauge
-  function _drawBattery(telem) {
-    const canvas = document.getElementById('chor-battery-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    const cx = W / 2, cy = H * 0.72, r = Math.min(W, H) * 0.38;
-    const startA = Math.PI * 0.85, endA = Math.PI * 2.15;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startA, endA);
-    ctx.strokeStyle = 'rgba(0,170,255,0.1)';
-    ctx.lineWidth = 7;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    let pct = 0, voltage = null;
-    if (telem) {
-      const vals = [telem.L ? telem.L.v_in : null, telem.R ? telem.R.v_in : null].filter(v => v !== null);
-      if (vals.length) { voltage = Math.min(...vals); pct = Math.max(0, Math.min(1, (voltage - 20) / 9.4)); }
-    }
-    const color = pct < 0.2 ? '#ff2244' : pct < 0.5 ? '#ffb300' : '#00cc66';
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startA, startA + (endA - startA) * pct);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 7;
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = color;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = color;
-    ctx.font = 'bold 12px Courier New';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(voltage !== null ? Math.round(pct * 100) + '%' : '—', cx, cy - 4);
-    ctx.font = '7px Courier New';
-    ctx.fillStyle = 'rgba(0,170,255,0.4)';
-    ctx.fillText(voltage !== null ? voltage.toFixed(1) + 'V' : 'NO TELEM', cx, cy + 10);
-  }
-
-  // Dome compass with rotating needle
-  function _drawDomeCompass(t) {
-    const canvas = document.getElementById('chor-dome-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    const cx = W / 2, cy = H / 2, r = Math.min(W, H) * 0.42;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.strokeStyle = 'rgba(0,170,255,0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    const angle = (t * 0.015) % (Math.PI * 2);
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.sin(angle) * (r - 12), cy - Math.cos(angle) * (r - 12));
-    ctx.strokeStyle = '#00eeff';
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 8;
-    ctx.shadowColor = '#00eeff';
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
-    ctx.fillStyle = '#00eeff';
-    ctx.fill();
-    ctx.fillStyle = 'rgba(0,170,255,0.25)';
-    ctx.font = '7px Courier New';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', Math.PI * 1.5]].forEach(([label, a]) => {
-      ctx.fillText(label, cx + Math.sin(a) * (r - 7), cy - Math.cos(a) * (r - 7));
-    });
-  }
-
-  // Animate PSI canvases — front (cyan) and rear (amber)
-  function _drawPSI(t) {
-    function drawOne(id, c1, c2, phase) {
-      const canvas = document.getElementById(id);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const W = canvas.width, H = canvas.height;
-      const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 1;
-      ctx.clearRect(0, 0, W, H);
-      const blink = Math.sin(t * 0.12 + phase) > 0;
-      const activeColor = blink ? c1 : c2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = blink ? c1 + '33' : c2;
-      ctx.fill();
-      ctx.strokeStyle = activeColor;
-      ctx.lineWidth = 1.5;
-      ctx.shadowBlur = blink ? 8 : 2;
-      ctx.shadowColor = c1;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-      ctx.fillStyle = blink ? c1 : 'rgba(0,0,0,0)';
-      ctx.shadowBlur = blink ? 6 : 0;
-      ctx.shadowColor = activeColor;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-    }
-    drawOne('chor-psi-f-canvas', '#00ffea', 'rgba(0,80,60,.3)', 0);
-    drawOne('chor-psi-r-canvas', '#ffaa00', 'rgba(80,40,0,.3)', Math.PI * 0.7);
-  }
+  // ── Monitor — delegates to _chorMon photorealistic engine ────────
+  function _startMonitor() { _chorMon.init(); }
+  function _stopMonitor()  { /* _chorMon rAF loop continues — driven by timeline */ }
 
   // Populate the block palette and attach dragstart handlers
   // Wire the Ultratime source buttons (one per track, already in HTML)
@@ -5125,6 +5039,25 @@ const choreoEditor = (() => {
   }
 
   // ── Playhead polling ─────────────────────────────────────────────
+  // Sync the live monitor to the active lights block at t_now
+  function _syncChorMonitor(t_now) {
+    if (!_chor) { _chorMon.setMode('random'); return; }
+    const lights = _chor.tracks.lights || [];
+    let activeEv = null;
+    for (const ev of lights) {
+      const s = ev.t || 0;
+      if (t_now >= s && t_now < s + (ev.duration || 0)) { activeEv = ev; break; }
+    }
+    if (!activeEv) { _chorMon.setMode('off'); return; }
+    const mode = activeEv.mode || 'random';
+    if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
+      _chorMon.setModeNum(parseInt(mode.slice(1), 10));
+    } else {
+      _chorMon.setMode(mode);
+    }
+    if (activeEv.text) _chorMon.setText(activeEv.target || 'both', activeEv.text, activeEv.color);
+  }
+
   function _startPolling() {
     _stopPolling();
     _pollTimer = setInterval(async () => {
@@ -5134,6 +5067,7 @@ const choreoEditor = (() => {
       if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
       const tc = document.getElementById('chor-timecode');
       if (tc) tc.textContent = _fmtTime(status.t_now || 0);
+      _syncChorMonitor(status.t_now || 0);
       _updateTelem(status.telem || null);
       _updateAlarms(status.abort_reason || null);
       if (status.abort_reason) { _stopPolling(); _showAbortModal(status.abort_reason); return; }
@@ -5275,6 +5209,7 @@ const choreoEditor = (() => {
       const ph = document.getElementById('chor-playhead'); if (ph) ph.style.left = '0px';
       const tc = document.getElementById('chor-timecode'); if (tc) tc.textContent = '00:00.000';
       _updateTelem(null);
+      _chorMon.setMode('random');
       toast('Choreo stopped', 'ok');
     },
 
