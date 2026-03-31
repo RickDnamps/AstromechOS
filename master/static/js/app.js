@@ -1396,27 +1396,6 @@ async function loadLightSequences() {
     _updateRawPaletteItem();
   }
 
-  // Saved light sequences
-  const seqGrid = el('light-seq-list');
-  if (seqGrid && seqData) {
-    const names = seqData.sequences || [];
-    if (names.length === 0) {
-      seqGrid.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:8px 0;letter-spacing:0.5px">No saved sequences — create one in the Editor tab</div>';
-    } else {
-      seqGrid.innerHTML = names.map(name => `
-        <div class="script-card" id="light-card-${name}">
-          <div class="script-name">${name.toUpperCase()}<span class="script-badge-light">LIGHT</span></div>
-          <div class="script-btns">
-            <div class="running-indicator"></div>
-            <button class="btn btn-sm btn-active" onclick="runLightSeq('${name}', false)">RUN</button>
-            <button class="btn btn-sm" onclick="runLightSeq('${name}', true)">LOOP</button>
-            <button class="btn btn-sm btn-danger" onclick="api('/light/stop_all','POST').then(()=>toast('Stopped','ok'))">STOP</button>
-          </div>
-        </div>
-      `).join('');
-    }
-  }
-
   // Backend title
   if (state?.backend) teecesController.updateCardTitle(state.backend);
 }
@@ -1433,11 +1412,6 @@ function playAnimation(mode) {
   });
 }
 
-function runLightSeq(name, loop) {
-  api('/light/run', 'POST', { name, loop }).then(d => {
-    if (d) toast(`${name.toUpperCase()} started${loop ? ' (loop)' : ''}`, 'ok');
-  });
-}
 
 // ================================================================
 // Servo Panel
