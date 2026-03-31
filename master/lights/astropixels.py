@@ -107,6 +107,28 @@ class AstroPixelsDriver(BaseLightsController):
     def off(self) -> bool:
         return self._send("@0T20\r")
 
+    def psi_seq(self, target: str = "both", sequence: str = "normal") -> bool:
+        """Control PSI (Process State Indicators) via @nPn commands (source: MarcduinoPSI.h).
+        target: 'fpsi' | 'rpsi' | 'both'
+        sequence: 'normal'|'flash'|'alarm'|'failure'|'redalert'|'leia'|'march'
+        Colors are firmware-defined per sequence — not configurable via serial."""
+        _TARGET = {'fpsi': '1', 'rpsi': '2', 'both': '0'}
+        _SEQ    = {
+            'normal':   '1',
+            'flash':    '2',
+            'alarm':    '3',
+            'failure':  '4',
+            'redalert': '5',
+            'leia':     '6',
+            'march':    '11',
+        }
+        t = _TARGET.get(target.lower(), '0')
+        s = _SEQ.get(sequence.lower(), '1')
+        if target.lower() == 'both':
+            self._send(f"@1P{s}\r")
+            return self._send(f"@2P{s}\r")
+        return self._send(f"@{t}P{s}\r")
+
     def holo(self, target: str = "fhp", effect: str = "on") -> bool:
         """Control holo projectors via @HP passthrough (source: MarcduinoHolo.h).
         target: 'fhp' | 'rhp' | 'thp' | 'radar' | 'all'

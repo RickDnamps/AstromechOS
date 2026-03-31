@@ -4270,6 +4270,7 @@ const choreoEditor = (() => {
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                                               duration:2   } },
     { track:'lights',     label:'TEXT',   tpl:{ mode:'text',  display:'fld_top', text:'HELLO',            duration:3   } },
     { track:'lights',     label:'HOLO',   tpl:{ mode:'holo',  target:'fhp',      effect:'on',             duration:3   } },
+    { track:'lights',     label:'PSI',    tpl:{ mode:'psi',   target:'both',     sequence:'normal',        duration:4   } },
     { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'dome_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'dome', duration:1   } },
     { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
@@ -4591,6 +4592,7 @@ const choreoEditor = (() => {
     if (track === 'lights') {
       if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
       if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      if (item.mode === 'psi')  return `[${(item.target||'both').toUpperCase()}] ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
@@ -4620,6 +4622,7 @@ const choreoEditor = (() => {
     if (track === 'lights') {
       if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
       if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      if (item.mode === 'psi')  return `[${(item.target||'both').toUpperCase()}] ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
@@ -5012,8 +5015,15 @@ const choreoEditor = (() => {
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text', holo: '🔦 Holo' });
-      if (item.mode === 'holo') {
+      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text', holo: '🔦 Holo', psi: '👁 PSI' });
+      if (item.mode === 'psi') {
+        html += selectRow('TARGET', 'target', { both:'FPSI + RPSI', fpsi:'FPSI (Front)', rpsi:'RPSI (Rear)' });
+        html += selectRow('SEQUENCE', 'sequence', {
+          normal:'NORMAL (default)', flash:'FLASH (random colors)',
+          alarm:'ALARM (red)', failure:'FAILURE (cycle+fade)',
+          redalert:'RED ALERT', leia:'LEIA (pale green)', march:'MARCH'
+        });
+      } else if (item.mode === 'holo') {
         html += selectRow('TARGET', 'target', {
           fhp:'FHP (Front)', rhp:'RHP (Rear)', thp:'THP (Top)', radar:'Radar Eye', all:'ALL'
         });

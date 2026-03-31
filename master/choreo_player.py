@@ -284,6 +284,18 @@ class ChoreoPlayer:
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
 
+                # PSI mode — FPSI/RPSI sequence control
+                if mode == 'psi':
+                    target   = ev.get('target', 'both')
+                    sequence = ev.get('sequence', 'normal')
+                    if self._teeces and hasattr(self._teeces, 'psi_seq'):
+                        self._teeces.psi_seq(target, sequence)
+                    elif self._teeces and hasattr(self._teeces, 'psi'):
+                        # Teeces32 fallback: map to numeric mode
+                        _TEECES_MAP = {'normal':1,'flash':1,'alarm':3,'redalert':3,'leia':1,'failure':1,'march':1}
+                        self._teeces.psi(_TEECES_MAP.get(sequence, 1))
+                    return
+
                 # Holo projector mode — FHP/RHP/THP via @HP passthrough (AstroPixels+ only)
                 if mode == 'holo':
                     if self._teeces and hasattr(self._teeces, 'holo'):
