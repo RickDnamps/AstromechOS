@@ -4829,9 +4829,9 @@ const choreoEditor = (() => {
         const scaleX      = W / (svgRect.width  || W);
 
         const onMove = e2 => {
-          // Horizontal → time (snapped, clamped to ≥ 0)
+          // Horizontal → time (snapped, clamped to ≥ 0, no overlap with neighbours)
           const rawT  = startT + _sec((e2.clientX - startMouseX) * scaleX);
-          const newT  = Math.max(0, _snap(rawT));
+          const newT  = _domeClampT(i, Math.max(0, _snap(rawT)));
           kf.t = newT; _dirty = true;
           // Vertical → power
           const newPower = yToPow(startY + (e2.clientY - startMouseY) * scaleY);
