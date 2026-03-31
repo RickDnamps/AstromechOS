@@ -4978,6 +4978,15 @@ const choreoEditor = (() => {
       </div>`;
     }
 
+    function textRow(key, field, maxLen) {
+      const val = item[field] !== undefined ? String(item[field]) : '';
+      return `<div class="chor-prop-row-full">
+        <span class="chor-prop-key">${key}</span>
+        <input class="chor-prop-input" type="text" value="${val.replace(/"/g,'&quot;')}" maxlength="${maxLen}" style="width:100%;box-sizing:border-box"
+          oninput="choreoEditor._setProp('${track}',${idx},'${field}',this.value)">
+      </div>`;
+    }
+
     // ── Build field list by track ────────────────────────────────────
     let html = numRow('START', 't', { min: 0, step: 0.1 });
 
@@ -4993,8 +5002,13 @@ const choreoEditor = (() => {
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      // _lightModes is already a {key: label} object — pass directly
-      html += selectRow('MODE', 'mode', _lightModes);
+      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text' });
+      if (item.mode === 'text') {
+        const preview = (item.text || '...').slice(0, 20);
+        html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em"><span style="font-size:13px">💬</span><span style="opacity:.7;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${preview}</span></div>`;
+        html += selectRow('DISPLAY', 'display', { fld:'FLD (Front)', rld:'RLD (Rear)', both:'FLD + RLD' });
+        html += textRow('TEXT (MAX 20)', 'text', 20);
+      }
 
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
