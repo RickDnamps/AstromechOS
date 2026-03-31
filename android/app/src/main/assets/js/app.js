@@ -1336,6 +1336,31 @@ function sendTeecesText()  {
   _domeSim.setText(display, text, color);
 }
 
+const LIGHT_ANIMATIONS = [
+  { mode:  1, label: 'Random',           icon: '✨', dur: '∞' },
+  { mode:  2, label: 'Flash',            icon: '⚡', dur: '4s' },
+  { mode:  3, label: 'Alarm',            icon: '🚨', dur: '4s' },
+  { mode:  4, label: 'Short Circuit',    icon: '💥', dur: '10s' },
+  { mode:  5, label: 'Scream',           icon: '😱', dur: '4s' },
+  { mode:  6, label: 'Leia',             icon: '🌀', dur: '34s' },
+  { mode:  7, label: 'I ♥ U',           icon: '❤️', dur: '10s' },
+  { mode:  8, label: 'Panel Sweep',      icon: '↔️', dur: '7s' },
+  { mode:  9, label: 'Pulse Monitor',    icon: '💓', dur: '∞' },
+  { mode: 10, label: 'Star Wars Scroll', icon: '⭐', dur: '15s' },
+  { mode: 11, label: 'Imperial March',   icon: '🎵', dur: '47s' },
+  { mode: 12, label: 'Disco (timed)',    icon: '🪩', dur: '4s' },
+  { mode: 13, label: 'Disco',            icon: '🪩', dur: '∞' },
+  { mode: 14, label: 'Rebel Symbol',     icon: '✊', dur: '5s' },
+  { mode: 15, label: 'Knight Rider',     icon: '🚗', dur: '20s' },
+  { mode: 16, label: 'Test White',       icon: '⬜', dur: '∞' },
+  { mode: 17, label: 'Red On',           icon: '🔴', dur: '∞' },
+  { mode: 18, label: 'Green On',         icon: '🟢', dur: '∞' },
+  { mode: 19, label: 'Lightsaber',       icon: '⚔️', dur: '∞' },
+  { mode: 20, label: 'Off',              icon: '⬛', dur: '—' },
+  { mode: 21, label: 'VU Meter (timed)', icon: '📊', dur: '4s' },
+  { mode: 92, label: 'VU Meter',         icon: '📊', dur: '∞' },
+];
+
 async function loadLightSequences() {
   const [seqData, animData, state] = await Promise.all([
     api('/light/list'),
