@@ -946,7 +946,9 @@ function applyPSI() {
     if (d) toast(`PSI ${target.toUpperCase()} — ${sequence.toUpperCase()}`, 'ok');
   });
   const color = _PSI_SEQ_COLORS[sequence] || '#00aaff';
-  _domeSim.updatePSI(color);
+  // Use setPSICustom (active=true) so the animation render loop can't override the color
+  if (target === 'both' || target === 'fpsi') _domeSim.setPSICustom('front', color, color, 1.0);
+  if (target === 'both' || target === 'rpsi') _domeSim.setPSICustom('rear',  color, color, 1.0);
 }
 
 function resetPSI() {
@@ -995,7 +997,7 @@ const _chorMon = (() => {
     16:'white',17:'redon',18:'greenon',19:'saber',20:'off',
     21:'pulse',92:'pulse',
   };
-  let _tick=0, _mode='off', _lastShort=0, _running=false;
+  let _tick=0, _mode='off', _lastShort=0, _running=false, _psiColor='#00ffea';
   const _textState = {
     'chor-fld-top': { buf:null, scroll:0, color:'#00ffea', active:false },
     'chor-fld-bot': { buf:null, scroll:0, color:'#00aaff', active:false },
@@ -1053,6 +1055,7 @@ const _chorMon = (() => {
     greenon(){IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#00cc66')));_setPSI('#00cc66','#009944');},
     white()  {IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#eef2ff')));_setPSI('#ffffff','#ccddff');},
     off()    {IDS.forEach(id=>_getDots(id).forEach(d=>_dim(d)));_setPSI('#0a0e14','#0a0e14');},
+    psi()    {_setPSI(_psiColor,_psiColor);},
     text(t) {
       if(t%8===0) IDS.forEach(id=>{
         if(_textState[id].active){_renderText(id);}
@@ -1111,7 +1114,7 @@ const _chorMon = (() => {
       }
       _mode='text'; _tick=0;
     },
-    updatePSI(color){ _setPSI(color,color); },
+    updatePSI(color){ _psiColor=color; },
   };
 })();
 
