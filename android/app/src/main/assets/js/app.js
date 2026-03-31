@@ -257,7 +257,7 @@ class AdminGuard {
     this._unlocked  = false;
     this._timer     = null;
     this._TIMEOUT   = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED = new Set(['systems', 'vesc', 'config', 'editor']);
+    this._PROTECTED = new Set(['systems', 'vesc', 'config', 'choreo']);
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
   }
@@ -309,13 +309,18 @@ class AdminGuard {
 
   lock() {
     if (!this._unlocked) return;
+    // If a choreography is playing, postpone lock — check again in 60s
+    if (typeof choreoEditor !== 'undefined' && choreoEditor.isPlaying()) {
+      this._timer = setTimeout(() => this.lock(), 60 * 1000);
+      return;
+    }
     this._unlocked = false;
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
     document.removeEventListener('mousemove', this._boundActivity);
     document.removeEventListener('click',     this._boundActivity);
     document.removeEventListener('keydown',   this._boundActivity);
-    // Si on est sur un onglet protégé → revenir à DRIVE
+    // If on a protected tab → return to DRIVE
     const active = document.querySelector('.tab.active');
     if (active && this._PROTECTED.has(active.dataset.tab)) {
       switchTab('drive');
@@ -4204,5 +4209,8 @@ const choreoEditor = (() => {
     _onFieldChange(track, idx, field, value) {
       _onFieldChange(track, idx, field, value);
     },
+
+    // Returns true while a choreography is actively playing
+    isPlaying: () => _pollTimer !== null,
   };
 })();
