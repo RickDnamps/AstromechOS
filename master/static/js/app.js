@@ -3261,7 +3261,7 @@ const choreoEditor = (() => {
     if (track === 'lights') {
       if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
       if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
-      if (item.mode === 'psi')  return `[${(item.target||'both').toUpperCase()}] ${(item.sequence||'normal').toUpperCase()}`;
+      if (item.mode === 'psi')  return `PSI ${(item.target||'both').toUpperCase()} — ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
@@ -3290,7 +3290,7 @@ const choreoEditor = (() => {
     if (track === 'lights') {
       if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
       if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
-      if (item.mode === 'psi')  return `[${(item.target||'both').toUpperCase()}] ${(item.sequence||'normal').toUpperCase()}`;
+      if (item.mode === 'psi')  return `PSI ${(item.target||'both').toUpperCase()} — ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
