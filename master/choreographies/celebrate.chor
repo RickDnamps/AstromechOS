@@ -50,7 +50,7 @@
       {
         "t": 2.9,
         "power": -60.0,
-        "duration": 1000,
+        "duration": 800,
         "accel": 0.3,
         "easing": "linear"
       },
@@ -64,14 +64,14 @@
       {
         "t": 4.3,
         "power": 40.0,
-        "duration": 1000,
+        "duration": 600,
         "accel": 0.3,
         "easing": "linear"
       },
       {
         "t": 4.9,
         "power": -40.0,
-        "duration": 1000,
+        "duration": 600,
         "accel": 0.3,
         "easing": "linear"
       },

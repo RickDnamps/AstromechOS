@@ -50,21 +50,21 @@
       {
         "t": 0.0,
         "power": 70.0,
-        "duration": 1000,
+        "duration": 400,
         "accel": 0.3,
         "easing": "linear"
       },
       {
         "t": 0.4,
         "power": -70.0,
-        "duration": 1000,
+        "duration": 320,
         "accel": 0.3,
         "easing": "linear"
       },
       {
         "t": 0.72,
         "power": 50.0,
-        "duration": 1000,
+        "duration": 350,
         "accel": 0.3,
         "easing": "linear"
       },

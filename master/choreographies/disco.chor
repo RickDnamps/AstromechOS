@@ -35,28 +35,28 @@
       {
         "t": 0.0,
         "power": 40.0,
-        "duration": 1000,
+        "duration": 300,
         "accel": 0.3,
         "easing": "linear"
       },
       {
         "t": 0.3,
         "power": -40.0,
-        "duration": 1000,
+        "duration": 600,
         "accel": 0.3,
         "easing": "linear"
       },
       {
         "t": 0.9,
         "power": 40.0,
-        "duration": 1000,
+        "duration": 600,
         "accel": 0.3,
         "easing": "linear"
       },
       {
         "t": 1.5,
         "power": -40.0,
-        "duration": 1000,
+        "duration": 600,
         "accel": 0.3,
         "easing": "linear"
       },
