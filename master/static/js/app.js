@@ -4300,10 +4300,9 @@ const choreoEditor = (() => {
 
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
-    { track:'audio',      label:'PLAY',   tpl:{ action:'play', file:'', volume:85,   duration:5   } },
-    { track:'audio',      label:'STOP',   tpl:{ action:'stop',                        duration:0.5 } },
-    { track:'audio2',     label:'PLAY 2', tpl:{ action:'play', file:'', volume:85,   duration:5   } },
-    { track:'audio2',     label:'STOP 2', tpl:{ action:'stop',                        duration:0.5 } },
+    { track:'audio', label:'PLAY',  tpl:{ action:'play', file:'', volume:85, duration:5, ch:0 } },
+    { track:'audio', label:'PLAY 2',tpl:{ action:'play', file:'', volume:85, duration:5, ch:1 } },
+    { track:'audio', label:'STOP',  tpl:{ action:'stop', duration:0.5, ch:0 } },
     { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                                            duration:4   } },
     { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                                              duration:6   } },
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                                             duration:3   } },
@@ -4361,7 +4360,6 @@ const choreoEditor = (() => {
     _renderRuler(dur);
     _syncLaneWidths(dur);
     _drawWaveform();
-    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
@@ -4482,47 +4480,33 @@ const choreoEditor = (() => {
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
-    const name  = (_chor.tracks.audio[0] || {}).file || 'audio';
-    const barW  = 2, barGap = 1;
-    const nBars = Math.floor(W / (barW + barGap));
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, 'rgba(0,200,255,0.85)');
-    grad.addColorStop(1, 'rgba(0,100,180,0.15)');
-    ctx.fillStyle = grad;
-    for (let i = 0; i < nBars; i++) {
-      hash = ((hash * 1664525) + 1013904223) | 0;
-      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
-      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
+    const barW = 2, barGap = 1;
+    // Draw a per-block waveform — color by channel (ch=0 cyan, ch=1 orange)
+    for (const ev of (_chor.tracks.audio || [])) {
+      if (ev.action !== 'play' || !ev.file) continue;
+      const x0   = _px(ev.t || 0);
+      const x1   = _px((ev.t || 0) + (ev.duration || 5));
+      const ch   = ev.ch || 0;
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      if (ch === 1) {
+        grad.addColorStop(0, 'rgba(255,153,0,0.80)');
+        grad.addColorStop(1, 'rgba(180,80,0,0.12)');
+      } else {
+        grad.addColorStop(0, 'rgba(0,200,255,0.80)');
+        grad.addColorStop(1, 'rgba(0,100,180,0.12)');
+      }
+      ctx.fillStyle = grad;
+      let hash = 0;
+      for (let i = 0; i < ev.file.length; i++) hash = ((hash << 5) - hash + ev.file.charCodeAt(i)) | 0;
+      const nBars = Math.floor((x1 - x0) / (barW + barGap));
+      for (let i = 0; i < nBars; i++) {
+        hash = ((hash * 1664525) + 1013904223) | 0;
+        const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
+        ctx.fillRect(x0 + i * (barW + barGap), (H - bh) / 2, barW, bh);
+      }
     }
   }
 
-  function _drawWaveform2() {
-    const canvas = document.getElementById('chor-waveform-canvas2');
-    const lane   = _lane('audio2');
-    if (!canvas || !lane || !_chor) return;
-    const W = _liquidWidth(_chor.meta.duration);
-    const H = lane.clientHeight || 44;
-    canvas.width = W; canvas.height = H;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, W, H);
-    const name  = ((_chor.tracks.audio2 || [])[0] || {}).file || 'audio2';
-    const barW  = 2, barGap = 1;
-    const nBars = Math.floor(W / (barW + barGap));
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, 'rgba(255,153,0,0.85)');
-    grad.addColorStop(1, 'rgba(180,80,0,0.15)');
-    ctx.fillStyle = grad;
-    for (let i = 0; i < nBars; i++) {
-      hash = ((hash * 1664525) + 1013904223) | 0;
-      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
-      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
-    }
-  }
 
   // ── Ruler ─────────────────────────────────────────────────────────
   function _renderRuler(duration) {
@@ -4548,14 +4532,13 @@ const choreoEditor = (() => {
   function _renderAllTracks() {
     if (!_chor) return;
     _fitToScreen();
-    ['audio', 'audio2', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
+    ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
     _renderRuler(dur);
     _syncLaneWidths(dur);
     _drawWaveform();
-    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
@@ -4567,8 +4550,6 @@ const choreoEditor = (() => {
   const _LANE_MIN_H = 44;   // px — minimum lane height (single layer)
 
   function _computeLayers(items, track) {
-    // Audio tracks stay single-lane — no cascading
-    if (track === 'audio' || track === 'audio2') return items.map(() => 0);
     const layerEnds = [];   // layerEnds[i] = end time of last block in layer i
     return items.map(item => {
       const t   = item.t || 0;
@@ -4610,7 +4591,7 @@ const choreoEditor = (() => {
     block.dataset.idx   = idx;
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
-    const isAudioTrack = track === 'audio' || track === 'audio2';
+    const isAudioTrack = track === 'audio';
     const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
     const isAudioLocked = isAudioTrack && item.duration > 0;
     block.style.left    = _px(t)   + 'px';
@@ -4629,7 +4610,7 @@ const choreoEditor = (() => {
   }
 
   function _blockLabel(track, item) {
-    if (track === 'audio' || track === 'audio2') return item.file || '?';
+    if (track === 'audio') return item.file || '?';
     if (track === 'lights') {
       if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
       if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
@@ -4645,7 +4626,6 @@ const choreoEditor = (() => {
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
     audio:       '#00eeff',
-    audio2:      '#007bff',
     lights:      '#ffcc00',
     dome:        '#cc44ff',
     dome_servos: '#00ff88',
@@ -4656,7 +4636,7 @@ const choreoEditor = (() => {
 
   // Full label for block tooltip and inspector
   function _inspectorLabel(track, item) {
-    if (track === 'audio' || track === 'audio2') {
+    if (track === 'audio') {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
@@ -5044,7 +5024,7 @@ const choreoEditor = (() => {
     // ── Build field list by track ────────────────────────────────────
     let html = numRow('START', 't', { min: 0, step: 0.1 });
 
-    if (track === 'audio' || track === 'audio2') {
+    if (track === 'audio') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
       // FILE — use disk scan (flat) when available, fall back to grouped index
       if (_audioScanned.length) {
@@ -5053,6 +5033,7 @@ const choreoEditor = (() => {
         html += selectRow('FILE', 'file', _audioIndex, true);
       }
       html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
+      html += selectRow('CHANNEL', 'ch', { 0: 'CH 0 — Primary (S:)', 1: 'CH 1 — Secondary (S2:)' });
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -5118,7 +5099,7 @@ const choreoEditor = (() => {
 
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
-    if ((track !== 'audio' && track !== 'audio2') || field !== 'file' || !value) return;
+    if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
     const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
     audioEl.addEventListener('loadedmetadata', () => {
@@ -5373,8 +5354,12 @@ const choreoEditor = (() => {
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
-      // Ensure audio2 track exists in legacy files
-      if (!_chor.tracks.audio2) _chor.tracks.audio2 = [];
+      // Migrate legacy audio2 track → unified audio track with ch=1
+      if (_chor.tracks.audio2 && _chor.tracks.audio2.length) {
+        _chor.tracks.audio2.forEach(ev => _chor.tracks.audio.push({ ...ev, ch: 1 }));
+        _chor.tracks.audio.sort((a, b) => (a.t || 0) - (b.t || 0));
+      }
+      delete _chor.tracks.audio2;
       // Migrate legacy generic "servos" track → body_servos
       if (_chor.tracks.servos && _chor.tracks.servos.length) {
         if (!_chor.tracks.body_servos) _chor.tracks.body_servos = [];
@@ -5424,7 +5409,7 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], audio2:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
+        tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');

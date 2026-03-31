@@ -810,14 +810,8 @@
 
         <div class="chor-track-row" data-track="audio">
           <div class="chor-src-btn" data-track="audio"
-               data-tpl='{"action":"play","file":"","volume":85,"duration":5}'
-               draggable="true">+ AUDIO 1</div>
-        </div>
-
-        <div class="chor-track-row" data-track="audio2">
-          <div class="chor-src-btn" data-track="audio2"
-               data-tpl='{"action":"play","file":"","volume":85,"duration":5}'
-               draggable="true">+ AUDIO 2</div>
+               data-tpl='{"action":"play","file":"","volume":85,"duration":5,"ch":0}'
+               draggable="true">+ AUDIO</div>
         </div>
 
         <div class="chor-track-row" data-track="lights">
@@ -864,9 +858,6 @@
           <div class="chor-ruler" id="chor-ruler"></div>
           <div class="chor-lane chor-lane-audio" id="chor-lane-audio" data-track="audio">
             <canvas class="chor-waveform-canvas" id="chor-waveform-canvas"></canvas>
-          </div>
-          <div class="chor-lane chor-lane-audio" id="chor-lane-audio2" data-track="audio2">
-            <canvas class="chor-waveform-canvas" id="chor-waveform-canvas2"></canvas>
           </div>
           <div class="chor-lane" id="chor-lane-lights"     data-track="lights"></div>
           <div class="chor-lane chor-lane-dome" id="chor-lane-dome" data-track="dome"></div>

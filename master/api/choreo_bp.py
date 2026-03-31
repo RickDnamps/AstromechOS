@@ -42,7 +42,16 @@ def choreo_load():
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
     with open(path) as f:
-        return jsonify(json.load(f))
+        chor = json.load(f)
+    # Migrate legacy audio2 track → unified audio track with ch=1
+    tracks = chor.get('tracks', {})
+    audio2 = tracks.pop('audio2', [])
+    if audio2:
+        audio = tracks.setdefault('audio', [])
+        for ev in audio2:
+            audio.append({**ev, 'ch': 1})
+        tracks['audio'].sort(key=lambda e: e.get('t', 0))
+    return jsonify(chor)
 
 
 @choreo_bp.post('/choreo/save')

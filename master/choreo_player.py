@@ -150,11 +150,10 @@ class ChoreoPlayer:
         events = []
         lat = self._latency
 
-        # Audio tracks — NOT shifted (audio fires first, everything else follows)
+        # Audio track — NOT shifted (audio fires first, everything else follows)
+        # All blocks live in 'audio'; ch=0 → S: (primary), ch=1 → S2: (secondary)
         for ev in tracks.get('audio', []):
             events.append({**ev, 'track': 'audio'})
-        for ev in tracks.get('audio2', []):
-            events.append({**ev, 'track': 'audio2'})
 
         # Lights — shifted; auto-restore to random at end of each block
         for ev in tracks.get('lights', []):
@@ -261,18 +260,12 @@ class ChoreoPlayer:
             if track == 'audio':
                 if not self._audio:
                     return
+                ch  = ev.get('ch', 0)
+                cmd = 'S' if ch == 0 else 'S2'
                 if ev['action'] == 'play':
-                    self._audio.send('S', ev.get('file', ''))
+                    self._audio.send(cmd, ev.get('file', ''))
                 elif ev['action'] == 'stop':
-                    self._audio.send('S', 'STOP')
-
-            elif track == 'audio2':
-                if not self._audio:
-                    return
-                if ev['action'] == 'play':
-                    self._audio.send('S2', ev.get('file', ''))
-                elif ev['action'] == 'stop':
-                    self._audio.send('S2', 'STOP')
+                    self._audio.send(cmd, 'STOP')
 
             elif track == 'dome':
                 if not self._dome_motor:
