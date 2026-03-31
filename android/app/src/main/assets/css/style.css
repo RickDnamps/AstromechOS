@@ -1695,7 +1695,7 @@ body::after {
 /* PSI custom controls */
 .psi-ctrl { display: flex; flex-direction: column; gap: 5px; }
 .psi-ctrl-row { display: flex; align-items: center; gap: 5px; }
-.psi-ctrl-label { font-size: 9px; letter-spacing: 1.5px; color: var(--text-dim); width: 36px; flex-shrink: 0; }
+.psi-ctrl-label { font-size: 9px; letter-spacing: 1.5px; color: var(--text-dim); width: 62px; flex-shrink: 0; }
 .psi-ctrl-sep { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
 .psi-speed-sel { width: 52px; }
 
