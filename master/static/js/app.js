@@ -4256,6 +4256,7 @@ const choreoEditor = (() => {
   let _dirty       = false;
   let _lanesWired  = false;
   let _lastTelem   = null;
+  let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
 
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
@@ -5221,18 +5222,22 @@ const choreoEditor = (() => {
       const s = ev.t || 0;
       if (t_now >= s && t_now < s + (ev.duration || 0)) { activeEv = ev; break; }
     }
-    if (!activeEv) { _chorMon.setMode('off'); return; }
+    if (!activeEv) { _chorMon.setMode('off'); _lastLightsEvT = -1; return; }
     const mode = activeEv.mode || 'random';
+    const evStart = activeEv.t || 0;
+    const evChanged = evStart !== _lastLightsEvT;
+    if (evChanged) _lastLightsEvT = evStart;
+
     if (mode === 'text') {
       _chorMon.setMode('text');
-      _chorMon.setText(activeEv.display || 'fld_top', activeEv.text || '', activeEv.color);
+      if (evChanged) _chorMon.setText(activeEv.display || 'fld_top', activeEv.text || '', activeEv.color);
     } else if (mode === 'psi') {
       const _PSI_COLOR = {
         normal:'#00ffea', flash:'#ffffff', alarm:'#ff2244',
         failure:'#ff8800', redalert:'#ff0000', leia:'#44ff88', march:'#00ffea'
       };
       _chorMon.setMode('psi');
-      _chorMon.updatePSI(_PSI_COLOR[activeEv.sequence || 'normal'] || '#00ffea');
+      if (evChanged) _chorMon.updatePSI(_PSI_COLOR[activeEv.sequence || 'normal'] || '#00ffea');
     } else if (mode === 'holo') {
       // holo projectors don't affect FLD/RLD/PSI monitor — no visual change
     } else if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
