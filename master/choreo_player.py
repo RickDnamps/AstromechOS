@@ -284,6 +284,12 @@ class ChoreoPlayer:
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
 
+                # Holo projector mode — FHP/RHP/THP via @HP passthrough (AstroPixels+ only)
+                if mode == 'holo':
+                    if self._teeces and hasattr(self._teeces, 'holo'):
+                        self._teeces.holo(ev.get('target', 'fhp'), ev.get('effect', 'on'))
+                    return
+
                 # Text mode — scrolling message to logic displays
                 # display targets: fld_top | fld_bottom | fld_both | rld | all
                 if mode == 'text' and self._teeces:

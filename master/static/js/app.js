@@ -4263,11 +4263,13 @@ const choreoEditor = (() => {
     { track:'audio',      label:'STOP',   tpl:{ action:'stop',                        duration:0.5 } },
     { track:'audio2',     label:'PLAY 2', tpl:{ action:'play', file:'', volume:85,   duration:5   } },
     { track:'audio2',     label:'STOP 2', tpl:{ action:'stop',                        duration:0.5 } },
-    { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                        duration:4   } },
-    { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                          duration:6   } },
-    { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
-    { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
-    { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
+    { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                                            duration:4   } },
+    { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                                              duration:6   } },
+    { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                                             duration:3   } },
+    { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                                             duration:5   } },
+    { track:'lights',     label:'OFF',    tpl:{ mode:'off',                                               duration:2   } },
+    { track:'lights',     label:'TEXT',   tpl:{ mode:'text',  display:'fld_top', text:'HELLO',            duration:3   } },
+    { track:'lights',     label:'HOLO',   tpl:{ mode:'holo',  target:'fhp',      effect:'on',             duration:3   } },
     { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'dome_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'dome', duration:1   } },
     { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
@@ -4586,7 +4588,11 @@ const choreoEditor = (() => {
 
   function _blockLabel(track, item) {
     if (track === 'audio' || track === 'audio2') return item.file || '?';
-    if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'lights') {
+      if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
+      if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
       return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
@@ -4611,7 +4617,11 @@ const choreoEditor = (() => {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
-    if (track === 'lights') return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'lights') {
+      if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
+      if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
@@ -5002,8 +5012,16 @@ const choreoEditor = (() => {
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text' });
-      if (item.mode === 'text') {
+      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text', holo: '🔦 Holo' });
+      if (item.mode === 'holo') {
+        html += selectRow('TARGET', 'target', {
+          fhp:'FHP (Front)', rhp:'RHP (Rear)', thp:'THP (Top)', radar:'Radar Eye', all:'ALL'
+        });
+        html += selectRow('EFFECT', 'effect', {
+          on:'ON (cycle)', off:'OFF', pulse:'PULSE', rainbow:'RAINBOW',
+          random_move:'RANDOM MOVE', wag:'WAG', nod:'NOD'
+        });
+      } else if (item.mode === 'text') {
         const preview = (item.text || '...').slice(0, 20);
         html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em"><span style="font-size:13px">💬</span><span style="opacity:.7;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${preview}</span></div>`;
         html += selectRow('DISPLAY', 'display', {

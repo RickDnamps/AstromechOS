@@ -107,6 +107,24 @@ class AstroPixelsDriver(BaseLightsController):
     def off(self) -> bool:
         return self._send("@0T20\r")
 
+    def holo(self, target: str = "fhp", effect: str = "on") -> bool:
+        """Control holo projectors via @HP passthrough (source: MarcduinoHolo.h).
+        target: 'fhp' | 'rhp' | 'thp' | 'radar' | 'all'
+        effect: 'on' | 'off' | 'pulse' | 'rainbow' | 'random_move' | 'wag' | 'nod'"""
+        _TARGET = {'fhp': 'F', 'rhp': 'R', 'thp': 'T', 'radar': 'D', 'all': 'A'}
+        _EFFECT = {
+            'on':          '0040',
+            'off':         '0000',
+            'pulse':       '0030',
+            'rainbow':     '006',
+            'random_move': '104',
+            'wag':         '105|5',
+            'nod':         '106|5',
+        }
+        t = _TARGET.get(target.lower(), 'F')
+        e = _EFFECT.get(effect.lower(), '0000')
+        return self._send(f"@HP{t}{e}\r")
+
     def text(self, message: str, target: str = "fld_top", color: str = "") -> bool:
         """Send scrolling text to a logic display.
         target: 'fld_top' | 'fld_bottom' | 'fld_both' | 'rld' | 'all'
