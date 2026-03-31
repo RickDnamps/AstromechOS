@@ -165,12 +165,23 @@ class ChoreoPlayer:
                 })
 
         # Dome — shifted; auto-stop always injected after duration (ms → seconds)
-        # Fail-safe: events without a valid duration get a 50ms burst to prevent infinite rotation
-        for ev in tracks.get('dome', []):
+        # Overlap guard: cap each event's duration to the start of the next dome
+        # event so two commands never run simultaneously (defensive — works even
+        # if the .chor file was authored with overlapping timestamps).
+        # Fail-safe: events without a valid duration get a 50ms burst to prevent
+        # infinite rotation.
+        dome_evs = tracks.get('dome', [])
+        for i, ev in enumerate(dome_evs):
             events.append({**ev, 'track': 'dome', 't': ev['t'] + lat})
             dur_ms = ev.get('duration', 0)
             if not dur_ms or dur_ms <= 0:
                 dur_ms = 50   # fail-safe burst — no open-ended motor command
+            # Cap duration to avoid overlapping with the next dome event
+            if i + 1 < len(dome_evs):
+                gap_ms = (dome_evs[i + 1]['t'] - ev['t']) * 1000.0
+                if 0 < gap_ms < dur_ms:
+                    dur_ms = gap_ms
+                    log.debug('Dome overlap clamped: ev[%d] t=%.3fs dur capped to %.0fms', i, ev['t'], dur_ms)
             events.append({
                 'track': 'dome', 'power': 0.0,
                 't': ev['t'] + (dur_ms / 1000.0) + lat,
