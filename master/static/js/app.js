@@ -629,10 +629,12 @@ const _domeSim = (() => {
     'rld':     { buf:null, scroll:0, color:'#ff8800', active:false },
   };
 
-  // Independent custom PSI state (front / rear blink)
+  // PSI is independent of T-code animations (firmware: @0T only affects FLD+RLD, not PSI).
+  // Start active=true so T-code render loop never overrides PSI.
+  // Default = NORMAL sequence (blue slow blink). Only applyPSI/resetPSI change this.
   const _psiCustom = {
-    front: { c1:'#00aaff', c2:'#000000', speed:0.8, active:false },
-    rear:  { c1:'#00aaff', c2:'#000000', speed:0.8, active:false },
+    front: { c1:'#00aaff', c2:'#0055aa', speed:0.8, active:true },
+    rear:  { c1:'#00aaff', c2:'#0055aa', speed:0.8, active:true },
   };
 
   function _buildBuf(text, rows, font) {
@@ -904,13 +906,10 @@ const _domeSim = (() => {
       _updateBadge('text');
     },
 
-    /** Update PSI circle colors (from animation mode — resets custom state) */
+    /** Set PSI to a solid color (keeps active=true so T-codes can't override) */
     updatePSI(color) {
-      _psiCustom.front.active = false;
-      _psiCustom.rear.active = false;
-      document.getElementById('psi-front')?.classList.remove('psi-custom');
-      document.getElementById('psi-rear')?.classList.remove('psi-custom');
-      _setPSI(color, color);
+      _psiCustom.front.c1 = color; _psiCustom.front.c2 = color;
+      _psiCustom.rear.c1  = color; _psiCustom.rear.c2  = color;
     },
 
     /** Set one PSI to a custom blink: c2='#000000' = pulse off→c1 */
@@ -923,12 +922,11 @@ const _domeSim = (() => {
       document.getElementById(elemId)?.classList.add('psi-custom');
     },
 
-    /** Reset both PSIs back to animation control */
+    /** Reset both PSIs to NORMAL (blue blink) — PSI stays independent of T-code animations */
     resetPSICustom() {
-      _psiCustom.front.active = false;
-      _psiCustom.rear.active = false;
-      document.getElementById('psi-front')?.classList.remove('psi-custom');
-      document.getElementById('psi-rear')?.classList.remove('psi-custom');
+      for (const s of ['front', 'rear']) {
+        _psiCustom[s].c1 = '#00aaff'; _psiCustom[s].c2 = '#0055aa'; _psiCustom[s].speed = 0.8;
+      }
     },
   };
 })();
