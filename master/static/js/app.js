@@ -3259,8 +3259,8 @@ const choreoEditor = (() => {
   function _blockLabel(track, item) {
     if (track === 'audio') return item.file || '?';
     if (track === 'lights') {
-      if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
-      if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      if (item.mode === 'text') return `TEXT ${(item.display||'fld_top').toUpperCase()} — ${item.text||'...'}`;
+      if (item.mode === 'holo') return `HOLO ${(item.target||'fhp').toUpperCase()} — ${(item.effect||'on').toUpperCase()}`;
       if (item.mode === 'psi')  return `PSI ${(item.target||'both').toUpperCase()} — ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
@@ -3288,8 +3288,8 @@ const choreoEditor = (() => {
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
     if (track === 'lights') {
-      if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
-      if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      if (item.mode === 'text') return `TEXT ${(item.display||'fld_top').toUpperCase()} — ${item.text||'...'}`;
+      if (item.mode === 'holo') return `HOLO ${(item.target||'fhp').toUpperCase()} — ${(item.effect||'on').toUpperCase()}`;
       if (item.mode === 'psi')  return `PSI ${(item.target||'both').toUpperCase()} — ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
