@@ -5006,13 +5006,11 @@ const choreoEditor = (() => {
       if (item.mode === 'text') {
         const preview = (item.text || '...').slice(0, 20);
         html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em"><span style="font-size:13px">💬</span><span style="opacity:.7;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${preview}</span></div>`;
-        html += selectRow('DISPLAY', 'display', { fld:'FLD (Front)', rld:'RLD (Rear)', both:'FLD + RLD' });
-        html += textRow('TEXT (MAX 20)', 'text', 20);
-        html += selectRow('COLOR', 'color', {
-          '':'DEFAULT', 'red':'RED', 'orange':'ORANGE', 'yellow':'YELLOW',
-          'green':'GREEN', 'cyan':'CYAN', 'blue':'BLUE',
-          'purple':'PURPLE', 'magenta':'MAGENTA', 'pink':'PINK'
+        html += selectRow('DISPLAY', 'display', {
+          fld_top:'FLD Top', fld_bottom:'FLD Bottom',
+          fld_both:'FLD Top+Bottom', rld:'RLD', all:'ALL'
         });
+        html += textRow('TEXT (MAX 20)', 'text', 20);
       }
 
     } else if (track === 'dome') {

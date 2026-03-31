@@ -284,18 +284,19 @@ class ChoreoPlayer:
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
 
-                # Text mode — scrolling message to FLD/RLD with optional color
+                # Text mode — scrolling message to logic displays
+                # display targets: fld_top | fld_bottom | fld_both | rld | all
                 if mode == 'text' and self._teeces:
                     text_val = ev.get('text', '')[:20].upper()
-                    display  = ev.get('display', 'fld')
-                    color    = ev.get('color', '')
-                    # AstroPixels+ supports color via LE command; Teeces32 ignores it
+                    display  = ev.get('display', 'fld_top')
                     if hasattr(self._teeces, 'text'):
-                        self._teeces.text(text_val, display, color)
+                        # AstroPixels+: full target support
+                        self._teeces.text(text_val, display)
                     else:
-                        if display in ('fld', 'both'):
+                        # Teeces32: no top/bottom split, map to fld/rld
+                        if display in ('fld_top', 'fld_bottom', 'fld_both', 'all'):
                             self._teeces.fld_text(text_val)
-                        if display in ('rld', 'both'):
+                        if display in ('rld', 'all'):
                             self._teeces.rld_text(text_val)
                     return
 
