@@ -2,7 +2,7 @@
   "meta": {
     "name": "cantina",
     "version": "1.0",
-    "duration": 8.8,
+    "duration": 18.1,
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
@@ -15,7 +15,7 @@
         "action": "play",
         "file": "CANTINA",
         "volume": 85,
-        "duration": 5,
+        "duration": 16,
         "ch": 0
       }
     ],
@@ -409,6 +409,18 @@
         "servo": "all",
         "action": "close",
         "duration": 1.0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 14.1
+      },
+      {
+        "t": 14.1,
+        "mode": "off",
+        "duration": 2.0
       }
     ]
   }

@@ -2,7 +2,7 @@
   "meta": {
     "name": "party",
     "version": "1.0",
-    "duration": 24.5,
+    "duration": 122.0,
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
@@ -15,7 +15,7 @@
         "action": "play",
         "file": "Gangnam",
         "volume": 85,
-        "duration": 5,
+        "duration": 120,
         "ch": 0
       }
     ],
@@ -23,10 +23,10 @@
       {
         "t": 0.0,
         "mode": "random",
-        "duration": 22.5
+        "duration": 120.0
       },
       {
-        "t": 22.5,
+        "t": 120.0,
         "mode": "off",
         "duration": 2.0
       }

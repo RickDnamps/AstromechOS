@@ -2,7 +2,7 @@
   "meta": {
     "name": "theme",
     "version": "1.0",
-    "duration": 40.0,
+    "duration": 46.0,
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
@@ -15,8 +15,20 @@
         "action": "play",
         "file": "Theme001",
         "volume": 85,
-        "duration": 5,
+        "duration": 44,
         "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 44.0
+      },
+      {
+        "t": 44.0,
+        "mode": "off",
+        "duration": 2.0
       }
     ]
   }

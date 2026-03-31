@@ -9,37 +9,134 @@
   },
   "tracks": {
     "audio": [
-      { "t": 0.0, "action": "play", "file": "CANTINA", "volume": 85 },
-      { "t": 45.0, "action": "stop" }
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "CANTINA",
+        "volume": 85,
+        "duration": 16
+      },
+      {
+        "t": 45.0,
+        "action": "stop"
+      }
     ],
     "lights": [
-      { "t": 0.0,  "duration": 4.5,  "action": "mode", "mode": "leia" },
-      { "t": 4.5,  "duration": 2.5,  "action": "mode", "mode": "random" },
-      { "t": 8.0,  "duration": 4.5,  "action": "mode", "mode": "alarm",
-        "psi": { "c1": "#ff3355", "c2": "#000000", "speed": "fast" } },
-      { "t": 15.0, "duration": 10.0, "action": "mode", "mode": "disco" }
+      {
+        "t": 0.0,
+        "duration": 4.5,
+        "action": "mode",
+        "mode": "leia"
+      },
+      {
+        "t": 4.5,
+        "duration": 2.5,
+        "action": "mode",
+        "mode": "random"
+      },
+      {
+        "t": 8.0,
+        "duration": 4.5,
+        "action": "mode",
+        "mode": "alarm",
+        "psi": {
+          "c1": "#ff3355",
+          "c2": "#000000",
+          "speed": "fast"
+        }
+      },
+      {
+        "t": 15.0,
+        "duration": 10.0,
+        "action": "mode",
+        "mode": "disco"
+      }
     ],
     "dome": [
-      { "t": 0.0,  "angle": 0,   "easing": "linear" },
-      { "t": 5.0,  "angle": 180, "easing": "ease-in-out" },
-      { "t": 10.0, "angle": 90,  "easing": "ease-out" },
-      { "t": 20.0, "angle": 360, "easing": "ease-in" },
-      { "t": 30.0, "angle": 0,   "easing": "ease-in-out" }
+      {
+        "t": 0.0,
+        "angle": 0,
+        "easing": "linear"
+      },
+      {
+        "t": 5.0,
+        "angle": 180,
+        "easing": "ease-in-out"
+      },
+      {
+        "t": 10.0,
+        "angle": 90,
+        "easing": "ease-out"
+      },
+      {
+        "t": 20.0,
+        "angle": 360,
+        "easing": "ease-in"
+      },
+      {
+        "t": 30.0,
+        "angle": 0,
+        "easing": "ease-in-out"
+      }
     ],
     "servos": [
-      { "t": 3.0,  "servo": "dome_panel_1", "action": "open",  "duration": 0.5 },
-      { "t": 6.0,  "servo": "all_dome",     "action": "open",  "duration": 0.3 },
-      { "t": 10.0, "servo": "utility_arm",  "action": "open",  "easing": "ease-out", "duration": 2.0 },
-      { "t": 20.0, "servo": "all",          "action": "close", "duration": 0.5 }
+      {
+        "t": 3.0,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 0.5
+      },
+      {
+        "t": 6.0,
+        "servo": "all_dome",
+        "action": "open",
+        "duration": 0.3
+      },
+      {
+        "t": 10.0,
+        "servo": "utility_arm",
+        "action": "open",
+        "easing": "ease-out",
+        "duration": 2.0
+      },
+      {
+        "t": 20.0,
+        "servo": "all",
+        "action": "close",
+        "duration": 0.5
+      }
     ],
     "propulsion": [
-      { "t": 20.0, "duration": 2.0, "left": 0.3,  "right": 0.3 },
-      { "t": 24.0, "duration": 2.0, "left": 0.3,  "right": -0.3 },
-      { "t": 26.0, "duration": 0.5, "left": 0.0,  "right": 0.0 }
+      {
+        "t": 20.0,
+        "duration": 2.0,
+        "left": 0.3,
+        "right": 0.3
+      },
+      {
+        "t": 24.0,
+        "duration": 2.0,
+        "left": 0.3,
+        "right": -0.3
+      },
+      {
+        "t": 26.0,
+        "duration": 0.5,
+        "left": 0.0,
+        "right": 0.0
+      }
     ],
     "markers": [
-      { "t": 10.0, "label": "FACE DETECT TRIGGER", "type": "trigger" },
-      { "t": 20.0, "label": "SWITCH TO AUTONOMOUS", "type": "mode_switch" }
+      {
+        "t": 10.0,
+        "label": "FACE DETECT TRIGGER",
+        "type": "trigger"
+      },
+      {
+        "t": 20.0,
+        "label": "SWITCH TO AUTONOMOUS",
+        "type": "mode_switch"
+      }
     ]
   }
 }

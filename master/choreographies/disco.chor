@@ -2,7 +2,7 @@
   "meta": {
     "name": "disco",
     "version": "1.0",
-    "duration": 34.1,
+    "duration": 152.0,
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
@@ -15,7 +15,7 @@
         "action": "play",
         "file": "SWDiscoShort",
         "volume": 85,
-        "duration": 5,
+        "duration": 150,
         "ch": 0
       }
     ],
@@ -23,10 +23,10 @@
       {
         "t": 0.0,
         "mode": "random",
-        "duration": 32.1
+        "duration": 150.0
       },
       {
-        "t": 32.1,
+        "t": 150.0,
         "mode": "off",
         "duration": 2.0
       }
