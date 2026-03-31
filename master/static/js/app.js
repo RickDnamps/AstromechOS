@@ -1914,21 +1914,8 @@ class ScriptEngine {
   }
 
   async load() {
-    const [seqData, lightData, chorNames] = await Promise.all([
-      api('/scripts/list'),
-      api('/light/list'),
-      api('/choreo/list'),
-    ]);
-    this._scripts = (seqData?.scripts || []).map(e => ({
-      name: typeof e === 'object' ? e.name : e,
-      type: 'seq',
-    }));
-    (lightData?.sequences || []).forEach(name => {
-      this._scripts.push({ name, type: 'light' });
-    });
-    (chorNames || []).forEach(name => {
-      this._scripts.push({ name, type: 'choreo' });
-    });
+    const chorNames = await api('/choreo/list');
+    this._scripts = (chorNames || []).map(name => ({ name, type: 'choreo' }));
     this.render();
   }
 

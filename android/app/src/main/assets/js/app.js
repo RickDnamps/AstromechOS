@@ -1076,15 +1076,24 @@ const _chorMon = (() => {
     },
     setText(target, text, color) {
       if(!text) return;
-      if(target==='fld'||target==='both'){
-        ['chor-fld-top','chor-fld-bot'].forEach(id=>{
-          _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
-          if(color)_textState[id].color=color;
-        });
+      const t = (target||'fld_top').toLowerCase();
+      // FLD top row
+      if(t==='fld_top'||t==='fld_both'||t==='fld'||t==='both'||t==='all'){
+        const id='chor-fld-top';
+        _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
+        if(color)_textState[id].color=color;
       }
-      if(target==='rld'||target==='both'){
-        _textState['chor-rld'].buf=_buildBuf(text,4,FONT4);_textState['chor-rld'].scroll=0;_textState['chor-rld'].active=true;
-        if(color)_textState['chor-rld'].color=color;
+      // FLD bottom row
+      if(t==='fld_bottom'||t==='fld_both'||t==='fld'||t==='both'||t==='all'){
+        const id='chor-fld-bot';
+        _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
+        if(color)_textState[id].color=color;
+      }
+      // RLD
+      if(t==='rld'||t==='both'||t==='all'){
+        const id='chor-rld';
+        _textState[id].buf=_buildBuf(text,4,FONT4);_textState[id].scroll=0;_textState[id].active=true;
+        if(color)_textState[id].color=color;
       }
       _mode='text'; _tick=0;
     },
@@ -1905,17 +1914,8 @@ class ScriptEngine {
   }
 
   async load() {
-    const [seqData, lightData] = await Promise.all([
-      api('/scripts/list'),
-      api('/light/list'),
-    ]);
-    this._scripts = (seqData?.scripts || []).map(e => ({
-      name: typeof e === 'object' ? e.name : e,
-      type: 'seq',
-    }));
-    (lightData?.sequences || []).forEach(name => {
-      this._scripts.push({ name, type: 'light' });
-    });
+    const chorNames = await api('/choreo/list');
+    this._scripts = (chorNames || []).map(name => ({ name, type: 'choreo' }));
     this.render();
   }
 
@@ -1924,9 +1924,15 @@ class ScriptEngine {
     if (!grid) return;
     grid.innerHTML = this._scripts.map(entry => {
       const { name, type } = entry;
-      const desc = this._DESCRIPTIONS[name] || (type === 'light' ? 'Light sequence' : 'Custom sequence script');
+      const desc = this._DESCRIPTIONS[name] ||
+        (type === 'light'  ? 'Light sequence' :
+         type === 'choreo' ? 'Choreography (timeline with interpolation)' :
+                             'Custom sequence script');
       const isRunning = this._running.has(name);
-      const badge = type === 'light' ? '<span class="script-badge-light">LIGHT</span>' : '';
+      const badge = type === 'light'  ? '<span class="script-badge-light">LIGHT</span>' :
+                    type === 'choreo' ? '<span class="script-badge-choreo">🎬 CHOREO</span>' : '';
+      const loopBtn = type !== 'choreo'
+        ? `<button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>` : '';
       return `
         <div class="script-card${isRunning ? ' running' : ''}" id="script-card-${name}">
           <div class="script-name">${name.toUpperCase()}${badge}</div>
@@ -1934,7 +1940,7 @@ class ScriptEngine {
           <div class="script-btns">
             <div class="running-indicator"></div>
             <button class="btn btn-sm btn-active" onclick="scriptEngine.run('${name}', false, '${type}')">RUN</button>
-            <button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>
+            ${loopBtn}
             <button class="btn btn-sm btn-danger" onclick="scriptEngine.stopName('${name}', '${type}')">STOP</button>
           </div>
         </div>
@@ -1943,17 +1949,29 @@ class ScriptEngine {
   }
 
   run(name, loop, type = 'seq') {
+    if (type === 'choreo') {
+      api('/choreo/play', 'POST', { name }).then(d => {
+        if (d) {
+          this._running.clear();
+          document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+          this._running.add(name);
+          const card = el(`script-card-${name}`);
+          if (card) card.classList.add('running');
+          toast(`🎬 ${name.toUpperCase()} playing`, 'ok');
+          poller.poll();
+        }
+      });
+      return;
+    }
     const endpoint = type === 'light' ? '/light/run' : '/scripts/run';
     api(endpoint, 'POST', { name, loop }).then(d => {
       if (d) {
-        // Un seul script à la fois — effacer toutes les cartes immédiatement
         this._running.clear();
         document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
         const count = el('running-count');
         if (count) count.textContent = '1';
         const list = el('running-scripts');
         if (list) list.textContent = `${name}#${d.id}`;
-        // Marquer uniquement la nouvelle carte
         this._running.add(name);
         const card = el(`script-card-${name}`);
         if (card) card.classList.add('running');
@@ -1964,6 +1982,15 @@ class ScriptEngine {
   }
 
   stopName(name, type = 'seq') {
+    if (type === 'choreo') {
+      api('/choreo/stop', 'POST').then(() => {
+        this._running.delete(name);
+        const card = el(`script-card-${name}`);
+        if (card) card.classList.remove('running');
+        toast(`${name.toUpperCase()} stopped`, 'ok');
+      });
+      return;
+    }
     const endpoint = type === 'light' ? '/light/stop_all' : '/scripts/stop_all';
     api(endpoint, 'POST').then(d => {
       if (d) {
@@ -4247,6 +4274,7 @@ const choreoEditor = (() => {
   let _dirty       = false;
   let _lanesWired  = false;
   let _lastTelem   = null;
+  let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
 
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
@@ -4259,15 +4287,17 @@ const choreoEditor = (() => {
 
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
-    { track:'audio',      label:'PLAY',   tpl:{ action:'play', file:'', volume:85,   duration:5   } },
-    { track:'audio',      label:'STOP',   tpl:{ action:'stop',                        duration:0.5 } },
-    { track:'audio2',     label:'PLAY 2', tpl:{ action:'play', file:'', volume:85,   duration:5   } },
-    { track:'audio2',     label:'STOP 2', tpl:{ action:'stop',                        duration:0.5 } },
-    { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                        duration:4   } },
-    { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                          duration:6   } },
-    { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
-    { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
-    { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
+    { track:'audio', label:'PLAY',  tpl:{ action:'play', file:'', volume:85, duration:5, ch:0 } },
+    { track:'audio', label:'PLAY 2',tpl:{ action:'play', file:'', volume:85, duration:5, ch:1 } },
+    { track:'audio', label:'STOP',  tpl:{ action:'stop', duration:0.5, ch:0 } },
+    { track:'lights',     label:'RANDOM', tpl:{ mode:'random',                                            duration:4   } },
+    { track:'lights',     label:'LEIA',   tpl:{ mode:'leia',                                              duration:6   } },
+    { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                                             duration:3   } },
+    { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                                             duration:5   } },
+    { track:'lights',     label:'OFF',    tpl:{ mode:'off',                                               duration:2   } },
+    { track:'lights',     label:'TEXT',   tpl:{ mode:'text',  display:'fld_top', text:'HELLO',            duration:3   } },
+    { track:'lights',     label:'HOLO',   tpl:{ mode:'holo',  target:'fhp',      effect:'on',             duration:3   } },
+    { track:'lights',     label:'PSI',    tpl:{ mode:'psi',   target:'both',     sequence:'normal',        duration:4   } },
     { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'dome_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'dome', duration:1   } },
     { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
@@ -4317,7 +4347,6 @@ const choreoEditor = (() => {
     _renderRuler(dur);
     _syncLaneWidths(dur);
     _drawWaveform();
-    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
   }
@@ -4438,47 +4467,33 @@ const choreoEditor = (() => {
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
-    const name  = (_chor.tracks.audio[0] || {}).file || 'audio';
-    const barW  = 2, barGap = 1;
-    const nBars = Math.floor(W / (barW + barGap));
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, 'rgba(0,200,255,0.85)');
-    grad.addColorStop(1, 'rgba(0,100,180,0.15)');
-    ctx.fillStyle = grad;
-    for (let i = 0; i < nBars; i++) {
-      hash = ((hash * 1664525) + 1013904223) | 0;
-      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
-      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
+    const barW = 2, barGap = 1;
+    // Draw a per-block waveform — color by channel (ch=0 cyan, ch=1 orange)
+    for (const ev of (_chor.tracks.audio || [])) {
+      if (ev.action !== 'play' || !ev.file) continue;
+      const x0   = _px(ev.t || 0);
+      const x1   = _px((ev.t || 0) + (ev.duration || 5));
+      const ch   = ev.ch || 0;
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      if (ch === 1) {
+        grad.addColorStop(0, 'rgba(255,153,0,0.80)');
+        grad.addColorStop(1, 'rgba(180,80,0,0.12)');
+      } else {
+        grad.addColorStop(0, 'rgba(0,200,255,0.80)');
+        grad.addColorStop(1, 'rgba(0,100,180,0.12)');
+      }
+      ctx.fillStyle = grad;
+      let hash = 0;
+      for (let i = 0; i < ev.file.length; i++) hash = ((hash << 5) - hash + ev.file.charCodeAt(i)) | 0;
+      const nBars = Math.floor((x1 - x0) / (barW + barGap));
+      for (let i = 0; i < nBars; i++) {
+        hash = ((hash * 1664525) + 1013904223) | 0;
+        const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
+        ctx.fillRect(x0 + i * (barW + barGap), (H - bh) / 2, barW, bh);
+      }
     }
   }
 
-  function _drawWaveform2() {
-    const canvas = document.getElementById('chor-waveform-canvas2');
-    const lane   = _lane('audio2');
-    if (!canvas || !lane || !_chor) return;
-    const W = _liquidWidth(_chor.meta.duration);
-    const H = lane.clientHeight || 44;
-    canvas.width = W; canvas.height = H;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, W, H);
-    const name  = ((_chor.tracks.audio2 || [])[0] || {}).file || 'audio2';
-    const barW  = 2, barGap = 1;
-    const nBars = Math.floor(W / (barW + barGap));
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, 'rgba(255,153,0,0.85)');
-    grad.addColorStop(1, 'rgba(180,80,0,0.15)');
-    ctx.fillStyle = grad;
-    for (let i = 0; i < nBars; i++) {
-      hash = ((hash * 1664525) + 1013904223) | 0;
-      const bh = (0.15 + Math.abs((hash & 0x7fffffff) / 0x7fffffff) * 0.85) * H;
-      ctx.fillRect(i * (barW + barGap), (H - bh) / 2, barW, bh);
-    }
-  }
 
   // ── Ruler ─────────────────────────────────────────────────────────
   function _renderRuler(duration) {
@@ -4504,16 +4519,39 @@ const choreoEditor = (() => {
   function _renderAllTracks() {
     if (!_chor) return;
     _fitToScreen();
-    ['audio', 'audio2', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
+    ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const dur = _calcTotalDuration();
     _chor.meta.duration = dur;
     _renderRuler(dur);
     _syncLaneWidths(dur);
     _drawWaveform();
-    _drawWaveform2();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(dur);
+  }
+
+  // Block cascade constants — shingled layout
+  const _BLOCK_H    = 32;   // px — block height (32px tall)
+  const _SHINGLE    = 20;   // px — vertical offset per layer (overlap = BLOCK_H - SHINGLE = 12px)
+  const _LANE_PAD   = 5;    // px — top padding inside lane
+  const _LANE_MIN_H = 44;   // px — minimum lane height (single layer)
+
+  function _computeLayers(items, track) {
+    const layerEnds = [];   // layerEnds[i] = end time of last block in layer i
+    return items.map(item => {
+      const t   = item.t || 0;
+      const dur = item.duration || 2.0;
+      const end = t + dur;
+      let layer = layerEnds.findIndex(e => e <= t);
+      if (layer === -1) layer = layerEnds.length;
+      layerEnds[layer] = end;
+      return layer;
+    });
+  }
+
+  function _syncTrackRow(track, heightPx) {
+    const row = document.querySelector(`.chor-track-row[data-track="${track}"]`);
+    if (row) row.style.height = heightPx + 'px';
   }
 
   function _renderTrack(track) {
@@ -4521,34 +4559,51 @@ const choreoEditor = (() => {
     if (!lane) return;
     lane.querySelectorAll('.chor-block').forEach(b => b.remove());
     const items = _chor.tracks[track] || [];
-    items.forEach((item, idx) => {
-      if (track === 'dome') return;
-      lane.appendChild(_makeBlock(track, item, idx));
-    });
-    if (track === 'dome') _renderDomeLane(items);
+    if (track === 'dome') { _renderDomeLane(items); return; }
+
+    const layers   = _computeLayers(items, track);
+    const maxLayer = layers.length > 0 ? Math.max(...layers) : 0;
+    // BaseHeight (44) + each extra layer adds one SHINGLE step
+    const laneH    = Math.max(_LANE_MIN_H, _LANE_PAD + _BLOCK_H + maxLayer * _SHINGLE + _LANE_PAD);
+    lane.style.height = laneH + 'px';
+    _syncTrackRow(track, laneH);
+
+    items.forEach((item, idx) => lane.appendChild(_makeBlock(track, item, idx, layers[idx])));
   }
 
-  function _makeBlock(track, item, idx) {
+  function _makeBlock(track, item, idx, layer = 0) {
     const block = document.createElement('div');
     block.className = 'chor-block';
     block.dataset.track = track;
     block.dataset.idx   = idx;
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
-    const isAudioTrack = track === 'audio' || track === 'audio2';
+    const isAudioTrack = track === 'audio';
     const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
     const isAudioLocked = isAudioTrack && item.duration > 0;
-    block.style.left  = _px(t)   + 'px';
-    block.style.width = _px(dur) + 'px';
+    block.style.left    = _px(t)   + 'px';
+    block.style.width   = _px(dur) + 'px';
+    block.style.top     = (_LANE_PAD + layer * _SHINGLE) + 'px';
+    block.style.height  = _BLOCK_H + 'px';
+    block.style.bottom  = 'auto';
+    block.style.zIndex  = 2 + layer;   // higher layers sit on top; lower layers clickable via exposed strip
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
+    block.addEventListener('mouseenter', e => _showTooltip(e, track, item));
+    block.addEventListener('mousemove',  e => _positionTooltip(e));
+    block.addEventListener('mouseleave', ()  => _hideTooltip());
     return block;
   }
 
   function _blockLabel(track, item) {
-    if (track === 'audio' || track === 'audio2') return item.file || '?';
-    if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'audio') return item.file || '?';
+    if (track === 'lights') {
+      if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
+      if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      if (item.mode === 'psi')  return `[${(item.target||'both').toUpperCase()}] ${(item.sequence||'normal').toUpperCase()}`;
+      return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
       return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
@@ -4558,7 +4613,6 @@ const choreoEditor = (() => {
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
     audio:       '#00eeff',
-    audio2:      '#007bff',
     lights:      '#ffcc00',
     dome:        '#cc44ff',
     dome_servos: '#00ff88',
@@ -4567,13 +4621,18 @@ const choreoEditor = (() => {
     propulsion:  '#ff8800',
   };
 
-  // Derive the short action label shown after the colon in the inspector header
+  // Full label for block tooltip and inspector
   function _inspectorLabel(track, item) {
-    if (track === 'audio' || track === 'audio2') {
+    if (track === 'audio') {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
-    if (track === 'lights') return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'lights') {
+      if (item.mode === 'text') return `[${(item.display||'fld_top').toUpperCase()}] ${item.text||'...'}`;
+      if (item.mode === 'holo') return `[${(item.target||'fhp').toUpperCase()}] ${(item.effect||'on').toUpperCase()}`;
+      if (item.mode === 'psi')  return `[${(item.target||'both').toUpperCase()}] ${(item.sequence||'normal').toUpperCase()}`;
+      return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
@@ -4583,20 +4642,61 @@ const choreoEditor = (() => {
     return '?';
   }
 
+  // ── Floating tooltip ──────────────────────────────────────────────
+  function _getTooltip() {
+    let t = document.getElementById('chor-block-tooltip');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'chor-block-tooltip';
+      t.style.cssText = [
+        'position:fixed', 'z-index:9999', 'pointer-events:none',
+        'font-family:Courier New,monospace', 'font-size:11px', 'letter-spacing:1.5px',
+        'text-transform:uppercase', 'padding:4px 10px', 'border-radius:3px',
+        'background:#060910', 'white-space:nowrap', 'display:none',
+      ].join(';');
+      document.body.appendChild(t);
+    }
+    return t;
+  }
+
+  function _showTooltip(e, track, item) {
+    const t = _getTooltip();
+    const label = _inspectorLabel(track, item);
+    const c = _TRACK_COLOR[track] || '#00ccff';
+    t.textContent = label;
+    t.style.color = c;
+    t.style.border = `1px solid ${c}`;
+    t.style.boxShadow = `0 2px 10px ${c}33`;
+    t.style.display = 'block';
+    _positionTooltip(e);
+  }
+
+  function _positionTooltip(e) {
+    const t = document.getElementById('chor-block-tooltip');
+    if (!t || t.style.display === 'none') return;
+    t.style.left = (e.clientX + 14) + 'px';
+    t.style.top  = (e.clientY - 32) + 'px';
+  }
+
+  function _hideTooltip() {
+    const t = document.getElementById('chor-block-tooltip');
+    if (t) t.style.display = 'none';
+  }
+
+  // ── Inspector title — two-line layout ────────────────────────────
   function _setInspectorTitle(track, item) {
     const el = document.getElementById('chor-inspector-title');
     if (!el) return;
     const label = _inspectorLabel(track, item);
     const c = _TRACK_COLOR[track] || '#00ccff';
-    el.style.color = c;
-    el.style.textShadow = `0 0 10px ${c}88`;
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'space-between';
-    el.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${track.toUpperCase()} : ${label}</span>
-      <button onclick="choreoEditor._deleteSelected()"
-        style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
-        title="Delete block">✕</button>`;
+    el.innerHTML =
+      `<div style="display:flex;align-items:center;justify-content:space-between">
+         <span style="font-size:11px;letter-spacing:2px;color:rgba(0,170,255,.4);font-weight:normal">${track.toUpperCase()} :</span>
+         <button onclick="choreoEditor._deleteSelected()"
+           style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0;line-height:1"
+           title="Delete block">✕</button>
+       </div>
+       <div style="font-size:8px;color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${label}</div>`;
   }
 
   function _clearInspectorTitle() {
@@ -4816,6 +4916,8 @@ const choreoEditor = (() => {
         }
       }
       block.style.opacity = '1';
+      _renderTrack(track);
+      _selectBlock(track, idx);
       _refreshLayout();
     };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
@@ -4830,7 +4932,7 @@ const choreoEditor = (() => {
       _dirty = true;
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _refreshLayout(); };
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
     document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
   }
 
@@ -4897,10 +4999,19 @@ const choreoEditor = (() => {
       </div>`;
     }
 
+    function textRow(key, field, maxLen) {
+      const val = item[field] !== undefined ? String(item[field]) : '';
+      return `<div class="chor-prop-row-full">
+        <span class="chor-prop-key">${key}</span>
+        <input class="chor-prop-input" type="text" value="${val.replace(/"/g,'&quot;')}" maxlength="${maxLen}" style="width:100%;box-sizing:border-box"
+          oninput="choreoEditor._setProp('${track}',${idx},'${field}',this.value)">
+      </div>`;
+    }
+
     // ── Build field list by track ────────────────────────────────────
     let html = numRow('START', 't', { min: 0, step: 0.1 });
 
-    if (track === 'audio' || track === 'audio2') {
+    if (track === 'audio') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
       // FILE — use disk scan (flat) when available, fall back to grouped index
       if (_audioScanned.length) {
@@ -4909,11 +5020,35 @@ const choreoEditor = (() => {
         html += selectRow('FILE', 'file', _audioIndex, true);
       }
       html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
+      html += selectRow('CHANNEL', 'ch', { 0: 'CH 0 — Primary (S:)', 1: 'CH 1 — Secondary (S2:)' });
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      // _lightModes is already a {key: label} object — pass directly
-      html += selectRow('MODE', 'mode', _lightModes);
+      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text', holo: '🔦 Holo', psi: '👁 PSI' });
+      if (item.mode === 'psi') {
+        html += selectRow('TARGET', 'target', { both:'FPSI + RPSI', fpsi:'FPSI (Front)', rpsi:'RPSI (Rear)' });
+        html += selectRow('SEQUENCE', 'sequence', {
+          normal:'NORMAL (default)', flash:'FLASH (random colors)',
+          alarm:'ALARM (red)', failure:'FAILURE (cycle+fade)',
+          redalert:'RED ALERT', leia:'LEIA (pale green)', march:'MARCH'
+        });
+      } else if (item.mode === 'holo') {
+        html += selectRow('TARGET', 'target', {
+          fhp:'FHP (Front)', rhp:'RHP (Rear)', thp:'THP (Top)', radar:'Radar Eye', all:'ALL'
+        });
+        html += selectRow('EFFECT', 'effect', {
+          on:'ON (cycle)', off:'OFF', pulse:'PULSE', rainbow:'RAINBOW',
+          random_move:'RANDOM MOVE', wag:'WAG', nod:'NOD'
+        });
+      } else if (item.mode === 'text') {
+        const preview = (item.text || '...').slice(0, 20);
+        html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em"><span style="font-size:13px">💬</span><span style="opacity:.7;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${preview}</span></div>`;
+        html += selectRow('DISPLAY', 'display', {
+          fld_top:'FLD Top', fld_bottom:'FLD Bottom',
+          fld_both:'FLD Top+Bottom', rld:'RLD', all:'ALL'
+        });
+        html += textRow('TEXT (MAX 20)', 'text', 20);
+      }
 
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
@@ -4931,8 +5066,10 @@ const choreoEditor = (() => {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
       html += selectRow('SERVO', 'servo', servoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
-      html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
-      html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
+      if (item.action === 'degree') {
+        html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
+        html += selectRow('EASING', 'easing', { 'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT' });
+      }
 
     } else if (track === 'propulsion') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -4949,7 +5086,7 @@ const choreoEditor = (() => {
 
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
-    if ((track !== 'audio' && track !== 'audio2') || field !== 'file' || !value) return;
+    if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
     const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
     audioEl.addEventListener('loadedmetadata', () => {
@@ -5084,14 +5221,29 @@ const choreoEditor = (() => {
       const s = ev.t || 0;
       if (t_now >= s && t_now < s + (ev.duration || 0)) { activeEv = ev; break; }
     }
-    if (!activeEv) { _chorMon.setMode('off'); return; }
+    if (!activeEv) { _chorMon.setMode('off'); _lastLightsEvT = -1; return; }
     const mode = activeEv.mode || 'random';
-    if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
+    const evStart = activeEv.t || 0;
+    const evChanged = evStart !== _lastLightsEvT;
+    if (evChanged) _lastLightsEvT = evStart;
+
+    if (mode === 'text') {
+      _chorMon.setMode('text');
+      if (evChanged) _chorMon.setText(activeEv.display || 'fld_top', activeEv.text || '', activeEv.color);
+    } else if (mode === 'psi') {
+      const _PSI_COLOR = {
+        normal:'#00ffea', flash:'#ffffff', alarm:'#ff2244',
+        failure:'#ff8800', redalert:'#ff0000', leia:'#44ff88', march:'#00ffea'
+      };
+      _chorMon.setMode('psi');
+      if (evChanged) _chorMon.updatePSI(_PSI_COLOR[activeEv.sequence || 'normal'] || '#00ffea');
+    } else if (mode === 'holo') {
+      // holo projectors don't affect FLD/RLD/PSI monitor — no visual change
+    } else if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
       _chorMon.setModeNum(parseInt(mode.slice(1), 10));
     } else {
       _chorMon.setMode(mode);
     }
-    if (activeEv.text) _chorMon.setText(activeEv.target || 'both', activeEv.text, activeEv.color);
   }
 
   function _startPolling() {
@@ -5189,8 +5341,12 @@ const choreoEditor = (() => {
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
-      // Ensure audio2 track exists in legacy files
-      if (!_chor.tracks.audio2) _chor.tracks.audio2 = [];
+      // Migrate legacy audio2 track → unified audio track with ch=1
+      if (_chor.tracks.audio2 && _chor.tracks.audio2.length) {
+        _chor.tracks.audio2.forEach(ev => _chor.tracks.audio.push({ ...ev, ch: 1 }));
+        _chor.tracks.audio.sort((a, b) => (a.t || 0) - (b.t || 0));
+      }
+      delete _chor.tracks.audio2;
       // Migrate legacy generic "servos" track → body_servos
       if (_chor.tracks.servos && _chor.tracks.servos.length) {
         if (!_chor.tracks.body_servos) _chor.tracks.body_servos = [];
@@ -5240,7 +5396,7 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
-        tracks: { audio:[], audio2:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
+        tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
       _dirty = true; _renderAllTracks();
       const sel = document.getElementById('chor-select');
@@ -5271,16 +5427,41 @@ const choreoEditor = (() => {
       if (result) { _dirty = false; toast(`Saved: ${_chor.meta.name}`, 'ok'); }
     },
 
-    async exportScr() {
+    async exportChor() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       if (_dirty) await this.save();
-      const result = await api('/choreo/export_scr', 'POST', { name: _chor.meta.name });
-      if (!result) return;
-      const blob = new Blob([result.scr], { type:'text/plain' });
+      const json = JSON.stringify(_chor, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a'); a.href = url; a.download = _chor.meta.name + '.scr'; a.click();
+      const a    = document.createElement('a');
+      a.href = url; a.download = (_chor.meta.name || 'choreography') + '.chor'; a.click();
       URL.revokeObjectURL(url);
-      toast('SCR exported', 'ok');
+      toast('Choreo exported', 'ok');
+    },
+
+    async importChor() {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.chor,application/json';
+      input.onchange = async () => {
+        const file = input.files[0]; if (!file) return;
+        let chor;
+        try { chor = JSON.parse(await file.text()); } catch { toast('Invalid .chor file', 'error'); return; }
+        if (!chor?.meta?.name) { toast('Invalid .chor: missing meta.name', 'error'); return; }
+        const result = await api('/choreo/save', 'POST', { chor });
+        if (!result) return;
+        // Refresh dropdown and load the imported choreo
+        const names = await api('/choreo/list');
+        const sel   = document.getElementById('chor-select');
+        if (sel && names) {
+          sel.innerHTML = '<option value="">— select choreography —</option>' +
+            names.map(n => `<option value="${n}">${n}</option>`).join('');
+          sel.onchange = () => this.load(sel.value);
+          sel.value = chor.meta.name;
+        }
+        await this.load(chor.meta.name);
+        toast(`Imported: ${chor.meta.name}`, 'ok');
+      };
+      input.click();
     },
 
     dismissAbort() {
@@ -5318,8 +5499,17 @@ const choreoEditor = (() => {
         if (labelEl) labelEl.textContent = _blockLabel(track, item);
       }
       if (track === 'dome' && _chor) _renderDomeLane(_chor.tracks.dome);
-      if (_selected && _selected.track === track && _selected.idx === idx)
+      const _isServo = ['dome_servos', 'body_servos', 'arm_servos'].includes(track);
+      if (_isServo && field === 'action') {
+        if (rawVal === 'degree' && !item.easing) item.easing = 'ease-in-out';
+        if (_selected && _selected.track === track && _selected.idx === idx)
+          _updatePropsPanel(track, idx);
+      } else if (track === 'lights' && field === 'mode') {
+        if (_selected && _selected.track === track && _selected.idx === idx)
+          _updatePropsPanel(track, idx);
+      } else if (_selected && _selected.track === track && _selected.idx === idx) {
         _setInspectorTitle(track, item);
+      }
     },
 
     _deleteSelected() {
