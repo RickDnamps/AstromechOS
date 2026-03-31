@@ -1513,6 +1513,17 @@ body::after {
   border-radius: 3px;
   vertical-align: middle;
 }
+.script-badge-choreo {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: #ff9944;
+  border: 1px solid #ff994444;
+  border-radius: 3px;
+  vertical-align: middle;
+}
 
 .script-btns {
   display: flex;

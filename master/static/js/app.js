@@ -1914,9 +1914,10 @@ class ScriptEngine {
   }
 
   async load() {
-    const [seqData, lightData] = await Promise.all([
+    const [seqData, lightData, chorNames] = await Promise.all([
       api('/scripts/list'),
       api('/light/list'),
+      api('/choreo/list'),
     ]);
     this._scripts = (seqData?.scripts || []).map(e => ({
       name: typeof e === 'object' ? e.name : e,
@@ -1924,6 +1925,9 @@ class ScriptEngine {
     }));
     (lightData?.sequences || []).forEach(name => {
       this._scripts.push({ name, type: 'light' });
+    });
+    (chorNames || []).forEach(name => {
+      this._scripts.push({ name, type: 'choreo' });
     });
     this.render();
   }
@@ -1933,9 +1937,15 @@ class ScriptEngine {
     if (!grid) return;
     grid.innerHTML = this._scripts.map(entry => {
       const { name, type } = entry;
-      const desc = this._DESCRIPTIONS[name] || (type === 'light' ? 'Light sequence' : 'Custom sequence script');
+      const desc = this._DESCRIPTIONS[name] ||
+        (type === 'light'  ? 'Light sequence' :
+         type === 'choreo' ? 'Choreography (timeline with interpolation)' :
+                             'Custom sequence script');
       const isRunning = this._running.has(name);
-      const badge = type === 'light' ? '<span class="script-badge-light">LIGHT</span>' : '';
+      const badge = type === 'light'  ? '<span class="script-badge-light">LIGHT</span>' :
+                    type === 'choreo' ? '<span class="script-badge-choreo">🎬 CHOREO</span>' : '';
+      const loopBtn = type !== 'choreo'
+        ? `<button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>` : '';
       return `
         <div class="script-card${isRunning ? ' running' : ''}" id="script-card-${name}">
           <div class="script-name">${name.toUpperCase()}${badge}</div>
@@ -1943,7 +1953,7 @@ class ScriptEngine {
           <div class="script-btns">
             <div class="running-indicator"></div>
             <button class="btn btn-sm btn-active" onclick="scriptEngine.run('${name}', false, '${type}')">RUN</button>
-            <button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>
+            ${loopBtn}
             <button class="btn btn-sm btn-danger" onclick="scriptEngine.stopName('${name}', '${type}')">STOP</button>
           </div>
         </div>
@@ -1952,17 +1962,29 @@ class ScriptEngine {
   }
 
   run(name, loop, type = 'seq') {
+    if (type === 'choreo') {
+      api('/choreo/play', 'POST', { name }).then(d => {
+        if (d) {
+          this._running.clear();
+          document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+          this._running.add(name);
+          const card = el(`script-card-${name}`);
+          if (card) card.classList.add('running');
+          toast(`🎬 ${name.toUpperCase()} playing`, 'ok');
+          poller.poll();
+        }
+      });
+      return;
+    }
     const endpoint = type === 'light' ? '/light/run' : '/scripts/run';
     api(endpoint, 'POST', { name, loop }).then(d => {
       if (d) {
-        // Un seul script à la fois — effacer toutes les cartes immédiatement
         this._running.clear();
         document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
         const count = el('running-count');
         if (count) count.textContent = '1';
         const list = el('running-scripts');
         if (list) list.textContent = `${name}#${d.id}`;
-        // Marquer uniquement la nouvelle carte
         this._running.add(name);
         const card = el(`script-card-${name}`);
         if (card) card.classList.add('running');
@@ -1973,6 +1995,15 @@ class ScriptEngine {
   }
 
   stopName(name, type = 'seq') {
+    if (type === 'choreo') {
+      api('/choreo/stop', 'POST').then(() => {
+        this._running.delete(name);
+        const card = el(`script-card-${name}`);
+        if (card) card.classList.remove('running');
+        toast(`${name.toUpperCase()} stopped`, 'ok');
+      });
+      return;
+    }
     const endpoint = type === 'light' ? '/light/stop_all' : '/scripts/stop_all';
     api(endpoint, 'POST').then(d => {
       if (d) {
@@ -5424,16 +5455,41 @@ const choreoEditor = (() => {
       if (result) { _dirty = false; toast(`Saved: ${_chor.meta.name}`, 'ok'); }
     },
 
-    async exportScr() {
+    async exportChor() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       if (_dirty) await this.save();
-      const result = await api('/choreo/export_scr', 'POST', { name: _chor.meta.name });
-      if (!result) return;
-      const blob = new Blob([result.scr], { type:'text/plain' });
+      const json = JSON.stringify(_chor, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
       const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a'); a.href = url; a.download = _chor.meta.name + '.scr'; a.click();
+      const a    = document.createElement('a');
+      a.href = url; a.download = (_chor.meta.name || 'choreography') + '.chor'; a.click();
       URL.revokeObjectURL(url);
-      toast('SCR exported', 'ok');
+      toast('Choreo exported', 'ok');
+    },
+
+    async importChor() {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = '.chor,application/json';
+      input.onchange = async () => {
+        const file = input.files[0]; if (!file) return;
+        let chor;
+        try { chor = JSON.parse(await file.text()); } catch { toast('Invalid .chor file', 'error'); return; }
+        if (!chor?.meta?.name) { toast('Invalid .chor: missing meta.name', 'error'); return; }
+        const result = await api('/choreo/save', 'POST', { chor });
+        if (!result) return;
+        // Refresh dropdown and load the imported choreo
+        const names = await api('/choreo/list');
+        const sel   = document.getElementById('chor-select');
+        if (sel && names) {
+          sel.innerHTML = '<option value="">— select choreography —</option>' +
+            names.map(n => `<option value="${n}">${n}</option>`).join('');
+          sel.onchange = () => this.load(sel.value);
+          sel.value = chor.meta.name;
+        }
+        await this.load(chor.meta.name);
+        toast(`Imported: ${chor.meta.name}`, 'ok');
+      };
+      input.click();
     },
 
     dismissAbort() {
