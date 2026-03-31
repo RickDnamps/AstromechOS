@@ -2,7 +2,7 @@
   "meta": {
     "name": "birthday",
     "version": "1.0",
-    "duration": 27.5,
+    "duration": 42.0,
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
@@ -15,7 +15,7 @@
         "action": "play",
         "file": "birthday",
         "volume": 85,
-        "duration": 5,
+        "duration": 40,
         "ch": 0
       }
     ],
@@ -34,6 +34,11 @@
       },
       {
         "t": 25.5,
+        "mode": "random",
+        "duration": 14.5
+      },
+      {
+        "t": 40.0,
         "mode": "off",
         "duration": 2.0
       }
