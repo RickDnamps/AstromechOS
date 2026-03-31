@@ -4890,11 +4890,36 @@ const choreoEditor = (() => {
     });
   }
 
+  // Dome overlap guards — clamp t/duration so no two dome events overlap.
+  // Called during drag, resize, and inspector edits.
+  function _domeClampT(idx, newT) {
+    const evs = _chor.tracks.dome || [];
+    const durS = (evs[idx].duration || 200) / 1000.0;
+    if (idx > 0) {
+      const prev = evs[idx - 1];
+      newT = Math.max(newT, prev.t + (prev.duration || 200) / 1000.0);
+    }
+    if (idx + 1 < evs.length) {
+      newT = Math.min(newT, evs[idx + 1].t - durS);
+    }
+    return Math.max(0, newT);
+  }
+
+  function _domeClampDur(idx, newDur) {
+    const evs = _chor.tracks.dome || [];
+    if (idx + 1 < evs.length) {
+      const maxDur = (evs[idx + 1].t - evs[idx].t) * 1000.0;
+      newDur = Math.min(newDur, maxDur);
+    }
+    return Math.max(200, newDur);
+  }
+
   function _startDrag(e, block, track, idx) {
     const startX = e.clientX, startLeft = parseFloat(block.style.left) || 0;
     const scroll = document.getElementById('chor-scroll');
     const onMove = e2 => {
-      const newT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX)));
+      let newT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX)));
+      if (track === 'dome') newT = _domeClampT(idx, newT);
       block.style.left = _px(newT) + 'px';
       _chor.tracks[track][idx].t = newT;
       _dirty = true;
@@ -4926,7 +4951,8 @@ const choreoEditor = (() => {
   function _startResize(e, block, track, idx) {
     const startX = e.clientX, startW = parseFloat(block.style.width) || 60;
     const onMove = e2 => {
-      const newDur = _snap(_sec(Math.max(20, startW + e2.clientX - startX)));
+      let newDur = _snap(_sec(Math.max(20, startW + e2.clientX - startX)));
+      if (track === 'dome') newDur = _domeClampDur(idx, newDur);
       block.style.width = _px(newDur) + 'px';
       _chor.tracks[track][idx].duration = newDur;
       _dirty = true;
@@ -5489,8 +5515,11 @@ const choreoEditor = (() => {
       const item = (_chor.tracks[track] || [])[idx];
       if (!item) return;
       const num = parseFloat(rawVal); item[field] = isNaN(num) ? rawVal : num; _dirty = true;
-      // Dome duration must be >= 200ms — no open-ended motor pulses
-      if (track === 'dome' && field === 'duration' && item.duration < 200) item.duration = 200;
+      // Dome overlap guard — clamp t and duration to prevent overlapping commands
+      if (track === 'dome') {
+        if (field === 'duration') item.duration = _domeClampDur(idx, item.duration);
+        if (field === 't')        item.t        = _domeClampT(idx, item.t);
+      }
       const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
       if (block) {
         if (field === 't')        block.style.left  = _px(item.t)        + 'px';
