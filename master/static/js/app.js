@@ -4268,6 +4268,7 @@ const choreoEditor = (() => {
     { track:'lights',     label:'ALARM',  tpl:{ mode:'alarm',                         duration:3   } },
     { track:'lights',     label:'DISCO',  tpl:{ mode:'disco',                         duration:5   } },
     { track:'lights',     label:'OFF',    tpl:{ mode:'off',                           duration:2   } },
+    { track:'lights',     label:'TEXT',   tpl:{ mode:'text', display:'fld', text:'HELLO', duration:3 } },
     { track:'dome',       label:'DOME',   tpl:{ power:0, duration:500, accel:0.5, easing:'ease-in-out' } },
     { track:'dome_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'dome', duration:1   } },
     { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
@@ -4586,7 +4587,10 @@ const choreoEditor = (() => {
 
   function _blockLabel(track, item) {
     if (track === 'audio' || track === 'audio2') return item.file || '?';
-    if (track === 'lights')     return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'lights') {
+      if (item.mode === 'text') return `[${(item.display || 'fld').toUpperCase()}] ${item.text || '...'}`;
+      return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
       return `${item.servo || '?'} ${item.action || ''}`;
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
@@ -4611,7 +4615,10 @@ const choreoEditor = (() => {
       if (!item.file) return '?';
       return item.file.replace(/\.[^.]+$/, ''); // strip extension
     }
-    if (track === 'lights') return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    if (track === 'lights') {
+      if (item.mode === 'text') return `[${(item.display || 'fld').toUpperCase()}] ${item.text || '...'}`;
+      return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
+    }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const name = (item.servo || '?').replace(/_/g, ' ');
@@ -4940,6 +4947,16 @@ const choreoEditor = (() => {
     // ── Helpers ─────────────────────────────────────────────────────
     const set = (field, val) => choreoEditor._setProp(track, idx, field, val);
 
+    function textRow(key, field, maxLen = 20) {
+      const val = escapeHtml(String(item[field] || ''));
+      return `<div class="chor-prop-row">
+        <span class="chor-prop-key">${key}</span>
+        <input class="chor-prop-input" type="text" value="${val}" maxlength="${maxLen}"
+          oninput="choreoEditor._setProp('${track}',${idx},'${field}',this.value)"
+          style="width:120px;text-transform:uppercase">
+      </div>`;
+    }
+
     function numRow(key, field, { min, max, step } = {}) {
       const val = item[field] !== undefined ? item[field] : '';
       const attrs = [
@@ -4993,8 +5010,16 @@ const choreoEditor = (() => {
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      // _lightModes is already a {key: label} object — pass directly
-      html += selectRow('MODE', 'mode', _lightModes);
+      html += selectRow('MODE', 'mode', { ..._lightModes, text: '💬 Text' });
+      if (item.mode === 'text') {
+        const preview = (item.text || '...').slice(0, 20);
+        html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em">
+          <span style="font-size:13px">💬</span>
+          <span style="opacity:.75;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${preview}</span>
+        </div>`;
+        html += selectRow('DISPLAY', 'display', { fld:'FLD (Front)', rld:'RLD (Rear)', both:'FLD + RLD' });
+        html += textRow('TEXT (MAX 20)', 'text', 20);
+      }
 
     } else if (track === 'dome') {
       html += numRow('POWER %', 'power', { min: -100, max: 100, step: 1 });
@@ -5174,7 +5199,7 @@ const choreoEditor = (() => {
     } else {
       _chorMon.setMode(mode);
     }
-    if (activeEv.text) _chorMon.setText(activeEv.target || 'both', activeEv.text, activeEv.color);
+    if (activeEv.text) _chorMon.setText(activeEv.display || 'both', activeEv.text, activeEv.color);
   }
 
   function _startPolling() {
@@ -5402,8 +5427,9 @@ const choreoEditor = (() => {
       }
       if (track === 'dome' && _chor) _renderDomeLane(_chor.tracks.dome);
       const _isServo = ['dome_servos', 'body_servos', 'arm_servos'].includes(track);
-      if (_isServo && field === 'action') {
-        if (rawVal === 'degree' && !item.easing) item.easing = 'ease-in-out';
+      const _needsRepanel = (_isServo && field === 'action') || (track === 'lights' && field === 'mode');
+      if (_needsRepanel) {
+        if (_isServo && rawVal === 'degree' && !item.easing) item.easing = 'ease-in-out';
         if (_selected && _selected.track === track && _selected.idx === idx)
           _updatePropsPanel(track, idx);
       } else if (_selected && _selected.track === track && _selected.idx === idx) {

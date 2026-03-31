@@ -283,6 +283,17 @@ class ChoreoPlayer:
 
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
+
+                # Text mode — send scrolling message to FLD/RLD via JawaLite
+                if mode == 'text' and self._teeces:
+                    text_val = ev.get('text', '')[:20].upper()
+                    display  = ev.get('display', 'fld')
+                    if display in ('fld', 'both'):
+                        self._teeces.fld_text(text_val)
+                    if display in ('rld', 'both'):
+                        self._teeces.rld_text(text_val)
+                    return
+
                 # Named → T-code lookup (backward compat for old .chor files)
                 _NAMED_CODES: dict[str, int] = {
                     'random': 1,  'flash': 2,       'alarm': 3,   'short_circuit': 4,
@@ -510,7 +521,12 @@ class ChoreoPlayer:
 
         for ev in tracks.get('lights', []):
             mode = ev.get('mode', 'random')
-            cmd = _LIGHT_SCR.get(mode, 'teeces,anim,1')
+            if mode == 'text':
+                text_val = ev.get('text', '')[:20].upper()
+                display  = ev.get('display', 'fld')
+                cmd = f"teeces,text,{text_val},{display}"
+            else:
+                cmd = _LIGHT_SCR.get(mode, 'teeces,anim,1')
             events.append((ev['t'], cmd))
             if 'duration' in ev:
                 events.append((ev['t'] + ev['duration'], 'teeces,random'))
