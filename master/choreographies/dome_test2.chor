@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "name": "dome_test2",
+    "version": "1.0",
+    "duration": 5.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "dome_test2.scr"
+  },
+  "tracks": {
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 500
+      },
+      {
+        "t": 0.0,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 500
+      },
+      {
+        "t": 0.0,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 500
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 0.0,
+        "angle": 500
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 0.0,
+        "angle": 500
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 0.0,
+        "angle": 500
+      }
+    ]
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "meta": {
+    "name": "curious",
+    "version": "1.0",
+    "duration": 12.82,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "curious.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:proc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 2.8,
+        "action": "play",
+        "file": "RANDOM:proc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 6.9,
+        "action": "play",
+        "file": "RANDOM:ooh",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 7.82,
+        "mode": "random",
+        "duration": 3.0
+      },
+      {
+        "t": 10.82,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome": [
+      {
+        "t": 0.0,
+        "power": 30.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 1.5,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      },
+      {
+        "t": 2.8,
+        "power": -30.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 4.3,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 1.9,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 55,
+        "speed": 3
+      },
+      {
+        "t": 2.5,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 3
+      },
+      {
+        "t": 4.6,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 50,
+        "speed": 2
+      },
+      {
+        "t": 5.4,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 45,
+        "speed": 2
+      },
+      {
+        "t": 6.4,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 3
+      },
+      {
+        "t": 6.4,
+        "servo": "dome_panel_3",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 3
+      },
+      {
+        "t": 6.9,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 40,
+        "speed": 7
+      },
+      {
+        "t": 7.05,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 7
+      },
+      {
+        "t": 7.17,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 40,
+        "speed": 7
+      },
+      {
+        "t": 7.32,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 7
+      }
+    ]
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "meta": {
+    "name": "party",
+    "version": "1.0",
+    "duration": 24.5,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "party.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "Gangnam",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 22.5
+      },
+      {
+        "t": 22.5,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome": [
+      {
+        "t": 0.0,
+        "power": 50.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 0.8,
+        "power": -50.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 1.6,
+        "power": 50.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 2.5,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.4,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "dome_panel_3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "dome_panel_4",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.5,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

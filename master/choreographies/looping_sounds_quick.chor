@@ -1,0 +1,47 @@
+{
+  "meta": {
+    "name": "looping_sounds_quick",
+    "version": "1.0",
+    "duration": 92.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "looping_sounds_quick.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:happy",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 22.5,
+        "action": "play",
+        "file": "RANDOM:proc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 45.0,
+        "action": "play",
+        "file": "RANDOM:misc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 67.5,
+        "action": "play",
+        "file": "RANDOM:razz",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ]
+  }
+}

@@ -1,0 +1,328 @@
+{
+  "meta": {
+    "name": "excited",
+    "version": "1.0",
+    "duration": 7.37,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "excited.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:happy",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 2.37,
+        "action": "play",
+        "file": "RANDOM:happy",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 2.37
+      },
+      {
+        "t": 2.37,
+        "mode": "psi",
+        "target": "both",
+        "sequence": "normal",
+        "duration": 3.0
+      },
+      {
+        "t": 5.37,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome": [
+      {
+        "t": 0.0,
+        "power": 70.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 0.4,
+        "power": -70.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 0.72,
+        "power": 50.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 1.07,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 9
+      },
+      {
+        "t": 0.0,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 9
+      },
+      {
+        "t": 0.0,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 9
+      },
+      {
+        "t": 0.0,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 9
+      },
+      {
+        "t": 0.25,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.25,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.25,
+        "servo": "dome_panel_3",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.25,
+        "servo": "dome_panel_4",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.4,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.4,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.4,
+        "servo": "dome_panel_5",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.4,
+        "servo": "dome_panel_7",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.6,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.6,
+        "servo": "dome_panel_3",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.6,
+        "servo": "dome_panel_5",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.6,
+        "servo": "dome_panel_7",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.72,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.72,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.72,
+        "servo": "dome_panel_6",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.72,
+        "servo": "dome_panel_8",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 100,
+        "speed": 9
+      },
+      {
+        "t": 0.92,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.92,
+        "servo": "dome_panel_4",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.92,
+        "servo": "dome_panel_6",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.92,
+        "servo": "dome_panel_8",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 1.07,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 5
+      },
+      {
+        "t": 1.07,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 5
+      },
+      {
+        "t": 1.07,
+        "servo": "dome_panel_5",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 5
+      },
+      {
+        "t": 1.47,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 5
+      },
+      {
+        "t": 1.47,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 5
+      },
+      {
+        "t": 1.47,
+        "servo": "dome_panel_6",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 5
+      },
+      {
+        "t": 1.97,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

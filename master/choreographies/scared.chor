@@ -1,0 +1,205 @@
+{
+  "meta": {
+    "name": "scared",
+    "version": "1.0",
+    "duration": 7.53,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "scared.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:sad",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 2.63,
+        "action": "play",
+        "file": "RANDOM:sad",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "off",
+        "duration": 2.0
+      },
+      {
+        "t": 5.53,
+        "mode": "random",
+        "duration": 0.5
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 35,
+        "speed": 8
+      },
+      {
+        "t": 0.0,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 35,
+        "speed": 8
+      },
+      {
+        "t": 0.08,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 8
+      },
+      {
+        "t": 0.08,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 8
+      },
+      {
+        "t": 0.14,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 28,
+        "speed": 9
+      },
+      {
+        "t": 0.14,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 28,
+        "speed": 9
+      },
+      {
+        "t": 0.21,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.21,
+        "servo": "dome_panel_3",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 0.33,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 45,
+        "speed": 5
+      },
+      {
+        "t": 0.68,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 1.18,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 30,
+        "speed": 9
+      },
+      {
+        "t": 1.23,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 1.28,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 30,
+        "speed": 9
+      },
+      {
+        "t": 1.33,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 1.38,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 30,
+        "speed": 9
+      },
+      {
+        "t": 1.43,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 9
+      },
+      {
+        "t": 3.43,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 40,
+        "speed": 8
+      },
+      {
+        "t": 3.43,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 40,
+        "speed": 8
+      },
+      {
+        "t": 3.53,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 8
+      },
+      {
+        "t": 3.53,
+        "servo": "dome_panel_4",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 8
+      }
+    ]
+  }
+}

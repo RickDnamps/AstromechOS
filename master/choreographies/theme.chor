@@ -1,0 +1,23 @@
+{
+  "meta": {
+    "name": "theme",
+    "version": "1.0",
+    "duration": 40.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "theme.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "Theme001",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ]
+  }
+}

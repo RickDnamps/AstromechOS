@@ -1,0 +1,221 @@
+{
+  "meta": {
+    "name": "angry",
+    "version": "1.0",
+    "duration": 9.6,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "angry.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:razz",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 0.74,
+        "action": "play",
+        "file": "RANDOM:razz",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 2.3
+      },
+      {
+        "t": 2.3,
+        "mode": "text",
+        "text": "GRAAAH",
+        "display": "fld_top",
+        "duration": 2.8
+      },
+      {
+        "t": 5.1,
+        "mode": "random",
+        "duration": 2.5
+      },
+      {
+        "t": 7.6,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.12,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.16,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.24,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.3,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.34,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.54,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 10
+      },
+      {
+        "t": 1.54,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 10
+      },
+      {
+        "t": 1.54,
+        "servo": "dome_panel_3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 10
+      },
+      {
+        "t": 1.64,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 10
+      },
+      {
+        "t": 1.64,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 10
+      },
+      {
+        "t": 1.64,
+        "servo": "dome_panel_3",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 10
+      },
+      {
+        "t": 1.7,
+        "servo": "dome_panel_4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 10
+      },
+      {
+        "t": 1.7,
+        "servo": "dome_panel_5",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 10
+      },
+      {
+        "t": 1.7,
+        "servo": "dome_panel_6",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 10
+      },
+      {
+        "t": 1.8,
+        "servo": "dome_panel_4",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 10
+      },
+      {
+        "t": 1.8,
+        "servo": "dome_panel_5",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 10
+      },
+      {
+        "t": 1.8,
+        "servo": "dome_panel_6",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 10
+      },
+      {
+        "t": 3.8,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 80,
+        "speed": 3
+      },
+      {
+        "t": 3.8,
+        "servo": "dome_panel_2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 80,
+        "speed": 3
+      },
+      {
+        "t": 4.6,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 3
+      },
+      {
+        "t": 4.6,
+        "servo": "dome_panel_2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 3
+      }
+    ]
+  }
+}

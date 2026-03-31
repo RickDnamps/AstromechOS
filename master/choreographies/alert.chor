@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "name": "alert",
+    "version": "1.0",
+    "duration": 222.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "alert.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "ALARM003",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 220.0
+      },
+      {
+        "t": 220.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ]
+  }
+}

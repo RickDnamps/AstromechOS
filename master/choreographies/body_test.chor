@@ -1,0 +1,39 @@
+{
+  "meta": {
+    "name": "body_test",
+    "version": "1.0",
+    "duration": 5.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "body_test.scr"
+  },
+  "tracks": {
+    "body_servos": [
+      {
+        "t": 0.0,
+        "servo": "body_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.1,
+        "servo": "body_panel_2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.1,
+        "servo": "body_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.1,
+        "servo": "body_panel_2",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

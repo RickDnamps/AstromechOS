@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "name": "scan",
+    "version": "1.0",
+    "duration": 12.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "scan.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:proc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 2.5,
+        "action": "play",
+        "file": "RANDOM:proc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      },
+      {
+        "t": 5.0,
+        "action": "play",
+        "file": "RANDOM:misc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "text",
+        "text": "SCANNING",
+        "display": "fld_top",
+        "duration": 5.0
+      },
+      {
+        "t": 5.0,
+        "mode": "text",
+        "text": "ANALYSIS",
+        "display": "fld_top",
+        "duration": 2.0
+      },
+      {
+        "t": 7.0,
+        "mode": "psi",
+        "target": "both",
+        "sequence": "normal",
+        "duration": 1.0
+      },
+      {
+        "t": 8.0,
+        "mode": "random",
+        "duration": 2.0
+      },
+      {
+        "t": 10.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome": [
+      {
+        "t": 0.0,
+        "power": 20.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 2.0,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      },
+      {
+        "t": 2.5,
+        "power": -20.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 4.5,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ]
+  }
+}

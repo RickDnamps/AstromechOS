@@ -1,0 +1,25 @@
+{
+  "meta": {
+    "name": "evil",
+    "version": "1.0",
+    "duration": 53.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "evil.scr"
+  },
+  "tracks": {
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 51.0
+      },
+      {
+        "t": 51.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ]
+  }
+}

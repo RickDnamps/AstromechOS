@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "name": "leia",
+    "version": "1.0",
+    "duration": 32.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "leia.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "LEIA",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 30.0
+      },
+      {
+        "t": 30.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ]
+  }
+}

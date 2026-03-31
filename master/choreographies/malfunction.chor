@@ -1,0 +1,169 @@
+{
+  "meta": {
+    "name": "malfunction",
+    "version": "1.0",
+    "duration": 6.65,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "malfunction.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "FAILURE",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 4.65
+      },
+      {
+        "t": 4.65,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.5,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.6,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.75,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.85,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.95,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.1,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.15,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.25,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.75,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.9,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.15,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.25,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.3,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.4,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.45,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.55,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.65,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.65,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

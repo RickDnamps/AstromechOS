@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "name": "wolfwhistle",
+    "version": "1.0",
+    "duration": 59.15,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "wolfwhistle.scr"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "WOLFWSTL",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 57.15
+      },
+      {
+        "t": 57.15,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.3,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.35,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.45,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.65,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.85,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.05,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.15,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.45,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.65,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.85,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.05,
+        "servo": "dome_panel_1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.15,
+        "servo": "dome_panel_1",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}
