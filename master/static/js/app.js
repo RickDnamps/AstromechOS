@@ -1076,15 +1076,24 @@ const _chorMon = (() => {
     },
     setText(target, text, color) {
       if(!text) return;
-      if(target==='fld'||target==='both'){
-        ['chor-fld-top','chor-fld-bot'].forEach(id=>{
-          _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
-          if(color)_textState[id].color=color;
-        });
+      const t = (target||'fld_top').toLowerCase();
+      // FLD top row
+      if(t==='fld_top'||t==='fld_both'||t==='fld'||t==='both'||t==='all'){
+        const id='chor-fld-top';
+        _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
+        if(color)_textState[id].color=color;
       }
-      if(target==='rld'||target==='both'){
-        _textState['chor-rld'].buf=_buildBuf(text,4,FONT4);_textState['chor-rld'].scroll=0;_textState['chor-rld'].active=true;
-        if(color)_textState['chor-rld'].color=color;
+      // FLD bottom row
+      if(t==='fld_bottom'||t==='fld_both'||t==='fld'||t==='both'||t==='all'){
+        const id='chor-fld-bot';
+        _textState[id].buf=_buildBuf(text,5,FONT5);_textState[id].scroll=0;_textState[id].active=true;
+        if(color)_textState[id].color=color;
+      }
+      // RLD
+      if(t==='rld'||t==='both'||t==='all'){
+        const id='chor-rld';
+        _textState[id].buf=_buildBuf(text,4,FONT4);_textState[id].scroll=0;_textState[id].active=true;
+        if(color)_textState[id].color=color;
       }
       _mode='text'; _tick=0;
     },
@@ -5214,12 +5223,23 @@ const choreoEditor = (() => {
     }
     if (!activeEv) { _chorMon.setMode('off'); return; }
     const mode = activeEv.mode || 'random';
-    if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
+    if (mode === 'text') {
+      _chorMon.setMode('text');
+      _chorMon.setText(activeEv.display || 'fld_top', activeEv.text || '', activeEv.color);
+    } else if (mode === 'psi') {
+      const _PSI_COLOR = {
+        normal:'#00ffea', flash:'#ffffff', alarm:'#ff2244',
+        failure:'#ff8800', redalert:'#ff0000', leia:'#44ff88', march:'#00ffea'
+      };
+      _chorMon.setMode('psi');
+      _chorMon.updatePSI(_PSI_COLOR[activeEv.sequence || 'normal'] || '#00ffea');
+    } else if (mode === 'holo') {
+      // holo projectors don't affect FLD/RLD/PSI monitor — no visual change
+    } else if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
       _chorMon.setModeNum(parseInt(mode.slice(1), 10));
     } else {
       _chorMon.setMode(mode);
     }
-    if (activeEv.text) _chorMon.setText(activeEv.target || 'both', activeEv.text, activeEv.color);
   }
 
   function _startPolling() {
