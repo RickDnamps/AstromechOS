@@ -37,7 +37,24 @@ _TEXT_PREFIX = {
 
 
 class AstroPixelsDriver(BaseLightsController):
-    """AstroPixels+ driver (@-prefixed commands)."""
+    """AstroPixels+ driver (@-prefixed commands).
+
+    Only 8 of the 22 JawaLite T-codes are defined in MarcduinoLogics.h.
+    The rest (T7-T10, T12-T19, T21, T92) are Teeces32/JawaLite-only and
+    are silently ignored by AstroPixels+ firmware.
+    """
+
+    # Override base ANIMATIONS — only expose what AstroPixels+ actually handles
+    ANIMATIONS: dict[int, str] = {
+        1:  'Random',
+        2:  'Flash',
+        3:  'Alarm',
+        4:  'Short Circuit',
+        5:  'Scream',
+        6:  'Leia Message',
+        11: 'Imperial March',
+        20: 'Off',
+    }
 
     def __init__(self, cfg: configparser.ConfigParser):
         self._port   = cfg.get('teeces', 'port')
