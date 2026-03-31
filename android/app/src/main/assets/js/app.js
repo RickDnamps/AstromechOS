@@ -4019,6 +4019,7 @@ const choreoEditor = (() => {
       if (!sel || !names) return;
       sel.innerHTML = '<option value="">— select choreography —</option>' +
         names.map(n => `<option value="${n}">${n}</option>`).join('');
+      if (_chor && _chor.meta && _chor.meta.name) sel.value = _chor.meta.name;
       sel.onchange = () => this.load(sel.value);
     },
 
