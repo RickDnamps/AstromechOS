@@ -304,14 +304,14 @@ body::after {
 .tab-content.active { display: block; }
 
 /* Editor tab — flex column so inner panels fill remaining height */
-#tab-editor {
+#tab-editor.active {
   display: flex;
   flex-direction: column;
   height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
   overflow: hidden;
 }
-#editor-panel-sequence,
-#editor-panel-light {
+#tab-editor.active #editor-panel-sequence,
+#tab-editor.active #editor-panel-light {
   flex: 1;
   min-height: 0;
   display: flex;
