@@ -32,6 +32,15 @@ _TEXT_PREFIX = {
     "both": "@3M",
 }
 
+# Reeltwo ColorVal codes for LE color command (0=default/firmware color)
+_COLOR_CODE = {
+    'red': 1, 'orange': 2, 'yellow': 3, 'green': 4,
+    'cyan': 5, 'blue': 6, 'purple': 7, 'magenta': 8, 'pink': 9,
+}
+
+# Logic display selector for LE color command (Reeltwo LEECSNN format)
+_LE_LOGIC = {"fld": 1, "rld": 3, "both": None}
+
 
 class AstroPixelsDriver(BaseLightsController):
     """AstroPixels+ driver (@-prefixed commands)."""
@@ -104,9 +113,23 @@ class AstroPixelsDriver(BaseLightsController):
     def off(self) -> bool:
         return self._send("@0T20\r")
 
-    def text(self, message: str, target: str = "both") -> bool:
+    def text(self, message: str, target: str = "both", color: str = "") -> bool:
+        """Send scrolling text to FLD/RLD. color: 'red','orange','yellow','green',
+        'cyan','blue','purple','magenta','pink' or '' for firmware default.
+        Color is applied via Reeltwo LE command (LEECSNN) before the text payload.
+        Requires hardware testing — LE color + @M text sequence needs validation."""
         msg    = message[:_MAX_TEXT].upper()
         prefix = _TEXT_PREFIX.get(target.lower(), "@3M")
+        color_code = _COLOR_CODE.get(color.lower(), 0)
+        if color_code:
+            logic = _LE_LOGIC.get(target.lower())
+            if logic is not None:
+                # LEECSNN: logic(1) + effect scroll-left(16) + color + speed(0) + duration(0=infinite)
+                self._send(f"LE{logic}1{color_code}000\r")
+            else:
+                # both = send LE color to FLD then RLD
+                self._send(f"LE11{color_code}000\r")
+                self._send(f"LE31{color_code}000\r")
         return self._send(f"{prefix}{msg}\r")
 
     def animation(self, code: int) -> bool:

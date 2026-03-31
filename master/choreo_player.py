@@ -283,6 +283,22 @@ class ChoreoPlayer:
 
             elif track == 'lights':
                 mode = ev.get('mode') or ev.get('name', 'random')
+
+                # Text mode — scrolling message to FLD/RLD with optional color
+                if mode == 'text' and self._teeces:
+                    text_val = ev.get('text', '')[:20].upper()
+                    display  = ev.get('display', 'fld')
+                    color    = ev.get('color', '')
+                    # AstroPixels+ supports color via LE command; Teeces32 ignores it
+                    if hasattr(self._teeces, 'text'):
+                        self._teeces.text(text_val, display, color)
+                    else:
+                        if display in ('fld', 'both'):
+                            self._teeces.fld_text(text_val)
+                        if display in ('rld', 'both'):
+                            self._teeces.rld_text(text_val)
+                    return
+
                 # Named → T-code lookup (backward compat for old .chor files)
                 _NAMED_CODES: dict[str, int] = {
                     'random': 1,  'flash': 2,       'alarm': 3,   'short_circuit': 4,
