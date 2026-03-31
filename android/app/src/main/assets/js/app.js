@@ -934,8 +934,21 @@ const _domeSim = (() => {
 })();
 
 
+// PSI sequence animation params {c1, c2, speed} — matches AstroPixels+ firmware behavior
+// flash: strobe on/off 250ms | alarm: color↔red alt | failure: rapid dim/bright
+// redalert: solid red | leia: solid green | march: fast yellow/orange beat
+const _PSI_SEQ_ANIM = {
+  normal:   { c1: '#00aaff', c2: '#00aaff', speed: 1.0  }, // steady blue
+  flash:    { c1: '#00aaff', c2: '#000000', speed: 0.25 }, // fast strobe ON/OFF
+  alarm:    { c1: '#00aaff', c2: '#ff2244', speed: 0.5  }, // blue ↔ red alternating
+  failure:  { c1: '#ff8800', c2: '#220000', speed: 0.2  }, // rapid orange/dark cycle
+  redalert: { c1: '#ff0000', c2: '#ff0000', speed: 1.0  }, // solid red
+  leia:     { c1: '#44ff88', c2: '#44ff88', speed: 1.0  }, // solid pale green
+  march:    { c1: '#ffee00', c2: '#ff4400', speed: 0.15 }, // fast yellow/orange beat
+};
+// Color used by choreo monitor (single representative color per sequence)
 const _PSI_SEQ_COLORS = {
-  normal:'#00aaff', flash:'#ffffff', alarm:'#ff2244',
+  normal:'#00aaff', flash:'#00aaff', alarm:'#ff2244',
   failure:'#ff8800', redalert:'#ff0000', leia:'#44ff88', march:'#ffee00',
 };
 
@@ -945,10 +958,9 @@ function applyPSI() {
   api('/teeces/psi_seq', 'POST', { target, sequence }).then(d => {
     if (d) toast(`PSI ${target.toUpperCase()} — ${sequence.toUpperCase()}`, 'ok');
   });
-  const color = _PSI_SEQ_COLORS[sequence] || '#00aaff';
-  // Use setPSICustom (active=true) so the animation render loop can't override the color
-  if (target === 'both' || target === 'fpsi') _domeSim.setPSICustom('front', color, color, 1.0);
-  if (target === 'both' || target === 'rpsi') _domeSim.setPSICustom('rear',  color, color, 1.0);
+  const anim = _PSI_SEQ_ANIM[sequence] || _PSI_SEQ_ANIM.normal;
+  if (target === 'both' || target === 'fpsi') _domeSim.setPSICustom('front', anim.c1, anim.c2, anim.speed);
+  if (target === 'both' || target === 'rpsi') _domeSim.setPSICustom('rear',  anim.c1, anim.c2, anim.speed);
 }
 
 function resetPSI() {
@@ -997,7 +1009,8 @@ const _chorMon = (() => {
     16:'white',17:'redon',18:'greenon',19:'saber',20:'off',
     21:'pulse',92:'pulse',
   };
-  let _tick=0, _mode='off', _lastShort=0, _running=false, _psiColor='#00ffea';
+  let _tick=0, _mode='off', _lastShort=0, _running=false;
+  let _psiColor='#00ffea', _psiColor2='#00ffea', _psiBlinkSpeed=0;
   const _textState = {
     'chor-fld-top': { buf:null, scroll:0, color:'#00ffea', active:false },
     'chor-fld-bot': { buf:null, scroll:0, color:'#00aaff', active:false },
@@ -1055,7 +1068,10 @@ const _chorMon = (() => {
     greenon(){IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#00cc66')));_setPSI('#00cc66','#009944');},
     white()  {IDS.forEach(id=>_getDots(id).forEach(d=>_lit(d,'#eef2ff')));_setPSI('#ffffff','#ccddff');},
     off()    {IDS.forEach(id=>_getDots(id).forEach(d=>_dim(d)));_setPSI('#0a0e14','#0a0e14');},
-    psi()    {_setPSI(_psiColor,_psiColor);},
+    psi(t)   {
+      if(_psiBlinkSpeed>0){const on=Math.floor(t*_psiBlinkSpeed)%2===0;_setPSI(on?_psiColor:_psiColor2,on?_psiColor:_psiColor2);}
+      else{_setPSI(_psiColor,_psiColor);}
+    },
     text(t) {
       if(t%8===0) IDS.forEach(id=>{
         if(_textState[id].active){_renderText(id);}
@@ -1114,7 +1130,11 @@ const _chorMon = (() => {
       }
       _mode='text'; _tick=0;
     },
-    updatePSI(color){ _psiColor=color; },
+    updatePSI(color, seq) {
+      const a = _PSI_SEQ_ANIM[seq];
+      if (a) { _psiColor=a.c1; _psiColor2=a.c2; _psiBlinkSpeed=(a.c1===a.c2)?0:(1/a.speed); }
+      else    { _psiColor=color; _psiColor2=color; _psiBlinkSpeed=0; }
+    },
   };
 })();
 
@@ -3930,12 +3950,11 @@ const choreoEditor = (() => {
       _chorMon.setMode('text');
       if (evChanged) _chorMon.setText(activeEv.display || 'fld_top', activeEv.text || '', activeEv.color);
     } else if (mode === 'psi') {
-      const _PSI_COLOR = {
-        normal:'#00ffea', flash:'#ffffff', alarm:'#ff2244',
-        failure:'#ff8800', redalert:'#ff0000', leia:'#44ff88', march:'#00ffea'
-      };
       _chorMon.setMode('psi');
-      if (evChanged) _chorMon.updatePSI(_PSI_COLOR[activeEv.sequence || 'normal'] || '#00ffea');
+      if (evChanged) {
+        const seq = activeEv.sequence || 'normal';
+        _chorMon.updatePSI(_PSI_SEQ_COLORS[seq] || '#00ffea', seq);
+      }
     } else if (mode === 'holo') {
       // holo projectors don't affect FLD/RLD/PSI monitor — no visual change
     } else if (mode.startsWith('t') && /^\d+$/.test(mode.slice(1))) {
