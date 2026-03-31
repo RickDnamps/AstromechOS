@@ -102,6 +102,24 @@ def teeces_psi():
     return jsonify({'status': 'ok', 'mode': mode})
 
 
+@teeces_bp.post('/psi_seq')
+def teeces_psi_seq():
+    """PSI sequence control. Body: {"target": "both", "sequence": "normal"}
+    target: both | fpsi | rpsi
+    sequence: normal | flash | alarm | failure | redalert | leia | march
+    """
+    body     = request.get_json(silent=True) or {}
+    target   = body.get('target',   'both').lower()
+    sequence = body.get('sequence', 'normal').lower()
+    if reg.teeces:
+        if hasattr(reg.teeces, 'psi_seq'):
+            reg.teeces.psi_seq(target, sequence)
+        else:
+            _TEECES_MAP = {'normal':1,'flash':1,'alarm':3,'redalert':3,'leia':1,'failure':1,'march':1}
+            reg.teeces.psi(_TEECES_MAP.get(sequence, 1))
+    return jsonify({'status': 'ok', 'target': target, 'sequence': sequence})
+
+
 @teeces_bp.get('/animations')
 def teeces_animations():
     """List all known T-code animations."""

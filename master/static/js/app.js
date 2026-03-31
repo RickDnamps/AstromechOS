@@ -875,21 +875,24 @@ const _domeSim = (() => {
       _updateBadge(key);
     },
 
-    /** Set text for a display target: 'fld'=both FLDs, 'rld', 'both'=all. Optional color. */
-    setText(target, text, color) {
+    /** Set text for a display target: fld_top | fld_bottom | fld_both | rld | all */
+    setText(target, text) {
       if (!text) return;
-      if (target === 'fld' || target === 'both') {
+      const t = (target || 'fld_top').toLowerCase();
+      const fldTop = t === 'fld_top' || t === 'fld_both' || t === 'fld' || t === 'both' || t === 'all';
+      const fldBot = t === 'fld_bottom' || t === 'fld_both' || t === 'fld' || t === 'both' || t === 'all';
+      const rldOn  = t === 'rld' || t === 'both' || t === 'all';
+      if (fldTop) {
         _textState['fld-top'].buf = _buildBuf(text, 5, FONT5);
         _textState['fld-top'].scroll = 0; _textState['fld-top'].active = true;
-        if (color) _textState['fld-top'].color = color;
+      }
+      if (fldBot) {
         _textState['fld-bot'].buf = _buildBuf(text, 5, FONT5);
         _textState['fld-bot'].scroll = 0; _textState['fld-bot'].active = true;
-        if (color) _textState['fld-bot'].color = color;
       }
-      if (target === 'rld' || target === 'both') {
+      if (rldOn) {
         _textState['rld'].buf = _buildBuf(text, 4, FONT4);
         _textState['rld'].scroll = 0; _textState['rld'].active = true;
-        if (color) _textState['rld'].color = color;
       }
       _mode = 'text';
       _tick = 0;
@@ -931,14 +934,23 @@ const _domeSim = (() => {
 })();
 
 
-function applyPSICustom(side) {
-  const c1    = el(side === 'front' ? 'psi-f-c1'    : 'psi-r-c1')?.value    || '#00aaff';
-  const c2    = el(side === 'front' ? 'psi-f-c2'    : 'psi-r-c2')?.value    || '#000000';
-  const speed = parseFloat(el(side === 'front' ? 'psi-f-spd' : 'psi-r-spd')?.value || '0.8');
-  _domeSim.setPSICustom(side, c1, c2, speed);
+const _PSI_SEQ_COLORS = {
+  normal:'#00aaff', flash:'#ffffff', alarm:'#ff2244',
+  failure:'#ff8800', redalert:'#ff0000', leia:'#44ff88', march:'#ffee00',
+};
+
+function applyPSI() {
+  const target   = el('psi-target')?.value   || 'both';
+  const sequence = el('psi-sequence')?.value || 'normal';
+  api('/teeces/psi_seq', 'POST', { target, sequence }).then(d => {
+    if (d) toast(`PSI ${target.toUpperCase()} — ${sequence.toUpperCase()}`, 'ok');
+  });
+  const color = _PSI_SEQ_COLORS[sequence] || '#00aaff';
+  _domeSim.updatePSI(color);
 }
 
-function resetPSICustom() {
+function resetPSI() {
+  teecesMode('random');
   _domeSim.resetPSICustom();
 }
 
@@ -1328,12 +1340,11 @@ class TeecesController {
 const teecesController = new TeecesController();
 
 function teecesMode(mode)  { teecesController.setMode(mode); }
-function sendTeecesText()  {
+function sendTeecesText() {
   const text    = el('teeces-text')?.value.trim() || '';
-  const display = el('teeces-display')?.value || 'fld';
-  const color   = el('teeces-text-color')?.value || '#00ffea';
+  const display = el('teeces-display')?.value || 'fld_top';
   teecesController.sendText(text, display);
-  _domeSim.setText(display, text, color);
+  _domeSim.setText(display, text);
 }
 
 const LIGHT_ANIMATIONS = [

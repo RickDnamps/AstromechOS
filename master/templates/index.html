@@ -490,50 +490,41 @@
         <input type="text" id="teeces-text" placeholder="Scrolling text (max 20)…"
                maxlength="20" class="input-text">
         <select id="teeces-display" class="input-select-sm" title="Display target">
-          <option value="fld">FLD</option>
+          <option value="fld_top">FLD TOP</option>
+          <option value="fld_bottom">FLD BOT</option>
+          <option value="fld_both">FLD BOTH</option>
           <option value="rld">RLD</option>
-          <option value="both">BOTH</option>
+          <option value="all">ALL</option>
         </select>
-        <input type="color" id="teeces-text-color" value="#00ffea" title="Text color"
-               class="text-color-picker">
         <button class="btn" onclick="sendTeecesText()">SEND</button>
       </div>
 
-      <!-- PSI custom controls -->
+      <!-- PSI controls -->
       <div class="psi-swatches-label mt">PSI SETTINGS</div>
       <div class="psi-ctrl">
         <div class="psi-ctrl-row">
-          <span class="psi-ctrl-label">FRONT</span>
-          <input type="color" id="psi-f-c1" value="#00aaff" class="psi-color-input"
-                 onchange="applyPSICustom('front')" title="Main color">
-          <span class="psi-ctrl-sep">↔</span>
-          <input type="color" id="psi-f-c2" value="#000000" class="psi-color-input"
-                 onchange="applyPSICustom('front')" title="Blink to (black = off)">
-          <select id="psi-f-spd" class="input-select-sm psi-speed-sel"
-                  onchange="applyPSICustom('front')">
-            <option value="1.5">SLOW</option>
-            <option value="0.8" selected>MED</option>
-            <option value="0.3">FAST</option>
+          <span class="psi-ctrl-label">TARGET</span>
+          <select id="psi-target" class="input-select-sm" style="flex:1">
+            <option value="both">BOTH</option>
+            <option value="fpsi">FPSI (FRONT)</option>
+            <option value="rpsi">RPSI (REAR)</option>
           </select>
-          <button class="btn" onclick="applyPSICustom('front')">SET</button>
         </div>
-        <div class="psi-ctrl-row">
-          <span class="psi-ctrl-label">REAR</span>
-          <input type="color" id="psi-r-c1" value="#00aaff" class="psi-color-input"
-                 onchange="applyPSICustom('rear')" title="Main color">
-          <span class="psi-ctrl-sep">↔</span>
-          <input type="color" id="psi-r-c2" value="#000000" class="psi-color-input"
-                 onchange="applyPSICustom('rear')" title="Blink to (black = off)">
-          <select id="psi-r-spd" class="input-select-sm psi-speed-sel"
-                  onchange="applyPSICustom('rear')">
-            <option value="1.5">SLOW</option>
-            <option value="0.8" selected>MED</option>
-            <option value="0.3">FAST</option>
+        <div class="psi-ctrl-row" style="margin-top:6px">
+          <span class="psi-ctrl-label">SEQUENCE</span>
+          <select id="psi-sequence" class="input-select-sm" style="flex:1">
+            <option value="normal">NORMAL</option>
+            <option value="flash">FLASH</option>
+            <option value="alarm">ALARM</option>
+            <option value="failure">FAILURE</option>
+            <option value="redalert">RED ALERT</option>
+            <option value="leia">LEIA</option>
+            <option value="march">MARCH</option>
           </select>
-          <button class="btn" onclick="applyPSICustom('rear')">SET</button>
         </div>
+        <button class="btn" style="margin-top:8px;width:100%" onclick="applyPSI()">SET PSI</button>
         <button class="btn btn-dark" style="margin-top:4px;font-size:9px;width:100%"
-                onclick="resetPSICustom()">↺ RESET TO ANIMATION</button>
+                onclick="resetPSI()">↺ RESET TO ANIMATION</button>
       </div>
     </section>
 
