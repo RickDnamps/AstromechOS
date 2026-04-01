@@ -29,33 +29,50 @@ All scheduling intelligence lives on the **Master** (`ChoreoPlayer`). The **Slav
 
 | File | Change |
 |---|---|
-| `master/config/main.cfg` | Add `audio_channels = 6` |
-| `slave/drivers/audio_driver.py` | Dynamic slot pool (N slots), register N callbacks |
-| `slave/main.py` | Register callbacks `S`, `S2` … `Sn` dynamically |
+| `master/config/local.cfg` | Add `audio_channels = 6` under `[audio]` |
+| `slave/config/slave.cfg` | New file — mirrors `audio_channels`, synced via SCP on save + update.sh |
+| `slave/drivers/audio_driver.py` | Dynamic slot pool (N slots), `make_channel_handler()` |
+| `slave/main.py` | Read `audio_channels` from `slave.cfg`, register N UART callbacks dynamically |
 | `master/choreo_player.py` | Slot scheduler + priority eviction |
-| `master/api/status_bp.py` | Expose `audio_channels` in `GET /status` |
-| `master/static/js/app.js` | Priority picker in inspector + timeline validation + compatibility banner |
+| `master/api/settings_bp.py` | Add `audio.channels` to `GET /settings` + `POST /settings/config` allowed set + SCP + restart |
+| `master/static/js/app.js` | Audio channels field in Config tab, priority picker in inspector, timeline validation, compatibility banner |
 | `.chor` schema | Add `"priority"` on audio events, `"audio_channels_required"` in meta |
 
 ---
 
 ## Configuration
 
-Two config files — one per Pi (update.sh syncs `slave/` but not `master/`):
+### Storage
 
-`master/config/main.cfg` — read by `ChoreoPlayer` and the Master Flask app:
+`audio_channels` is stored in `master/config/local.cfg` (already read by `config_loader`, gitignored — survives updates):
 ```ini
 [audio]
 audio_channels = 6
 ```
 
-`slave/config/slave.cfg` *(new file, synced via update.sh rsync slave/)* — read by `slave/main.py`:
+A mirror is kept at `slave/config/slave.cfg` *(new file, synced via update.sh rsync slave/)* — read by `slave/main.py` at boot:
 ```ini
 [audio]
 audio_channels = 6
 ```
 
-Both default to `6` if the key is absent. The user sets both to the same value. Documented in CLAUDE.md.
+Both default to `6` if the key is absent. The user **never edits these files manually** — the web UI manages both.
+
+### Web UI (Config tab)
+
+`GET /settings` returns:
+```json
+"audio": { "channels": 6 }
+```
+
+`POST /settings/config` accepts `"audio.channels"` in its existing `allowed` set. When called:
+1. Writes `audio_channels` to `local.cfg` (Master)
+2. Writes `slave/config/slave.cfg` on the Master filesystem
+3. SCPs `slave/config/slave.cfg` to the Slave (`artoo@r2-slave.local`)
+4. Restarts both services (`systemctl restart r2d2-master r2d2-slave`)
+5. Returns `{"status": "ok", "message": "Audio channels updated — services restarting"}`
+
+A restart is **always required** when changing channel count (UART callbacks are registered at boot). The UI shows a "Restarting…" toast matching the existing pattern.
 
 ---
 
@@ -216,14 +233,16 @@ Banner is yellow, dismissible, reappears on next load.
 
 ---
 
-## API Change
+## API Changes
 
-`GET /status` adds:
+`GET /settings` adds:
 ```json
-"audio_channels": 6
+"audio": { "channels": 6 }
 ```
 
-No new endpoint required.
+`POST /settings/config` — `audio.channels` added to `allowed` set. Triggers SCP + service restart.
+
+No new endpoints required.
 
 ---
 
