@@ -30,13 +30,17 @@
 """
 Slave audio driver — N-channel polyphony (configurable, default 6).
 Plays MP3 sounds via mpg123 (native 3.5mm jack Pi 4B).
-N independent channels run simultaneously.
+N independent channels run simultaneously with independent per-channel volume.
 
 UART commands (n = channel index, n=0 → 'S:', n=1 → 'S2:', n=2 → 'S3:', etc.):
-  S:Happy001          → channel 0: play specific file
-  S:RANDOM:happy      → channel 0: play random from category
+  S:Happy001          → channel 0: play at 100%
+  S:Happy001:75       → channel 0: play at 75%
+  S:RANDOM:happy      → channel 0: play random from category at 100%
+  S:RANDOM:happy:30   → channel 0: play random at 30%
   S:STOP              → channel 0: stop
-  S2:Happy001         → channel 1 (and so on for S3:, S4: …)
+  S2:Happy001:50      → channel 1 at 50% (and so on for S3:, S4: …)
+
+Volume is per-channel via mpg123 -f flag (0–32768). No global ALSA change.
 
 Prerequisite: sudo apt install -y mpg123
 """
@@ -98,8 +102,8 @@ class AudioDriver(BaseDriver):
     # Public API
     # ------------------------------------------------------------------
 
-    def play(self, filename: str, channel: int = 0) -> bool:
-        """Plays an MP3 file by name (without extension) on the given channel."""
+    def play(self, filename: str, channel: int = 0, volume: int = 100) -> bool:
+        """Plays an MP3 file by name (without extension) on the given channel at given volume (0-100)."""
         if not filename or any(c in filename for c in ('/', '\\', '..')):
             log.warning(f"Audio filename rejected (path traversal): {filename!r}")
             return False
@@ -110,17 +114,17 @@ class AudioDriver(BaseDriver):
         if not os.path.isfile(path):
             log.warning(f"Sound not found: {path}")
             return False
-        self._launch(path, channel)
+        self._launch(path, channel, volume)
         return True
 
-    def play_random(self, category: str, channel: int = 0) -> bool:
-        """Plays a random sound from the given category on the given channel."""
+    def play_random(self, category: str, channel: int = 0, volume: int = 100) -> bool:
+        """Plays a random sound from the given category on the given channel at given volume (0-100)."""
         sounds = self._index.get(category.lower())
         if not sounds:
             log.warning(f"Unknown audio category: {category!r}")
             return False
         filename = random.choice(sounds)
-        return self.play(filename, channel)
+        return self.play(filename, channel, volume)
 
     def stop(self, channel: int | None = None) -> None:
         """Stops channel N, or all channels (channel=None)."""
@@ -182,28 +186,40 @@ class AudioDriver(BaseDriver):
             self.stop(channel)
             return
         if value.startswith('RANDOM:'):
-            self.play_random(value[7:], channel)
+            # RANDOM:category  or  RANDOM:category:volume
+            rest = value[7:]
+            parts = rest.rsplit(':', 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                self.play_random(parts[0], channel, int(parts[1]))
+            else:
+                self.play_random(rest, channel)
         else:
-            self.play(value, channel)
+            # filename  or  filename:volume
+            parts = value.rsplit(':', 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                self.play(parts[0], channel, int(parts[1]))
+            else:
+                self.play(value, channel)
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
-    def _launch(self, path: str, channel: int = 0) -> None:
-        """Launches mpg123 on the given channel, stopping whatever was on that channel."""
+    def _launch(self, path: str, channel: int = 0, volume: int = 100) -> None:
+        """Launches mpg123 on the given channel at the given volume (0-100), independent of ALSA."""
+        scale = int(max(0, min(100, volume)) / 100 * 32768)
         with self._lock:
             proc = self._procs[channel] if 0 <= channel < len(self._procs) else None
             if proc and proc.poll() is None:
                 proc.terminate()
             try:
                 new_proc = subprocess.Popen(
-                    ['mpg123', '-q', path],
+                    ['mpg123', '-q', '-f', str(scale), path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
                 self._procs[channel] = new_proc
-                log.info(f"Audio ch{channel}: {os.path.basename(path)}")
+                log.info(f"Audio ch{channel} vol{volume}%: {os.path.basename(path)}")
             except FileNotFoundError:
                 log.error("mpg123 not found — sudo apt install -y mpg123")
             except Exception as e:
