@@ -55,6 +55,13 @@ class ChoreoPlayer:
             if cfg is not None else 0.025
         )
 
+        # Audio slot scheduler
+        self._audio_channels: int = (
+            cfg.getint('audio', 'audio_channels', fallback=6) if cfg is not None else 6
+        )
+        self._audio_slots: list[dict | None]             = [None] * self._audio_channels
+        self._audio_timers: list[threading.Timer | None] = [None] * self._audio_channels
+
         self._audio      = audio
         self._teeces     = teeces
         self._dome_motor = dome_motor
@@ -118,10 +125,21 @@ class ChoreoPlayer:
         if self.is_playing():
             log.warning("ChoreoPlayer: already playing, stop first")
             return False
+
+        meta = chor.get('meta', {})
+        required = meta.get('audio_channels_required', 0)
+        if required > self._audio_channels:
+            log.warning(
+                "Choreo '%s' requires %d audio channels but system has %d — some sounds may be dropped.",
+                meta.get('name', '?'), required, self._audio_channels,
+            )
+
         self._drive_fail_count = 0
         self._abort_reason     = None
         self._last_telem       = None
         self._last_telem_check = 0.0
+        self._audio_slots  = [None] * self._audio_channels
+        self._audio_timers = [None] * self._audio_channels
         self._stop_flag.clear()
         self._thread = threading.Thread(
             target=self._run, args=(chor,),
@@ -264,6 +282,44 @@ class ChoreoPlayer:
                 'telem':        self._last_telem,
             })
 
+    def _release_slot(self, i: int) -> None:
+        """Cancel the release timer and mark slot i as free."""
+        if 0 <= i < len(self._audio_timers) and self._audio_timers[i]:
+            self._audio_timers[i].cancel()
+            self._audio_timers[i] = None
+        if 0 <= i < len(self._audio_slots):
+            self._audio_slots[i] = None
+
+    def _assign_audio_slot(self, priority: str) -> int | None:
+        """
+        Return a free slot index, evicting the best candidate if all slots are busy.
+        Eviction order: low (oldest first) → normal (oldest first) → never high.
+        Returns None if all slots are high-priority (new sound is dropped).
+        """
+        # 1. Free slot
+        for i, s in enumerate(self._audio_slots):
+            if s is None:
+                return i
+        # 2. Evict by priority
+        for evict_pri in ('low', 'normal'):
+            candidates = [
+                (i, s) for i, s in enumerate(self._audio_slots)
+                if s is not None and s['priority'] == evict_pri
+            ]
+            if candidates:
+                i, _ = min(candidates, key=lambda x: x[1]['started_at'])
+                cmd = 'S' if i == 0 else f'S{i + 1}'
+                if self._audio:
+                    self._audio.send(cmd, 'STOP')
+                self._release_slot(i)
+                return i
+        # 3. All high — drop
+        log.warning(
+            "ChoreoPlayer: all %d audio slots are High-priority — sound dropped",
+            self._audio_channels,
+        )
+        return None
+
     def _dispatch(self, ev: dict) -> None:
         try:
             track = ev['track']
@@ -271,12 +327,34 @@ class ChoreoPlayer:
             if track == 'audio':
                 if not self._audio:
                     return
-                ch  = ev.get('ch', 0)
-                cmd = 'S' if ch == 0 else 'S2'
                 if ev['action'] == 'play':
+                    priority = ev.get('priority', 'normal').lower()
+                    slot = self._assign_audio_slot(priority)
+                    if slot is None:
+                        return  # all slots High — sound dropped
+                    cmd = 'S' if slot == 0 else f'S{slot + 1}'
                     self._audio.send(cmd, ev.get('file', ''))
+                    duration = ev.get('duration')
+                    self._audio_slots[slot] = {
+                        'sound':      ev.get('file', ''),
+                        'started_at': time.monotonic(),
+                        'priority':   priority,
+                        'duration':   duration,
+                    }
+                    if duration:
+                        t = threading.Timer(float(duration), self._release_slot, args=(slot,))
+                        t.daemon = True
+                        self._audio_timers[slot] = t
+                        t.start()
                 elif ev['action'] == 'stop':
-                    self._audio.send(cmd, 'STOP')
+                    file_to_stop = ev.get('file')
+                    for i, s in enumerate(self._audio_slots):
+                        if s is None:
+                            continue
+                        if file_to_stop is None or s['sound'] == file_to_stop:
+                            cmd = 'S' if i == 0 else f'S{i + 1}'
+                            self._audio.send(cmd, 'STOP')
+                            self._release_slot(i)
 
             elif track == 'dome':
                 if not self._dome_motor:
@@ -492,8 +570,11 @@ class ChoreoPlayer:
     def _safe_stop_all(self) -> None:
         # NOTE: self._audio is UARTController — use send(), NEVER .stop() (that closes serial)
         for fn in [
-            lambda: self._audio.send('S', 'STOP') if self._audio else None,
-            lambda: self._audio.send('S2', 'STOP') if self._audio else None,
+            *[
+                (lambda cmd=('S' if i == 0 else f'S{i+1}'): self._audio.send(cmd, 'STOP') if self._audio else None)
+                for i in range(self._audio_channels)
+            ],
+            lambda: [self._release_slot(i) for i in range(self._audio_channels)],
             lambda: self._teeces.all_off() if self._teeces else None,
             lambda: self._dome_motor.set_speed(0.0) if self._dome_motor else None,
             lambda: self._vesc.drive(0.0, 0.0) if self._vesc else None,
