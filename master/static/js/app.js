@@ -3000,6 +3000,7 @@ const choreoEditor = (() => {
   let _lanesWired  = false;
   let _lastTelem   = null;
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
+  let _audioOverflowIdxs = new Set();  // indices of audio events that will be dropped
 
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
@@ -3174,6 +3175,7 @@ const choreoEditor = (() => {
         _dirty = true;
         _renderTrack(track);
         _refreshLayout();
+        if (track === 'audio') _validateAudioOverflow();
         const idx = _chor.tracks[track].indexOf(newItem);
         if (track !== 'dome') _selectBlock(track, idx);
         toast(`${track} block → ${t.toFixed(2)}s`, 'ok');
@@ -3315,6 +3317,10 @@ const choreoEditor = (() => {
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
+    if (track === 'audio' && _audioOverflowIdxs.has(idx)) {
+      block.style.outline = '1px solid #ff4444';
+      block.title = 'May be dropped — all audio slots full at this timestamp';
+    }
     block.addEventListener('mouseenter', e => _showTooltip(e, track, item));
     block.addEventListener('mousemove',  e => _positionTooltip(e));
     block.addEventListener('mouseleave', ()  => _hideTooltip());
@@ -3446,6 +3452,7 @@ const choreoEditor = (() => {
     if (ew) ew.style.display = 'none';
     _renderTrack(track);
     _refreshLayout();
+    if (track === 'audio') _validateAudioOverflow();
   }
 
   function _renderDomeLane(keyframes) {
@@ -3775,6 +3782,11 @@ const choreoEditor = (() => {
       }
       html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
       html += selectRow('CHANNEL', 'ch', { 0: 'CH 0 — Primary (S:)', 1: 'CH 1 — Secondary (S2:)' });
+      html += selectRow('PRIORITY', 'priority', {
+        'high':   '🔒 HIGH — never evicted',
+        'normal': 'NORMAL (default)',
+        'low':    '▽ LOW — evicted first',
+      });
 
     } else if (track === 'lights') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
@@ -3840,6 +3852,7 @@ const choreoEditor = (() => {
 
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
+    if (track === 'audio') _validateAudioOverflow();
     if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
     const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
@@ -3855,6 +3868,57 @@ const choreoEditor = (() => {
     });
     audioEl.preload = 'metadata';
     audioEl.load();
+  }
+
+  function _validateAudioOverflow() {
+    if (!_chor) return;
+    const events = (_chor.tracks.audio || []).filter(e => e.action === 'play' && e.duration > 0);
+
+    // Collect all time boundary points (start + end of every event)
+    const timepoints = new Set();
+    events.forEach(e => {
+      timepoints.add(e.t);
+      timepoints.add(e.t + (e.duration || 0));
+    });
+
+    // Peak simultaneous events (all priorities)
+    let peak = 0;
+    timepoints.forEach(tp => {
+      const count = events.filter(e => e.t <= tp && (e.t + (e.duration || 0)) > tp).length;
+      if (count > peak) peak = count;
+    });
+    if (_chor.meta) _chor.meta.audio_channels_required = peak || 0;
+
+    // Flag overflow: events where more than N overlap at any point
+    const overflow = new Set();
+    timepoints.forEach(tp => {
+      const active = events.filter(e => e.t <= tp && (e.t + (e.duration || 0)) > tp);
+      if (active.length > _audioChannelsConfig) {
+        // Sort by start time — events added later (higher t) are the ones dropped
+        const sorted = [...active].sort((a, b) => a.t - b.t);
+        sorted.slice(_audioChannelsConfig).forEach(e => {
+          const idx = (_chor.tracks.audio || []).indexOf(e);
+          if (idx >= 0) overflow.add(idx);
+        });
+      }
+    });
+    _audioOverflowIdxs = overflow;
+
+    // Update banner
+    const banner = document.getElementById('chor-audio-banner');
+    if (banner) {
+      if (peak > _audioChannelsConfig) {
+        banner.textContent =
+          `⚠  This choreo uses up to ${peak} simultaneous audio tracks — your system is configured for ${_audioChannelsConfig}. Some sounds may be dropped.`;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    // Trigger redraw so overflow badges appear on blocks
+    _renderTrack('audio');
+    _refreshLayout();
   }
 
   function _drawEasingPreview(name) {
@@ -4123,6 +4187,7 @@ const choreoEditor = (() => {
       });
       _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
       _renderAllTracks();
+      _validateAudioOverflow();
       toast(`Loaded: ${name}`, 'ok');
     },
 
@@ -4177,6 +4242,7 @@ const choreoEditor = (() => {
 
     async save() {
       if (!_chor) return;
+      _validateAudioOverflow();  // ensure meta.audio_channels_required is up to date
       const result = await api('/choreo/save', 'POST', { chor: _chor });
       if (result) { _dirty = false; toast(`Saved: ${_chor.meta.name}`, 'ok'); }
     },
