@@ -2079,6 +2079,17 @@ select.input-text option { background: #0a1525; }
 /* ================================================================
    SETTINGS / CONFIG TAB
 ================================================================ */
+#tab-config.active {
+  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,170,255,.25) transparent;
+}
+#tab-config::-webkit-scrollbar { width: 4px; }
+#tab-config::-webkit-scrollbar-track { background: transparent; }
+#tab-config::-webkit-scrollbar-thumb { background: rgba(0,170,255,.25); border-radius: 2px; }
+#tab-config::-webkit-scrollbar-thumb:hover { background: rgba(0,170,255,.5); }
+
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2086,20 +2097,6 @@ select.input-text option { background: #0a1525; }
   padding: 16px;
   max-width: 1200px;
   margin: 0 auto;
-  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0,170,255,.25) transparent;
-  align-content: start;
-}
-.settings-grid::-webkit-scrollbar { width: 4px; }
-.settings-grid::-webkit-scrollbar-track { background: transparent; }
-.settings-grid::-webkit-scrollbar-thumb {
-  background: rgba(0,170,255,.25);
-  border-radius: 2px;
-}
-.settings-grid::-webkit-scrollbar-thumb:hover {
-  background: rgba(0,170,255,.5);
 }
 
 .settings-card { }
