@@ -41,6 +41,7 @@ Boot sequence:
 7. If all OK → DISP:READY (green screen 3s then READY)
 """
 
+import configparser
 import logging
 import signal
 import subprocess
@@ -63,6 +64,17 @@ from slave.drivers.audio_driver   import AudioDriver
 # from slave.drivers.vesc_driver        import VescDriver   # enables M: VCFG: VINV: CANSCAN: callbacks
 from slave.drivers.body_servo_driver  import BodyServoDriver
 # from slave.drivers.dome_motor_driver  import DomeMotorDriver  # to create Phase 2
+
+_SLAVE_CFG = '/home/artoo/r2d2/slave/config/slave.cfg'
+
+def _read_audio_channels() -> int:
+    """Reads audio_channels from slave.cfg. Defaults to 6 if absent."""
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(_SLAVE_CFG)
+    except Exception:
+        pass
+    return cfg.getint('audio', 'audio_channels', fallback=6)
 
 UART_PORT = "/dev/ttyAMA0"
 UART_BAUD = 115200
@@ -160,11 +172,14 @@ def main() -> None:
     # Audio — native 3.5mm jack Pi 4B
     # ------------------------------------------------------------------
     display.boot_item('AUDIO')
-    audio = AudioDriver()
+    _audio_channels = _read_audio_channels()
+    audio = AudioDriver(channels=_audio_channels)
     if audio.setup():
-        uart.register_callback('S',   audio.handle_uart)
-        uart.register_callback('S2',  audio.handle_uart2)
+        for _i in range(_audio_channels):
+            _msg_type = 'S' if _i == 0 else f'S{_i + 1}'
+            uart.register_callback(_msg_type, audio.make_channel_handler(_i))
         uart.register_callback('VOL', audio.handle_volume)
+        log.info("Audio: %d channels registered (S: … S%d:)", _audio_channels, _audio_channels)
         display.boot_ok('AUDIO')
     else:
         log.warning("AudioDriver unavailable — audio disabled")
