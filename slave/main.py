@@ -72,8 +72,8 @@ def _read_audio_channels() -> int:
     cfg = configparser.ConfigParser()
     try:
         cfg.read(_SLAVE_CFG)
-    except Exception:
-        pass
+    except OSError as exc:
+        logging.getLogger(__name__).warning("Cannot read slave.cfg: %s — using defaults", exc)
     return cfg.getint('audio', 'audio_channels', fallback=6)
 
 UART_PORT = "/dev/ttyAMA0"
@@ -179,7 +179,9 @@ def main() -> None:
             _msg_type = 'S' if _i == 0 else f'S{_i + 1}'
             uart.register_callback(_msg_type, audio.make_channel_handler(_i))
         uart.register_callback('VOL', audio.handle_volume)
-        log.info("Audio: %d channels registered (S: … S%d:)", _audio_channels, _audio_channels)
+        last = 'S' if _audio_channels == 1 else f'S{_audio_channels}'
+        log.info("Audio: %d channels registered (%s)", _audio_channels,
+                 'S:' if _audio_channels == 1 else f'S: … {last}:')
         display.boot_ok('AUDIO')
     else:
         log.warning("AudioDriver unavailable — audio disabled")
