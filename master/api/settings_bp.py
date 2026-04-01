@@ -136,6 +136,53 @@ def _reload_lights_driver(backend: str) -> dict:
     return {'ok': True}
 
 
+def _sync_audio_channels(channels: int) -> None:
+    """
+    Write audio_channels to slave/config/slave.cfg locally,
+    SCP it to the Slave, then restart both services (delayed to let
+    the HTTP response complete first).
+    """
+    slave_cfg_path = '/home/artoo/r2d2/slave/config/slave.cfg'
+    slave_host     = 'artoo@r2-slave.local'
+
+    # Write slave.cfg on Master filesystem
+    slave_cfg = configparser.ConfigParser()
+    if os.path.exists(slave_cfg_path):
+        slave_cfg.read(slave_cfg_path)
+    if not slave_cfg.has_section('audio'):
+        slave_cfg.add_section('audio')
+    slave_cfg.set('audio', 'audio_channels', str(channels))
+    try:
+        os.makedirs(os.path.dirname(slave_cfg_path), exist_ok=True)
+        with open(slave_cfg_path, 'w') as f:
+            slave_cfg.write(f)
+        log.info("slave.cfg written: audio_channels=%d", channels)
+    except Exception as e:
+        log.warning("Failed to write slave.cfg: %s", e)
+
+    # SCP to Slave
+    try:
+        subprocess.run(
+            ['scp', slave_cfg_path, f'{slave_host}:{slave_cfg_path}'],
+            timeout=8, check=False, capture_output=True,
+        )
+        log.info("slave.cfg synced to Slave")
+    except Exception as e:
+        log.warning("Failed to SCP slave.cfg: %s", e)
+
+    # Delayed restart (2s) — lets the HTTP response reach the client first
+    def _delayed_restart():
+        import time as _time
+        _time.sleep(2)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-slave'], check=False)
+        _time.sleep(1)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-master'], check=False)
+
+    import threading as _threading
+    _threading.Thread(target=_delayed_restart, daemon=True).start()
+    log.info("Services scheduled to restart in 2s (audio_channels=%d)", channels)
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -180,6 +227,9 @@ def get_settings():
         'lights': {
             'backend':   cfg.get('lights', 'backend', fallback='teeces'),
             'available': ['teeces', 'astropixels'],
+        },
+        'audio': {
+            'channels': cfg.getint('audio', 'audio_channels', fallback=6),
         },
     })
 
@@ -302,6 +352,7 @@ def set_config():
         'github.branch', 'github.auto_pull_on_boot',
         'slave.host', 'deploy.button_pin',
         'lights.backend',
+        'audio.channels',
     }
 
     updated = []
@@ -310,6 +361,13 @@ def set_config():
             section, key = dotkey.split('.', 1)
             _write_key(section, key, str(value))
             updated.append(dotkey)
+
+    if 'audio.channels' in updated:
+        try:
+            channels = max(1, min(12, int(data.get('audio.channels', 6))))
+            _sync_audio_channels(channels)
+        except (ValueError, TypeError) as e:
+            log.warning("Invalid audio.channels value: %s", e)
 
     return jsonify({'status': 'ok', 'updated': updated})
 
