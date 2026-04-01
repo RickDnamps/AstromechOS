@@ -2695,6 +2695,8 @@ function updateClock() {
 // Settings
 // ================================================================
 
+let _audioChannelsConfig = 6;  // loaded from GET /settings, used by CHOREO validation
+
 async function loadSettings() {
   const data = await api('/settings');
   if (!data) return;
@@ -2742,6 +2744,12 @@ async function loadSettings() {
     const sel = el('lights-backend');
     if (sel) sel.value = data.lights.backend || 'teeces';
   }
+
+  if (data.audio) {
+    const inp = el('audio-channels');
+    if (inp) inp.value = data.audio.channels ?? 6;
+    _audioChannelsConfig = data.audio.channels ?? 6;
+  }
 }
 
 async function saveLightsBackend() {
@@ -2756,6 +2764,25 @@ async function saveLightsBackend() {
   } else {
     toast(data?.error || 'Hot-reload failed', 'error');
     if (status) { status.textContent = data?.error || 'Error'; status.className = 'settings-status error'; }
+  }
+}
+
+async function saveAudioChannels() {
+  const channels = parseInt(el('audio-channels')?.value) || 6;
+  if (channels < 1 || channels > 12) { toast('Channels must be between 1 and 12', 'error'); return; }
+  const status = el('audio-channels-status');
+  if (status) { status.textContent = 'Applying…'; status.className = 'settings-status'; }
+  const data = await api('/settings/config', 'POST', { 'audio.channels': channels });
+  if (data?.status === 'ok') {
+    _audioChannelsConfig = channels;
+    toast(`Audio channels: ${channels} — services restarting`, 'ok');
+    if (status) {
+      status.textContent = `Set to ${channels} — reconnecting in ~5s…`;
+      status.className = 'settings-status ok';
+    }
+  } else {
+    toast('Failed to update audio channels', 'error');
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
 }
 

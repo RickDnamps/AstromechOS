@@ -1157,6 +1157,19 @@
       <button class="btn" onclick="saveLightsBackend()">APPLY (hot-reload)</button>
     </section>
 
+    <!-- Audio Channels -->
+    <section class="card settings-card">
+      <h2 class="card-title">AUDIO CHANNELS</h2>
+      <p class="settings-note">Number of simultaneous sounds R2-D2 can play (default: 6, max: 12).<br>Applies to CHOREO timeline. Requires service restart.</p>
+      <div class="form-group">
+        <label>Channels</label>
+        <input type="number" id="audio-channels" class="input-text"
+               min="1" max="12" value="6" style="width:80px">
+      </div>
+      <button class="btn btn-warn" onclick="saveAudioChannels()">APPLY + RESTART SERVICES</button>
+      <div class="settings-status" id="audio-channels-status"></div>
+    </section>
+
     <!-- GitHub / Deploy -->
     <section class="card settings-card">
       <h2 class="card-title">GITHUB / DEPLOY</h2>
