@@ -333,6 +333,9 @@ class ChoreoPlayer:
                     if slot is None:
                         return  # all slots High — sound dropped
                     cmd = 'S' if slot == 0 else f'S{slot + 1}'
+                    volume = ev.get('volume')
+                    if volume is not None:
+                        self._audio.send('VOL', str(int(volume)))
                     self._audio.send(cmd, ev.get('file', ''))
                     duration = ev.get('duration')
                     self._audio_slots[slot] = {

@@ -3338,7 +3338,7 @@ const choreoEditor = (() => {
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const sid   = item.servo || '?';
       const label = _servoSettings[sid]?.label || sid;
-      return `${label} ${item.action || ''}`;
+      return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
