@@ -97,12 +97,16 @@ class BodyServoDriver:
     def open(self, name: str, angle_deg: float = None, speed: int = None) -> bool:
         if angle_deg is None:
             angle_deg = _calibrated_angle(name, 'open')
-        return self._send(name, angle_deg)
+        if speed is None:
+            speed = 10
+        return self._send(name, angle_deg, speed)
 
     def close(self, name: str, angle_deg: float = None, speed: int = None) -> bool:
         if angle_deg is None:
             angle_deg = _calibrated_angle(name, 'close')
-        return self._send(name, angle_deg)
+        if speed is None:
+            speed = 10
+        return self._send(name, angle_deg, speed)
 
     def move(self, name: str, position: float,
              angle_open: float = DEFAULT_OPEN_DEG,
@@ -127,12 +131,12 @@ class BodyServoDriver:
     # Internal
     # ------------------------------------------------------------------
 
-    def _send(self, name: str, angle_deg: float) -> bool:
+    def _send(self, name: str, angle_deg: float, speed: int = 10) -> bool:
         if not self._ready:
             log.warning("BodyServoDriver not ready — command ignored (%r)", name)
             return False
         if name not in KNOWN_SERVOS:
             log.warning("Unknown servo: %r", name)
-        ok = self._uart.send('SRV', f'{name},{angle_deg:.1f}')
-        log.debug("Servo %s → %.1f°", name, angle_deg)
+        ok = self._uart.send('SRV', f'{name},{angle_deg:.1f},{speed}')
+        log.debug("Servo %s → %.1f° speed=%d", name, angle_deg, speed)
         return ok

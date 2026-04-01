@@ -1540,7 +1540,7 @@ class ServoPanel {
     if (!data) { toast('Network error', 'error'); return; }
     _servoCfg = data;
     this.updateInputs();
-    toast('Saved', 'ok');
+    toast('Config saved', 'ok');
   }
 
   _setFill(name, pct) {

@@ -263,10 +263,11 @@ def body_open_all():
     cfg = _read_panels_cfg()
     for name in BODY_SERVOS:
         angle = _panel_angle(name, 'open', cfg)
+        speed = _panel_speed(name, cfg)
         if reg.servo:
-            reg.servo.open(name, angle)
+            reg.servo.open(name, angle, speed)
         elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle}')
+            reg.uart.send('SRV', f'{name},{angle},{speed}')
     return jsonify({'status': 'ok'})
 
 
@@ -275,10 +276,11 @@ def body_close_all():
     cfg = _read_panels_cfg()
     for name in BODY_SERVOS:
         angle = _panel_angle(name, 'close', cfg)
+        speed = _panel_speed(name, cfg)
         if reg.servo:
-            reg.servo.close(name, angle)
+            reg.servo.close(name, angle, speed)
         elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle}')
+            reg.uart.send('SRV', f'{name},{angle},{speed}')
     return jsonify({'status': 'ok'})
 
 
@@ -348,7 +350,7 @@ def dome_open_all():
         return jsonify({'status': 'ok'})
     cfg = _read_panels_cfg()
     for name in DOME_SERVOS:
-        reg.dome_servo.open(name, _panel_angle(name, 'open', cfg))
+        reg.dome_servo.open(name, _panel_angle(name, 'open', cfg), _panel_speed(name, cfg))
     return jsonify({'status': 'ok'})
 
 
@@ -358,7 +360,7 @@ def dome_close_all():
         return jsonify({'status': 'ok'})
     cfg = _read_panels_cfg()
     for name in DOME_SERVOS:
-        reg.dome_servo.close(name, _panel_angle(name, 'close', cfg))
+        reg.dome_servo.close(name, _panel_angle(name, 'close', cfg), _panel_speed(name, cfg))
     return jsonify({'status': 'ok'})
 
 
@@ -383,13 +385,14 @@ def servo_open_all():
     cfg = _read_panels_cfg()
     for name in BODY_SERVOS:
         angle = _panel_angle(name, 'open', cfg)
+        speed = _panel_speed(name, cfg)
         if reg.servo:
-            reg.servo.open(name, angle)
+            reg.servo.open(name, angle, speed)
         elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle}')
+            reg.uart.send('SRV', f'{name},{angle},{speed}')
     if reg.dome_servo:
         for name in DOME_SERVOS:
-            reg.dome_servo.open(name, _panel_angle(name, 'open', cfg))
+            reg.dome_servo.open(name, _panel_angle(name, 'open', cfg), _panel_speed(name, cfg))
     return jsonify({'status': 'ok'})
 
 
@@ -398,13 +401,14 @@ def servo_close_all():
     cfg = _read_panels_cfg()
     for name in BODY_SERVOS:
         angle = _panel_angle(name, 'close', cfg)
+        speed = _panel_speed(name, cfg)
         if reg.servo:
-            reg.servo.close(name, angle)
+            reg.servo.close(name, angle, speed)
         elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle}')
+            reg.uart.send('SRV', f'{name},{angle},{speed}')
     if reg.dome_servo:
         for name in DOME_SERVOS:
-            reg.dome_servo.close(name, _panel_angle(name, 'close', cfg))
+            reg.dome_servo.close(name, _panel_angle(name, 'close', cfg), _panel_speed(name, cfg))
     return jsonify({'status': 'ok'})
 
 

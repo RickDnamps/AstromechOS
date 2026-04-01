@@ -748,7 +748,7 @@
       <div class="row mt">
         <button class="btn btn-active" onclick="api('/servo/dome/open_all','POST').then(()=>toast('Dome panels open','ok'))">OPEN ALL</button>
         <button class="btn btn-dark" onclick="api('/servo/dome/close_all','POST').then(()=>toast('Dome panels closed','ok'))">CLOSE ALL</button>
-        <button class="btn" onclick="domeServoPanel.saveAngles()">SAVE ANGLES</button>
+        <button class="btn" onclick="domeServoPanel.saveAngles()">SAVE CONFIG</button>
       </div>
     </section>
 
@@ -762,7 +762,7 @@
       <div class="row mt">
         <button class="btn btn-active" onclick="api('/servo/body/open_all','POST').then(()=>toast('Body panels open','ok'))">OPEN ALL</button>
         <button class="btn btn-dark" onclick="api('/servo/body/close_all','POST').then(()=>toast('Body panels closed','ok'))">CLOSE ALL</button>
-        <button class="btn" onclick="bodyServoPanel.saveAngles()">SAVE ANGLES</button>
+        <button class="btn" onclick="bodyServoPanel.saveAngles()">SAVE CONFIG</button>
       </div>
     </section>
 

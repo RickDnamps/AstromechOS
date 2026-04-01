@@ -198,10 +198,11 @@ class BodyServoDriver(BaseDriver):
         for t in threads: t.join()
 
     def handle_uart(self, value: str) -> None:
-        """Callback UART — SRV:NAME,ANGLE_DEG"""
+        """Callback UART — SRV:NAME,ANGLE_DEG[,SPEED]"""
         try:
             parts = value.split(',')
-            self._move(parts[0], float(parts[1]))
+            speed = int(parts[2]) if len(parts) >= 3 else 10
+            self._move_ramp(parts[0], float(parts[1]), speed)
         except (ValueError, IndexError) as e:
             log.error("Invalid SRV message %r: %s", value, e)
 
