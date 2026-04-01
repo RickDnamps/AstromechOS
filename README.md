@@ -12,7 +12,7 @@
 [![Sequences](https://img.shields.io/badge/Sequences-40%20behavioral-blue)](master/sequences/)
 [![API](https://img.shields.io/badge/API-60%2B%20endpoints-orange)](master/api/)
 
-*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Visual sequence & light editors · Kids Lock · Child Lock*
+*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Choreography timeline editor · Visual sequence editor · Kids Lock · Child Lock*
 
 </div>
 
@@ -93,7 +93,7 @@ All motion blocked — R2 on display safely, lights & sounds still work
 <td align="center" width="50%">
 
 ### 💡 Lights
-Teeces32 or AstroPixels+ · 22 animations · FLD/RLD/BOTH text · PSI picker · Light sequences
+Teeces32 or AstroPixels+ · 22 animations · FLD/RLD/BOTH text · PSI sequences
 
 ![Lights Interface](Screenshots/Light.png)
 
@@ -110,26 +110,18 @@ Drag-and-drop step builder · Command palette · Per-command builders · Test wi
 </td>
 <td align="center" width="50%">
 
-### 🌈 Light Editor (admin)
-Build light choreographies · Step-by-step · FLD/RLD/BOTH target · Parallel playback
-
-![Light Editor](Screenshots/Sequence__LightEditor_admin.png)
-
-</td>
-</tr>
-<tr>
-<td align="center" width="50%">
-
 ### 🎼 Choreography Timeline Editor
 Multi-track timeline · Drag-and-drop blocks · Digital Twin monitor · VESC telemetry gauges
 
 ![Choreo Timeline Editor](Screenshots/Choreo_Sequence_Editor.png)
 
 </td>
+</tr>
+<tr>
 <td align="center" width="50%">
 
 ### 🦾 Servo Calibration
-Per-panel open/close angle · Speed ramp · Live test · Saved to robot-specific JSON
+Hardware IDs (Servo_M0/Servo_S0) · Editable labels · Per-panel open/close/speed · Saved to JSON
 
 ![Servo Calibration](Screenshots/Servos_Config_open_close_position.png)
 
@@ -174,7 +166,7 @@ Voltage · temperature · RPM · duty · fault codes — minimal setup reference
 |---|---|
 | 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights |
 | ✏️ **Visual sequence editor** | Drag-and-drop, no coding required |
-| 💡 **Visual light editor** | Build light choreographies step by step |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · Digital Twin monitor · VESC telemetry |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -184,7 +176,7 @@ Voltage · temperature · RPM · duty · fault codes — minimal setup reference
 | 🚀 **One-button deploy** | Dome button → git pull + rsync Slave + reboot |
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
-| 🦾 **22 servo panels** | Per-panel open/close/speed ramp calibration |
+| 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
 | 📊 **VESC telemetry** | Voltage · temp · RPM · duty · fault codes live |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
@@ -196,7 +188,7 @@ This is where R2-D2 comes alive. 40 sequences combine sounds, servo panels, dome
 
 | Sequence | What R2 does |
 |----------|-------------|
-| `scared` | Panels **tremble** at 35° (speed 8) — nervous micro-movements |
+| `scared` | Panels (e.g. `Servo_M0`) **tremble** at 35° (speed 8) — nervous micro-movements |
 | `excited` | Panels **snap** open/shut at speed 9, rapid alternating combos |
 | `curious` | Panels **creep** open (speed 2, ~50°) while dome turns — deliberate peeking |
 | `angry` | Panels **slam** at speed 10, aggressive clack-clack, slow menacing close |
@@ -211,8 +203,8 @@ This is where R2-D2 comes alive. 40 sequences combine sounds, servo panels, dome
 Sequences **use per-panel calibrated angles automatically** — calibrate once in the UI, every sequence respects it. Override angle and speed inline for mood-specific choreography:
 
 ```
-servo,dome_panel_1,open,40,8    # open to 40° at speed 8 — nervous peek
-servo,dome_panel_1,close,20,9   # snap shut at speed 9
+servo,Servo_M0,open,40,8        # open to 40° at speed 8 — nervous peek
+servo,Servo_M0,close,20,9       # snap shut at speed 9
 servo,all,open                  # all 11 dome panels simultaneously
 lseq,alarm_flash,false          # trigger a light sequence in parallel
 wait_light,alarm_flash          # wait for it to finish before continuing
@@ -246,11 +238,7 @@ Build and edit behavioral sequences directly in the browser — no SSH, no file 
 
 ---
 
-## 💡 Visual Light Editor + 22 Animations
-
-Build light choreographies with the dedicated **Light Editor** — same drag-and-drop interface as the sequence editor, lights-only focus.
-
-**Saved as `.lseq` files**, light sequences run **in parallel** to behavioral sequences — a `patrol` can play while a custom light show loops, independently.
+## 💡 Lights Tab — 22 Animations + AstroPixels+ Controls
 
 ### 22 Built-in T-code Animations — one click away in the Lights tab:
 
@@ -268,7 +256,11 @@ Build light choreographies with the dedicated **Light Editor** — same drag-and
 | 10 | Star Wars Scroll | 21 | VU Meter (timed) |
 | 11 | Imperial March | 92 | VU Meter |
 
-**Text display** — send scrolling text to **FLD**, **RLD**, or **BOTH** displays. Full FLD/RLD/BOTH target selector inline in the Lights tab, same as in the light editor.
+**Text display** — send scrolling text to `fld_top`, `fld_bottom`, `fld_both`, `rld`, or `all`. Target selector inline in the Lights tab.
+
+**PSI control** — select target (`both/fpsi/rpsi`) and sequence (`normal/flash/alarm/failure/redalert/leia/march`). PSI is independent of T-code animations on AstroPixels+.
+
+> ⚠️ **AstroPixels+ note:** Only 8 of the 22 T-codes are supported via serial (`@0T`): T1, T2, T3, T4, T5, T6, T11, T20. All 22 work on Teeces32. The UI automatically shows only supported codes for your connected hardware.
 
 ---
 
@@ -577,19 +569,19 @@ Plain `.scr` CSV files — easy to read, write, and share. Light sequences use `
 ```
 # Full sequence example
 sound,RANDOM,happy                       # random happy sound
-servo,dome_panel_1,open,40,8            # open to 40° at speed 8
+servo,Servo_M0,open,40,8               # open Dome_Panel_1 to 40° at speed 8
 teeces,anim,11                           # Imperial March animation
 sleep,1.5                                # wait 1.5 seconds
-lseq,alarm_flash,false                   # start light sequence (parallel)
 servo,all,open                           # all dome panels simultaneously
 sleep,random,0.5,2.0                     # random pause 0.5–2s
-teeces,text,R2-D2,both                  # scroll text on FLD + RLD
-wait_light,alarm_flash                   # wait for light sequence to finish
+teeces,text,R2-D2,fld_both              # scroll text on FLD top + bottom
 servo,all,close                          # close everything
 motion,STOP                              # ensure motors stopped
 ```
 
-Both types are **created visually in the in-browser Editor** — no file editing required.
+**Servo IDs:** `Servo_M0`–`Servo_M10` = Master HAT channels 0–10 (dome). `Servo_S0`–`Servo_S10` = Slave HAT channels 0–10 (body). Each servo has a user-editable label configured in the Servo tab.
+
+Sequences are **created visually in the in-browser Sequence Editor** — no file editing required.
 
 ---
 
@@ -601,7 +593,7 @@ Both types are **created visually in the in-browser Editor** — no file editing
 | **2** | VESCs · dome motor · MG90S servo panels with speed ramp | 🔧 Code complete — hardware assembly in progress |
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
-| **4+** | Visual sequence & light editors · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry + CAN scan | ✅ Active |
+| **4+** | Visual sequence editor · Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Servo hardware IDs + labels | ✅ Active |
 | **5** | Vision — USB camera stream, person tracking | 📋 Planned |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.

@@ -12,85 +12,85 @@
     "dome_servos": [
       {
         "t": 0.0,
-        "servo": "dome_panel_9",
+        "servo": "Servo_M8",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_9",
+        "servo": "Servo_M8",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_10",
+        "servo": "Servo_M9",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_10",
+        "servo": "Servo_M9",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_11",
+        "servo": "Servo_M10",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_11",
+        "servo": "Servo_M10",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_6",
+        "servo": "Servo_M5",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_6",
+        "servo": "Servo_M5",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_7",
+        "servo": "Servo_M6",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_7",
+        "servo": "Servo_M6",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_8",
+        "servo": "Servo_M7",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_8",
+        "servo": "Servo_M7",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_5",
+        "servo": "Servo_M4",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "dome_panel_5",
+        "servo": "Servo_M4",
         "action": "close",
         "duration": 1.0
       }

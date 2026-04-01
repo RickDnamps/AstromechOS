@@ -82,7 +82,7 @@
     "servos": [
       {
         "t": 3.0,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "open",
         "duration": 0.5
       },

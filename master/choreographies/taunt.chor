@@ -42,37 +42,37 @@
     "dome_servos": [
       {
         "t": 0.5,
-        "servo": "dome_panel_2",
+        "servo": "Servo_M1",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 1.0,
-        "servo": "dome_panel_2",
+        "servo": "Servo_M1",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 2.0,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 2.2,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 2.3,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 2.6,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "close",
         "duration": 1.0
       }

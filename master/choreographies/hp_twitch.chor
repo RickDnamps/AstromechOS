@@ -12,20 +12,20 @@
     "dome_servos": [
       {
         "t": 0.0,
-        "servo": "dome_panel_9",
+        "servo": "Servo_M8",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 20.0,
-        "servo": "dome_panel_9",
+        "servo": "Servo_M8",
         "action": "open",
         "duration": 0.5,
         "angle": 300
       },
       {
         "t": 40.0,
-        "servo": "dome_panel_9",
+        "servo": "Servo_M8",
         "action": "open",
         "duration": 1.0
       }

@@ -12,46 +12,46 @@
     "body_servos": [
       {
         "t": 0.0,
-        "servo": "body_panel_1",
+        "servo": "Servo_S0",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.0,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "open",
         "duration": 0.8,
         "angle": 300
       },
       {
         "t": 0.0,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "open",
         "duration": 0.9,
         "angle": 300
       },
       {
         "t": 0.0,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "open",
         "duration": 0.8,
         "angle": 300
       },
       {
         "t": 2.0,
-        "servo": "body_panel_1",
+        "servo": "Servo_S0",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 2.0,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "close",
         "duration": 1.0
       }

@@ -12,97 +12,97 @@
     "dome_servos": [
       {
         "t": 0.0,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.05,
-        "servo": "dome_panel_2",
+        "servo": "Servo_M1",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.1,
-        "servo": "dome_panel_3",
+        "servo": "Servo_M2",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.15,
-        "servo": "dome_panel_4",
+        "servo": "Servo_M3",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.2,
-        "servo": "dome_panel_6",
+        "servo": "Servo_M5",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.25,
-        "servo": "dome_panel_7",
+        "servo": "Servo_M6",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.3,
-        "servo": "dome_panel_8",
+        "servo": "Servo_M7",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.35,
-        "servo": "dome_panel_5",
+        "servo": "Servo_M4",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 0.4,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.45,
-        "servo": "dome_panel_2",
+        "servo": "Servo_M1",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.5,
-        "servo": "dome_panel_3",
+        "servo": "Servo_M2",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.55,
-        "servo": "dome_panel_4",
+        "servo": "Servo_M3",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.6,
-        "servo": "dome_panel_6",
+        "servo": "Servo_M5",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.65,
-        "servo": "dome_panel_7",
+        "servo": "Servo_M6",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.7,
-        "servo": "dome_panel_8",
+        "servo": "Servo_M7",
         "action": "close",
         "duration": 1.0
       },
       {
         "t": 0.75,
-        "servo": "dome_panel_5",
+        "servo": "Servo_M4",
         "action": "close",
         "duration": 1.0
       }

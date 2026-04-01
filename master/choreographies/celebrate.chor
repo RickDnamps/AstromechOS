@@ -86,7 +86,7 @@
     "dome_servos": [
       {
         "t": 0.4,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -94,7 +94,7 @@
       },
       {
         "t": 0.7,
-        "servo": "dome_panel_2",
+        "servo": "Servo_M1",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -102,7 +102,7 @@
       },
       {
         "t": 1.0,
-        "servo": "dome_panel_3",
+        "servo": "Servo_M2",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -110,7 +110,7 @@
       },
       {
         "t": 1.3,
-        "servo": "dome_panel_4",
+        "servo": "Servo_M3",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -118,7 +118,7 @@
       },
       {
         "t": 2.6,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -126,7 +126,7 @@
       },
       {
         "t": 2.6,
-        "servo": "dome_panel_2",
+        "servo": "Servo_M1",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -134,7 +134,7 @@
       },
       {
         "t": 3.4,
-        "servo": "dome_panel_3",
+        "servo": "Servo_M2",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -142,7 +142,7 @@
       },
       {
         "t": 3.4,
-        "servo": "dome_panel_4",
+        "servo": "Servo_M3",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -150,7 +150,7 @@
       },
       {
         "t": 3.9,
-        "servo": "dome_panel_5",
+        "servo": "Servo_M4",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -158,7 +158,7 @@
       },
       {
         "t": 3.9,
-        "servo": "dome_panel_6",
+        "servo": "Servo_M5",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -166,7 +166,7 @@
       },
       {
         "t": 5.5,
-        "servo": "dome_panel_5",
+        "servo": "Servo_M4",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -174,7 +174,7 @@
       },
       {
         "t": 5.5,
-        "servo": "dome_panel_6",
+        "servo": "Servo_M5",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -184,7 +184,7 @@
     "body_servos": [
       {
         "t": 0.4,
-        "servo": "body_panel_1",
+        "servo": "Servo_S0",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -192,7 +192,7 @@
       },
       {
         "t": 0.7,
-        "servo": "body_panel_2",
+        "servo": "Servo_S1",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -200,7 +200,7 @@
       },
       {
         "t": 3.4,
-        "servo": "body_panel_1",
+        "servo": "Servo_S0",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -208,7 +208,7 @@
       },
       {
         "t": 3.4,
-        "servo": "body_panel_2",
+        "servo": "Servo_S1",
         "action": "close",
         "duration": 1.0,
         "angle": 20,
@@ -216,7 +216,7 @@
       },
       {
         "t": 3.9,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "open",
         "duration": 1.0,
         "angle": 110,
@@ -224,7 +224,7 @@
       },
       {
         "t": 5.5,
-        "servo": "body_panel_3",
+        "servo": "Servo_S2",
         "action": "close",
         "duration": 1.0,
         "angle": 20,

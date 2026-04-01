@@ -34,13 +34,13 @@
     "dome_servos": [
       {
         "t": 1.0,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "open",
         "duration": 1.0
       },
       {
         "t": 6.0,
-        "servo": "dome_panel_1",
+        "servo": "Servo_M0",
         "action": "close",
         "duration": 1.0
       }

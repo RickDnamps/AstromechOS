@@ -150,14 +150,15 @@ POST /motion/dome/turn          {"speed": 0.3}
 POST /motion/dome/stop
 POST /motion/dome/random        {"enabled": true}
 
-POST /servo/dome/open           {"name": "dome_panel_1"}
-POST /servo/dome/close          {"name": "dome_panel_1"}
+POST /servo/dome/open           {"name": "Servo_M0"}
+POST /servo/dome/close          {"name": "Servo_M0"}
 POST /servo/dome/open_all  /servo/dome/close_all
-POST /servo/body/open           {"name": "body_panel_1"}
-POST /servo/body/close          {"name": "body_panel_1"}
+POST /servo/body/open           {"name": "Servo_S0"}
+POST /servo/body/close          {"name": "Servo_S0"}
 POST /servo/body/open_all  /servo/body/close_all
 GET  /servo/list
-POST /servo/settings/save       {"panels": {"dome_panel_1": {"open":110,"close":20,"speed":10}}}
+POST /servo/settings            {"panels": {"Servo_M0": {"label":"Dome_Panel_1","open":110,"close":20,"speed":10}}}
+GET  /servo/settings            → {panels: {Servo_M0: {label, open, close, speed}, ...}}
 
 POST /scripts/run               {"name": "patrol", "loop": false}
 POST /scripts/stop_all
@@ -196,10 +197,25 @@ Volume UI → courbe racine cubique (exposant 1/3) : slider 50% → ALSA 79%.
 
 ---
 
-## 🦾 Servos — Calibration par panneau
+## 🦾 Servos — Hardware IDs + Labels
 
-Chaque panneau : **O°** open (10–170), **C°** close (10–170), **S** speed (1–10).
-Config sauvegardée dans `dome_angles.json` / `servo_angles.json` (gitignorés).
+**Naming convention (effective 2026-03-31):**
+- `Servo_M0`–`Servo_M10` : canaux 0–10 du HAT Master (PCA9685 @ 0x40, dome)
+- `Servo_S0`–`Servo_S10` : canaux 0–10 du HAT Slave  (PCA9685 @ 0x41, body)
+
+L'ID hardware est immuable (lié au canal physique). Chaque servo a un **label éditable** affiché dans l'UI et la timeline CHOREO.
+
+**JSON schema (`dome_angles.json` / `servo_angles.json`) :**
+```json
+{
+  "Servo_M0": {"label": "Dome_Panel_1", "open": 110, "close": 20, "speed": 10},
+  "Servo_M1": {"label": "Dome_Panel_2", "open": 110, "close": 20, "speed": 10}
+}
+```
+
+Label sauvegardé via `POST /servo/settings` — inclus dans le payload panels.
+Drivers (`dome_servo_driver.py`, `slave/body_servo_driver.py`) utilisent les IDs hardware.
+Script_engine route : `Servo_M*` → dome driver, `Servo_S*` → body driver.
 
 ```python
 pulse_us = 500 + (angle / 180.0) * 2000   # MG90S 180°
@@ -207,7 +223,7 @@ pulse_us = 500 + (angle / 180.0) * 2000   # MG90S 180°
 # speed 10 = instant | speed 1 ≈ 1.2s pour 90°
 ```
 
-Commande séquence avec override angle+vitesse : `servo,dome_panel_1,open,40,8`
+Commande séquence avec override angle+vitesse : `servo,Servo_M0,open,40,8`
 
 ---
 
@@ -300,7 +316,39 @@ sudo systemctl start r2d2-slave
 
 **VERSION file** — `update.sh` écrit toujours `git rev-parse --short HEAD` dans `VERSION` (même si "already up to date"). Si ce fichier est périmé, le Slave voit un mismatch au boot → RP2040 affiche `SYNC FAILED`.
 
-**Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic)
+**Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic) · AstroPixels+ firmware extension (17 missing sequences — blocked on hardware)
+
+---
+
+## 💡 Lights tab — AstroPixels+ notes
+
+**AstroPixels+ serial commands** (`@`-prefix, `\r` terminator) :
+```
+@0T{n}\r     FLD+RLD animation (T-codes — see below)
+@{1|2|3}M{text}\r   FLD top / FLD bottom / RLD scrolling text
+@{0|1|2}P{n}\r   PSI sequence (0=both, 1=front, 2=rear)
+@4S{n}\r     PSI mode legacy (0=off, 1–8=colors)
+@HP{target}{effect}\r   Holo projectors
+```
+
+**T-codes valides sur AstroPixels+** (8 sur 22 JawaLite) :
+`T1`=Random, `T2`=Flash, `T3`=Alarm, `T4`=Short Circuit, `T5`=Scream, `T6`=Leia, `T11`=Imperial March, `T20`=Off.
+Les autres T-codes (T7-T10, T12-T19, T21, T92) sont Teeces32-only — silently ignored par AstroPixels+.
+
+**T-codes n'affectent QUE FLD+RLD** — PSI est contrôlé séparément via `@0P{n}`.
+
+**Text targets** (`/teeces/text`) : `fld_top` | `fld_bottom` | `fld_both` | `rld` | `all`
+Color non configurable via serial — firmware utilise `randomColor()`.
+
+**PSI sequences** (`/teeces/psi_seq`) : `normal` | `flash` | `alarm` | `failure` | `redalert` | `leia` | `march`
+7 séquences accessibles via serial sur 24 présentes dans le firmware (les autres = boutons physiques seulement).
+
+**Lights tab** (onglet LIGHT) :
+- Animations : 22 chips one-click (8 réels sur AstroPixels+, 22 sur Teeces32) + STOP ALL (`/teeces/off`)
+- Text : display selector `fld_top/fld_bottom/fld_both/rld/all` + champ texte
+- PSI : target `both/fpsi/rpsi` + sequence selector + SET PSI / RESET PSI
+- La section "Light Sequences" a été retirée de l'onglet (les `.lseq` restent dans le backend)
+- Light Editor admin tab a été retiré du dashboard
 
 ---
 
@@ -313,20 +361,31 @@ This applies to every file going forward. Existing French in untouched files is 
 
 ---
 
-## ✅ Implementation Status — ChoreoPlayer VESC Telemetry (2026-03-28)
+## ✅ Implementation Status
 
-Deployed at commit `2287eec` — all 5 tasks complete, 36/36 tests passing.
+### ChoreoPlayer VESC Telemetry (2026-03-28) — commit `2287eec`
+UART fail-safe, telemetry thresholds (20V/80°C/30A), `GET /choreo/status` returns `abort_reason` + `telem`.
 
-| Feature | File | Status |
-|---------|------|--------|
-| Threshold config (20V / 80°C / 30A) | `master/config/main.cfg` | ✅ |
-| `telem_getter` injection + state vars | `master/choreo_player.py` | ✅ |
-| UART fail-safe (`uart_loss` after 3 failures) | `master/choreo_player.py` | ✅ |
-| Telemetry threshold monitoring | `master/choreo_player.py` | ✅ |
-| Live wiring (`lambda: reg.vesc_telem`) | `master/main.py` | ✅ |
+### Choreo Timeline UI — Sprint 6.3 (2026-03-28 → 2026-03-31)
+| Feature | Status |
+|---------|--------|
+| Liquid timeline fill + multiplicative zoom + dynamic ruler | ✅ |
+| Block labels: TEXT/HOLO/PSI show mode prefix | ✅ |
+| Choreo dropdown preserved on tab switch | ✅ |
+| Lights tab: STOP ALL → `/teeces/off`, Light Sequences section removed | ✅ |
+| AstroPixels+ text/PSI controls fixed (correct targets, real PSI sequences) | ✅ |
+| PSI simulation independent of T-code animations (per firmware) | ✅ |
+| AstroPixels+ ANIMATIONS override (8 valid T-codes only) | ✅ |
+| Choreo font sizes standardized (blocks 10px, labels 9px, ruler 9px) | ✅ |
 
-`GET /choreo/status` now returns `abort_reason` + `telem` fields.
-Next: UI — Choreography Timeline Editor (Tasks 6-7).
+### Servo Hardware IDs + Labels (2026-03-31) — commit `ba0a802`
+| Feature | Status |
+|---------|--------|
+| `dome_panel_N` → `Servo_M{N-1}`, `body_panel_N` → `Servo_S{N-1}` | ✅ |
+| Editable label field per servo, saved in JSON config | ✅ |
+| Labels displayed in CHOREO timeline blocks + inspector dropdown | ✅ |
+| 29 .scr + 30 .chor files migrated | ✅ |
+| Servo tab layout full-width (1fr 1fr) | ✅ |
 
 ---
 
