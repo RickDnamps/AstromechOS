@@ -33,6 +33,9 @@
   cd /home/artoo/r2d2 && git pull && bash scripts/update.sh
   ```
 
+- **Audio channels** — configurable in Config tab (web UI) → writes `master/config/local.cfg` `[audio] audio_channels` + SCPs `slave/config/slave.cfg` + restarts services.
+  Default: 6. Range: 1–12.
+
 ---
 
 ## 🎯 Vision
