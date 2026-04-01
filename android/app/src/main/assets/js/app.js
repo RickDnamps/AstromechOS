@@ -3387,7 +3387,7 @@ const choreoEditor = (() => {
            style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0;line-height:1"
            title="Delete block">✕</button>
        </div>
-       <div style="font-size:8px;color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${label}</div>`;
+       <div style="font-size:10px;color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:1.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${label}</div>`;
   }
 
   function _clearInspectorTitle() {
