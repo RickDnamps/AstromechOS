@@ -28,17 +28,15 @@
 #  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Slave audio driver — dual-channel polyphony.
+Slave audio driver — N-channel polyphony (configurable, default 6).
 Plays MP3 sounds via mpg123 (native 3.5mm jack Pi 4B).
-Two independent channels run simultaneously (channel 0 = AUDIO_1, channel 1 = AUDIO_2).
+N independent channels run simultaneously.
 
-UART commands:
+UART commands (n = channel index, n=0 → 'S:', n=1 → 'S2:', n=2 → 'S3:', etc.):
   S:Happy001          → channel 0: play specific file
   S:RANDOM:happy      → channel 0: play random from category
   S:STOP              → channel 0: stop
-  S2:Happy001         → channel 1: play specific file
-  S2:RANDOM:happy     → channel 1: play random from category
-  S2:STOP             → channel 1: stop
+  S2:Happy001         → channel 1 (and so on for S3:, S4: …)
 
 Prerequisite: sudo apt install -y mpg123
 """
@@ -61,10 +59,11 @@ _INDEX_FILE  = os.path.join(_SOUNDS_DIR, 'sounds_index.json')
 
 
 class AudioDriver(BaseDriver):
-    def __init__(self, sounds_dir: str = _SOUNDS_DIR):
+    def __init__(self, sounds_dir: str = _SOUNDS_DIR, channels: int = 6):
         self._sounds_dir = os.path.abspath(sounds_dir)
         self._index: dict[str, list[str]] = {}
-        self._procs: list[subprocess.Popen | None] = [None, None]   # channel 0 and 1
+        self._channels = channels
+        self._procs: list[subprocess.Popen | None] = [None] * channels
         self._lock = threading.Lock()
         self._ready = False
 
@@ -100,9 +99,12 @@ class AudioDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def play(self, filename: str, channel: int = 0) -> bool:
-        """Plays an MP3 file by name (without extension) on the given channel (0 or 1)."""
+        """Plays an MP3 file by name (without extension) on the given channel."""
         if not filename or any(c in filename for c in ('/', '\\', '..')):
             log.warning(f"Audio filename rejected (path traversal): {filename!r}")
+            return False
+        if not (0 <= channel < self._channels):
+            log.warning(f"Audio channel {channel} out of range (0–{self._channels - 1})")
             return False
         path = os.path.join(self._sounds_dir, filename + '.mp3')
         if not os.path.isfile(path):
@@ -121,8 +123,8 @@ class AudioDriver(BaseDriver):
         return self.play(filename, channel)
 
     def stop(self, channel: int | None = None) -> None:
-        """Stops channel 0, channel 1, or both (channel=None)."""
-        channels = [0, 1] if channel is None else [channel]
+        """Stops channel N, or all channels (channel=None)."""
+        channels = list(range(self._channels)) if channel is None else [channel]
         with self._lock:
             for ch in channels:
                 if 0 <= ch < len(self._procs):
@@ -168,6 +170,12 @@ class AudioDriver(BaseDriver):
           - 'STOP'           → stop ch1
         """
         self._handle_channel(value, channel=1)
+
+    def make_channel_handler(self, ch: int):
+        """Returns a UART callback closure routing to channel ch."""
+        def handler(value: str):
+            self._handle_channel(value, ch)
+        return handler
 
     def _handle_channel(self, value: str, channel: int) -> None:
         if value == 'STOP':
