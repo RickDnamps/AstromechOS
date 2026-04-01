@@ -536,7 +536,7 @@
       </div>
       <div style="margin-top:12px">
         <button class="btn btn-danger btn-sm" style="width:100%"
-                onclick="api('/light/stop_all','POST').then(()=>toast('Lights stopped','ok'))">
+                onclick="api('/teeces/off','POST').then(()=>{toast('Lights off','ok');document.querySelectorAll('.anim-chip').forEach(b=>b.classList.remove('active'));_domeSim.setModeNum(20);})">
           STOP ALL
         </button>
       </div>
