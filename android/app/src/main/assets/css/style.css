@@ -1716,12 +1716,30 @@ body::after {
 }
 
 .servo-name {
-  width: 22px;
+  width: 72px;
   flex: none;
-  font-size: 10px;
-  color: var(--text-dim);
+  font-size: 9px;
+  color: rgba(0,170,255,.5);
   letter-spacing: 0.3px;
-  text-transform: uppercase;
+  font-family: 'Courier New', monospace;
+}
+
+.servo-label-in {
+  flex: 1;
+  min-width: 80px;
+  max-width: 160px;
+  font-size: 10px;
+  background: rgba(0,0,0,.4);
+  border: 1px solid rgba(0,170,255,.2);
+  border-radius: 3px;
+  color: #00ccff;
+  padding: 2px 6px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: .3px;
+}
+.servo-label-in:focus {
+  outline: none;
+  border-color: rgba(0,170,255,.55);
 }
 
 .servo-pos-bar {

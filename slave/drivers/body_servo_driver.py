@@ -65,17 +65,17 @@ ANGLE_MIN_DEG     =  10   # hardware safety limit
 ANGLE_MAX_DEG     = 170   # hardware safety limit
 
 SERVO_MAP: dict[str, int] = {
-    'body_panel_1':   0,
-    'body_panel_2':   1,
-    'body_panel_3':   2,
-    'body_panel_4':   3,
-    'body_panel_5':   4,
-    'body_panel_6':   5,
-    'body_panel_7':   6,
-    'body_panel_8':   7,
-    'body_panel_9':   8,
-    'body_panel_10':  9,
-    'body_panel_11': 10,
+    'Servo_S0':   0,
+    'Servo_S1':   1,
+    'Servo_S2':   2,
+    'Servo_S3':   3,
+    'Servo_S4':   4,
+    'Servo_S5':   5,
+    'Servo_S6':   6,
+    'Servo_S7':   7,
+    'Servo_S8':   8,
+    'Servo_S9':   9,
+    'Servo_S10': 10,
 }
 
 

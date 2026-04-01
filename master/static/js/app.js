@@ -1464,11 +1464,12 @@ class ServoPanel {
     if (!grid) return;
     const varName = this._getVar();
     grid.innerHTML = this._servos.map(name => {
-      const num      = name.split('_').pop();
-      const panel    = (_servoCfg.panels || {})[name] || { open: 110, close: 20, speed: 10 };
+      const panel = (_servoCfg.panels || {})[name] || { label: name, open: 110, close: 20, speed: 10 };
       return `
         <div class="servo-row" id="servo-row-${name}">
-          <span class="servo-name">P${num}</span>
+          <span class="servo-name">${name}</span>
+          <input type="text" id="sc-label-${name}" class="servo-label-in"
+                 value="${panel.label || name}" placeholder="Label" maxlength="32">
           <div class="servo-calib-wrap">
             <label class="servo-calib-label">O<input type="number" id="sc-open-${name}"
               class="servo-angle-in" min="10" max="170" value="${panel.open}"></label>
@@ -1488,9 +1489,11 @@ class ServoPanel {
     this._servos.forEach(name => {
       const panel = (_servoCfg.panels || {})[name];
       if (!panel) return;
+      const lEl = el(`sc-label-${name}`);
       const oEl = el(`sc-open-${name}`);
       const cEl = el(`sc-close-${name}`);
       const sEl = el(`sc-speed-${name}`);
+      if (lEl) lEl.value = panel.label || name;
       if (oEl) oEl.value = panel.open;
       if (cEl) cEl.value = panel.close;
       if (sEl) sEl.value = panel.speed ?? 10;
@@ -1502,15 +1505,17 @@ class ServoPanel {
   }
 
   open(name) {
+    const label = el(`sc-label-${name}`)?.value || name;
     api(`${this._apiPrefix}/open`, 'POST', { name }).then(d => {
-      if (d) { toast(`P${name.split('_').pop()}: OPEN`, 'ok'); this._setFill(name, 100); }
+      if (d) { toast(`${label}: OPEN`, 'ok'); this._setFill(name, 100); }
     });
     this._state[name] = 'open';
   }
 
   close(name) {
+    const label = el(`sc-label-${name}`)?.value || name;
     api(`${this._apiPrefix}/close`, 'POST', { name }).then(d => {
-      if (d) { toast(`P${name.split('_').pop()}: CLOSE`, 'ok'); this._setFill(name, 0); }
+      if (d) { toast(`${label}: CLOSE`, 'ok'); this._setFill(name, 0); }
     });
     this._state[name] = 'close';
   }
@@ -1518,11 +1523,13 @@ class ServoPanel {
   async saveAngles() {
     const panels = {};
     this._servos.forEach(name => {
+      const lEl = el(`sc-label-${name}`);
       const oEl = el(`sc-open-${name}`);
       const cEl = el(`sc-close-${name}`);
       const sEl = el(`sc-speed-${name}`);
       if (oEl && cEl) {
         panels[name] = {
+          label: lEl?.value.trim() || name,
           open:  parseInt(oEl.value) || 110,
           close: parseInt(cEl.value) || 20,
           speed: parseInt(sEl?.value) || 10,
@@ -1533,7 +1540,7 @@ class ServoPanel {
     if (!data) { toast('Network error', 'error'); return; }
     _servoCfg = data;
     this.updateInputs();
-    toast('Angles saved', 'ok');
+    toast('Saved', 'ok');
   }
 
   _setFill(name, pct) {
@@ -1577,12 +1584,12 @@ async function saveServoMs90() {
 
 async function testServoSettings(dir) {
   const endpoint = dir === 'open' ? '/servo/dome/open' : '/servo/dome/close';
-  const data = await api(endpoint, 'POST', { name: 'dome_panel_1' });
-  if (data) toast(`Test dome_panel_1 ${dir.toUpperCase()} — ${data.duration}ms`, 'ok');
+  const data = await api(endpoint, 'POST', { name: 'Servo_M0' });
+  if (data) toast(`Test Servo_M0 ${dir.toUpperCase()}`, 'ok');
 }
 
-const DOME_SERVOS = Array.from({length: 11}, (_, i) => `dome_panel_${i + 1}`);
-const BODY_SERVOS = Array.from({length: 11}, (_, i) => `body_panel_${i + 1}`);
+const DOME_SERVOS = Array.from({length: 11}, (_, i) => `Servo_M${i}`);
+const BODY_SERVOS = Array.from({length: 11}, (_, i) => `Servo_S${i}`);
 
 const domeServoPanel = new ServoPanel('dome-servo-list', DOME_SERVOS, '/servo/dome');
 const bodyServoPanel = new ServoPanel('body-servo-list', BODY_SERVOS, '/servo/body');
@@ -3295,8 +3302,11 @@ const choreoEditor = (() => {
       if (item.mode === 'psi')  return `PSI ${(item.target||'both').toUpperCase()} — ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
-    if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos')
-      return `${item.servo || '?'} ${item.action || ''}`;
+    if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
+      const sid   = item.servo || '?';
+      const label = _servoSettings[sid]?.label || sid;
+      return `${label} ${item.action || ''}`;
+    }
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
   }
@@ -3776,10 +3786,10 @@ const choreoEditor = (() => {
       });
 
     } else if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
-      const prefix = track === 'dome_servos' ? 'dome_' : track === 'body_servos' ? 'body_' : 'arm_';
+      const prefix = track === 'dome_servos' ? 'Servo_M' : track === 'body_servos' ? 'Servo_S' : 'Servo_';
       const filtered = _servoList.filter(s => s.startsWith(prefix));
       const pool = filtered.length ? filtered : _servoList;
-      const servoOpts = Object.fromEntries(pool.map(s => [s, s.replace(/_/g,' ').toUpperCase()]));
+      const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
       html += selectRow('SERVO', 'servo', servoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });

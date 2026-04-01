@@ -79,8 +79,8 @@ _DOME_ANGLES_FILE  = '/home/artoo/r2d2/master/config/dome_angles.json'
 _SLAVE_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
 _SLAVE_HOST        = 'artoo@r2-slave.local'
 
-BODY_SERVOS = [f'body_panel_{i}' for i in range(1, 12)]
-DOME_SERVOS = [f'dome_panel_{i}' for i in range(1, 12)]
+BODY_SERVOS = [f'Servo_S{i}' for i in range(11)]
+DOME_SERVOS = [f'Servo_M{i}' for i in range(11)]
 _ALL_PANELS = DOME_SERVOS + BODY_SERVOS
 
 _DEFAULT_OPEN  = 110
@@ -104,38 +104,42 @@ def _clamp_speed(val: int) -> int:
 
 
 def _read_panels_cfg() -> dict:
-    """
-    Returns {'panels': {name: {'open': int, 'close': int}}}
-    """
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    """Returns {'panels': {name: {'label': str, 'open': int, 'close': int, 'speed': int}}}"""
+    dome_json: dict = {}
+    body_json: dict = {}
+    try:
+        with open(_DOME_ANGLES_FILE) as f:
+            dome_json = json.load(f)
+    except Exception:
+        pass
+    try:
+        with open(_SLAVE_ANGLES_FILE) as f:
+            body_json = json.load(f)
+    except Exception:
+        pass
+
     panels = {}
-    for name in _ALL_PANELS:
-        open_a  = _clamp(cfg.getint('servo_panels', f'{name}_open',  fallback=_DEFAULT_OPEN))
-        close_a = _clamp(cfg.getint('servo_panels', f'{name}_close', fallback=_DEFAULT_CLOSE))
-        speed   = _clamp_speed(cfg.getint('servo_panels', f'{name}_speed', fallback=_DEFAULT_SPEED))
-        panels[name] = {'open': open_a, 'close': close_a, 'speed': speed}
+    for name in DOME_SERVOS:
+        j = dome_json.get(name, {})
+        panels[name] = {
+            'label': j.get('label', name),
+            'open':  _clamp(int(j.get('open',  _DEFAULT_OPEN))),
+            'close': _clamp(int(j.get('close', _DEFAULT_CLOSE))),
+            'speed': _clamp_speed(int(j.get('speed', _DEFAULT_SPEED))),
+        }
+    for name in BODY_SERVOS:
+        j = body_json.get(name, {})
+        panels[name] = {
+            'label': j.get('label', name),
+            'open':  _clamp(int(j.get('open',  _DEFAULT_OPEN))),
+            'close': _clamp(int(j.get('close', _DEFAULT_CLOSE))),
+            'speed': _clamp_speed(int(j.get('speed', _DEFAULT_SPEED))),
+        }
     return {'panels': panels}
 
 
 def _write_panels_cfg(panels: dict) -> None:
-    cfg = configparser.ConfigParser()
-    if os.path.exists(_LOCAL_CFG):
-        cfg.read(_LOCAL_CFG)
-    if not cfg.has_section('servo_panels'):
-        cfg.add_section('servo_panels')
-    for name, vals in panels.items():
-        if name not in _ALL_PANELS:
-            continue
-        if 'open'  in vals:
-            cfg.set('servo_panels', f'{name}_open',  str(_clamp(int(vals['open']))))
-        if 'close' in vals:
-            cfg.set('servo_panels', f'{name}_close', str(_clamp(int(vals['close']))))
-        if 'speed' in vals:
-            cfg.set('servo_panels', f'{name}_speed', str(_clamp_speed(int(vals['speed']))))
-    with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
-        cfg.write(f)
-    # Sync to dedicated JSON files
+    # Sync to JSON files (source of truth for drivers)
     _sync_angles_json(panels)
 
 
@@ -153,6 +157,7 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
             pass
     for name, vals in subset.items():
         existing[name] = {
+            'label': str(vals.get('label', existing.get(name, {}).get('label', name)))[:40],
             'open':  _clamp(int(vals.get('open',  existing.get(name, {}).get('open',  110)))),
             'close': _clamp(int(vals.get('close', existing.get(name, {}).get('close',  20)))),
             'speed': _clamp_speed(int(vals.get('speed', existing.get(name, {}).get('speed', 10)))),
@@ -419,6 +424,7 @@ def servo_settings_save():
     for name, vals in (data.get('panels') or {}).items():
         if name in _ALL_PANELS and isinstance(vals, dict):
             panels[name] = {
+                'label': str(vals.get('label', name))[:40],
                 'open':  _clamp(int(vals.get('open',  _DEFAULT_OPEN))),
                 'close': _clamp(int(vals.get('close', _DEFAULT_CLOSE))),
                 'speed': _clamp_speed(int(vals.get('speed', _DEFAULT_SPEED))),

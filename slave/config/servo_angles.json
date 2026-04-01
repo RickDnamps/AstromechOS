@@ -1,13 +1,13 @@
 {
-  "body_panel_1":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_2":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_3":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_4":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_5":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_6":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_7":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_8":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_9":  {"open": 110, "close": 20, "speed": 10},
-  "body_panel_10": {"open": 110, "close": 20, "speed": 10},
-  "body_panel_11": {"open": 110, "close": 20, "speed": 10}
+  "Servo_S0":  {"label": "Body_Panel_1",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S1":  {"label": "Body_Panel_2",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S2":  {"label": "Body_Panel_3",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S3":  {"label": "Body_Panel_4",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S4":  {"label": "Body_Panel_5",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S5":  {"label": "Body_Panel_6",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S6":  {"label": "Body_Panel_7",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S7":  {"label": "Body_Panel_8",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S8":  {"label": "Body_Panel_9",  "open": 110, "close": 20, "speed": 10},
+  "Servo_S9":  {"label": "Body_Panel_10", "open": 110, "close": 20, "speed": 10},
+  "Servo_S10": {"label": "Body_Panel_11", "open": 110, "close": 20, "speed": 10}
 }

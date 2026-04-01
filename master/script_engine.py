@@ -316,12 +316,12 @@ class ScriptEngine:
         action = row[2].lower() if len(row) > 2 else 'open'
 
         if action in ('open', 'close'):
-            # servo,dome_panel_1,open          → calibrated angle
-            # servo,dome_panel_1,open,150      → angle override
-            # servo,dome_panel_1,open,150,8    → angle + speed override
+            # servo,Servo_M0,open          → calibrated angle
+            # servo,Servo_M0,open,150      → angle override
+            # servo,Servo_M0,open,150,8    → angle + speed override
             angle = float(row[3]) if len(row) > 3 else None
             speed = int(row[4])   if len(row) > 4 else None
-            if name.startswith('dome_panel_'):
+            if name.startswith('Servo_M'):
                 if self._dome_servo:
                     if action == 'open':
                         self._dome_servo.open(name, angle, speed)
@@ -338,7 +338,7 @@ class ScriptEngine:
         position = float(action)
         duration = int(row[3]) if len(row) > 3 else 300
 
-        if name.startswith('dome_panel_'):
+        if name.startswith('Servo_M'):
             if self._dome_servo:
                 self._dome_servo.move(name, position, duration)
         else:
