@@ -5,7 +5,8 @@
     "duration": 45.2,
     "bpm": 120,
     "created": "2026-03-27",
-    "author": "R2-D2 Control"
+    "author": "R2-D2 Control",
+    "audio_channels_required": 1
   },
   "tracks": {
     "audio": [
@@ -14,7 +15,8 @@
         "action": "play",
         "file": "CANTINA",
         "volume": 85,
-        "duration": 16
+        "duration": 16,
+        "priority": "normal"
       },
       {
         "t": 45.0,

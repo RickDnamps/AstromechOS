@@ -6,7 +6,8 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "dome_dance.scr"
+    "source": "dome_dance.scr",
+    "audio_channels_required": 1
   },
   "tracks": {
     "audio": [
@@ -16,7 +17,8 @@
         "file": "RANDOM:happy",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       }
     ],
     "dome_servos": [

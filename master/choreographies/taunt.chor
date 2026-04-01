@@ -6,7 +6,8 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "taunt.scr"
+    "source": "taunt.scr",
+    "audio_channels_required": 2
   },
   "tracks": {
     "audio": [
@@ -16,7 +17,8 @@
         "file": "RANDOM:ooh",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       },
       {
         "t": 1.0,
@@ -24,7 +26,8 @@
         "file": "RANDOM:whistle",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       }
     ],
     "lights": [

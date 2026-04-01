@@ -6,7 +6,8 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "birthday.scr"
+    "source": "birthday.scr",
+    "audio_channels_required": 1
   },
   "tracks": {
     "audio": [
@@ -16,7 +17,8 @@
         "file": "birthday",
         "volume": 85,
         "duration": 40,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       }
     ],
     "lights": [

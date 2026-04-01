@@ -6,7 +6,8 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "scan.scr"
+    "source": "scan.scr",
+    "audio_channels_required": 2
   },
   "tracks": {
     "audio": [
@@ -16,7 +17,8 @@
         "file": "RANDOM:proc",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       },
       {
         "t": 2.5,
@@ -24,7 +26,8 @@
         "file": "RANDOM:proc",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       },
       {
         "t": 5.0,
@@ -32,7 +35,8 @@
         "file": "RANDOM:misc",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       }
     ],
     "lights": [

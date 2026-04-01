@@ -6,7 +6,8 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "disco.scr"
+    "source": "disco.scr",
+    "audio_channels_required": 1
   },
   "tracks": {
     "audio": [
@@ -16,7 +17,8 @@
         "file": "SWDiscoShort",
         "volume": 85,
         "duration": 150,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       }
     ],
     "lights": [

@@ -6,7 +6,8 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "looping_sounds.scr"
+    "source": "looping_sounds.scr",
+    "audio_channels_required": 1
   },
   "tracks": {
     "audio": [
@@ -16,7 +17,8 @@
         "file": "RANDOM:happy",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       },
       {
         "t": 45.0,
@@ -24,7 +26,8 @@
         "file": "RANDOM:proc",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       },
       {
         "t": 90.0,
@@ -32,7 +35,8 @@
         "file": "RANDOM:misc",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       },
       {
         "t": 135.0,
@@ -40,7 +44,8 @@
         "file": "RANDOM:razz",
         "volume": 85,
         "duration": 5,
-        "ch": 0
+        "ch": 0,
+        "priority": "normal"
       }
     ]
   }
