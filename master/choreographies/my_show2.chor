@@ -1,0 +1,185 @@
+{
+  "meta": {
+    "audio_channels_required": 6,
+    "author": "R2-D2 Control",
+    "created": "2026-03-30",
+    "duration": 18.1,
+    "name": "my_show2",
+    "version": "1.0"
+  },
+  "tracks": {
+    "arm_servos": [],
+    "audio": [
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 16.1,
+        "file": "CANTINA",
+        "t": 0,
+        "volume": 10,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 3.7,
+        "file": "Happy003",
+        "t": 0.7000000000000001,
+        "volume": 85,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 2.5,
+        "file": "MISC_022",
+        "t": 0.7000000000000001,
+        "volume": 85,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 1,
+        "duration": 2.2,
+        "file": "SCREA002",
+        "t": 1.2000000000000002,
+        "volume": 85,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 1.3,
+        "file": "PROC_013",
+        "t": 1.7000000000000002,
+        "volume": 85,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 3.4,
+        "file": "ANNOYED",
+        "t": 1.8,
+        "volume": 85,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 5.2,
+        "file": "DOODOO",
+        "t": 6.1000000000000005,
+        "volume": 85,
+        "priority": "normal"
+      }
+    ],
+    "body_servos": [
+      {
+        "action": "open",
+        "duration": 1,
+        "easing": "",
+        "group": "body",
+        "servo": "body_panel_1",
+        "t": 0.30000000000000004
+      },
+      {
+        "action": "open",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "body",
+        "servo": "body_panel_2",
+        "t": 0.30000000000000004,
+        "target": 50
+      },
+      {
+        "action": "degree",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "body",
+        "servo": "body_panel_1",
+        "t": 2.1
+      },
+      {
+        "action": "close",
+        "duration": 1,
+        "group": "body",
+        "servo": "body_panel_2",
+        "t": 4.6000000000000005
+      }
+    ],
+    "dome": [
+      {
+        "accel": 1,
+        "angle": 0,
+        "duration": 5000,
+        "easing": "ease-in-out",
+        "power": 66,
+        "t": 3.5
+      },
+      {
+        "accel": 1,
+        "angle": 0,
+        "duration": 1000,
+        "easing": "ease-in-out",
+        "power": -100,
+        "t": 8.5
+      }
+    ],
+    "dome_servos": [
+      {
+        "action": "open",
+        "duration": 1,
+        "easing": "",
+        "group": "dome",
+        "servo": "dome_panel_1",
+        "t": 0.30000000000000004
+      },
+      {
+        "action": "close",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "dome",
+        "servo": "dome_panel_1",
+        "t": 2.1
+      }
+    ],
+    "lights": [
+      {
+        "display": "all",
+        "duration": 4,
+        "mode": "text",
+        "t": 0.5,
+        "text": "allo"
+      },
+      {
+        "duration": 4,
+        "effect": "rainbow",
+        "mode": "holo",
+        "t": 0.6000000000000001,
+        "target": "fhp"
+      },
+      {
+        "duration": 4,
+        "mode": "t14",
+        "t": 4.9
+      },
+      {
+        "duration": 4,
+        "mode": "psi",
+        "sequence": "march",
+        "t": 9.700000000000001,
+        "target": "both"
+      }
+    ],
+    "markers": [],
+    "propulsion": [
+      {
+        "duration": 3,
+        "left": 0.5,
+        "right": 0.5,
+        "t": 1
+      }
+    ]
+  }
+}

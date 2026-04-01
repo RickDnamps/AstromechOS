@@ -1,0 +1,32 @@
+{
+  "meta": {
+    "name": "my_show",
+    "version": "1.0",
+    "duration": 5,
+    "created": "2026-03-31",
+    "author": "R2-D2 Control"
+  },
+  "tracks": {
+    "audio": [],
+    "lights": [],
+    "dome": [
+      {
+        "angle": 0,
+        "easing": "ease-in-out",
+        "t": 0.30000000000000004,
+        "power": 72,
+        "duration": 1000
+      },
+      {
+        "angle": 0,
+        "easing": "ease-in-out",
+        "t": 0.6000000000000001,
+        "power": -100,
+        "duration": 1000
+      }
+    ],
+    "servos": [],
+    "propulsion": [],
+    "markers": []
+  }
+}
