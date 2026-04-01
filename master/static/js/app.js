@@ -1588,8 +1588,8 @@ async function testServoSettings(dir) {
   if (data) toast(`Test Servo_M0 ${dir.toUpperCase()}`, 'ok');
 }
 
-const DOME_SERVOS = Array.from({length: 11}, (_, i) => `Servo_M${i}`);
-const BODY_SERVOS = Array.from({length: 11}, (_, i) => `Servo_S${i}`);
+const DOME_SERVOS = Array.from({length: 16}, (_, i) => `Servo_M${i}`);
+const BODY_SERVOS = Array.from({length: 16}, (_, i) => `Servo_S${i}`);
 
 const domeServoPanel = new ServoPanel('dome-servo-list', DOME_SERVOS, '/servo/dome');
 const bodyServoPanel = new ServoPanel('body-servo-list', BODY_SERVOS, '/servo/body');

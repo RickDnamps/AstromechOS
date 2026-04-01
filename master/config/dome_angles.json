@@ -9,5 +9,10 @@
   "Servo_M7":  {"label": "Dome_Panel_8",  "open": 110, "close": 20, "speed": 10},
   "Servo_M8":  {"label": "Dome_Panel_9",  "open": 110, "close": 20, "speed": 10},
   "Servo_M9":  {"label": "Dome_Panel_10", "open": 110, "close": 20, "speed": 10},
-  "Servo_M10": {"label": "Dome_Panel_11", "open": 110, "close": 20, "speed": 10}
+  "Servo_M10": {"label": "Dome_Panel_11", "open": 110, "close": 20, "speed": 10},
+  "Servo_M11": {"label": "Dome_Panel_12", "open": 110, "close": 20, "speed": 10},
+  "Servo_M12": {"label": "Dome_Panel_13", "open": 110, "close": 20, "speed": 10},
+  "Servo_M13": {"label": "Dome_Panel_14", "open": 110, "close": 20, "speed": 10},
+  "Servo_M14": {"label": "Dome_Panel_15", "open": 110, "close": 20, "speed": 10},
+  "Servo_M15": {"label": "Dome_Panel_16", "open": 110, "close": 20, "speed": 10}
 }

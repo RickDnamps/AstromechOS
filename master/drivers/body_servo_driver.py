@@ -65,7 +65,7 @@ def _calibrated_angle(name: str, action: str) -> float:
     except Exception:
         return default
 
-KNOWN_SERVOS = {f'Servo_S{i}' for i in range(11)}
+KNOWN_SERVOS = {f'Servo_S{i}' for i in range(16)}
 
 
 class BodyServoDriver:

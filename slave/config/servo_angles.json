@@ -9,5 +9,10 @@
   "Servo_S7":  {"label": "Body_Panel_8",  "open": 110, "close": 20, "speed": 10},
   "Servo_S8":  {"label": "Body_Panel_9",  "open": 110, "close": 20, "speed": 10},
   "Servo_S9":  {"label": "Body_Panel_10", "open": 110, "close": 20, "speed": 10},
-  "Servo_S10": {"label": "Body_Panel_11", "open": 110, "close": 20, "speed": 10}
+  "Servo_S10": {"label": "Body_Panel_11", "open": 110, "close": 20, "speed": 10},
+  "Servo_S11": {"label": "Body_Panel_12", "open": 110, "close": 20, "speed": 10},
+  "Servo_S12": {"label": "Body_Panel_13", "open": 110, "close": 20, "speed": 10},
+  "Servo_S13": {"label": "Body_Panel_14", "open": 110, "close": 20, "speed": 10},
+  "Servo_S14": {"label": "Body_Panel_15", "open": 110, "close": 20, "speed": 10},
+  "Servo_S15": {"label": "Body_Panel_16", "open": 110, "close": 20, "speed": 10}
 }

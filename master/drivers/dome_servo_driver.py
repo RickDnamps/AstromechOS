@@ -30,7 +30,7 @@
 """
 Master Dome Servo Driver — Phase 2 (MG90S 180°).
 Drives the PCA9685 I2C @ 0x40 directly via smbus2 (hardware registers).
-11 dome panel servos, channels 0–10.
+16 dome panel servos, channels 0–15.
 
 MG90S 180° servo: pulse_us = 500 + (angle_deg / 180.0) * 2000
 open()  → moves to open_angle_deg and holds position
@@ -77,6 +77,11 @@ SERVO_MAP: dict[str, int] = {
     'Servo_M8':   8,
     'Servo_M9':   9,
     'Servo_M10': 10,
+    'Servo_M11': 11,
+    'Servo_M12': 12,
+    'Servo_M13': 13,
+    'Servo_M14': 14,
+    'Servo_M15': 15,
 }
 
 

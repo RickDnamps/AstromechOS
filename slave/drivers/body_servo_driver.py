@@ -76,6 +76,11 @@ SERVO_MAP: dict[str, int] = {
     'Servo_S8':   8,
     'Servo_S9':   9,
     'Servo_S10': 10,
+    'Servo_S11': 11,
+    'Servo_S12': 12,
+    'Servo_S13': 13,
+    'Servo_S14': 14,
+    'Servo_S15': 15,
 }
 
 

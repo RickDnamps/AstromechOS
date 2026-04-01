@@ -79,8 +79,8 @@ _DOME_ANGLES_FILE  = '/home/artoo/r2d2/master/config/dome_angles.json'
 _SLAVE_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
 _SLAVE_HOST        = 'artoo@r2-slave.local'
 
-BODY_SERVOS = [f'Servo_S{i}' for i in range(11)]
-DOME_SERVOS = [f'Servo_M{i}' for i in range(11)]
+BODY_SERVOS = [f'Servo_S{i}' for i in range(16)]
+DOME_SERVOS = [f'Servo_M{i}' for i in range(16)]
 _ALL_PANELS = DOME_SERVOS + BODY_SERVOS
 
 _DEFAULT_OPEN  = 110
