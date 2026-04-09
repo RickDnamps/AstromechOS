@@ -94,6 +94,10 @@ def get_status():
         'heartbeat_ok': heartbeat_ok,   # App ↔ Master
         'uart_ready':   uart_ready,     # Master ↔ Slave UART
         'app_hb_age_ms': app_watchdog.last_hb_age_ms,
+        'battery_voltage':  next(
+            (t['v_in'] for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
+             if t and t.get('v_in')), None
+        ),
         'teeces_ready':     bool(reg.teeces     and reg.teeces.is_ready()),
         'vesc_ready':       bool(reg.vesc       and reg.vesc.is_ready()),
         'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),
