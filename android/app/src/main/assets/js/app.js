@@ -202,7 +202,9 @@ class LockManager {
     document.body.dataset.lockMode = mode;
 
     const label = el('lock-mode-label');
-    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];
+    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];  // kept for compatibility
+    const dlabel = el('drive-lock-label');
+    if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][mode];
 
     // Timer Kids Mode
     if (mode === 1) {
@@ -241,6 +243,8 @@ class LockManager {
       document.body.dataset.lockMode = lockMode;
       const label = el('lock-mode-label');
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
+      const dlabel = el('drive-lock-label');
+      if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][lockMode];
       if (lockMode === 1) this._applyKidsSpeed();
     }
   }
@@ -392,14 +396,34 @@ class BatteryGauge {
     this._pct      = el('battery-pct');
     this._TOTAL    = 170;   // full arc length (main)
     this._MINI     = 63;    // full arc length (mini header)
-    this._MIN_V    = 20.0;
-    this._MAX_V    = 29.4;
+    this._MIN_V    = 14.0;  // 4S default (testing battery)
+    this._MAX_V    = 16.8;
+    this._lastV    = null;
+  }
+
+  // LiPo: 3.5 V/cell (min) — 4.2 V/cell (max)
+  setCells(cells) {
+    this._MIN_V = cells * 3.5;
+    this._MAX_V = cells * 4.2;
+    if (this._lastV) this.update(this._lastV);
+  }
+
+  // Returns 0–100 percentage based on configured cell count
+  voltToPct(v) {
+    return Math.max(0, Math.min(100, ((v - this._MIN_V) / (this._MAX_V - this._MIN_V)) * 100));
+  }
+
+  // Per-cell thresholds (LiPo): green > 3.8V, orange 3.6–3.8V, red < 3.6V
+  voltToColor(v) {
+    const vpc = v / (this._MAX_V / 4.2);
+    return vpc >= 3.8 ? '#00cc66' : vpc >= 3.6 ? '#ff8800' : '#ff2244';
   }
 
   update(voltage) {
+    this._lastV = voltage;
     if (!voltage || voltage < 1) return;
-    const pct  = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
-    const color = pct > 0.5 ? '#00cc66' : pct > 0.25 ? '#ff8800' : '#ff2244';
+    const pct   = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
+    const color = this.voltToColor(voltage);
 
     // Main arc
     if (this._arc) {
@@ -1148,6 +1172,139 @@ function driveStop()       { api('/motion/stop',      'POST'); }
 function domeStop()        { api('/motion/dome/stop', 'POST'); }
 function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on }); }
 
+// ================================================================
+// Camera — last-connect-wins proxy via Flask /camera/*
+// ================================================================
+
+let _camToken     = null;
+let _camEnabled   = true;
+let _camPollTimer = null;
+
+function _camBase() {
+  return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
+    ? window.R2D2_API_BASE : '';
+}
+
+async function _takeCameraStream() {
+  if (!_camEnabled) return;
+  const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
+    .then(r => r.json()).catch(() => null);
+  if (!r) return;
+  _camToken = r.token;
+
+  const img   = el('cam-stream');
+  const bg    = el('cam-bg');
+  const taken = el('cam-taken');
+  if (!img) return;
+
+  if (taken) taken.style.display = 'none';
+  img.src = _camBase() + `/camera/stream?t=${_camToken}`;
+  img.style.display = 'block';
+  if (bg) bg.style.display = 'none';
+
+  _startCamPoll();
+}
+
+function _startCamPoll() {
+  clearInterval(_camPollTimer);
+  _camPollTimer = setInterval(async () => {
+    if (!_camToken || !_camEnabled) return;
+    const r = await fetch(_camBase() + '/camera/status')
+      .then(r => r.json()).catch(() => null);
+    if (!r) return;
+    if (r.active_token !== _camToken) {
+      // Another client claimed the slot
+      _camToken = null;
+      const img   = el('cam-stream');
+      const bg    = el('cam-bg');
+      const taken = el('cam-taken');
+      if (img)   { img.src = ''; img.style.display = 'none'; }
+      if (bg)    bg.style.display = 'block';
+      if (taken) taken.style.display = 'flex';
+      clearInterval(_camPollTimer);
+    }
+  }, 3000);
+}
+
+function _toggleCamera() {
+  _camEnabled = !_camEnabled;
+  const btn   = el('cam-toggle-btn');
+  const img   = el('cam-stream');
+  const bg    = el('cam-bg');
+  const taken = el('cam-taken');
+  if (btn) {
+    btn.classList.toggle('cam-on',  _camEnabled);
+    btn.classList.toggle('cam-off', !_camEnabled);
+  }
+  if (_camEnabled) {
+    _takeCameraStream();
+  } else {
+    clearInterval(_camPollTimer);
+    _camToken = null;
+    if (img)   { img.src = ''; img.style.display = 'none'; }
+    if (taken) taken.style.display = 'none';
+    if (bg)    bg.style.display = 'block';
+  }
+}
+
+function _initCameraStream() { _takeCameraStream(); }
+
+// ================================================================
+// Drive HUD — speed arc + direction arrow
+// ================================================================
+
+// Arc length for "M6 40 A32 32 0 0 1 68 40" semicircle ≈ π × 32 ≈ 100.5
+const _CAM_ARC_LEN = 101;
+
+function _updateDriveHUD(throttle, steering) {
+  // Speed arc
+  const speed = Math.min(1, Math.abs(throttle));
+  const arc   = el('cam-speed-arc');
+  const val   = el('cam-speed-val');
+  if (arc) arc.style.strokeDashoffset = _CAM_ARC_LEN * (1 - speed);
+  if (val) val.textContent = Math.round(speed * 100) + '%';
+
+  // Color arc green→orange→red with speed
+  if (arc) arc.style.stroke = speed < 0.5 ? '#00aaff' : speed < 0.8 ? '#ff8800' : '#ff2244';
+
+  // Direction arrow
+  const wrap = el('cam-dir-wrap');
+  const poly = el('cam-dir-poly');
+  if (!wrap) return;
+  const mag = Math.sqrt(throttle * throttle + steering * steering * 0.3);
+  wrap.style.opacity = mag > 0.05 ? Math.min(1, mag * 2).toFixed(2) : '0';
+  if (mag > 0.05 && poly) {
+    // atan2: 0=up, positive=clockwise
+    const angleDeg = Math.atan2(steering, throttle) * (180 / Math.PI);
+    // Our arrow points up = forward = throttle > 0
+    // Rotate: forward(throttle=1,steer=0) → 0°, right(steer=1) → +90°
+    const rot = angleDeg;
+    wrap.style.transform = `translate(-50%,-50%) rotate(${rot}deg)`;
+  }
+}
+
+let _estopTripped = false;
+
+function _setEstopUI(tripped) {
+  _estopTripped = tripped;
+  const btn = el('estop-toggle-btn');
+  const txt = el('estop-toggle-text');
+  if (!btn) return;
+  if (tripped) {
+    btn.classList.replace('estop-armed', 'estop-tripped');
+    if (txt) txt.textContent = 'RESET E-STOP';
+    btn.querySelector('.estop-icon').innerHTML = '&#9654;';
+  } else {
+    btn.classList.replace('estop-tripped', 'estop-armed');
+    if (txt) txt.textContent = 'EMERGENCY STOP';
+    btn.querySelector('.estop-icon').innerHTML = '&#9632;';
+  }
+}
+
+function toggleEstop() {
+  if (_estopTripped) { estopReset(); } else { emergencyStop(); }
+}
+
 function emergencyStop() {
   driveStop();
   domeStop();
@@ -1157,12 +1314,14 @@ function emergencyStop() {
   api('/system/estop', 'POST');
   toast('EMERGENCY STOP', 'error');
   audioBoard.setPlaying(false);
+  _setEstopUI(true);
 }
 
 function estopReset() {
   api('/system/estop_reset', 'POST').then(r => {
     if (r && r.status === 'reset') {
       toast('E-STOP RESET — servos re-armed', 'ok');
+      _setEstopUI(false);
     } else {
       toast('Reset failed', 'error');
     }
@@ -1179,13 +1338,14 @@ const jsLeft = new VirtualJoystick(
     const throttle = -y * _speedLimit;
     const steering =  x * _speedLimit * 0.55;
     api('/motion/arcade', 'POST', { throttle, steering });
-    // update throttle/steer displays
+    _updateDriveHUD(throttle, steering);
     const t = el('js-left-t'); if (t) t.textContent = throttle.toFixed(2);
     const s = el('js-left-s'); if (s) s.textContent = steering.toFixed(2);
   },
   () => {
     _leftActive = false;
     driveStop();
+    _updateDriveHUD(0, 0);
     const t = el('js-left-t'); if (t) t.textContent = '0.00';
     const s = el('js-left-s'); if (s) s.textContent = '0.00';
   }
@@ -1220,8 +1380,11 @@ const jsRight = new VirtualJoystick(
 // ================================================================
 
 const _keys = {};
-const KBD_IDS = { 'KeyW': 'kbd-w', 'ArrowUp': 'kbd-w', 'KeyS': 'kbd-s', 'ArrowDown': 'kbd-s',
-                  'KeyA': 'kbd-a', 'ArrowLeft': 'kbd-a', 'KeyD': 'kbd-d', 'ArrowRight': 'kbd-d' };
+// WASD → propulsion indicators | Arrows → dome indicators (separate)
+const KBD_IDS = {
+  'KeyW': 'kbd-w', 'KeyS': 'kbd-s', 'KeyA': 'kbd-a', 'KeyD': 'kbd-d',
+  'ArrowUp': 'kbd-up', 'ArrowDown': 'kbd-down', 'ArrowLeft': 'kbd-left', 'ArrowRight': 'kbd-right',
+};
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
@@ -1239,7 +1402,7 @@ document.addEventListener('keyup', e => {
 });
 
 function _updateKbdUI() {
-  ['kbd-w','kbd-s','kbd-a','kbd-d'].forEach(id => {
+  ['kbd-w','kbd-s','kbd-a','kbd-d','kbd-up','kbd-down','kbd-left','kbd-right'].forEach(id => {
     const k = el(id);
     if (k) k.classList.remove('active');
   });
@@ -1249,18 +1412,38 @@ function _updateKbdUI() {
   });
 }
 
+let _domeKeyWasActive = false;
+
 function _handleKeys() {
   if (_leftActive) return; // joystick takes priority
-  const fwd   = _keys['KeyW'] || _keys['ArrowUp'];
-  const back  = _keys['KeyS'] || _keys['ArrowDown'];
-  const left  = _keys['KeyA'] || _keys['ArrowLeft'];
-  const right = _keys['KeyD'] || _keys['ArrowRight'];
 
-  if (!fwd && !back && !left && !right) { driveStop(); return; }
+  // Propulsion — WASD only
+  const fwd   = _keys['KeyW'];
+  const back  = _keys['KeyS'];
+  const left  = _keys['KeyA'];
+  const right = _keys['KeyD'];
 
-  const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
-  const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
-  api('/motion/arcade', 'POST', { throttle, steering });
+  if (fwd || back || left || right) {
+    const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
+    const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
+    api('/motion/arcade', 'POST', { throttle, steering });
+    _updateDriveHUD(throttle, steering);
+  } else {
+    driveStop();
+    _updateDriveHUD(0, 0);
+  }
+
+  // Dome rotation — Arrow Left / Right
+  // Arrow Up / Down reserved for future camera tilt
+  const domeL = _keys['ArrowLeft'];
+  const domeR = _keys['ArrowRight'];
+  if (domeL || domeR) {
+    _domeKeyWasActive = true;
+    api('/motion/dome/turn', 'POST', { speed: domeR ? 0.4 : -0.4 });
+  } else if (_domeKeyWasActive) {
+    _domeKeyWasActive = false;
+    domeStop();
+  }
 }
 
 // ================================================================
@@ -1784,14 +1967,14 @@ class VescPanel {
     const vEl  = el('vesc-voltage');
     const fill = el('vesc-battery-fill');
     if (src && vEl) {
-      const v = src.v_in;
+      const v   = src.v_in;
+      const col = batteryGauge.voltToColor(v);
       vEl.textContent = v.toFixed(1);
-      vEl.className = 'vesc-battery-value' + (v < 21 ? ' danger' : v < 22 ? ' warn' : '');
-      // 6S LiPo: 19.2V empty → 25.2V full
-      const pct = Math.max(0, Math.min(100, ((v - 19.2) / (25.2 - 19.2)) * 100));
+      vEl.className = 'vesc-battery-value' + (col === '#ff2244' ? ' danger' : col === '#ff8800' ? ' warn' : '');
+      const pct = batteryGauge.voltToPct(v);
       if (fill) {
         fill.style.width = pct + '%';
-        fill.style.background = v < 21 ? '#ff4455' : v < 22 ? '#ffcc00' : '#00ff88';
+        fill.style.background = col;
       }
     } else if (vEl) {
       vEl.textContent = '--.-';
@@ -2533,6 +2716,16 @@ class StatusPoller {
     // Battery gauge
     if (data.battery_voltage) batteryGauge.update(data.battery_voltage);
 
+    // Drive tab VESC stats (voltage + VESC temp)
+    const sv = el('drive-stat-v');
+    const st = el('drive-stat-t');
+    if (sv && data.battery_voltage != null)
+      sv.textContent = data.battery_voltage.toFixed(1) + 'V';
+    if (st && data.vesc_temp != null) {
+      st.textContent = data.vesc_temp.toFixed(0) + '°C';
+      st.style.color = data.vesc_temp < 50 ? 'var(--text-dim)' : data.vesc_temp < 70 ? 'var(--orange)' : 'var(--red)';
+    }
+
     // Temperature
     if (data.temperature != null) {
       const temp = data.temperature;
@@ -2750,6 +2943,13 @@ async function loadSettings() {
     if (inp) inp.value = data.audio.channels ?? 6;
     _audioChannelsConfig = data.audio.channels ?? 6;
   }
+
+  if (data.battery) {
+    const cells = data.battery.cells ?? 4;
+    const sel = el('battery-cells');
+    if (sel) sel.value = String(cells);
+    batteryGauge.setCells(cells);
+  }
 }
 
 async function saveLightsBackend() {
@@ -2782,6 +2982,21 @@ async function saveAudioChannels() {
     }
   } else {
     toast('Failed to update audio channels', 'error');
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  }
+}
+
+async function saveBatteryCells() {
+  const cells = parseInt(el('battery-cells')?.value) || 4;
+  const status = el('battery-cells-status');
+  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+  const data = await api('/settings/config', 'POST', { 'battery.cells': cells });
+  if (data?.status === 'ok') {
+    batteryGauge.setCells(cells);
+    toast(`Battery: ${cells}S (${(cells * 3.5).toFixed(1)}–${(cells * 4.2).toFixed(1)} V)`, 'ok');
+    if (status) { status.textContent = `${cells}S configured`; status.className = 'settings-status ok'; }
+  } else {
+    toast('Failed to save battery config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
 }
@@ -2961,6 +3176,9 @@ async function init() {
 
   // Lock Manager init (kids speed slider + body data-lock-mode)
   lockMgr.init();
+
+  // Camera stream (Drive tab center)
+  _initCameraStream();
 
   // Volume slider + VESC scale slider
   initVolume();
@@ -3338,7 +3556,7 @@ const choreoEditor = (() => {
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const sid   = item.servo || '?';
       const label = _servoSettings[sid]?.label || sid;
-      return `${label} ${item.action || ''}`;
+      return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
     return '?';
@@ -3970,8 +4188,9 @@ const choreoEditor = (() => {
 
     if (vVals.length) {
       const vMin = Math.min(...vVals);
-      const vPct = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
-      const vCol = vPct < 20 ? 'var(--red)' : vPct < 50 ? 'var(--amber)' : 'var(--green)';
+      const vPct = batteryGauge.voltToPct(vMin);
+      const vCol = batteryGauge.voltToColor(vMin) === '#ff2244' ? 'var(--red)'
+                 : batteryGauge.voltToColor(vMin) === '#ff8800' ? 'var(--amber)' : 'var(--green)';
       _setBar('chor-telem-v-bar', 'chor-telem-v', vPct, vMin.toFixed(1)+'V', vCol);
     }
     if (tVals.length) {
@@ -3994,9 +4213,9 @@ const choreoEditor = (() => {
 
     if (battEl && vVals && vVals.length) {
       const vMin = Math.min(...vVals);
-      const vPctLocal = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
+      const col  = batteryGauge.voltToColor(vMin);
       battEl.textContent = vMin.toFixed(1) + 'V';
-      battEl.className = 'chor-cmd-gauge' + (vPctLocal < 20 ? ' crit' : vPctLocal < 50 ? ' warn' : '');
+      battEl.className = 'chor-cmd-gauge' + (col === '#ff2244' ? ' crit' : col === '#ff8800' ? ' warn' : '');
     }
     if (tempEl && tVals && tVals.length) {
       const tMax = Math.max(...tVals);
