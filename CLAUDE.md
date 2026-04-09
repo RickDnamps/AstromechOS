@@ -399,8 +399,33 @@ This applies to every file going forward. Existing French in untouched files is 
 
 ## ✅ Implementation Status
 
+### ChoreoPlayer — Architecture & Gotchas
+
+**File:** `master/choreo_player.py` — `TICK = 50ms` loop
+
+**Multichannel audio:** Up to 12 simultaneous tracks (configured via Config tab → `[audio] audio_channels` in `local.cfg`).
+Each Choreo `audio` event claims a free slot; if all slots are busy the oldest running track is preempted.
+`audio_channels` propagates automatically to ChoreoPlayer at startup (read from cfg).
+
+**Drive (motion) blocks:** ChoreoPlayer fires discrete `vesc.drive(left, right)` at event timestamps.
+There is **no software ramping** in the player. Progressive movement is handled automatically by VESC firmware
+(acceleration/deceleration ramps configured in VESC Tool per motor profile).
+A `drive` block with value `0,0` sends an explicit stop. The `motion_watchdog.py` (800ms) catches runaway movement if the player crashes mid-sequence.
+
+**Servo interpolation:** Dome servos (I2C, PCA9685 @ 0x40) use easing functions + slew threads → smooth motion.
+Body servos (UART → Slave → PCA9685 @ 0x41) are advanced by `body_servo_uart_lat` (default 25ms) to compensate UART round-trip.
+
+**Telemetry abort thresholds (auto-derived from `[battery] cells`):**
+- `vesc_min_voltage`: `cells × 3.5V` (default: 4S → 14.0V, 6S → 21.0V) — overridable via `[choreo] vesc_min_voltage`
+- `vesc_max_temp`: 80°C
+- `vesc_max_current`: 30A
+- `uart_fail_threshold`: 3 consecutive UART failures → abort
+
+`GET /choreo/status` returns `abort_reason` + `telem` (last known telemetry).
+
 ### ChoreoPlayer VESC Telemetry (2026-03-28) — commit `2287eec`
-UART fail-safe, telemetry thresholds (20V/80°C/30A), `GET /choreo/status` returns `abort_reason` + `telem`.
+UART fail-safe, telemetry thresholds, `GET /choreo/status` returns `abort_reason` + `telem`.
+`vesc_min_voltage` default now derived from `[battery] cells` (3.5V/cell) — no longer hardcoded 20V.
 
 ### Choreo Timeline UI — Sprint 6.3 (2026-03-28 → 2026-03-31)
 | Feature | Status |

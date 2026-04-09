@@ -75,13 +75,16 @@ class ChoreoPlayer:
         if cfg is not None:
             self._telem_check_interval = cfg.getfloat('choreo', 'telem_check_interval', fallback=0.5)
             self._uart_fail_threshold  = cfg.getint('choreo',   'uart_fail_threshold',  fallback=3)
-            self._vesc_min_voltage     = cfg.getfloat('choreo', 'vesc_min_voltage',     fallback=20.0)
+            # vesc_min_voltage: derive from battery cell count (3.5V/cell) unless overridden in cfg
+            _cells = cfg.getint('battery', 'cells', fallback=4)
+            _default_min_v = _cells * 3.5
+            self._vesc_min_voltage     = cfg.getfloat('choreo', 'vesc_min_voltage',     fallback=_default_min_v)
             self._vesc_max_temp        = cfg.getfloat('choreo', 'vesc_max_temp',        fallback=80.0)
             self._vesc_max_current     = cfg.getfloat('choreo', 'vesc_max_current',     fallback=30.0)
         else:
             self._telem_check_interval = 0.5
             self._uart_fail_threshold  = 3
-            self._vesc_min_voltage     = 20.0
+            self._vesc_min_voltage     = 14.0   # 4S default (3.5V × 4); set [battery] cells in cfg for other packs
             self._vesc_max_temp        = 80.0
             self._vesc_max_current     = 30.0
 
