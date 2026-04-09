@@ -78,6 +78,7 @@ def create_app() -> Flask:
     from master.api.bt_bp       import bt_bp
     from master.api.light_bp    import light_bp
     from master.api.choreo_bp   import choreo_bp
+    from master.api.camera_bp   import camera_bp
 
     app.register_blueprint(audio_bp)
     app.register_blueprint(motion_bp)
@@ -90,6 +91,7 @@ def create_app() -> Flask:
     app.register_blueprint(bt_bp)
     app.register_blueprint(light_bp)
     app.register_blueprint(choreo_bp)
+    app.register_blueprint(camera_bp)
 
     # ------------------------------------------------------------------
     # Routes dashboard

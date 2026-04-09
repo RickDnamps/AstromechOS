@@ -1172,22 +1172,115 @@ function driveStop()       { api('/motion/stop',      'POST'); }
 function domeStop()        { api('/motion/dome/stop', 'POST'); }
 function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on }); }
 
-// Camera MJPEG stream — port 8080 on Master Pi
-function _initCameraStream() {
-  const img = el('cam-stream');
-  const bg  = el('cam-bg');
+// ================================================================
+// Camera — last-connect-wins proxy via Flask /camera/*
+// ================================================================
+
+let _camToken     = null;
+let _camEnabled   = true;
+let _camPollTimer = null;
+
+function _camBase() {
+  return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
+    ? window.R2D2_API_BASE : '';
+}
+
+async function _takeCameraStream() {
+  if (!_camEnabled) return;
+  const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
+    .then(r => r.json()).catch(() => null);
+  if (!r) return;
+  _camToken = r.token;
+
+  const img   = el('cam-stream');
+  const bg    = el('cam-bg');
+  const taken = el('cam-taken');
   if (!img) return;
-  let host = window.location.hostname || '192.168.2.104';
-  if (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) {
-    host = window.R2D2_API_BASE.replace(/^https?:\/\//, '').replace(/:\d+$/, '');
-  }
-  const url = `http://${host}:8080/?action=stream`;
-  img.onerror = () => { img.style.display = 'none'; if (bg) bg.style.display = 'block'; };
-  img.onload  = () => { img.style.display = 'block'; if (bg) bg.style.display = 'none'; };
-  img.src = url;
-  // Show immediately — MJPEG streams don't fire onload until first frame
+
+  if (taken) taken.style.display = 'none';
+  img.src = _camBase() + `/camera/stream?t=${_camToken}`;
   img.style.display = 'block';
   if (bg) bg.style.display = 'none';
+
+  _startCamPoll();
+}
+
+function _startCamPoll() {
+  clearInterval(_camPollTimer);
+  _camPollTimer = setInterval(async () => {
+    if (!_camToken || !_camEnabled) return;
+    const r = await fetch(_camBase() + '/camera/status')
+      .then(r => r.json()).catch(() => null);
+    if (!r) return;
+    if (r.active_token !== _camToken) {
+      // Another client claimed the slot
+      _camToken = null;
+      const img   = el('cam-stream');
+      const bg    = el('cam-bg');
+      const taken = el('cam-taken');
+      if (img)   { img.src = ''; img.style.display = 'none'; }
+      if (bg)    bg.style.display = 'block';
+      if (taken) taken.style.display = 'flex';
+      clearInterval(_camPollTimer);
+    }
+  }, 3000);
+}
+
+function _toggleCamera() {
+  _camEnabled = !_camEnabled;
+  const btn   = el('cam-toggle-btn');
+  const img   = el('cam-stream');
+  const bg    = el('cam-bg');
+  const taken = el('cam-taken');
+  if (btn) {
+    btn.classList.toggle('cam-on',  _camEnabled);
+    btn.classList.toggle('cam-off', !_camEnabled);
+  }
+  if (_camEnabled) {
+    _takeCameraStream();
+  } else {
+    clearInterval(_camPollTimer);
+    _camToken = null;
+    if (img)   { img.src = ''; img.style.display = 'none'; }
+    if (taken) taken.style.display = 'none';
+    if (bg)    bg.style.display = 'block';
+  }
+}
+
+function _initCameraStream() { _takeCameraStream(); }
+
+// ================================================================
+// Drive HUD — speed arc + direction arrow
+// ================================================================
+
+// Arc length for "M6 40 A32 32 0 0 1 68 40" semicircle ≈ π × 32 ≈ 100.5
+const _CAM_ARC_LEN = 101;
+
+function _updateDriveHUD(throttle, steering) {
+  // Speed arc
+  const speed = Math.min(1, Math.abs(throttle));
+  const arc   = el('cam-speed-arc');
+  const val   = el('cam-speed-val');
+  if (arc) arc.style.strokeDashoffset = _CAM_ARC_LEN * (1 - speed);
+  if (val) val.textContent = Math.round(speed * 100) + '%';
+
+  // Color arc green→orange→red with speed
+  if (arc) arc.style.stroke = speed < 0.5 ? '#00aaff' : speed < 0.8 ? '#ff8800' : '#ff2244';
+
+  // Direction arrow
+  const wrap = el('cam-dir-wrap');
+  const poly = el('cam-dir-poly');
+  if (!wrap) return;
+  const mag = Math.sqrt(throttle * throttle + steering * steering * 0.3);
+  wrap.style.opacity = mag > 0.05 ? Math.min(1, mag * 2).toFixed(2) : '0';
+  if (mag > 0.05 && poly) {
+    // atan2: 0=up, positive=clockwise
+    const angleDeg = Math.atan2(steering, throttle) * (180 / Math.PI);
+    // Our arrow points up = forward = throttle > 0
+    // Rotate: forward(throttle=1,steer=0) → 0°, right(steer=1) → +90°
+    const rot = angleDeg;
+    wrap.style.transform = `translate(-50%,-50%) rotate(${rot}deg)`;
+  }
 }
 
 let _estopTripped = false;
@@ -1245,13 +1338,14 @@ const jsLeft = new VirtualJoystick(
     const throttle = -y * _speedLimit;
     const steering =  x * _speedLimit * 0.55;
     api('/motion/arcade', 'POST', { throttle, steering });
-    // update throttle/steer displays
+    _updateDriveHUD(throttle, steering);
     const t = el('js-left-t'); if (t) t.textContent = throttle.toFixed(2);
     const s = el('js-left-s'); if (s) s.textContent = steering.toFixed(2);
   },
   () => {
     _leftActive = false;
     driveStop();
+    _updateDriveHUD(0, 0);
     const t = el('js-left-t'); if (t) t.textContent = '0.00';
     const s = el('js-left-s'); if (s) s.textContent = '0.00';
   }
@@ -1333,8 +1427,10 @@ function _handleKeys() {
     const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
     const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
     api('/motion/arcade', 'POST', { throttle, steering });
+    _updateDriveHUD(throttle, steering);
   } else {
     driveStop();
+    _updateDriveHUD(0, 0);
   }
 
   // Dome rotation — Arrow Left / Right
@@ -2619,6 +2715,16 @@ class StatusPoller {
 
     // Battery gauge
     if (data.battery_voltage) batteryGauge.update(data.battery_voltage);
+
+    // Drive tab VESC stats (voltage + VESC temp)
+    const sv = el('drive-stat-v');
+    const st = el('drive-stat-t');
+    if (sv && data.battery_voltage != null)
+      sv.textContent = data.battery_voltage.toFixed(1) + 'V';
+    if (st && data.vesc_temp != null) {
+      st.textContent = data.vesc_temp.toFixed(0) + '°C';
+      st.style.color = data.vesc_temp < 50 ? 'var(--text-dim)' : data.vesc_temp < 70 ? 'var(--orange)' : 'var(--red)';
+    }
 
     // Temperature
     if (data.temperature != null) {

@@ -541,27 +541,51 @@ function _updateHostLabel() {
 // ── Haptic ────────────────────────────────────────────────────
 function _haptic(ms) { if (window.AndroidBridge) AndroidBridge.vibrate(ms); }
 
-// ── Camera stream ─────────────────────────────────────────────
-function _initCameraStream() {
+// ── Camera stream — last-connect-wins proxy ───────────────────
+let _camToken     = null;
+let _camPollTimer = null;
+
+async function _initCameraStream() {
+  await _takeCameraStream();
+}
+
+async function _takeCameraStream() {
+  const r = await fetch(API_BASE + '/camera/take', { method: 'POST' })
+    .then(r => r.json()).catch(() => null);
+  if (!r) return;
+  _camToken = r.token;
+
   const img   = document.getElementById('cam-stream');
   const bg    = document.getElementById('cam-bg');
+  const taken = document.getElementById('cam-taken');
   if (!img) return;
 
-  const host  = API_BASE.replace('http://', '').replace(':5000', '');
-  const url   = `http://${host}:8080/?action=stream`;
-
-  img.onerror = () => {
-    img.style.display = 'none';
-    if (bg) bg.style.display = 'block';
-  };
-  img.onload = () => {
-    img.style.display  = 'block';
-    if (bg) bg.style.display = 'none';
-  };
-  img.src = url;
-  // Show immediately — MJPEG streams don't fire onload until first frame
-  img.style.display  = 'block';
+  if (taken) taken.style.display = 'none';
+  img.src = API_BASE + `/camera/stream?t=${_camToken}`;
+  img.style.display = 'block';
   if (bg) bg.style.display = 'none';
+
+  _startCamPoll();
+}
+
+function _startCamPoll() {
+  clearInterval(_camPollTimer);
+  _camPollTimer = setInterval(async () => {
+    if (!_camToken) return;
+    const r = await fetch(API_BASE + '/camera/status')
+      .then(r => r.json()).catch(() => null);
+    if (!r) return;
+    if (r.active_token !== _camToken) {
+      _camToken = null;
+      const img   = document.getElementById('cam-stream');
+      const bg    = document.getElementById('cam-bg');
+      const taken = document.getElementById('cam-taken');
+      if (img)   { img.src = ''; img.style.display = 'none'; }
+      if (bg)    bg.style.display = 'block';
+      if (taken) taken.style.display = 'flex';
+      clearInterval(_camPollTimer);
+    }
+  }, 3000);
 }
 
 // ── Init ──────────────────────────────────────────────────────

@@ -417,6 +417,102 @@ body[data-lock-mode="0"] .drive-lock-label { opacity: 0; }
   pointer-events: none;
 }
 
+/* ── Camera HUD overlays ─────────────────────────────── */
+
+/* Speed arc — top-left */
+.cam-hud-speed {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.cam-speed-val {
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--blue);
+  font-family: var(--font);
+  margin-top: -4px;
+  text-shadow: 0 0 6px var(--blue);
+}
+
+/* Direction arrow — center */
+.cam-dir-wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  pointer-events: none;
+  transition: opacity 0.3s;
+  filter: drop-shadow(0 0 6px rgba(0, 255, 200, 0.6));
+}
+
+/* Stream taken overlay */
+.cam-taken {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--red);
+  border-radius: var(--radius);
+}
+
+.cam-taken-text {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--text-dim);
+  font-family: var(--font);
+}
+
+.cam-taken-btn {
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 8px 18px;
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.cam-taken-btn:hover {
+  background: var(--blue);
+  color: #000;
+}
+
+/* ── Child Lock overlay — more visible ───────────────── */
+
+/* Override old emoji overlay */
+body[data-lock-mode="2"] #js-left-ring {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+body[data-lock-mode="2"] #js-left-ring::after {
+  content: 'CHILD LOCK';
+  position: absolute;
+  inset: 0;
+  background: rgba(200, 0, 0, 0.55);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-family: var(--font);
+  letter-spacing: 2px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 2px solid rgba(255, 60, 60, 0.7);
+  text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
+}
+
 /* Bottom bar — 3-column grid so E-STOP is always perfectly centered */
 .drive-bottom-bar {
   flex-shrink: 0;
@@ -429,14 +525,67 @@ body[data-lock-mode="0"] .drive-lock-label { opacity: 0; }
   background: rgba(0, 5, 15, 0.6);
 }
 
-.drive-bottom-bar .speed-wrap {
-  min-width: 100px;
-  max-width: 180px;
+/* Col 1 — speed + stats */
+.drive-bottom-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   justify-self: start;
+  min-width: 110px;
+  max-width: 180px;
 }
 
-.drive-bottom-bar .dome-toggle-wrap {
+/* Col 3 — dome + cam toggle */
+.drive-bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   justify-self: end;
+}
+
+/* VESC stats under speed slider */
+.drive-vesc-stats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.drive-stat {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  font-family: var(--font);
+}
+
+.drive-stat-sep {
+  font-size: 10px;
+  color: var(--border);
+}
+
+/* Camera toggle button */
+.cam-toggle-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.cam-toggle-btn.cam-on {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.cam-toggle-btn.cam-off {
+  border-color: var(--border);
+  color: var(--text-dim);
+  opacity: 0.5;
 }
 
 /* E-STOP toggle button */
@@ -2386,19 +2535,7 @@ body[data-lock-mode="0"] .lock-mode-bar { background: transparent; }
 body[data-lock-mode="1"] .lock-mode-bar { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
 body[data-lock-mode="2"] .lock-mode-bar { background: var(--red);    box-shadow: 0 0 8px var(--red);    }
 
-/* Joystick gauche désactivé en Child Lock */
-body[data-lock-mode="2"] #js-left-ring {
-  opacity: 0.3;
-  pointer-events: none;
-}
-body[data-lock-mode="2"] #js-left-ring::after {
-  content: '🔒';
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 20px;
-  pointer-events: none;
-}
+/* Child Lock joystick — see drive tab section for the full override */
 
 /* Contrôles vitesse désactivés en Kids et Child Lock */
 body[data-lock-mode="1"] .speed-mode-btn,

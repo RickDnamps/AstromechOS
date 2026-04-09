@@ -3,6 +3,7 @@
 # setup_master.sh le gère automatiquement.
 
 pyserial>=3.5
+requests>=2.31.0
 RPi.GPIO>=0.7.1
 adafruit-circuitpython-pca9685>=2.4.0
 flask>=3.0.0

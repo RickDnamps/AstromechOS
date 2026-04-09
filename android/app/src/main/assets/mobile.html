@@ -37,6 +37,12 @@
     <img id="cam-stream" style="display:none">
     <div id="cam-bg"></div>
 
+    <!-- Stream taken overlay -->
+    <div id="cam-taken" style="display:none;position:absolute;inset:0;z-index:10;background:rgba(0,0,0,0.78);flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#ff2244;font-family:monospace">
+      <div style="font-size:11px;letter-spacing:3px;color:#667788">STREAM TAKEN</div>
+      <button onclick="_takeCameraStream()" style="background:none;border:1px solid #00aaff;color:#00aaff;font-family:monospace;font-size:11px;letter-spacing:2px;padding:8px 18px;border-radius:6px;cursor:pointer">TAKE STREAM</button>
+    </div>
+
     <!-- HUD corner brackets -->
     <div class="hud-corner tl"></div>
     <div class="hud-corner tr"></div>

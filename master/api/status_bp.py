@@ -98,6 +98,14 @@ def get_status():
             (t['v_in'] for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
              if t and t.get('v_in')), None
         ),
+        'vesc_temp': max(
+            (t['temp'] for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
+             if t and t.get('temp') is not None), default=None
+        ),
+        'vesc_duty': max(
+            (abs(t['duty']) for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
+             if t and t.get('duty') is not None), default=None
+        ),
         'teeces_ready':     bool(reg.teeces     and reg.teeces.is_ready()),
         'vesc_ready':       bool(reg.vesc       and reg.vesc.is_ready()),
         'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),
