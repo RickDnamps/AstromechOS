@@ -346,6 +346,21 @@ The Slave checks version on boot — if it mismatches, it requests a resync auto
 
 ## Architecture
 
+### Why Two Raspberry Pi 4B?
+
+The Master + Slave split is a deliberate design decision, not just a workaround for cable routing through the slip ring.
+
+**The real-time problem.** R2-D2 has two physically separate worlds: the dome (servos, lights, Teeces, web server, Bluetooth) and the body (drive motors, body servos, audio, LCD). Putting everything on one Pi means a spike in Flask/Python GIL or a slow sequence could delay motor watchdog responses. With two Pis, the Slave's 500ms UART watchdog runs independently — even if the Master crashes, the Slave cuts the VESCs automatically.
+
+**The future: AI and computer vision.** The main reason for choosing 4GB on the Master is headroom for what comes next:
+- **Facial recognition** — detect and track a face, orient the dome toward the person
+- **Gesture recognition** — respond to waves, pointing, specific poses
+- **Behavioral AI** — generate contextually appropriate reactions (sounds, panel movements, dome orientation) based on what R2 perceives, making the robot feel genuinely alive rather than scripted
+
+These workloads are CPU/RAM-intensive and run continuously in the background. Isolating them on the Master means they never interfere with the real-time motor control on the Slave.
+
+**Pi 5 upgrade path.** If AI inference becomes a bottleneck on Pi 4B (especially running a small vision model or ONNX runtime), only the Master needs upgrading — the Slave keeps its Pi 4B 2GB forever since it does pure real-time I/O. The UART protocol between them doesn't change. This is also why the Master has 4GB (AI/CV headroom) while the Slave has only 2GB (real-time I/O, no AI workloads).
+
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │  📱 Phone / Tablet / PC  ←── Wi-Fi (192.168.4.1:5000)             │
