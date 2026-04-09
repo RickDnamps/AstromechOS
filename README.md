@@ -139,7 +139,7 @@ BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout
 <td align="center" width="50%">
 
 ### ⚙️ Config — Wi-Fi & Others
-Hotspot · Home Wi-Fi · Lights driver hot-swap · Auto-deploy · Git branch
+Hotspot · Home Wi-Fi · Lights driver hot-swap · Battery cell count · Auto-deploy · Git branch
 
 ![Config WiFi](Screenshots/Config_Menu_Wifi_Others.png)
 
@@ -177,7 +177,7 @@ Voltage · temperature · RPM · duty · fault codes — minimal setup reference
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
-| 📊 **VESC telemetry** | Voltage · temp · RPM · duty · fault codes live |
+| 📊 **VESC telemetry** | Voltage · temp · RPM · duty · fault codes live — battery gauge auto-scaled by cell count |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
 ---
@@ -387,7 +387,7 @@ The Slave checks version on boot — if it mismatches, it requests a resync auto
 │  │  Script engine           │   │  Watchdog 500ms → VESCs       │  │
 │  │  Light engine (parallel) │   │  Body servos PCA9685 @0x41    │  │
 │  │  Dome servos @0x40       │   │  Dome motor TB6612 @0x40      │  │
-│  │  Lights plugin           │   │  Drive VESCs (dual USB)       │  │
+│  │  Lights plugin           │   │  Drive VESCs (USB+CAN, ERPM)  │  │
 │  │  BT Controller (evdev)   │   │  Audio mpg123 (317 sounds)    │  │
 │  │  Deploy controller       │   │  RP2040 GC9A01 LCD (USB)      │  │
 │  └──────────────────────────┘   └───────────────────────────────┘  │
@@ -544,7 +544,7 @@ r2d2/
 │   ├── watchdog.py                — UART heartbeat watchdog → cuts VESCs at 500ms
 │   └── drivers/
 │       ├── audio_driver.py        — mpg123 + sounds_index.json (317 sounds)
-│       ├── vesc_driver.py         — pyvesc propulsion
+│       ├── vesc_driver.py         — VESC ERPM propulsion (native CRC-16, no pyvesc)
 │       ├── body_servo_driver.py   — PCA9685 @ 0x41
 │       └── display_driver.py      — RP2040 GC9A01 LCD via /dev/ttyACM*
 ├── shared/
@@ -590,7 +590,7 @@ Sequences are **created visually in the in-browser Sequence Editor** — no file
 | Phase | Description | Status |
 |-------|-------------|--------|
 | **1** | UART + CRC · heartbeat watchdog · audio · Teeces32 · RP2040 display · auto-deploy | ✅ Complete |
-| **2** | VESCs · dome motor · MG90S servo panels with speed ramp | 🔧 Code complete — hardware assembly in progress |
+| **2** | VESCs · dome motor · MG90S servo panels with speed ramp | ✅ Active — VESC ID1 USB + CAN→ID2, ERPM commands |
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
 | **4+** | Visual sequence editor · Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Servo hardware IDs + labels | ✅ Active |

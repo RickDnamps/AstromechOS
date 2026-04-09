@@ -81,7 +81,8 @@ r2d2/
 │   ├── drivers/
 │   │   ├── audio_driver.py      ← mpg123 + sounds_index.json
 │   │   ├── display_driver.py    ← RP2040 via /dev/ttyACM* (dynamique — ACM0/ACM1/ACM2 selon boot)
-│   │   ├── vesc_driver.py       ← pyvesc propulsion
+│   │   ├── vesc_driver.py       ← VESC ERPM propulsion (native CRC-16, no pyvesc)
+│   │   ├── vesc_can.py          ← COMM_FORWARD_CAN, set_rpm_can/direct, get_values_can/direct
 │   │   └── body_servo_driver.py ← PCA9685 @ 0x41
 │   ├── config/
 │   │   └── servo_angles.json    ← calibrations servos body (gitignored — propre au robot)
@@ -179,6 +180,36 @@ POST /system/estop_reset        → réarme les drivers servo (setup()) sans res
 
 ---
 
+## 🚗 VESC Propulsion — Topology & Gotchas
+
+**Hardware (2026-04-08) :** 2× Flipsky Mini V6.7, firmware v6.05, Hardware 60.
+**Connexion :** Pi Slave → USB → **VESC ID 1** → CAN H/L → **VESC ID 2**
+Un seul port série `/dev/ttyACM1` (ACM0 occupé par RP2040 — détection automatique via `display.used_port`).
+
+```
+Pi USB → VESC ID1 : set_rpm_direct(ser, erpm)
+Pi USB → VESC ID2 : set_rpm_can(ser, can_id=2, erpm)  # COMM_FORWARD_CAN (0x21) + COMM_SET_RPM (0x08)
+```
+
+**Pas de pyvesc** — implémentation native CRC-16/CCITT dans `vesc_can.py`.
+Raison : pip traite `PyCRC` et `pycrc` comme identiques (insensible casse) sur Python 3.13 → mauvais paquet installé.
+
+**ERPM** (Electrical RPM) = RPM mécanique × nombre de pôles. Default MAX_ERPM = 50 000.
+Override runtime : `VCFG:erpm:<valeur>` via UART depuis le Master.
+
+**⚠️ "Multiple ESC over CAN" = DÉSACTIVÉ** sur les deux VESCs obligatoirement.
+Si activé → les deux moteurs reçoivent la même commande → R2-D2 ne peut pas tourner.
+
+**Limites hardware :** 25A courant moteur configuré dans VESC Tool (pas dans le code).
+
+**Télémétrie :** VESC1 via `GET_VALUES` direct, VESC2 via `COMM_FORWARD_CAN` + `GET_VALUES`.
+Envoyé au Master toutes les 200ms : `TL:v_in:temp:curr:rpm:duty:fault:CRC` et `TR:...`
+
+**Batterie :** configurable dans Config tab (4S/6S/7S/8S). Défaut actuel = 4S (test).
+Jauge : ≥3.8V/cell vert · ≥3.6V orange · <3.6V rouge. Tous les indicateurs utilisent `BatteryGauge.voltToColor(v)`.
+
+---
+
 ## 🎵 Audio & Teeces — Gotchas
 
 **ALSA sur Pi 4B :**
@@ -264,7 +295,9 @@ wpa_cli -i wlan1 set_network 0 bgscan ""
 ```
 
 **Dépendances Master :** `flask` `pyserial` `RPi.GPIO` `adafruit-pca9685` `paramiko` `python3-evdev` (apt uniquement — pas pip)
-**Dépendances Slave :** `pyserial` `pyvesc` `adafruit-pca9685` `RPi.GPIO` + `mpg123` (apt)
+**Dépendances Slave :** `pyserial` `smbus2` `adafruit-pca9685` `RPi.GPIO` + `mpg123` `python3-smbus` (apt)
+> ⚠️ **pyvesc NOT required** — VESC communication uses native CRC-16/CCITT in `vesc_can.py`.
+> pyvesc conflicts with wrong `pycrc` package on Python 3.13 (pip case-insensitive). Do NOT add it back.
 
 **Manette BT (evdev) :**
 - `python3-evdev` doit être installé via `apt install python3-evdev` — PAS pip (Trixie externally-managed)
@@ -288,7 +321,7 @@ wpa_cli -i wlan1 set_network 0 bgscan ""
 | Phase | Description | État |
 |-------|-------------|------|
 | 1 | UART + watchdog + audio + Teeces + RP2040 + déploiement | ✅ Complet |
-| 2 | VESCs + moteur dôme + servos MG90S | 🔧 Code prêt — hardware en assemblage |
+| 2 | VESCs + moteur dôme + servos MG90S | ✅ Actif — VESC ID1 USB + CAN→ID2, ERPM natif |
 | 3 | 40 séquences comportementales .scr | ✅ Actif |
 | 4 | API REST + dashboard web (6 onglets) + Android | ✅ Actif |
 | 4+ | Manette BT (evdev) + jumelage UI + mapping configurable | ✅ Actif |
@@ -380,6 +413,33 @@ UART fail-safe, telemetry thresholds (20V/80°C/30A), `GET /choreo/status` retur
 | PSI simulation independent of T-code animations (per firmware) | ✅ |
 | AstroPixels+ ANIMATIONS override (8 valid T-codes only) | ✅ |
 | Choreo font sizes standardized (blocks 10px, labels 9px, ruler 9px) | ✅ |
+
+### VESC Phase 2 Activation (2026-04-08) — commit `921e257`
+| Feature | Status |
+|---------|--------|
+| Single USB topology: VESC ID1 via `/dev/ttyACM1`, VESC ID2 via `COMM_FORWARD_CAN` (ID 33) | ✅ |
+| Native CRC-16/CCITT packet building — pyvesc removed (PyCRC/pycrc conflict on Py 3.13) | ✅ |
+| ERPM commands: `set_rpm_direct()` + `set_rpm_can()` — synchronous in same lock | ✅ |
+| Telemetry: VESC1 via `get_values_direct()`, VESC2 via `get_values_can()` → TL:/TR: UART | ✅ |
+| Port detection: RP2040 (`display.used_port`) excluded from VESC ACM candidate list | ✅ |
+| `VCFG:erpm:<value>` — runtime MAX_ERPM override (default 50 000) | ✅ |
+| Watchdog callbacks wired: `vesc.stop()` on UART timeout, `vesc.shutdown()` on SIGTERM | ✅ |
+
+**Hardware validé :** Flipsky Mini V6.7, firmware v6.05 (Hardware 60), ID1=USB, ID2=CAN.
+**ERPM par défaut :** 50 000 — à calibrer selon moteurs (pôles × RPM mécanique max).
+**"Multiple ESC over CAN" doit être DÉSACTIVÉ** sur les deux VESCs — sinon même commande sur les deux → impossible de tourner.
+
+### Battery Gauge — Configurable Cell Count (2026-04-08) — commit `d9a06cc`
+| Feature | Status |
+|---------|--------|
+| `GET /settings` + `POST /settings/config` support `battery.cells` (stored in `local.cfg [battery]`) | ✅ |
+| Config tab BATTERY section — 4S/6S/7S/8S selector, APPLY sans restart | ✅ |
+| `BatteryGauge.setCells(n)` — recalcule MIN_V/MAX_V (3.5V/cell → 4.2V/cell) | ✅ |
+| `BatteryGauge.voltToColor(v)` — seuils par cellule : ≥3.8V vert, ≥3.6V orange, <3.6V rouge | ✅ |
+| `BatteryGauge.voltToPct(v)` — pourcentage selon pack configuré | ✅ |
+| Tous les indicateurs utilisent ces helpers : header arc, drive arc, VESC tab bar, ChoreoPlayer | ✅ |
+| `GET /status` retourne `battery_voltage` (v_in de VESC L ou R) | ✅ |
+| Défaut : 4S (batterie de test). Batterie finale prévue : 6S. | ✅ |
 
 ### Servo Hardware IDs + Labels (2026-03-31) — commit `ba0a802`
 | Feature | Status |

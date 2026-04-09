@@ -1,5 +1,6 @@
 pyserial>=3.5
-# pyvesc>=1.0.0  ← Phase 2 (VESC propulsion) — conflit PyCRC/pycrc sur Python 3.13, à installer manuellement
 adafruit-circuitpython-pca9685>=2.4.0
+smbus2>=0.4.0
 RPi.GPIO>=0.7.1
-# Audio via aplay (natif Raspberry Pi OS) — pas de dépendance pip requise
+# Audio: mpg123 (apt) — no pip package needed
+# VESC: native CRC-16/CCITT implementation in vesc_can.py — pyvesc NOT required

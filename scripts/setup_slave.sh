@@ -93,11 +93,13 @@ echo ""
 # =============================================================================
 # STEP 1 — System update + packages
 # =============================================================================
-info "Step 1/5 — Updating system..."
+info "Step 1/5 — Updating system + packages..."
 apt-get update -qq
 apt-get upgrade -y -qq
-apt-get install -y -qq python3-pip python3-serial git alsa-utils mpg123 avahi-daemon
-ok "Packages installed (mpg123 included for MP3 playback)"
+apt-get install -y -qq \
+    python3-pip python3-serial python3-smbus \
+    git alsa-utils mpg123 avahi-daemon i2c-tools
+ok "Packages installed (mpg123 + i2c-tools + python3-smbus included)"
 
 # =============================================================================
 # STEP 2 — UART fix: free ttyAMA0 from Bluetooth
@@ -124,9 +126,24 @@ ok "Hardware UART enabled, serial console disabled, I2C enabled"
 # STEP 4 — Create the repo directory (will be filled by rsync from the Master)
 # =============================================================================
 info "Step 4/5 — Preparing repo directory..."
-mkdir -p "$REPO_PATH"
-chown "$USER:$USER" "$REPO_PATH"
+mkdir -p "$REPO_PATH/slave"
+chown -R "$USER:$USER" "$REPO_PATH"
 ok "Directory $REPO_PATH ready"
+
+# =============================================================================
+# STEP 4b — Python pip dependencies (installed now so no internet needed later)
+# The Slave has no internet access once connected to the Master hotspot.
+# smbus2 + adafruit PCA9685 + pyserial must be pre-installed here.
+# Note: pyvesc is NOT required — VESC communication uses native CRC-16/CCITT.
+# =============================================================================
+info "Step 4b — Installing Python dependencies..."
+pip3 install --break-system-packages -q \
+    "pyserial>=3.5" \
+    "smbus2>=0.4.0" \
+    "adafruit-circuitpython-pca9685>=2.4.0" \
+    "RPi.GPIO>=0.7.1" \
+|| warn "Some pip packages failed — will retry via deploy.sh --first-install"
+ok "Python dependencies installed"
 
 # =============================================================================
 # STEP 5 — Network configuration (wlan0 → Master hotspot)
