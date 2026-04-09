@@ -176,6 +176,16 @@ POST /system/update             → git pull + rsync Slave + reboot
 POST /system/reboot  /system/reboot_slave
 POST /system/estop              → coupe PWM PCA9685 Master (0x40) + Slave (0x41), _ready=False
 POST /system/estop_reset        → réarme les drivers servo (setup()) sans restart service
+
+GET  /vesc/telemetry            → {connected, power_scale, L:{v_in,temp,current,rpm,duty,fault,fault_str}, R:…}
+GET  /vesc/config               → {power_scale, invert_L, invert_R}
+POST /vesc/config               {"scale": 0.8}   → power scale (persisted to local.cfg [vesc])
+POST /vesc/invert               {"side":"L","state":true}  → explicit direction (persisted)
+GET  /vesc/can/scan             → scan CAN bus via VESC1 USB (timeout 8s)
+
+POST /camera/take               → claim camera stream, returns {token}
+GET  /camera/stream?t=TOKEN     → MJPEG proxy (last-connect-wins — evicted client sees STREAM TAKEN)
+GET  /camera/status             → {active_token} — client polls every 3s to detect eviction
 ```
 
 ---
@@ -207,6 +217,15 @@ Envoyé au Master toutes les 200ms : `TL:v_in:temp:curr:rpm:duty:fault:CRC` et `
 
 **Batterie :** configurable dans Config tab (4S/6S/7S/8S). Défaut actuel = 4S (test).
 Jauge : ≥3.8V/cell vert · ≥3.6V orange · <3.6V rouge. Tous les indicateurs utilisent `BatteryGauge.voltToColor(v)`.
+
+**Power scale :** sauvegardé dans `local.cfg [vesc] power_scale`, relu au boot → survit aux redémarrages.
+Comportement **multiplicatif** : `effective = input × power_scale` (pas un clamp). Drive 50% × Power 50% = 25% ERPM.
+`HARDWARE_SPEED_LIMIT = 0.85` reste comme filet de sécurité absolu après multiplication.
+
+**Direction moteur (VINV) :** protocole UART changé de toggle aveugle à état explicite.
+`VINV:L:1:CRC` = invert left ON · `VINV:L:0:CRC` = invert left OFF.
+État sauvegardé dans `local.cfg [vesc] invert_l / invert_r`, relu et renvoyé au Slave au boot.
+`reg.vesc_invert_L` / `reg.vesc_invert_R` dans le registry.
 
 ---
 
@@ -465,6 +484,38 @@ UART fail-safe, telemetry thresholds, `GET /choreo/status` returns `abort_reason
 | Tous les indicateurs utilisent ces helpers : header arc, drive arc, VESC tab bar, ChoreoPlayer | ✅ |
 | `GET /status` retourne `battery_voltage` (v_in de VESC L ou R) | ✅ |
 | Défaut : 4S (batterie de test). Batterie finale prévue : 6S. | ✅ |
+
+### Drive Tab Redesign (2026-04-09) — commit `760654d`
+| Feature | Status |
+|---------|--------|
+| Camera feed : Flask MJPEG proxy `/camera/*` — last-connect-wins, STREAM TAKEN overlay + reclaim | ✅ |
+| Camera proxy forwards upstream `Content-Type` (boundary) — hardcoded `boundary=frame` causait image vide | ✅ |
+| Speed arc HUD (SVG dashoffset) + direction arrow (atan2 throttle/steering) overlay sur feed | ✅ |
+| VESC mini-stats (V, °C) dans bottom bar | ✅ |
+| E-STOP devient un toggle unique ARMED/TRIPPED (remplace bouton rouge + bouton vert séparés) | ✅ |
+| Bouton camera toggle dans bottom bar | ✅ |
+| LOCK button retiré du header, présent uniquement dans Drive tab (absolu top-left) | ✅ |
+| Label LOCK/KIDS/CHILD toujours visible (taille bouton fixe), hover scale + glow par mode | ✅ |
+| WASD = propulsion · Arrow keys = dome rotation (séparés) | ✅ |
+| Header `#temp-label` : `min-width: 42px` + `tabular-nums` — empêche layout shift | ✅ |
+
+### VESC Tab Diagnostic Dashboard (2026-04-09) — commit `3ed91e8`
+| Feature | Status |
+|---------|--------|
+| Barres animées temp/current/duty avec seuils warn/danger (couleur auto) | ✅ |
+| Puissance en Watts (V × I) par moteur | ✅ |
+| Indicateur symétrie L vs R : RPM Δ + Current Δ → BALANCED / ASYMMETRIC / IDLE | ✅ |
+| Session peaks : peak temp, current, duty, fault count — bouton RESET | ✅ |
+| Fault log : 20 derniers faults avec timestamp HH:MM:SS, côté (L/R), nom — bouton CLEAR | ✅ |
+| INVERT LEFT/RIGHT : toggles persistants (orange = inversé), sauvés local.cfg | ✅ |
+| Boutons FOC DETECT retirés (étaient non-fonctionnels — toast uniquement) | ✅ |
+| `GET /vesc/config` → `{power_scale, invert_L, invert_R}` | ✅ |
+| Horodatage dernière mise à jour télémétrie dans status bar | ✅ |
+
+### VESC Power Scale Persistence + Multiplicative Scaling (2026-04-09) — commit `0e96b03`
+`power_scale` sauvegardé dans `local.cfg [vesc]` + relu au boot.
+Slave : multiplication au lieu de clamp → `effective = input × power_scale`.
+Drive 50% × Power 50% = 25% ERPM réel (comportement attendu).
 
 ### Servo Hardware IDs + Labels (2026-03-31) — commit `ba0a802`
 | Feature | Status |

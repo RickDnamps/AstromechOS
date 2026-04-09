@@ -49,7 +49,7 @@ The dashboard runs on the Master Pi and is reachable from any phone, tablet, or 
 <td align="center" width="50%">
 
 ### 🕹️ Drive
-Dual joystick · WASD keyboard · Emergency stop · Live battery gauge · Speed limiter
+Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction HUD · E-Stop toggle · Lock button (LOCK / KIDS / CHILD)
 
 ![Drive Interface](Screenshots/Drive.png)
 
@@ -148,8 +148,8 @@ Hotspot · Home Wi-Fi · Lights driver hot-swap · Battery cell count · Auto-de
 <tr>
 <td align="center" width="50%">
 
-### 📊 VESC Minimal Config
-Voltage · temperature · RPM · duty · fault codes — minimal setup reference
+### 📊 VESC Diagnostic Dashboard
+Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks · Fault log · Persistent invert toggles
 
 ![VESC Config](Screenshots/VESC_MinimalConfig.png)
 
@@ -176,7 +176,7 @@ Voltage · temperature · RPM · duty · fault codes — minimal setup reference
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
-| 📊 **VESC telemetry** | Voltage · temp · RPM · duty · fault codes live — battery gauge auto-scaled by cell count |
+| 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
 ---
