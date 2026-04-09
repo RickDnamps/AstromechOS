@@ -203,6 +203,8 @@ class LockManager {
 
     const label = el('lock-mode-label');
     if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];
+    const dlabel = el('drive-lock-label');
+    if (dlabel) dlabel.textContent = ['', 'KIDS', 'LOCK'][mode];
 
     // Timer Kids Mode
     if (mode === 1) {
@@ -241,6 +243,8 @@ class LockManager {
       document.body.dataset.lockMode = lockMode;
       const label = el('lock-mode-label');
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
+      const dlabel = el('drive-lock-label');
+      if (dlabel) dlabel.textContent = ['', 'KIDS', 'LOCK'][lockMode];
       if (lockMode === 1) this._applyKidsSpeed();
     }
   }
@@ -1168,6 +1172,46 @@ function driveStop()       { api('/motion/stop',      'POST'); }
 function domeStop()        { api('/motion/dome/stop', 'POST'); }
 function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on }); }
 
+// Camera MJPEG stream — port 8080 on Master Pi
+function _initCameraStream() {
+  const img = el('cam-stream');
+  const bg  = el('cam-bg');
+  if (!img) return;
+  let host = window.location.hostname || '192.168.2.104';
+  if (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) {
+    host = window.R2D2_API_BASE.replace(/^https?:\/\//, '').replace(/:\d+$/, '');
+  }
+  const url = `http://${host}:8080/?action=stream`;
+  img.onerror = () => { img.style.display = 'none'; if (bg) bg.style.display = 'block'; };
+  img.onload  = () => { img.style.display = 'block'; if (bg) bg.style.display = 'none'; };
+  img.src = url;
+  // Show immediately — MJPEG streams don't fire onload until first frame
+  img.style.display = 'block';
+  if (bg) bg.style.display = 'none';
+}
+
+let _estopTripped = false;
+
+function _setEstopUI(tripped) {
+  _estopTripped = tripped;
+  const btn = el('estop-toggle-btn');
+  const txt = el('estop-toggle-text');
+  if (!btn) return;
+  if (tripped) {
+    btn.classList.replace('estop-armed', 'estop-tripped');
+    if (txt) txt.textContent = 'RESET E-STOP';
+    btn.querySelector('.estop-icon').innerHTML = '&#9654;';
+  } else {
+    btn.classList.replace('estop-tripped', 'estop-armed');
+    if (txt) txt.textContent = 'EMERGENCY STOP';
+    btn.querySelector('.estop-icon').innerHTML = '&#9632;';
+  }
+}
+
+function toggleEstop() {
+  if (_estopTripped) { estopReset(); } else { emergencyStop(); }
+}
+
 function emergencyStop() {
   driveStop();
   domeStop();
@@ -1177,12 +1221,14 @@ function emergencyStop() {
   api('/system/estop', 'POST');
   toast('EMERGENCY STOP', 'error');
   audioBoard.setPlaying(false);
+  _setEstopUI(true);
 }
 
 function estopReset() {
   api('/system/estop_reset', 'POST').then(r => {
     if (r && r.status === 'reset') {
       toast('E-STOP RESET — servos re-armed', 'ok');
+      _setEstopUI(false);
     } else {
       toast('Reset failed', 'error');
     }
@@ -1240,8 +1286,11 @@ const jsRight = new VirtualJoystick(
 // ================================================================
 
 const _keys = {};
-const KBD_IDS = { 'KeyW': 'kbd-w', 'ArrowUp': 'kbd-w', 'KeyS': 'kbd-s', 'ArrowDown': 'kbd-s',
-                  'KeyA': 'kbd-a', 'ArrowLeft': 'kbd-a', 'KeyD': 'kbd-d', 'ArrowRight': 'kbd-d' };
+// WASD → propulsion indicators | Arrows → dome indicators (separate)
+const KBD_IDS = {
+  'KeyW': 'kbd-w', 'KeyS': 'kbd-s', 'KeyA': 'kbd-a', 'KeyD': 'kbd-d',
+  'ArrowUp': 'kbd-up', 'ArrowDown': 'kbd-down', 'ArrowLeft': 'kbd-left', 'ArrowRight': 'kbd-right',
+};
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
@@ -1259,7 +1308,7 @@ document.addEventListener('keyup', e => {
 });
 
 function _updateKbdUI() {
-  ['kbd-w','kbd-s','kbd-a','kbd-d'].forEach(id => {
+  ['kbd-w','kbd-s','kbd-a','kbd-d','kbd-up','kbd-down','kbd-left','kbd-right'].forEach(id => {
     const k = el(id);
     if (k) k.classList.remove('active');
   });
@@ -1269,18 +1318,36 @@ function _updateKbdUI() {
   });
 }
 
+let _domeKeyWasActive = false;
+
 function _handleKeys() {
   if (_leftActive) return; // joystick takes priority
-  const fwd   = _keys['KeyW'] || _keys['ArrowUp'];
-  const back  = _keys['KeyS'] || _keys['ArrowDown'];
-  const left  = _keys['KeyA'] || _keys['ArrowLeft'];
-  const right = _keys['KeyD'] || _keys['ArrowRight'];
 
-  if (!fwd && !back && !left && !right) { driveStop(); return; }
+  // Propulsion — WASD only
+  const fwd   = _keys['KeyW'];
+  const back  = _keys['KeyS'];
+  const left  = _keys['KeyA'];
+  const right = _keys['KeyD'];
 
-  const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
-  const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
-  api('/motion/arcade', 'POST', { throttle, steering });
+  if (fwd || back || left || right) {
+    const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
+    const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
+    api('/motion/arcade', 'POST', { throttle, steering });
+  } else {
+    driveStop();
+  }
+
+  // Dome rotation — Arrow Left / Right
+  // Arrow Up / Down reserved for future camera tilt
+  const domeL = _keys['ArrowLeft'];
+  const domeR = _keys['ArrowRight'];
+  if (domeL || domeR) {
+    _domeKeyWasActive = true;
+    api('/motion/dome/turn', 'POST', { speed: domeR ? 0.4 : -0.4 });
+  } else if (_domeKeyWasActive) {
+    _domeKeyWasActive = false;
+    domeStop();
+  }
 }
 
 // ================================================================
@@ -3003,6 +3070,9 @@ async function init() {
 
   // Lock Manager init (kids speed slider + body data-lock-mode)
   lockMgr.init();
+
+  // Camera stream (Drive tab center)
+  _initCameraStream();
 
   // Volume slider + VESC scale slider
   initVolume();

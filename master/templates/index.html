@@ -249,100 +249,105 @@
 ================================================================ -->
 <div class="tab-content active" id="tab-drive">
 
-  <div class="drive-layout">
+  <!-- Lock button — top-left of Drive tab -->
+  <button id="drive-lock-btn" class="drive-lock-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
+    <svg class="lock-svg lock-open" width="22" height="26" viewBox="0 0 14 16">
+      <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+    </svg>
+    <svg class="lock-svg lock-closed" width="22" height="26" viewBox="0 0 14 16">
+      <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+    </svg>
+    <span id="drive-lock-label" class="drive-lock-label"></span>
+  </button>
 
-    <!-- Left joystick — Propulsion -->
-    <div class="joystick-panel joystick-panel-left">
-      <div class="joystick-label">PROPULSION</div>
-      <div class="joystick-ring" id="js-left-ring">
-        <div class="joystick-crosshair"></div>
-        <div class="joystick-knob" id="js-left-knob"></div>
-      </div>
-      <div class="joystick-vals">
-        <span>T: <span id="js-left-t">0.00</span></span>
-        <span>S: <span id="js-left-s">0.00</span></span>
-      </div>
-    </div>
+  <div class="drive-wrapper">
 
-    <!-- Center column -->
-    <div class="drive-center">
-      <!-- Status gauges row -->
-      <div class="gauge-row">
-        <div class="gauge-card">
-          <svg id="battery-gauge-svg" width="120" height="70" viewBox="0 0 120 70">
-            <path d="M10 62 A54 54 0 0 1 110 62" fill="none" stroke="#0d1e30" stroke-width="8" stroke-linecap="round"/>
-            <path id="battery-gauge-arc" d="M10 62 A54 54 0 0 1 110 62" fill="none" stroke="#00cc66" stroke-width="8" stroke-linecap="round" stroke-dasharray="170" stroke-dashoffset="0"/>
-            <text x="60" y="55" text-anchor="middle" fill="#00cc66" font-size="14" font-family="'Courier New',monospace" id="battery-gauge-text">--V</text>
-            <text x="60" y="66" text-anchor="middle" fill="#445566" font-size="8" font-family="'Courier New',monospace">BATTERY</text>
-          </svg>
+    <div class="drive-main">
+
+      <!-- Left joystick — Propulsion -->
+      <div class="joystick-panel joystick-panel-left">
+        <div class="joystick-label">PROPULSION</div>
+        <div class="joystick-ring" id="js-left-ring">
+          <div class="joystick-crosshair"></div>
+          <div class="joystick-knob" id="js-left-knob"></div>
         </div>
-        <div class="gauge-card temp-gauge-card">
-          <div class="temp-label">TEMP</div>
-          <div class="temp-bar-wrap">
-            <div class="temp-bar-bg">
-              <div id="temp-bar-fill" class="temp-bar-fill" style="height:0%"></div>
-            </div>
+        <div class="joystick-vals">
+          <span>T: <span id="js-left-t">0.00</span></span>
+          <span>S: <span id="js-left-s">0.00</span></span>
+        </div>
+        <!-- WASD keyboard shortcuts -->
+        <div class="kbd-indicator">
+          <div class="kbd-row"><div class="kbd-key" id="kbd-w">W</div></div>
+          <div class="kbd-row">
+            <div class="kbd-key" id="kbd-a">A</div>
+            <div class="kbd-key" id="kbd-s">S</div>
+            <div class="kbd-key" id="kbd-d">D</div>
           </div>
-          <div id="temp-val-drive" class="temp-val">--°C</div>
+          <div class="kbd-hint-text">KEYBOARD</div>
         </div>
       </div>
 
-      <!-- Emergency stop -->
-      <div class="estop-row">
-        <button class="estop-btn" id="estop-btn" onclick="emergencyStop()">
-          <span class="estop-icon">&#9632;</span>
-          <span class="estop-text">EMERGENCY STOP</span>
-        </button>
-        <button class="estop-reset-btn" id="estop-reset-btn" onclick="estopReset()">
-          <span class="estop-icon">&#9654;</span>
-          <span class="estop-text">RESET E-STOP</span>
-        </button>
-      </div>
-
-      <!-- Speed + dome controls -->
-      <div class="drive-controls-row">
-        <div class="speed-wrap">
-          <label class="ctrl-label">SPEED LIMIT <span id="speed-val" class="ctrl-val">60%</span></label>
-          <input type="range" id="speed-slider" min="10" max="100" value="60"
-                 oninput="setSpeed(this.value)" class="holo-slider">
-        </div>
-        <div class="dome-toggle-wrap">
-          <label class="toggle-label">
-            DOME AUTO
-            <input type="checkbox" id="dome-random-ctrl" onchange="domeRandom(this.checked)">
-            <span class="toggle-switch"></span>
-          </label>
+      <!-- Center — Camera feed -->
+      <div class="drive-center">
+        <div class="cam-container">
+          <img id="cam-stream" class="cam-stream" alt="" style="display:none">
+          <div id="cam-bg" class="cam-bg"></div>
+          <div class="cam-label">CAMERA</div>
         </div>
       </div>
 
-      <!-- Keyboard indicator -->
-      <div class="kbd-indicator">
-        <div class="kbd-row">
-          <div class="kbd-key" id="kbd-w">W</div>
+      <!-- Right joystick — Dome -->
+      <div class="joystick-panel joystick-panel-right">
+        <div class="joystick-label">DOME</div>
+        <div class="joystick-ring" id="js-right-ring">
+          <div class="joystick-crosshair"></div>
+          <div class="joystick-knob" id="js-right-knob"></div>
         </div>
-        <div class="kbd-row">
-          <div class="kbd-key" id="kbd-a">A</div>
-          <div class="kbd-key" id="kbd-s">S</div>
-          <div class="kbd-key" id="kbd-d">D</div>
+        <div class="joystick-vals">
+          <span>X: <span id="js-right-x">0.00</span></span>
+          <span>Y: <span id="js-right-y">0.00</span></span>
         </div>
-        <div class="kbd-hint-text">/ ARROW KEYS</div>
+        <!-- Arrow key shortcuts — dome rotation / future camera tilt -->
+        <div class="kbd-indicator">
+          <div class="kbd-row"><div class="kbd-key" id="kbd-up">↑</div></div>
+          <div class="kbd-row">
+            <div class="kbd-key" id="kbd-left">←</div>
+            <div class="kbd-key" id="kbd-down">↓</div>
+            <div class="kbd-key" id="kbd-right">→</div>
+          </div>
+          <div class="kbd-hint-text">DOME / CAM</div>
+        </div>
       </div>
-    </div>
 
-    <!-- Right joystick — Dome -->
-    <div class="joystick-panel joystick-panel-right">
-      <div class="joystick-label">DOME</div>
-      <div class="joystick-ring" id="js-right-ring">
-        <div class="joystick-crosshair"></div>
-        <div class="joystick-knob" id="js-right-knob"></div>
-      </div>
-      <div class="joystick-vals">
-        <span>X: <span id="js-right-x">0.00</span></span>
-        <span>Y: <span id="js-right-y">0.00</span></span>
-      </div>
-    </div>
+    </div><!-- .drive-main -->
 
-  </div>
+    <!-- Bottom bar -->
+    <div class="drive-bottom-bar">
+      <div class="speed-wrap">
+        <label class="ctrl-label">SPEED <span id="speed-val" class="ctrl-val">60%</span></label>
+        <input type="range" id="speed-slider" min="10" max="100" value="60"
+               oninput="setSpeed(this.value)" class="holo-slider">
+      </div>
+
+      <button id="estop-toggle-btn" class="estop-toggle-btn estop-armed" onclick="toggleEstop()">
+        <span class="estop-icon">&#9632;</span>
+        <span id="estop-toggle-text">EMERGENCY STOP</span>
+      </button>
+
+      <div class="dome-toggle-wrap">
+        <label class="toggle-label">
+          DOME AUTO
+          <input type="checkbox" id="dome-random-ctrl" onchange="domeRandom(this.checked)">
+          <span class="toggle-switch"></span>
+        </label>
+      </div>
+    </div><!-- .drive-bottom-bar -->
+
+  </div><!-- .drive-wrapper -->
 
 </div>
 
