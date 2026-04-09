@@ -358,8 +358,8 @@ body::after {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 8px 12px;
+  gap: 2px;
+  padding: 6px 11px;
   /* smooth all transitions */
   transition: border-color 0.2s, color 0.2s, background 0.2s,
               box-shadow 0.2s, transform 0.15s;
@@ -390,10 +390,12 @@ body[data-lock-mode="2"] .drive-lock-btn:hover { box-shadow: 0 0 12px rgba(220,5
   font-size: 9px;
   letter-spacing: 2px;
   line-height: 1;
-  min-height: 10px;
   text-align: center;
+  max-height: 12px;
+  overflow: hidden;
+  transition: max-height 0.2s, opacity 0.2s;
 }
-body[data-lock-mode="0"] .drive-lock-label { opacity: 0; }
+body[data-lock-mode="0"] .drive-lock-label { opacity: 0; max-height: 0; }
 
 /* Camera container */
 .cam-container {
@@ -1010,7 +1012,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   .joystick-vals { display: none; }
   .drive-bottom-bar { gap: 8px; padding: 6px 10px 8px; }
   .estop-toggle-btn { font-size: 11px; letter-spacing: 2px; padding: 9px 12px; }
-  .drive-lock-btn { padding: 6px 8px; }
+  .drive-lock-btn { padding: 5px 8px; }
 }
 
 @media (max-width: 420px) {
