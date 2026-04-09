@@ -38,8 +38,24 @@ Endpoints:
   GET  /vesc/can/scan          → CAN bus scan via Slave (timeout 8s)
 """
 
+import configparser
+import os
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+
+_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+
+
+def _save_power_scale(scale: float) -> None:
+    """Persist power_scale to local.cfg [vesc]."""
+    cfg = configparser.ConfigParser()
+    if os.path.exists(_LOCAL_CFG):
+        cfg.read(_LOCAL_CFG)
+    if not cfg.has_section('vesc'):
+        cfg.add_section('vesc')
+    cfg.set('vesc', 'power_scale', f'{scale:.2f}')
+    with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
+        cfg.write(f)
 
 vesc_bp = Blueprint('vesc', __name__, url_prefix='/vesc')
 
@@ -92,6 +108,7 @@ def set_config():
         return jsonify({'error': 'scale must be a float 0.1-1.0'}), 400
 
     reg.vesc_power_scale = scale
+    _save_power_scale(scale)
     if reg.uart:
         reg.uart.send('VCFG', f'scale:{scale:.2f}')
     return jsonify({'status': 'ok', 'power_scale': scale})

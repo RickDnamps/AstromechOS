@@ -214,6 +214,7 @@ def main() -> None:
     reg.uart   = uart
     reg.teeces = teeces
     reg.deploy = deploy
+    reg.vesc_power_scale = cfg.getfloat('vesc', 'power_scale', fallback=1.0)
 
     # ------------------------------------------------------------------
     # Phase 2 — Propulsion / dome / servo drivers

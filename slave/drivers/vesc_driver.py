@@ -200,10 +200,13 @@ class VescDriver(BaseDriver):
         """
         if not self._ready:
             return
-        # Apply power scale + hardware limit → normalised [-lim, +lim]
-        lim   = HARDWARE_SPEED_LIMIT * self._power_scale
-        left  = max(-lim, min(lim, left))
-        right = max(-lim, min(lim, right))
+        # Multiplicative scaling: power_scale is a true ceiling multiplier.
+        # Drive speed × power_scale = effective power (e.g. 50% × 50% = 25%).
+        # HARDWARE_SPEED_LIMIT is an absolute safety cap applied after.
+        left  = left  * self._power_scale
+        right = right * self._power_scale
+        left  = max(-HARDWARE_SPEED_LIMIT, min(HARDWARE_SPEED_LIMIT, left))
+        right = max(-HARDWARE_SPEED_LIMIT, min(HARDWARE_SPEED_LIMIT, right))
         # Software inversion if configured
         if self._invert_left:  left  = -left
         if self._invert_right: right = -right
