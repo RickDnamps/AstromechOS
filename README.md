@@ -386,6 +386,79 @@ These workloads are CPU/RAM-intensive and run continuously in the background. Is
 └────────────────────────────────────────────────────────────────────┘
 ```
 
+### The UART Bus — Why It Needed a Real Protocol
+
+Most DIY robots use a UART as a dumb serial pipe: send a string, hope it arrives intact. That works fine on a bench. It fails in a real robot.
+
+R2-D2's dome rotates continuously on a **slip ring** — a rotating electrical joint that physically rubs contact rings against brushes. Add 24V motor wiring, two VESC ESCs, a dome motor driver, and stepper coils all sharing the same chassis ground, and you have a textbook EMI environment. Commands get flipped, bytes get dropped, and corrupted packets can translate directly into unwanted motor movements or servo jolts on a 60kg robot.
+
+The solution is a proper framed protocol with verified checksums on **every single message**, implemented from scratch in [`shared/uart_protocol.py`](shared/uart_protocol.py).
+
+#### Why Arithmetic Sum mod 256 — Not XOR
+
+Almost every tutorial on serial communication uses XOR as a checksum. It's a single instruction, easy to explain, and works fine for simple bit errors. But XOR has a well-known blind spot:
+
+> **Any two identical bytes cancel each other out.** If a burst error flips the same bit in two bytes, `byte_A XOR byte_A = 0x00` — the checksum doesn't change. The corrupted packet passes validation.
+
+This is exactly the failure mode you'd see in a high-EMI environment: noise induced on a long cable tends to flip the same bit position across multiple bytes in a burst. XOR misses it.
+
+Arithmetic sum mod 256 doesn't have this property. Each byte adds its full value to a running total, so flipping any bit in any byte changes the final checksum — including symmetric errors that XOR would miss.
+
+```python
+# Arithmetic sum mod 256 — what R2-D2 uses
+def calc_crc(payload: str) -> str:
+    return format(sum(payload.encode('utf-8')) % 256, '02X')
+
+# Why not XOR? — silent failure on symmetric errors
+def bad_crc(payload: str) -> str:
+    result = 0
+    for b in payload.encode('utf-8'):
+        result ^= b          # 0x42 XOR 0x42 = 0x00 — cancelled out!
+    return format(result, '02X')
+```
+
+#### The Complete Frame
+
+Every message on the bus follows the same structure — no exceptions, no shortcuts:
+
+```
+TYPE:VALUE:CRC\n
+
+Examples:
+  H:1:B3        ← Heartbeat (Master → Slave, every 200ms)
+  M:0.5,-0.3:XX ← Drive left=0.5 right=-0.3
+  S:CANTINA:XX  ← Play audio file
+  TL:15.2:42:8.3:12400:0.21:0:XX  ← VESC telemetry left motor
+```
+
+- **TYPE** — single token identifying the command (`H`, `M`, `S`, `D`, `TL`, `TR`, `DISP`, `REBOOT`…)
+- **VALUE** — payload, can contain colons (only the last field is the CRC)
+- **CRC** — 2-digit uppercase hex, arithmetic sum of `TYPE:VALUE` mod 256
+
+The CRC is computed over the human-readable payload string, not raw bytes. This makes debugging trivial: open any serial monitor, read the messages directly, and verify the checksum by hand if needed.
+
+#### What Happens When a Message Fails
+
+Corrupted messages are **silently discarded** — no retry, no error state. This is intentional:
+
+- The heartbeat fires every 200ms. One dropped packet is invisible to the driver.
+- Drive commands are rate-limited to 60/s. A single corrupted packet is overwritten by the next one in 17ms.
+- The **500ms UART watchdog** on the Slave counts *consecutive* failures: 3 in a row triggers a safe stop, not a single anomaly. This prevents false stops from a momentary burst while still catching a true disconnection.
+
+The result: **zero false stops in operation**, zero motor jolts from EMI, and the bus health counter (displayed on the RP2040 LCD) stays above 99% even while the dome is spinning at full speed.
+
+#### Bus Health Monitoring
+
+The Slave counts every received packet (valid + invalid) over a rolling 60-second window and reports the ratio back to the Master via the telemetry stream. The RP2040 LCD shows a color-coded bar:
+
+- **≥ 80% valid** → green — nominal
+- **50–79% valid** → orange — `PARASITES DETECTES` warning
+- **< 50% valid** → red — check wiring, slip ring contact, or ground loops
+
+This is live data. You can watch the bus health degrade in real time if you introduce noise (e.g., touch the motor wires) — and watch it recover when you fix it.
+
+---
+
 ### Hardware at a Glance
 
 | | **Master Pi 4B 4GB** (Dome) | **Slave Pi 4B 2GB** (Body) |
