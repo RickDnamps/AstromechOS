@@ -1389,6 +1389,8 @@ const KBD_IDS = {
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
   if (e.code === 'Space') { e.preventDefault(); emergencyStop(); return; }
+  // VESC test mode captures keys when active
+  if (vescTest.onKey(e.code, true)) return;
   if (_keys[e.code]) return;
   _keys[e.code] = true;
   _updateKbdUI();
@@ -1396,6 +1398,7 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('keyup', e => {
+  if (vescTest.onKey(e.code, false)) return;
   delete _keys[e.code];
   _updateKbdUI();
   _handleKeys();
@@ -1959,6 +1962,7 @@ class VescPanel {
     this._updateScale(d.power_scale);
     this._updateSymmetry(d.L, d.R);
     this._updateLastUpdate();
+    vescTest.updateTelem(d.L, d.R);
   }
 
   async loadConfig() {
@@ -2192,6 +2196,111 @@ function vescClearLog() {
   vescPanel._faultLog = [];
   vescPanel._renderFaultLog();
 }
+
+// ================================================================
+// VESC Drive Test Mode
+// ================================================================
+
+const vescTest = {
+  _active:  false,
+  _keys:    {},          // currently held keys
+  _timer:   null,        // command loop interval
+  _SPEED:   0.4,         // test speed (40% — safe for bench)
+
+  toggle() {
+    this._active = !this._active;
+    const btn  = el('vesc-test-toggle');
+    const body = el('vesc-test-body');
+    const card = el('vesc-test-card');
+    if (btn)  { btn.textContent = this._active ? 'DISABLE' : 'ENABLE'; btn.classList.toggle('active', this._active); }
+    if (body) body.style.display = this._active ? '' : 'none';
+    if (card) card.classList.toggle('active', this._active);
+
+    if (this._active) {
+      this._timer = setInterval(() => this._tick(), 100);  // 10 Hz command loop
+    } else {
+      clearInterval(this._timer);
+      this._keys = {};
+      api('/motion/stop', 'POST');
+      api('/motion/dome/stop', 'POST');
+      this._updateBars(0, 0);
+      this._setStatus('IDLE', '');
+      ['w','a','s','d','left','right'].forEach(k => {
+        const e = el(`vt-kbd-${k}`); if (e) e.classList.remove('active');
+      });
+    }
+  },
+
+  onKey(code, down) {
+    if (!this._active) return false;
+    const map = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', ArrowLeft:'left', ArrowRight:'right', Escape:'esc' };
+    const k = map[code];
+    if (!k) return false;
+    if (k === 'esc' && down) { this.toggle(); return true; }
+    this._keys[k] = down;
+    const e = el(`vt-kbd-${k}`); if (e) e.classList.toggle('active', down);
+    return true;  // consumed — don't pass to drive tab
+  },
+
+  _tick() {
+    const fwd   = this._keys['w'];
+    const back  = this._keys['s'];
+    const left  = this._keys['a'];
+    const right = this._keys['d'];
+    const dLeft = this._keys['left'];
+    const dRight= this._keys['right'];
+
+    let L = 0, R = 0;
+    if (fwd)   { L =  this._SPEED; R =  this._SPEED; }
+    if (back)  { L = -this._SPEED; R = -this._SPEED; }
+    if (left)  { L = -this._SPEED * 0.5; R =  this._SPEED * 0.5; }
+    if (right) { L =  this._SPEED * 0.5; R = -this._SPEED * 0.5; }
+
+    const moving = L !== 0 || R !== 0;
+    api('/motion/drive', 'POST', { left: L, right: R });
+    this._updateBars(L, R);
+    this._setStatus(moving ? 'DRIVING' : 'IDLE', moving ? 'ok' : '');
+
+    // Dome
+    if (dLeft)       api('/motion/dome/turn', 'POST', { speed: -0.4 });
+    else if (dRight) api('/motion/dome/turn', 'POST', { speed:  0.4 });
+    else if (this._keys['_domeWas']) api('/motion/dome/stop', 'POST');
+    this._keys['_domeWas'] = dLeft || dRight;
+  },
+
+  _updateBars(L, R) {
+    const lpct = Math.round(Math.abs(L) * 100);
+    const rpct = Math.round(Math.abs(R) * 100);
+    const lcls = L < 0 ? 'warn' : '';
+    const rcls = R < 0 ? 'warn' : '';
+
+    const lb = el('vt-left-bar');
+    const rb = el('vt-right-bar');
+    if (lb) { lb.style.width = lpct + '%'; lb.className = 'vesc-brow-fill' + (lcls ? ' ' + lcls : ''); }
+    if (rb) { rb.style.width = rpct + '%'; rb.className = 'vesc-brow-fill' + (rcls ? ' ' + rcls : ''); }
+
+    const lv = el('vt-left-val');  if (lv) lv.textContent = (L < 0 ? '-' : '') + lpct;
+    const rv = el('vt-right-val'); if (rv) rv.textContent = (R < 0 ? '-' : '') + rpct;
+  },
+
+  _setStatus(text, cls) {
+    const e = el('vt-status'); if (!e) return;
+    e.textContent = text;
+    e.className = 'vesc-sym-status' + (cls ? ' ' + cls : '');
+  },
+
+  // Called by VescPanel on each telemetry refresh
+  updateTelem(dL, dR) {
+    if (!this._active) return;
+    const set = (id, val) => { const e = el(id); if (e) e.textContent = val ?? '—'; };
+    set('vt-rpm-l',  dL ? Math.abs(dL.rpm) : null);
+    set('vt-rpm-r',  dR ? Math.abs(dR.rpm) : null);
+    set('vt-curr-l', dL ? dL.current.toFixed(1) + 'A' : null);
+    set('vt-curr-r', dR ? dR.current.toFixed(1) + 'A' : null);
+  },
+};
+
+function vescTestToggle() { vescTest.toggle(); }
 
 // ================================================================
 // CAN Bus Wizard

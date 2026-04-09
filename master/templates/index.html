@@ -955,6 +955,70 @@
 
     </div>
 
+    <!-- Drive Test Mode -->
+    <div class="vesc-config-card vesc-test-card" id="vesc-test-card">
+      <div class="vesc-diag-title">
+        DRIVE TEST MODE
+        <button id="vesc-test-toggle" class="btn btn-sm vesc-test-toggle-btn" onclick="vescTestToggle()">ENABLE</button>
+      </div>
+      <div class="vesc-test-body" id="vesc-test-body" style="display:none">
+        <div class="vesc-test-hint">WASD = propulsion &nbsp;·&nbsp; Arrow Left/Right = dome &nbsp;·&nbsp; ESC = stop</div>
+        <div class="vesc-test-panels">
+          <!-- Commanded values -->
+          <div class="vesc-test-cmd">
+            <div class="vesc-test-cmd-title">COMMANDED</div>
+            <div class="vesc-brow">
+              <span class="vesc-brow-lbl">LEFT</span>
+              <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vt-left-bar"></div></div>
+              <span class="vesc-brow-val"><span id="vt-left-val">0</span><span class="vesc-brow-unit">%</span></span>
+            </div>
+            <div class="vesc-brow">
+              <span class="vesc-brow-lbl">RIGHT</span>
+              <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vt-right-bar"></div></div>
+              <span class="vesc-brow-val"><span id="vt-right-val">0</span><span class="vesc-brow-unit">%</span></span>
+            </div>
+          </div>
+          <!-- WASD keys display -->
+          <div class="vesc-test-keys">
+            <div class="kbd-row"><div class="kbd-key" id="vt-kbd-w">W</div></div>
+            <div class="kbd-row">
+              <div class="kbd-key" id="vt-kbd-a">A</div>
+              <div class="kbd-key" id="vt-kbd-s">S</div>
+              <div class="kbd-key" id="vt-kbd-d">D</div>
+            </div>
+            <div class="kbd-row" style="margin-top:4px">
+              <div class="kbd-key" id="vt-kbd-left">◀</div>
+              <div class="kbd-key" id="vt-kbd-right">▶</div>
+            </div>
+          </div>
+          <!-- Telemetry response -->
+          <div class="vesc-test-resp">
+            <div class="vesc-test-cmd-title">RESPONSE</div>
+            <div class="vesc-test-resp-row">
+              <span class="vesc-sym-lbl">RPM L</span>
+              <span class="vesc-footer-val" id="vt-rpm-l">—</span>
+            </div>
+            <div class="vesc-test-resp-row">
+              <span class="vesc-sym-lbl">RPM R</span>
+              <span class="vesc-footer-val" id="vt-rpm-r">—</span>
+            </div>
+            <div class="vesc-test-resp-row">
+              <span class="vesc-sym-lbl">CURR L</span>
+              <span class="vesc-footer-val" id="vt-curr-l">—</span>
+            </div>
+            <div class="vesc-test-resp-row">
+              <span class="vesc-sym-lbl">CURR R</span>
+              <span class="vesc-footer-val" id="vt-curr-r">—</span>
+            </div>
+            <div class="vesc-test-resp-row">
+              <span class="vesc-sym-lbl">STATUS</span>
+              <span id="vt-status" class="vesc-sym-status">IDLE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- CAN Bus Setup Wizard -->
     <div class="vesc-config-card vesc-can-wizard">
       <div class="vesc-can-header">
