@@ -12,7 +12,7 @@
 [![Sequences](https://img.shields.io/badge/Sequences-40%20behavioral-blue)](master/sequences/)
 [![API](https://img.shields.io/badge/API-60%2B%20endpoints-orange)](master/api/)
 
-*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Choreography timeline editor · Visual sequence editor · Kids Lock · Child Lock*
+*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Choreography timeline editor · Kids Lock · Child Lock*
 
 </div>
 
@@ -164,9 +164,8 @@ Voltage · temperature · RPM · duty · fault codes — minimal setup reference
 
 | | |
 |---|---|
-| 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights |
-| ✏️ **Visual sequence editor** | Drag-and-drop, no coding required |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · Digital Twin monitor · VESC telemetry |
+| 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — one-click in SEQUENCES tab |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -182,46 +181,33 @@ Voltage · temperature · RPM · duty · fault codes — minimal setup reference
 
 ---
 
-## 🎭 Expressive Behavioral Sequences
+## 🎼 Choreography Timeline Editor
 
-This is where R2-D2 comes alive. 40 sequences combine sounds, servo panels, dome rotation, and lights into **coordinated emotional performances** — all running in synchronized background threads:
+The **CHOREO tab** is the main authoring tool. Build multi-track timelines that synchronize every subsystem in real time: VESC drive motion, servo panels, dome rotation, audio (up to 12 simultaneous tracks), and lights — with drag-and-drop blocks, easing curves, and a Digital Twin preview.
+
+Telemetry abort safeguards: ChoreoPlayer monitors VESC voltage (min = cells × 3.5V), temperature (max 80°C), current (max 30A), and UART reliability (3 consecutive failures). Any threshold breach stops the sequence and logs the reason, readable via `GET /choreo/status`.
+
+---
+
+## 🎭 Built-in Behavioral Sequences
+
+40 legacy `.scr` sequences are still available in the **SEQUENCES tab** — one-click launch of coordinated emotional performances (sound + panels + dome + lights):
 
 | Sequence | What R2 does |
 |----------|-------------|
-| `scared` | Panels (e.g. `Servo_M0`) **tremble** at 35° (speed 8) — nervous micro-movements |
+| `scared` | Panels **tremble** at 35° (speed 8) — nervous micro-movements |
 | `excited` | Panels **snap** open/shut at speed 9, rapid alternating combos |
-| `curious` | Panels **creep** open (speed 2, ~50°) while dome turns — deliberate peeking |
-| `angry` | Panels **slam** at speed 10, aggressive clack-clack, slow menacing close |
-| `celebrate` | Dramatic **wave** across panels, body + dome flowing in sequence |
-| `patrol` | Dome wanders randomly, panels peek, random sounds — R2 feels alive |
+| `curious` | Panels **creep** open (speed 2, ~50°) while dome turns |
+| `angry` | Panels **slam** at speed 10, aggressive clack-clack |
+| `celebrate` | Dramatic wave across panels, body + dome flowing in sequence |
+| `patrol` | Dome wanders randomly, panels peek, random sounds |
 | `leia` | Full Leia hologram mode — Teeces + iconic audio |
 | `cantina` | Full Cantina Band routine |
 | `march` | Imperial March with lights and dome movements |
 | `malfunction` | Alarm animations + panic sounds + dome spins |
 | + 30 more | `evil`, `birthday`, `disco`, `dance`, `taunt`, `scan`, `startup`… |
 
-Sequences **use per-panel calibrated angles automatically** — calibrate once in the UI, every sequence respects it. Override angle and speed inline for mood-specific choreography:
-
-```
-servo,Servo_M0,open,40,8        # open to 40° at speed 8 — nervous peek
-servo,Servo_M0,close,20,9       # snap shut at speed 9
-servo,all,open                  # all 11 dome panels simultaneously
-```
-
-**Available `.scr` commands** (plain CSV files in `master/sequences/`):
-
-| Command | What it does |
-|---------|-------------|
-| `sleep` | Pause (fixed seconds or random range min–max) |
-| `sound` | Play a specific file or random from a category |
-| `servo` | Open/close a panel (or all) at calibrated or override angle + speed |
-| `dome` | Turn, stop, center, or enable random autonomous wander |
-| `motion` | Drive left + right at a throttle for a duration |
-| `teeces` | Random · Leia · Off · specific animation · scrolling text · raw JawaLite |
-| `lseq` | Launch a light sequence in parallel from `master/light_sequences/` |
-| `wait_light` | Block until a named light sequence finishes |
-
-Sequences are launched from the **SEQUENCES tab** in the web UI. For rich timeline choreography (motion + audio + servos + lights in sync), use the **CHOREO tab** instead.
+`.scr` files are plain CSV in `master/sequences/`. Available commands: `sleep` · `sound` · `servo` · `dome` · `motion` · `teeces`. Sequences use per-panel calibrated angles automatically — calibrate once in the Servo tab, every sequence respects it.
 
 ---
 
@@ -519,7 +505,7 @@ r2d2/
 │   │   ├── status_bp.py           — System status, e-stop, lock, reboot
 │   │   └── vesc_bp.py             — VESC telemetry, power scale, CAN scan
 │   ├── sequences/                 — 40 built-in behavioral sequences (.scr)
-│   ├── light_sequences/           — Custom light choreographies (.lseq)
+│   ├── light_sequences/           — Legacy .lseq files (used by lseq command in .scr sequences)
 │   ├── config/
 │   │   ├── main.cfg               — Default configuration
 │   │   ├── local.cfg              — Local overrides (gitignored)
@@ -551,7 +537,7 @@ r2d2/
 
 ## Sequence Format
 
-Plain `.scr` CSV files — easy to read, write, and share. Light sequences use `.lseq` files (same format, lights-only):
+Plain `.scr` CSV files — easy to read, write, and share. They are the legacy behavior system; the **CHOREO tab** is the primary authoring tool for new sequences.
 
 ```
 # Full sequence example
@@ -580,7 +566,7 @@ Sequences are **created visually in the in-browser Sequence Editor** — no file
 | **2** | VESCs · dome motor · MG90S servo panels with speed ramp | ✅ Active — VESC ID1 USB + CAN→ID2, ERPM commands |
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
-| **4+** | Visual sequence editor · Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Servo hardware IDs + labels | ✅ Active |
+| **4+** | Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Battery gauge (configurable cell count) · Servo hardware IDs + labels | ✅ Active |
 | **5** | Vision — USB camera stream, person tracking | 📋 Planned |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.
