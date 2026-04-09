@@ -170,6 +170,46 @@ def get_fw_version_can(ser, can_id: int) -> dict | None:
         return None
 
 
+def get_values_direct(ser) -> dict | None:
+    """
+    Reads MC_VALUES from the USB-connected VESC (no CAN forwarding).
+    Native implementation — does not require pyvesc.
+    """
+    pkt = _build_packet(bytes([COMM_GET_VALUES]))
+    try:
+        ser.reset_input_buffer()
+        ser.write(pkt)
+        time.sleep(0.06)
+        raw = ser.read(ser.in_waiting or 100)
+        if not raw:
+            return None
+        payload = _extract_payload(raw)
+        if payload is None or len(payload) < 52 or payload[0] != COMM_GET_VALUES:
+            return None
+        p = 1
+        temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
+        p += 2   # temp_motor
+        curr_m   = struct.unpack_from('>i', payload, p)[0] / 100.0; p += 4
+        p += 4   # curr_in
+        p += 8   # id, iq
+        duty     = struct.unpack_from('>h', payload, p)[0] / 1000.0; p += 2
+        rpm      = struct.unpack_from('>i', payload, p)[0];           p += 4
+        v_in     = struct.unpack_from('>H', payload, p)[0] / 10.0;    p += 2
+        p += 16  # amp_hours, watt_hours, tachometers
+        fault    = payload[p]
+        return {
+            'v_in':    round(v_in, 2),
+            'temp':    round(temp_fet, 1),
+            'current': round(curr_m, 2),
+            'rpm':     int(rpm),
+            'duty':    round(duty, 3),
+            'fault':   int(fault),
+        }
+    except Exception as e:
+        log.debug(f"get_values_direct: {e}")
+        return None
+
+
 def get_values_can(ser, can_id: int) -> dict | None:
     """
     Lit MC_VALUES d'un VESC via CAN forwarding.
@@ -256,25 +296,15 @@ def set_rpm_can(ser, can_id: int, erpm: int) -> None:
     ser.write(pkt)
 
 
-def set_rpm_direct(ser, erpm: int, pyvesc_module=None) -> None:
+def set_rpm_direct(ser, erpm: int) -> None:
     """
     Sends a SetRPM (ERPM) command directly to the USB-connected VESC (no CAN).
-
-    Prefers pyvesc encoding when the module is available; falls back to raw
-    packet construction using the same COMM_SET_RPM (8) command ID.
+    Native implementation — does not require pyvesc.
 
     Args:
-        ser           : open serial.Serial connected to the VESC
-        erpm          : electrical RPM — negative = reverse
-        pyvesc_module : imported pyvesc module, or None
+        ser  : open serial.Serial connected to the VESC
+        erpm : electrical RPM — negative = reverse
     """
-    if pyvesc_module is not None:
-        try:
-            msg = pyvesc_module.encode(pyvesc_module.SetRPM(int(erpm)))
-            ser.write(msg)
-            return
-        except Exception:
-            pass  # fall through to raw packet
     inner = bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm))
     ser.write(_build_packet(inner))
 

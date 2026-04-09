@@ -71,7 +71,10 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.base_driver import BaseDriver
-from slave.drivers.vesc_can import set_rpm_can, set_rpm_direct, get_values_can
+from slave.drivers.vesc_can import (
+    set_rpm_can, set_rpm_direct,
+    get_values_direct, get_values_can,
+)
 
 log = logging.getLogger(__name__)
 
@@ -112,16 +115,15 @@ class VescDriver(BaseDriver):
         self._ports   = ports if ports is not None else VESC_PORTS
         self._port    = None   # resolved at setup()
         self._serial  = None
-        self._pyvesc  = None
         self._ready   = False
         self._uart    = None          # UARTListener reference for telemetry
         self._lock    = threading.Lock()
 
-        # Config adjustable from the dashboard
-        self._power_scale   = 1.0          # 0.1 – 1.0 — scales max ERPM
-        self._max_erpm      = MAX_ERPM     # adjustable via VCFG:erpm:<value>
-        self._invert_left   = False
-        self._invert_right  = False
+        # Config (adjustable at runtime)
+        self._power_scale = 1.0        # 0.1 – 1.0 — scales max ERPM
+        self._max_erpm    = MAX_ERPM   # adjustable via VCFG:erpm:<value>
+        self._invert_left  = False
+        self._invert_right = False
 
         self._telem_thread: threading.Thread | None = None
         self._running = False
@@ -137,7 +139,6 @@ class VescDriver(BaseDriver):
         """
         self._uart = uart
         try:
-            import pyvesc
             import serial as _serial
 
             opened = False
@@ -154,8 +155,7 @@ class VescDriver(BaseDriver):
                 log.error(f"VescDriver: no VESC found on ports {self._ports}")
                 return False
 
-            self._pyvesc = pyvesc
-            self._ready  = True
+            self._ready = True
             log.info(
                 f"VescDriver ready: port={self._port}  "
                 f"USB_ID={VESC_ID_USB}  CAN_ID={VESC_ID_CAN}  "
@@ -170,9 +170,6 @@ class VescDriver(BaseDriver):
             self._telem_thread.start()
             return True
 
-        except ImportError:
-            log.error("pyvesc not installed — sudo pip install pyvesc")
-            return False
         except Exception as e:
             log.error(f"VESC init error: {e}")
             return False
@@ -214,7 +211,7 @@ class VescDriver(BaseDriver):
         erpm_left  = int(left  * self._max_erpm)
         erpm_right = int(right * self._max_erpm)
         with self._lock:
-            set_rpm_direct(self._serial, erpm_left,  self._pyvesc)
+            set_rpm_direct(self._serial, erpm_left)
             set_rpm_can(   self._serial, VESC_ID_CAN, erpm_right)
 
     def stop(self) -> None:
@@ -298,41 +295,16 @@ class VescDriver(BaseDriver):
     # Telemetry
     # ------------------------------------------------------------------
 
-    def _get_values(self, ser) -> dict | None:
-        """Reads MC_VALUES from a VESC via pyvesc. Returns dict or None."""
-        try:
-            req = self._pyvesc.encode_request(self._pyvesc.GetValues)
-            ser.reset_input_buffer()
-            ser.write(req)
-            time.sleep(0.04)   # wait for the response
-            raw = ser.read(ser.in_waiting or 100)
-            if not raw:
-                return None
-            msg, _ = self._pyvesc.decode(raw)
-            if msg is None:
-                return None
-            return {
-                'v_in':    round(float(msg.v_in),              2),
-                'temp':    round(float(msg.temp_fet),          1),
-                'current': round(float(msg.avg_motor_current), 2),
-                'rpm':     int(msg.rpm),
-                'duty':    round(float(msg.duty_cycle_now),    3),
-                'fault':   int(msg.fault_code),
-            }
-        except Exception as e:
-            log.debug(f"VESC telemetry unavailable: {e}")
-            return None
-
     def _telem_loop(self) -> None:
         """
         Reads telemetry from both VESCs and sends it to Master via UART.
-          TL → VESC ID 1 (USB direct via _get_values)
+          TL → VESC ID 1 (USB direct via get_values_direct)
           TR → VESC ID 2 (CAN forwarding via get_values_can)
         """
         while self._running:
             if self._ready and self._uart:
                 with self._lock:
-                    vl = self._get_values(self._serial)
+                    vl = get_values_direct(self._serial)
                     vr = get_values_can(self._serial, VESC_ID_CAN)
                 if vl:
                     self._uart.send('TL',
@@ -355,7 +327,7 @@ class VescDriver(BaseDriver):
             return
         try:
             with self._lock:
-                set_rpm_direct(self._serial, 0, self._pyvesc)
+                set_rpm_direct(self._serial, 0)
                 set_rpm_can(   self._serial, VESC_ID_CAN, 0)
         except Exception:
             pass
