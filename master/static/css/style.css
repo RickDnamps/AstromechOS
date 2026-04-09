@@ -417,30 +417,31 @@ body[data-lock-mode="0"] .drive-lock-label { opacity: 0; }
   pointer-events: none;
 }
 
-/* Bottom bar */
+/* Bottom bar — 3-column grid so E-STOP is always perfectly centered */
 .drive-bottom-bar {
   flex-shrink: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
-  padding: 8px 16px 10px;
+  padding: 8px 20px 10px;
   border-top: 1px solid var(--border);
   background: rgba(0, 5, 15, 0.6);
 }
 
 .drive-bottom-bar .speed-wrap {
-  flex: 1;
   min-width: 100px;
-  max-width: 160px;
+  max-width: 180px;
+  justify-self: start;
 }
 
 .drive-bottom-bar .dome-toggle-wrap {
-  flex-shrink: 0;
+  justify-self: end;
 }
 
 /* E-STOP toggle button */
 .estop-toggle-btn {
-  flex: 2;
+  min-width: 220px;
   max-width: 320px;
   font-family: var(--font);
   font-size: 13px;

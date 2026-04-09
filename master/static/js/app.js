@@ -202,7 +202,7 @@ class LockManager {
     document.body.dataset.lockMode = mode;
 
     const label = el('lock-mode-label');
-    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];
+    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];  // kept for compatibility
     const dlabel = el('drive-lock-label');
     if (dlabel) dlabel.textContent = ['', 'KIDS', 'LOCK'][mode];
 
