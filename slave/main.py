@@ -60,8 +60,7 @@ from slave.version_check import VersionChecker
 from slave.drivers.display_driver import DisplayDriver
 from slave.drivers.audio_driver   import AudioDriver
 
-# ---- Phase 2 — Uncomment to enable ----
-# from slave.drivers.vesc_driver        import VescDriver   # enables M: VCFG: VINV: CANSCAN: callbacks
+from slave.drivers.vesc_driver        import VescDriver
 from slave.drivers.body_servo_driver  import BodyServoDriver
 # from slave.drivers.dome_motor_driver  import DomeMotorDriver  # to create Phase 2
 
@@ -128,11 +127,14 @@ def main() -> None:
 
     display.boot_start()   # RP2040: reset all items → orange
 
+    vesc = None   # forward declaration — assigned below after port detection
+
     # Redefine with closures on display
     def emergency_stop_vesc() -> None:
         log.error("VESC CUTOFF — watchdog timeout")
         display.system_locked()
-        # Phase 2: vesc_g.stop() + vesc_d.stop()
+        if vesc is not None and vesc.is_ready():
+            vesc.stop()
 
     def resume_vesc() -> None:
         log.info("VESC re-enabled — heartbeat resumed")
@@ -141,8 +143,7 @@ def main() -> None:
                 v = f.read().strip()
         except Exception:
             v = ""
-        display.ok(v)   # system already operational — go directly to STATE_OK
-        # Phase 2: vesc_g.resume() + vesc_d.resume()
+        display.ok(v)
 
     # ------------------------------------------------------------------
     # UART Listener — connection to Master via slipring
@@ -188,22 +189,26 @@ def main() -> None:
         display.boot_fail('AUDIO')
 
     # ------------------------------------------------------------------
-    # Phase 2 — VESC + Dome motor (not connected — mark as disabled)
-    # Uncomment entire block when VESCs are connected via USB:
+    # Phase 2 — VESC propulsion (Flipsky Mini V6.7, fw v6.05)
+    # VESC ID 1 via USB, VESC ID 2 via CAN forwarding through VESC 1.
+    # Ports tried in order, skipping the ACM port used by the RP2040.
     # ------------------------------------------------------------------
-    # vesc = VescDriver()
-    # if vesc.setup(uart=uart):
-    #     uart.register_callback('M',       vesc.handle_uart)
-    #     uart.register_callback('VCFG',    vesc.handle_config_uart)
-    #     uart.register_callback('VINV',    vesc.handle_invert_uart)
-    #     uart.register_callback('CANSCAN', vesc.handle_can_scan_uart)
-    #     display.boot_ok('VESC_G')
-    #     display.boot_ok('VESC_D')
-    # else:
-    #     display.boot_fail('VESC_G')
-    #     display.boot_fail('VESC_D')
-    display.boot_fail('VESC_G')   # not connected Phase 1
-    display.boot_fail('VESC_D')   # not connected Phase 1
+    _rp2040_port = display.used_port
+    _vesc_ports  = [p for p in ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
+                    if p != _rp2040_port]
+    vesc = VescDriver(ports=_vesc_ports)
+    if vesc.setup(uart=uart):
+        uart.register_callback('M',       vesc.handle_uart)
+        uart.register_callback('VCFG',    vesc.handle_config_uart)
+        uart.register_callback('VINV',    vesc.handle_invert_uart)
+        uart.register_callback('CANSCAN', vesc.handle_can_scan_uart)
+        display.boot_ok('VESC_G')
+        display.boot_ok('VESC_D')
+    else:
+        log.warning("VescDriver unavailable — propulsion disabled")
+        display.boot_fail('VESC_G')
+        display.boot_fail('VESC_D')
+
     display.boot_fail('DOME')     # not connected Phase 1
     display.boot_fail('BT_CTRL')  # optional Phase 4
 
@@ -297,10 +302,7 @@ def main() -> None:
         watchdog.stop()
         uart.stop()
         audio.shutdown()
-        # Phase 2:
-        # if vesc_g.is_ready():  vesc_g.shutdown()
-        # if vesc_d.is_ready():  vesc_d.shutdown()
-        # if dome.is_ready():    dome.shutdown()
+        if vesc.is_ready():  vesc.shutdown()
         if servo.is_ready(): servo.shutdown()
         display.shutdown()
         log.info("Slave stopped cleanly")

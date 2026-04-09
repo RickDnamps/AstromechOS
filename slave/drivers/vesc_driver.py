@@ -75,9 +75,10 @@ from slave.drivers.vesc_can import set_rpm_can, set_rpm_direct, get_values_can
 
 log = logging.getLogger(__name__)
 
-# Single USB port — connected to VESC ID 1 (Master VESC)
-VESC_PORT = "/dev/ttyACM0"
-VESC_BAUD = 115200
+# USB ports to try in order — VESC takes the first available ACM
+# that is not already claimed by the RP2040 display driver.
+VESC_PORTS = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
+VESC_BAUD  = 115200
 
 # CAN IDs — validated hardware configuration (Flipsky Mini V6.7, fw v6.05)
 VESC_ID_USB = 1   # Master VESC — Pi connected via USB
@@ -107,8 +108,9 @@ class VescDriver(BaseDriver):
     - Power scale and invert configurable from the dashboard
     """
 
-    def __init__(self, port: str = VESC_PORT):
-        self._port    = port
+    def __init__(self, ports: list[str] | None = None):
+        self._ports   = ports if ports is not None else VESC_PORTS
+        self._port    = None   # resolved at setup()
         self._serial  = None
         self._pyvesc  = None
         self._ready   = False
@@ -138,7 +140,20 @@ class VescDriver(BaseDriver):
             import pyvesc
             import serial as _serial
 
-            self._serial = _serial.Serial(self._port, VESC_BAUD, timeout=0.05)
+            opened = False
+            for port in self._ports:
+                try:
+                    self._serial = _serial.Serial(port, VESC_BAUD, timeout=0.05)
+                    self._port   = port
+                    opened = True
+                    break
+                except _serial.SerialException:
+                    continue
+
+            if not opened:
+                log.error(f"VescDriver: no VESC found on ports {self._ports}")
+                return False
+
             self._pyvesc = pyvesc
             self._ready  = True
             log.info(

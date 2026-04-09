@@ -91,6 +91,11 @@ class DisplayDriver(BaseDriver):
             self._serial.close()
         self._ready = False
 
+    @property
+    def used_port(self) -> str | None:
+        """Returns the ACM port currently in use, or None if not connected."""
+        return self._port if self._ready else None
+
     def is_ready(self) -> bool:
         return self._ready and self._serial is not None and self._serial.is_open
 
