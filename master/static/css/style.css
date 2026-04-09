@@ -245,6 +245,13 @@ body::after {
 .stat-val  { color: var(--cyan); }
 .stat-sep  { color: var(--text-dim); }
 
+#temp-label {
+  display: inline-block;
+  min-width: 42px;        /* enough for "99.9°C" */
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .uptime-label {
   font-size: 10px;
   color: var(--text-dim);
