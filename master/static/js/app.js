@@ -407,8 +407,10 @@ class BatteryGauge {
   update(voltage) {
     this._lastV = voltage;
     if (!voltage || voltage < 1) return;
-    const pct  = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
-    const color = pct > 0.5 ? '#00cc66' : pct > 0.25 ? '#ff8800' : '#ff2244';
+    const pct      = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
+    const cells    = this._MAX_V / 4.2;
+    const vPerCell = voltage / cells;
+    const color    = vPerCell > 3.9 ? '#00cc66' : vPerCell > 3.7 ? '#ff8800' : '#ff2244';
 
     // Main arc
     if (this._arc) {
