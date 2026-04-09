@@ -404,13 +404,22 @@ class BatteryGauge {
     if (this._lastV) this.update(this._lastV);
   }
 
+  // Returns 0–100 percentage based on configured cell count
+  voltToPct(v) {
+    return Math.max(0, Math.min(100, ((v - this._MIN_V) / (this._MAX_V - this._MIN_V)) * 100));
+  }
+
+  // Per-cell thresholds (LiPo): green > 3.8V, orange 3.6–3.8V, red < 3.6V
+  voltToColor(v) {
+    const vpc = v / (this._MAX_V / 4.2);
+    return vpc > 3.8 ? '#00cc66' : vpc > 3.6 ? '#ff8800' : '#ff2244';
+  }
+
   update(voltage) {
     this._lastV = voltage;
     if (!voltage || voltage < 1) return;
-    const pct      = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
-    const cells    = this._MAX_V / 4.2;
-    const vPerCell = voltage / cells;
-    const color    = vPerCell > 3.9 ? '#00cc66' : vPerCell > 3.7 ? '#ff8800' : '#ff2244';
+    const pct   = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
+    const color = this.voltToColor(voltage);
 
     // Main arc
     if (this._arc) {
@@ -1795,14 +1804,14 @@ class VescPanel {
     const vEl  = el('vesc-voltage');
     const fill = el('vesc-battery-fill');
     if (src && vEl) {
-      const v = src.v_in;
+      const v   = src.v_in;
+      const col = batteryGauge.voltToColor(v);
       vEl.textContent = v.toFixed(1);
-      vEl.className = 'vesc-battery-value' + (v < 21 ? ' danger' : v < 22 ? ' warn' : '');
-      // 6S LiPo: 19.2V empty → 25.2V full
-      const pct = Math.max(0, Math.min(100, ((v - 19.2) / (25.2 - 19.2)) * 100));
+      vEl.className = 'vesc-battery-value' + (col === '#ff2244' ? ' danger' : col === '#ff8800' ? ' warn' : '');
+      const pct = batteryGauge.voltToPct(v);
       if (fill) {
         fill.style.width = pct + '%';
-        fill.style.background = v < 21 ? '#ff4455' : v < 22 ? '#ffcc00' : '#00ff88';
+        fill.style.background = col;
       }
     } else if (vEl) {
       vEl.textContent = '--.-';
@@ -4003,8 +4012,9 @@ const choreoEditor = (() => {
 
     if (vVals.length) {
       const vMin = Math.min(...vVals);
-      const vPct = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
-      const vCol = vPct < 20 ? 'var(--red)' : vPct < 50 ? 'var(--amber)' : 'var(--green)';
+      const vPct = batteryGauge.voltToPct(vMin);
+      const vCol = batteryGauge.voltToColor(vMin) === '#ff2244' ? 'var(--red)'
+                 : batteryGauge.voltToColor(vMin) === '#ff8800' ? 'var(--amber)' : 'var(--green)';
       _setBar('chor-telem-v-bar', 'chor-telem-v', vPct, vMin.toFixed(1)+'V', vCol);
     }
     if (tVals.length) {
@@ -4027,9 +4037,9 @@ const choreoEditor = (() => {
 
     if (battEl && vVals && vVals.length) {
       const vMin = Math.min(...vVals);
-      const vPctLocal = Math.max(0, Math.min(100, ((vMin - 20) / 9.4) * 100));
+      const col  = batteryGauge.voltToColor(vMin);
       battEl.textContent = vMin.toFixed(1) + 'V';
-      battEl.className = 'chor-cmd-gauge' + (vPctLocal < 20 ? ' crit' : vPctLocal < 50 ? ' warn' : '');
+      battEl.className = 'chor-cmd-gauge' + (col === '#ff2244' ? ' crit' : col === '#ff8800' ? ' warn' : '');
     }
     if (tempEl && tVals && tVals.length) {
       const tMax = Math.max(...tVals);
