@@ -46,14 +46,15 @@ import master.registry as reg
 _LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
 
 
-def _save_power_scale(scale: float) -> None:
-    """Persist power_scale to local.cfg [vesc]."""
+def _save_vesc_cfg(**kwargs) -> None:
+    """Persist one or more keys to local.cfg [vesc]."""
     cfg = configparser.ConfigParser()
     if os.path.exists(_LOCAL_CFG):
         cfg.read(_LOCAL_CFG)
     if not cfg.has_section('vesc'):
         cfg.add_section('vesc')
-    cfg.set('vesc', 'power_scale', f'{scale:.2f}')
+    for k, v in kwargs.items():
+        cfg.set('vesc', k, str(v))
     with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
         cfg.write(f)
 
@@ -108,22 +109,45 @@ def set_config():
         return jsonify({'error': 'scale must be a float 0.1-1.0'}), 400
 
     reg.vesc_power_scale = scale
-    _save_power_scale(scale)
+    _save_vesc_cfg(power_scale=f'{scale:.2f}')
     if reg.uart:
         reg.uart.send('VCFG', f'scale:{scale:.2f}')
     return jsonify({'status': 'ok', 'power_scale': scale})
 
 
+@vesc_bp.get('/config')
+def get_config():
+    """Returns current VESC configuration (power_scale + invert states)."""
+    return jsonify({
+        'power_scale': getattr(reg, 'vesc_power_scale', 1.0),
+        'invert_L':    getattr(reg, 'vesc_invert_L', False),
+        'invert_R':    getattr(reg, 'vesc_invert_R', False),
+    })
+
+
 @vesc_bp.post('/invert')
 def invert_motor():
-    """Inverts a motor direction. Body: {"side": "L"} or {"side": "R"}."""
+    """
+    Sets motor direction. Body: {"side": "L", "state": true/false}.
+    State is persisted to local.cfg and sent to Slave via UART VINV:L:1.
+    """
     body = request.get_json(silent=True) or {}
     side = body.get('side', '').upper()
     if side not in ('L', 'R'):
         return jsonify({'error': 'side must be "L" or "R"'}), 400
+    state = bool(body.get('state', False))
+
+    if side == 'L':
+        reg.vesc_invert_L = state
+    else:
+        reg.vesc_invert_R = state
+
+    _save_vesc_cfg(**{f'invert_{side.lower()}': '1' if state else '0'})
+
     if reg.uart:
-        reg.uart.send('VINV', side)
-    return jsonify({'status': 'ok', 'side': side})
+        reg.uart.send('VINV', f'{side}:{"1" if state else "0"}')
+
+    return jsonify({'status': 'ok', 'side': side, 'state': state})
 
 
 @vesc_bp.get('/can/scan')

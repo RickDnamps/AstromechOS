@@ -828,106 +828,131 @@
           <div class="vesc-battery-fill" id="vesc-battery-fill"></div>
         </div>
       </div>
-      <div class="vesc-scale-info">
-        POWER <span id="vesc-scale-pct">100</span>%
-      </div>
+      <div class="vesc-scale-info">POWER <span id="vesc-scale-pct">100</span>%</div>
+      <div class="vesc-last-update" id="vesc-last-update">—</div>
     </div>
 
-    <!-- Telemetry cards -->
+    <!-- Motor cards -->
     <div class="vesc-cards">
+
       <!-- LEFT -->
       <div class="vesc-card" id="vesc-card-L">
-        <div class="vesc-card-title">
-          <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="1" x2="5" y2="5" stroke="currentColor" stroke-width="1.5"/></svg>
-          LEFT MOTOR
+        <div class="vesc-card-title">LEFT MOTOR</div>
+        <div class="vesc-bar-metrics">
+          <div class="vesc-brow">
+            <span class="vesc-brow-lbl">FET TEMP</span>
+            <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vl-temp-bar"></div></div>
+            <span class="vesc-brow-val"><span id="vl-temp">--</span><span class="vesc-brow-unit">°C</span></span>
+          </div>
+          <div class="vesc-brow">
+            <span class="vesc-brow-lbl">CURRENT</span>
+            <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vl-curr-bar"></div></div>
+            <span class="vesc-brow-val"><span id="vl-curr">--</span><span class="vesc-brow-unit">A</span></span>
+          </div>
+          <div class="vesc-brow">
+            <span class="vesc-brow-lbl">DUTY</span>
+            <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vl-duty-bar"></div></div>
+            <span class="vesc-brow-val"><span id="vl-duty">--</span><span class="vesc-brow-unit">%</span></span>
+          </div>
         </div>
-        <div class="vesc-metrics">
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vl-temp">--</span>
-            <span class="vesc-metric-unit">°C</span>
-            <span class="vesc-metric-label">FET TEMP</span>
-          </div>
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vl-curr">--</span>
-            <span class="vesc-metric-unit">A</span>
-            <span class="vesc-metric-label">CURRENT</span>
-          </div>
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vl-rpm">----</span>
-            <span class="vesc-metric-unit">rpm</span>
-            <span class="vesc-metric-label">SPEED</span>
-          </div>
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vl-duty">--</span>
-            <span class="vesc-metric-unit">%</span>
-            <span class="vesc-metric-label">DUTY</span>
-          </div>
+        <div class="vesc-card-footer">
+          <span class="vesc-footer-item">RPM <span id="vl-rpm" class="vesc-footer-val">----</span></span>
+          <span class="vesc-footer-sep">|</span>
+          <span class="vesc-footer-item">POWER <span id="vl-power" class="vesc-footer-val">--</span> W</span>
         </div>
         <div class="vesc-fault" id="vl-fault">OFFLINE</div>
       </div>
 
       <!-- RIGHT -->
       <div class="vesc-card" id="vesc-card-R">
-        <div class="vesc-card-title">
-          <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/><line x1="5" y1="1" x2="5" y2="5" stroke="currentColor" stroke-width="1.5"/></svg>
-          RIGHT MOTOR
+        <div class="vesc-card-title">RIGHT MOTOR</div>
+        <div class="vesc-bar-metrics">
+          <div class="vesc-brow">
+            <span class="vesc-brow-lbl">FET TEMP</span>
+            <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vr-temp-bar"></div></div>
+            <span class="vesc-brow-val"><span id="vr-temp">--</span><span class="vesc-brow-unit">°C</span></span>
+          </div>
+          <div class="vesc-brow">
+            <span class="vesc-brow-lbl">CURRENT</span>
+            <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vr-curr-bar"></div></div>
+            <span class="vesc-brow-val"><span id="vr-curr">--</span><span class="vesc-brow-unit">A</span></span>
+          </div>
+          <div class="vesc-brow">
+            <span class="vesc-brow-lbl">DUTY</span>
+            <div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vr-duty-bar"></div></div>
+            <span class="vesc-brow-val"><span id="vr-duty">--</span><span class="vesc-brow-unit">%</span></span>
+          </div>
         </div>
-        <div class="vesc-metrics">
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vr-temp">--</span>
-            <span class="vesc-metric-unit">°C</span>
-            <span class="vesc-metric-label">FET TEMP</span>
-          </div>
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vr-curr">--</span>
-            <span class="vesc-metric-unit">A</span>
-            <span class="vesc-metric-label">CURRENT</span>
-          </div>
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vr-rpm">----</span>
-            <span class="vesc-metric-unit">rpm</span>
-            <span class="vesc-metric-label">SPEED</span>
-          </div>
-          <div class="vesc-metric">
-            <span class="vesc-metric-val" id="vr-duty">--</span>
-            <span class="vesc-metric-unit">%</span>
-            <span class="vesc-metric-label">DUTY</span>
-          </div>
+        <div class="vesc-card-footer">
+          <span class="vesc-footer-item">RPM <span id="vr-rpm" class="vesc-footer-val">----</span></span>
+          <span class="vesc-footer-sep">|</span>
+          <span class="vesc-footer-item">POWER <span id="vr-power" class="vesc-footer-val">--</span> W</span>
         </div>
         <div class="vesc-fault" id="vr-fault">OFFLINE</div>
       </div>
+
     </div>
 
-    <!-- Power scale slider -->
+    <!-- Symmetry indicator -->
+    <div class="vesc-symmetry" id="vesc-symmetry">
+      <div class="vesc-sym-item">
+        <span class="vesc-sym-lbl">RPM Δ</span>
+        <span class="vesc-sym-val" id="sym-rpm">—</span>
+      </div>
+      <div class="vesc-sym-item">
+        <span class="vesc-sym-lbl">CURRENT Δ</span>
+        <span class="vesc-sym-val" id="sym-curr">—</span>
+      </div>
+      <div class="vesc-sym-item">
+        <span class="vesc-sym-lbl">STATUS</span>
+        <span class="vesc-sym-status" id="sym-status">—</span>
+      </div>
+    </div>
+
+    <!-- Power scale + direction (same card) -->
     <div class="vesc-config-card">
       <div class="vesc-config-row">
-        <label class="vesc-config-label">
-          POWER SCALE
-          <span class="vesc-config-hint">limits max motor power</span>
-        </label>
+        <label class="vesc-config-label">POWER SCALE <span class="vesc-config-hint">max motor power</span></label>
         <div class="vesc-slider-wrap">
           <input type="range" id="vesc-scale-slider" min="10" max="100" value="100" class="volume-slider">
           <span id="vesc-scale-label" class="volume-label">100%</span>
         </div>
       </div>
+      <div class="vesc-config-row vesc-dir-row">
+        <label class="vesc-config-label">DIRECTION <span class="vesc-config-hint">invert motor spin</span></label>
+        <div class="row">
+          <button id="vesc-inv-L" class="btn btn-sm vesc-inv-btn" onclick="vescToggleInvert('L')">⟲ LEFT: NORMAL</button>
+          <button id="vesc-inv-R" class="btn btn-sm vesc-inv-btn" onclick="vescToggleInvert('R')">RIGHT: NORMAL ⟳</button>
+        </div>
+      </div>
     </div>
 
-    <!-- Action buttons -->
-    <div class="vesc-actions">
-      <div class="vesc-action-group">
-        <span class="vesc-action-title">DIRECTION</span>
-        <div class="row">
-          <button class="btn btn-sm btn-warn" onclick="vescInvert('L')">⟲ INVERT LEFT</button>
-          <button class="btn btn-sm btn-warn" onclick="vescInvert('R')">INVERT RIGHT ⟳</button>
+    <!-- Session stats + fault log (side by side) -->
+    <div class="vesc-diag-row">
+
+      <div class="vesc-config-card vesc-session-card">
+        <div class="vesc-diag-title">SESSION PEAKS</div>
+        <div class="vesc-session-grid">
+          <div class="vesc-session-item"><span class="vesc-session-lbl">TEMP L</span><span id="peak-temp-l" class="vesc-session-val">—</span><span class="vesc-session-unit">°C</span></div>
+          <div class="vesc-session-item"><span class="vesc-session-lbl">TEMP R</span><span id="peak-temp-r" class="vesc-session-val">—</span><span class="vesc-session-unit">°C</span></div>
+          <div class="vesc-session-item"><span class="vesc-session-lbl">CURR L</span><span id="peak-curr-l" class="vesc-session-val">—</span><span class="vesc-session-unit">A</span></div>
+          <div class="vesc-session-item"><span class="vesc-session-lbl">CURR R</span><span id="peak-curr-r" class="vesc-session-val">—</span><span class="vesc-session-unit">A</span></div>
+          <div class="vesc-session-item"><span class="vesc-session-lbl">DUTY</span><span id="peak-duty" class="vesc-session-val">—</span><span class="vesc-session-unit">%</span></div>
+          <div class="vesc-session-item"><span class="vesc-session-lbl">FAULTS</span><span id="peak-faults" class="vesc-session-val">0</span></div>
+        </div>
+        <button class="btn btn-xs vesc-reset-peaks" onclick="vescResetPeaks()">RESET</button>
+      </div>
+
+      <div class="vesc-config-card vesc-faultlog-card">
+        <div class="vesc-diag-title">
+          FAULT LOG
+          <button class="btn btn-xs vesc-clear-log" onclick="vescClearLog()">CLEAR</button>
+        </div>
+        <div class="vesc-faultlog" id="vesc-fault-log">
+          <div class="vesc-faultlog-empty">No faults this session.</div>
         </div>
       </div>
-      <div class="vesc-action-group">
-        <span class="vesc-action-title">FOC AUTODETECT <span class="vesc-action-hint">— motors must be free to spin</span></span>
-        <div class="row">
-          <button class="btn btn-sm btn-primary" onclick="vescFocDetect('L')">⚡ FOC LEFT</button>
-          <button class="btn btn-sm btn-primary" onclick="vescFocDetect('R')">⚡ FOC RIGHT</button>
-        </div>
-      </div>
+
     </div>
 
     <!-- CAN Bus Setup Wizard -->
@@ -942,9 +967,7 @@
       </div>
       <div class="vesc-can-step">
         <p class="vesc-can-desc">VESC 1 is connected via USB and acts as CAN gateway. Scan to discover VESC 2 on the CAN bus without a second USB cable.</p>
-        <button class="btn btn-sm btn-primary" id="can-scan-btn" onclick="canWizard.scan()">
-          SCAN CAN BUS
-        </button>
+        <button class="btn btn-sm btn-primary" id="can-scan-btn" onclick="canWizard.scan()">SCAN CAN BUS</button>
       </div>
       <div id="can-scan-result" class="vesc-can-result"></div>
       <div class="vesc-can-warning">
@@ -955,12 +978,11 @@
       </div>
     </div>
 
-    <!-- Info box -->
+    <!-- Info -->
     <div class="vesc-info-box">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="6" x2="7" y2="10" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="4" r="0.8" fill="currentColor"/></svg>
-      VESC telemetry updates at 5Hz when motors are connected via USB.
-      CAN scan requires VESC 1 connected via USB (<code>/dev/ttyACM0</code>).
-      For full motor config (FOC wizard, motor detection) use <strong>VESC Tool</strong>.
+      Telemetry at 5Hz via UART. Power = V × I per motor. Thresholds: Temp warn 60°C / alarm 80°C · Current warn 20A / alarm 25A · Duty warn 75% / alarm 90%.
+      Full motor config (FOC detection, motor tuning) requires <strong>VESC Tool</strong>.
     </div>
 
   </div>

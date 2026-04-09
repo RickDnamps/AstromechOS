@@ -255,13 +255,15 @@ class VescDriver(BaseDriver):
             log.error(f"Invalid VCFG message {value!r}: {e}")
 
     def handle_invert_uart(self, value: str) -> None:
-        """VINV:L or VINV:R — reverses a motor direction."""
-        side = value.strip().upper()
+        """VINV:L:0/1 — sets motor direction explicitly (0=normal, 1=inverted)."""
+        parts = value.strip().upper().split(':')
+        side  = parts[0]
+        state = (parts[1] == '1') if len(parts) > 1 else None
         if side == 'L':
-            self._invert_left = not self._invert_left
+            self._invert_left  = state if state is not None else (not self._invert_left)
             log.info(f"Invert left: {self._invert_left}")
         elif side == 'R':
-            self._invert_right = not self._invert_right
+            self._invert_right = state if state is not None else (not self._invert_right)
             log.info(f"Invert right: {self._invert_right}")
         else:
             log.warning(f"VINV: unknown side {value!r}")

@@ -215,6 +215,8 @@ def main() -> None:
     reg.teeces = teeces
     reg.deploy = deploy
     reg.vesc_power_scale = cfg.getfloat('vesc', 'power_scale', fallback=1.0)
+    reg.vesc_invert_L    = cfg.getboolean('vesc', 'invert_l',    fallback=False)
+    reg.vesc_invert_R    = cfg.getboolean('vesc', 'invert_r',    fallback=False)
 
     # ------------------------------------------------------------------
     # Phase 2 — Propulsion / dome / servo drivers

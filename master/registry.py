@@ -61,6 +61,8 @@ dome_servo:  'DomeServoDriver | None'   = None
 # Format: {'v_in': 23.5, 'temp': 35.2, 'current': 8.5, 'rpm': 1200, 'duty': 0.45, 'fault': 0, 'ts': 1234567890.0}
 vesc_telem: dict = {'L': None, 'R': None}
 vesc_power_scale: float = 1.0
+vesc_invert_L: bool = False
+vesc_invert_R: bool = False
 
 # CAN bus scan result — updated by CANFOUND callback in main.py
 # None = no result yet, [] = no VESC found, [...] = found IDs
