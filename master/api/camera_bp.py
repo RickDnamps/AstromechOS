@@ -39,6 +39,7 @@ def camera_stream():
     """
     MJPEG proxy. Requires a valid token from POST /camera/take.
     Stream ends automatically when another client claims the slot.
+    Forwards the upstream Content-Type so the browser gets the correct boundary.
     """
     try:
         my_token = int(request.args.get('t', -1))
@@ -48,20 +49,30 @@ def camera_stream():
     if my_token != _active_token or my_token < 1:
         return jsonify({'error': 'No active token — call POST /camera/take first'}), 403
 
+    try:
+        upstream = _requests.get(MJPG_URL, stream=True, timeout=5)
+        content_type = upstream.headers.get(
+            'Content-Type',
+            'multipart/x-mixed-replace; boundary=boundarydonotcross'
+        )
+    except _requests.exceptions.ConnectionError:
+        log.warning("Camera not reachable at %s", MJPG_URL)
+        return jsonify({'error': 'Camera not available'}), 503
+    except Exception as e:
+        log.warning("Camera connect error: %s", e)
+        return jsonify({'error': 'Camera error'}), 503
+
     def generate():
         try:
-            resp = _requests.get(MJPG_URL, stream=True, timeout=5)
-            for chunk in resp.iter_content(chunk_size=8192):
+            for chunk in upstream.iter_content(chunk_size=8192):
                 if _active_token != my_token:
                     # Another client claimed the slot — stop this stream
                     break
                 yield chunk
-        except _requests.exceptions.ConnectionError:
-            pass  # mjpg-streamer not running — stream ends silently
         except Exception as e:
             log.warning("Camera stream error: %s", e)
 
-    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(generate(), mimetype=content_type)
 
 
 @camera_bp.get('/camera/status')
