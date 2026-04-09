@@ -395,7 +395,7 @@ body[data-lock-mode="2"] .drive-lock-btn:hover { box-shadow: 0 0 12px rgba(220,5
   overflow: hidden;
   transition: max-height 0.2s, opacity 0.2s;
 }
-body[data-lock-mode="0"] .drive-lock-label { opacity: 0; max-height: 0; }
+/* label always visible — text changes per mode */
 
 /* Camera container */
 .cam-container {

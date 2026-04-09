@@ -204,7 +204,7 @@ class LockManager {
     const label = el('lock-mode-label');
     if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];  // kept for compatibility
     const dlabel = el('drive-lock-label');
-    if (dlabel) dlabel.textContent = ['', 'KIDS', 'LOCK'][mode];
+    if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][mode];
 
     // Timer Kids Mode
     if (mode === 1) {
@@ -244,7 +244,7 @@ class LockManager {
       const label = el('lock-mode-label');
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
       const dlabel = el('drive-lock-label');
-      if (dlabel) dlabel.textContent = ['', 'KIDS', 'LOCK'][lockMode];
+      if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][lockMode];
       if (lockMode === 1) this._applyKidsSpeed();
     }
   }
