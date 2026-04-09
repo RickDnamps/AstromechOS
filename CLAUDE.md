@@ -1,20 +1,19 @@
 # R2-D2 Project — Claude Code Context
 
-> Hardware complet, câblage, alimentation, I2C/GPIO → **[ELECTRONICS.md](ELECTRONICS.md)**
+> Hardware, câblage, alimentation, I2C/GPIO → **[ELECTRONICS.md](ELECTRONICS.md)**
 
 ---
 
-## 🔧 Workflow preferences
-- No confirmation prompts for standard code changes
-- Make changes directly and summarize after
-- Only ask if genuinely ambiguous or destructive (delete entire module, force-push, etc.)
+## 🔧 Workflow
+- No confirmation prompts for standard code changes — make changes directly, summarize after
+- Only ask if genuinely ambiguous or destructive
 
 ---
 
 ## ⚙️ Instructions Claude Code
-- **Toujours committer et pusher sur GitHub après chaque modification**
-- Ne jamais laisser des changements non commités en fin de session
-- **Toujours terminer avec le déploiement SSH direct** via paramiko :
+
+- **Toujours committer + pusher après chaque modification**
+- **Toujours terminer avec déploiement SSH (paramiko) :**
   ```python
   import paramiko, sys, io
   sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -24,115 +23,65 @@
   for line in stdout: print(line, end='')
   c.close()
   ```
-  > ⚠️ `sshpass` non disponible sur Windows Git Bash — toujours utiliser `paramiko`
-  > ⚠️ Ne jamais git commit/push depuis le Pi — toujours depuis le PC de dev
-  > ⚠️ IPs réelles : Master=`192.168.2.104`, Slave=`192.168.4.171` — ne pas utiliser `.local` (mDNS capricieux sur Windows)
+  > ⚠️ `sshpass` non dispo sur Windows — toujours `paramiko`
+  > ⚠️ Ne jamais git push depuis le Pi — toujours depuis le PC dev
+  > ⚠️ IPs : Master=`192.168.2.104`, Slave=`192.168.4.171` (pas `.local` — mDNS capricieux)
 
-- Si déploiement SSH impossible, une seule commande sur le Master :
-  ```bash
-  cd /home/artoo/r2d2 && git pull && bash scripts/update.sh
-  ```
-
-- **Audio channels** — configurable in Config tab (web UI) → writes `master/config/local.cfg` `[audio] audio_channels` + SCPs `slave/config/slave.cfg` + restarts services.
-  Default: 6. Range: 1–12.
+- Fallback si SSH impossible : `cd /home/artoo/r2d2 && git pull && bash scripts/update.sh`
+- Audio channels : Config tab → `local.cfg [audio] audio_channels` + SCP slave.cfg. Default 6, range 1–12.
 
 ---
 
-## 🎯 Vision
-Système de contrôle distribué pour une réplique R2-D2 grandeur nature.
+## 🎯 Architecture
+
 **Master Pi** (dôme) — Flask API, séquences, servos dôme, Teeces32, déploiement.
 **Slave Pi** (corps) — VESCs propulsion, servos body, audio, moteur dôme, RP2040 LCD.
-Communication via UART physique 115200 baud à travers le slipring.
-Inspiré de [r2_control by dpoulson](https://github.com/dpoulson/r2_control).
-
----
-
-## 🏗️ Structure du repo
+UART physique 115200 baud à travers le slipring. Inspiré de [r2_control by dpoulson](https://github.com/dpoulson/r2_control).
 
 ```
-r2d2/
-├── master/
-│   ├── main.py                  ← boot + init services
-│   ├── uart_controller.py       ← heartbeat 200ms + CRC
-│   ├── teeces_controller.py     ← JawaLite (random/leia/off/text/psi)
-│   ├── deploy_controller.py     ← git pull + rsync + bouton dôme
-│   ├── script_engine.py         ← exécuteur séquences .scr
-│   ├── app_watchdog.py          ← heartbeat App↔Master 600ms
-│   ├── motion_watchdog.py       ← timeout drive 800ms
-│   ├── safe_stop.py             ← ramp vitesse → 0
-│   ├── registry.py              ← injection dépendances Flask
-│   ├── flask_app.py             ← app factory
-│   ├── drivers/
-│   │   ├── dome_servo_driver.py ← PCA9685 @ 0x40, speed ramp, open/close par angle
-│   │   ├── dome_motor_driver.py ← envoie D: via UART
-│   │   └── body_servo_driver.py ← envoie SRV: via UART
-│   ├── api/                     ← Flask blueprints (audio/motion/servo/script/teeces/status)
-│   ├── sequences/               ← 40 séquences .scr (CSV)
-│   ├── config/
-│   │   ├── dome_angles.json     ← calibrations servos dôme (gitignored — propre au robot)
-│   │   ├── main.cfg             ← config principale
-│   │   └── local.cfg            ← credentials WiFi/hotspot (gitignored)
-│   ├── templates/index.html     ← dashboard web (6 onglets)
-│   └── static/                  ← CSS + JS
-├── slave/
-│   ├── main.py
-│   ├── uart_listener.py         ← parse CRC + callbacks
-│   ├── watchdog.py              ← coupe VESC si heartbeat >500ms
-│   ├── drivers/
-│   │   ├── audio_driver.py      ← mpg123 + sounds_index.json
-│   │   ├── display_driver.py    ← RP2040 via /dev/ttyACM* (dynamique — ACM0/ACM1/ACM2 selon boot)
-│   │   ├── vesc_driver.py       ← VESC ERPM propulsion (native CRC-16, no pyvesc)
-│   │   ├── vesc_can.py          ← COMM_FORWARD_CAN, set_rpm_can/direct, get_values_can/direct
-│   │   └── body_servo_driver.py ← PCA9685 @ 0x41
-│   ├── config/
-│   │   └── servo_angles.json    ← calibrations servos body (gitignored — propre au robot)
-│   └── sounds/sounds_index.json ← 317 sons, 14 catégories (MP3 gitignorés)
-├── shared/
-│   └── uart_protocol.py         ← CRC somme mod 256, build_msg(), parse_msg()
-├── rp2040/firmware/             ← MicroPython : GC9A01 display, écrans BOOT/OP/LOCKED
-├── android/                     ← WebView app + APK compilé
-├── tools/
-│   └── stress_joystick.py       ← stress test joystick + monitor WiFi/CPU/latence via SSH
-└── scripts/                     ← setup_*.sh, deploy.sh, update.sh
+master/
+  main.py            boot + init services
+  uart_controller.py heartbeat 200ms + CRC
+  choreo_player.py   TICK=50ms, multichannel audio, VESC drive, servo interp
+  script_engine.py   exécuteur séquences .scr
+  registry.py        injection dépendances Flask
+  flask_app.py       app factory + blueprints
+  drivers/           dome_servo(PCA9685@0x40)  dome_motor  body_servo(UART)
+  api/               blueprints audio/motion/servo/script/teeces/status/vesc/camera
+  config/            main.cfg  local.cfg(gitignored)  dome_angles.json(gitignored)
+slave/
+  uart_listener.py   parse CRC + callbacks
+  watchdog.py        coupe VESC si heartbeat >500ms
+  drivers/           audio(mpg123)  display(RP2040/ACM*)  vesc_driver  vesc_can  body_servo(PCA9685@0x41)
+  config/            servo_angles.json(gitignored)
+shared/uart_protocol.py   CRC somme mod 256
+rp2040/firmware/          MicroPython GC9A01 display
+android/                  WebView app + APK compilé
 ```
 
 ---
 
 ## 📡 Protocole UART — Checksum (somme mod 256)
 
-**Algorithme obligatoire sur tous les messages** — bus UART traverse slipring + parasites 24V.
-
 ```python
 def calc_crc(payload: str) -> str:
     return format(sum(payload.encode('utf-8')) % 256, '02X')
-
-def build_msg(type: str, value: str) -> str:
-    payload = f"{type}:{value}"
-    return f"{payload}:{calc_crc(payload)}\n"
-
-def parse_msg(raw: str) -> tuple[str, str] | None:
-    parts = raw.strip().split(":")
-    if len(parts) < 3: return None
-    *payload_parts, received_cs = parts
-    payload = ":".join(payload_parts)
-    if received_cs != calc_crc(payload): return None
-    return (payload_parts[0], ":".join(payload_parts[1:]))
-
-# Exemples : build_msg("H","1") → "H:1:B3\n"  |  build_msg("M","50") → "M:50:EC\n"
+# build_msg("H","1") → "H:1:B3\n"   parse_msg strips last field as CRC
 ```
 
-> ⚠️ Somme arithmétique mod 256 — PAS XOR (deux octets identiques s'annulent avec XOR)
-> Messages sans checksum = rejetés. Hex majuscule 2 chars (`00`–`FF`).
+> ⚠️ Somme arithmétique — PAS XOR. Messages sans checksum rejetés. Hex majuscule 2 chars.
 
-**Types de messages :**
+**Types de messages UART :**
 ```
-H:1:CRC          Master→Slave heartbeat (200ms)      H:OK:CRC  ACK
-M:L,R:CRC        Drive float [-1.0…1.0]
-D:SPEED:CRC      Dome motor [-1.0…1.0]
-S:FILE:CRC       Audio play   S:RANDOM:CAT:CRC   S:STOP:CRC
-V:?:CRC          Version request    V:hash:CRC   reply
-DISP:CMD:CRC     RP2040 display (BOOT/OK/ERROR/TELEM)
-REBOOT:1:CRC     Reboot Slave
+H:1:CRC        heartbeat Master→Slave 200ms      H:OK:CRC ACK
+M:L,R:CRC      drive float [-1.0…1.0]
+D:SPEED:CRC    dome motor [-1.0…1.0]
+S:FILE:CRC     audio play   S:RANDOM:CAT:CRC   S:STOP:CRC
+DISP:CMD:CRC   RP2040 display
+VCFG:scale:X   power scale   VCFG:erpm:N   MAX_ERPM override
+VINV:L:0/1     motor direction explicit (0=normal 1=inverted)
+TL/TR:v:t:c:rpm:duty:fault   VESC telemetry Slave→Master
+REBOOT:1:CRC   reboot Slave
 ```
 
 ---
@@ -140,391 +89,189 @@ REBOOT:1:CRC     Reboot Slave
 ## 🌐 API REST Flask — port 5000
 
 ```
-GET  /status                    → état JSON complet
-POST /heartbeat                 ← app JS toutes les 200ms (watchdog 600ms)
+GET  /status                    état JSON complet
+POST /heartbeat                 watchdog 600ms
 
-POST /audio/play                {"sound": "Happy001"}
-POST /audio/random              {"category": "happy"}
+POST /audio/play                {"sound":"Happy001"}
+POST /audio/random              {"category":"happy"}
 POST /audio/stop
-POST /audio/volume              {"volume": 79}
+POST /audio/volume              {"volume":79}
 
-POST /motion/drive              {"left": 0.5, "right": 0.5}
+POST /motion/drive              {"left":0.5,"right":0.5}
 POST /motion/stop
-POST /motion/dome/turn          {"speed": 0.3}
+POST /motion/dome/turn          {"speed":0.3}
 POST /motion/dome/stop
-POST /motion/dome/random        {"enabled": true}
+POST /motion/dome/random        {"enabled":true}
 
-POST /servo/dome/open           {"name": "Servo_M0"}
-POST /servo/dome/close          {"name": "Servo_M0"}
-POST /servo/dome/open_all  /servo/dome/close_all
-POST /servo/body/open           {"name": "Servo_S0"}
-POST /servo/body/close          {"name": "Servo_S0"}
-POST /servo/body/open_all  /servo/body/close_all
+POST /servo/dome/open|close     {"name":"Servo_M0"}
+POST /servo/dome/open_all|close_all
+POST /servo/body/open|close     {"name":"Servo_S0"}
+POST /servo/body/open_all|close_all
 GET  /servo/list
-POST /servo/settings            {"panels": {"Servo_M0": {"label":"Dome_Panel_1","open":110,"close":20,"speed":10}}}
-GET  /servo/settings            → {panels: {Servo_M0: {label, open, close, speed}, ...}}
+GET  /servo/settings
+POST /servo/settings            {"panels":{"Servo_M0":{"label":"..","open":110,"close":20,"speed":10}}}
 
-POST /scripts/run               {"name": "patrol", "loop": false}
+POST /scripts/run               {"name":"patrol","loop":false}
 POST /scripts/stop_all
 GET  /scripts/list
 
-POST /teeces/random  /teeces/leia  /teeces/off
-POST /teeces/text               {"text": "HELLO"}
-POST /teeces/psi                {"mode": 1}
+POST /teeces/random|leia|off
+POST /teeces/text               {"text":"HELLO"}
+POST /teeces/psi                {"mode":1}
 
-POST /system/update             → git pull + rsync Slave + reboot
-POST /system/reboot  /system/reboot_slave
-POST /system/estop              → coupe PWM PCA9685 Master (0x40) + Slave (0x41), _ready=False
-POST /system/estop_reset        → réarme les drivers servo (setup()) sans restart service
+POST /system/update|reboot|reboot_slave
+POST /system/estop              coupe PWM PCA9685 Master+Slave, _ready=False
+POST /system/estop_reset        réarme drivers sans restart
 
-GET  /vesc/telemetry            → {connected, power_scale, L:{v_in,temp,current,rpm,duty,fault,fault_str}, R:…}
-GET  /vesc/config               → {power_scale, invert_L, invert_R}
-POST /vesc/config               {"scale": 0.8}   → power scale (persisted to local.cfg [vesc])
-POST /vesc/invert               {"side":"L","state":true}  → explicit direction (persisted)
-GET  /vesc/can/scan             → scan CAN bus via VESC1 USB (timeout 8s)
+GET  /vesc/telemetry            {connected,power_scale,L:{v_in,temp,current,rpm,duty,fault,fault_str},R:…}
+GET  /vesc/config               {power_scale,invert_L,invert_R}
+POST /vesc/config               {"scale":0.8}  → persisted local.cfg [vesc]
+POST /vesc/invert               {"side":"L","state":true}  → persisted local.cfg [vesc]
+GET  /vesc/can/scan             CAN bus scan via VESC1 USB (timeout 8s)
 
-POST /camera/take               → claim camera stream, returns {token}
-GET  /camera/stream?t=TOKEN     → MJPEG proxy (last-connect-wins — evicted client sees STREAM TAKEN)
-GET  /camera/status             → {active_token} — client polls every 3s to detect eviction
+POST /camera/take               claim MJPEG stream → {token}
+GET  /camera/stream?t=TOKEN     proxy last-connect-wins (evicted client → STREAM TAKEN overlay)
+GET  /camera/status             {active_token}
 ```
 
 ---
 
-## 🚗 VESC Propulsion — Topology & Gotchas
+## 🚗 VESC — Gotchas
 
-**Hardware (2026-04-08) :** 2× Flipsky Mini V6.7, firmware v6.05, Hardware 60.
-**Connexion :** Pi Slave → USB → **VESC ID 1** → CAN H/L → **VESC ID 2**
-Un seul port série `/dev/ttyACM1` (ACM0 occupé par RP2040 — détection automatique via `display.used_port`).
+**Hardware :** 2× Flipsky Mini V6.7, fw v6.05, HW60. ID1=USB `/dev/ttyACM1`, ID2=CAN.
+RP2040 occupe ACM0 — détection auto via `display.used_port`.
 
-```
-Pi USB → VESC ID1 : set_rpm_direct(ser, erpm)
-Pi USB → VESC ID2 : set_rpm_can(ser, can_id=2, erpm)  # COMM_FORWARD_CAN (0x21) + COMM_SET_RPM (0x08)
-```
+**Pas de pyvesc** — CRC-16/CCITT natif dans `vesc_can.py` (pip confond PyCRC/pycrc sur Py3.13).
 
-**Pas de pyvesc** — implémentation native CRC-16/CCITT dans `vesc_can.py`.
-Raison : pip traite `PyCRC` et `pycrc` comme identiques (insensible casse) sur Python 3.13 → mauvais paquet installé.
+**ERPM :** RPM mécanique × pôles. MAX_ERPM=50000 default. Override : `VCFG:erpm:<N>`.
 
-**ERPM** (Electrical RPM) = RPM mécanique × nombre de pôles. Default MAX_ERPM = 50 000.
-Override runtime : `VCFG:erpm:<valeur>` via UART depuis le Master.
+**Power scale :** multiplicatif — `effective = input × power_scale` (pas un clamp).
+Drive 50% × Power 50% = 25% ERPM. `HARDWARE_SPEED_LIMIT=0.85` = safety cap absolu après.
+Sauvegardé `local.cfg [vesc] power_scale`, relu au boot.
 
-**⚠️ "Multiple ESC over CAN" = DÉSACTIVÉ** sur les deux VESCs obligatoirement.
-Si activé → les deux moteurs reçoivent la même commande → R2-D2 ne peut pas tourner.
+**Direction :** `VINV:L:1/0` état explicite (plus toggle aveugle). Sauvegardé `local.cfg [vesc] invert_l/r`.
+`reg.vesc_invert_L/R` dans registry, init depuis cfg au boot.
 
-**Limites hardware :** 25A courant moteur configuré dans VESC Tool (pas dans le code).
+**⚠️ "Multiple ESC over CAN" = DÉSACTIVÉ** sur les deux VESCs — sinon même commande → impossible de tourner.
 
-**Télémétrie :** VESC1 via `GET_VALUES` direct, VESC2 via `COMM_FORWARD_CAN` + `GET_VALUES`.
-Envoyé au Master toutes les 200ms : `TL:v_in:temp:curr:rpm:duty:fault:CRC` et `TR:...`
+**Télémétrie :** `TL/TR:v_in:temp:curr:rpm:duty:fault:CRC` toutes les 200ms.
+Abort thresholds ChoreoPlayer : `cells×3.5V` min voltage · 80°C temp · 30A current · 3 UART failures.
 
-**Batterie :** configurable dans Config tab (4S/6S/7S/8S). Défaut actuel = 4S (test).
-Jauge : ≥3.8V/cell vert · ≥3.6V orange · <3.6V rouge. Tous les indicateurs utilisent `BatteryGauge.voltToColor(v)`.
-
-**Power scale :** sauvegardé dans `local.cfg [vesc] power_scale`, relu au boot → survit aux redémarrages.
-Comportement **multiplicatif** : `effective = input × power_scale` (pas un clamp). Drive 50% × Power 50% = 25% ERPM.
-`HARDWARE_SPEED_LIMIT = 0.85` reste comme filet de sécurité absolu après multiplication.
-
-**Direction moteur (VINV) :** protocole UART changé de toggle aveugle à état explicite.
-`VINV:L:1:CRC` = invert left ON · `VINV:L:0:CRC` = invert left OFF.
-État sauvegardé dans `local.cfg [vesc] invert_l / invert_r`, relu et renvoyé au Slave au boot.
-`reg.vesc_invert_L` / `reg.vesc_invert_R` dans le registry.
+**Batterie :** 4S/6S/7S/8S via Config tab. Seuils par cellule : ≥3.8V vert · ≥3.6V orange · <3.6V rouge.
+Tous les indicateurs : `BatteryGauge.voltToColor(v)` / `voltToPct(v)`.
 
 ---
 
 ## 🎵 Audio & Teeces — Gotchas
 
-**ALSA sur Pi 4B :**
-```bash
-amixer -c 0 cset numid=1 <vol>%   # ✅ seule commande qui marche
-# ❌ Ne PAS utiliser : amixer sset 'Master' / sset 'PCM Playback Volume'
-```
-Volume UI → courbe racine cubique (exposant 1/3) : slider 50% → ALSA 79%.
-**Lecture MP3 :** `mpg123 -q` — `aplay` supporte uniquement WAV/PCM.
+**ALSA :** `amixer -c 0 cset numid=1 <vol>%` — seule commande qui marche sur Pi 4B.
+Volume UI → courbe racine cubique : slider 50% → ALSA 79%. Lecture MP3 : `mpg123 -q`.
 
-**JawaLite (Teeces32 via /dev/ttyUSB0 @ 9600 baud) :**
-```python
-"0T1\r"   # animations aléatoires    "0T20\r"  # tout éteint
-"0T6\r"   # mode Leia                "1MTEXTE\r" # texte FLD (max ~20 chars)
-"4S1\r"   # PSI random
-```
+**JawaLite (Teeces32, /dev/ttyUSB0 @ 9600) :**
+`0T1\r`=random · `0T20\r`=off · `0T6\r`=Leia · `1MTEXTE\r`=FLD text · `4S1\r`=PSI random
 
-**Sons spéciaux (catégorie `special`) :** `Theme001` `Theme002` `CANTINA` `LEIA` `FAILURE` `WOLFWSTL` `Gangnam` `SWDiscoShort` `birthday`
+**AstroPixels+ serial (`@`-prefix, `\r` terminator) :**
+```
+@0T{n}\r          FLD+RLD animation   (T-codes valides: T1,T2,T3,T4,T5,T6,T11,T20 seulement)
+@{1|2|3}M{text}\r FLD top/bottom/RLD text
+@{0|1|2}P{n}\r    PSI sequence (0=both 1=front 2=rear)
+@HP{target}{fx}\r holo projectors
+```
+T-codes n'affectent QUE FLD+RLD. PSI séparé. Text targets : `fld_top|fld_bottom|fld_both|rld|all`.
+PSI sequences : `normal|flash|alarm|failure|redalert|leia|march`.
+
+**Sons spéciaux :** `Theme001` `Theme002` `CANTINA` `LEIA` `FAILURE` `WOLFWSTL` `Gangnam` `SWDiscoShort` `birthday`
 
 ---
 
-## 🦾 Servos — Hardware IDs + Labels
+## 🦾 Servos — IDs + Labels
 
-**Naming convention (effective 2026-03-31):**
-- `Servo_M0`–`Servo_M10` : canaux 0–10 du HAT Master (PCA9685 @ 0x40, dome)
-- `Servo_S0`–`Servo_S10` : canaux 0–10 du HAT Slave  (PCA9685 @ 0x41, body)
+`Servo_M0`–`M10` = canaux 0–10 Master PCA9685 @ 0x40 (dome).
+`Servo_S0`–`S10` = canaux 0–10 Slave PCA9685 @ 0x41 (body).
+ID hardware immuable. Label éditable, sauvé dans `dome_angles.json` / `servo_angles.json`.
 
-L'ID hardware est immuable (lié au canal physique). Chaque servo a un **label éditable** affiché dans l'UI et la timeline CHOREO.
-
-**JSON schema (`dome_angles.json` / `servo_angles.json`) :**
 ```json
-{
-  "Servo_M0": {"label": "Dome_Panel_1", "open": 110, "close": 20, "speed": 10},
-  "Servo_M1": {"label": "Dome_Panel_2", "open": 110, "close": 20, "speed": 10}
-}
+{"Servo_M0": {"label":"Dome_Panel_1","open":110,"close":20,"speed":10}}
 ```
 
-Label sauvegardé via `POST /servo/settings` — inclus dans le payload panels.
-Drivers (`dome_servo_driver.py`, `slave/body_servo_driver.py`) utilisent les IDs hardware.
-Script_engine route : `Servo_M*` → dome driver, `Servo_S*` → body driver.
-
-```python
-pulse_us = 500 + (angle / 180.0) * 2000   # MG90S 180°
-# Speed ramp : step 2°, delay = (10 - speed) * 3ms/step
-# speed 10 = instant | speed 1 ≈ 1.2s pour 90°
-```
-
-Commande séquence avec override angle+vitesse : `servo,Servo_M0,open,40,8`
-
----
-
-## 🛠️ Directives de codage
-
-1. **Python 3.10+** — `try/except` sur tout I/O (UART, I2C, USB)
-2. **Watchdog prioritaire** — ne jamais bloquer le thread watchdog
-3. **Drivers isolés** — un fichier par périphérique, interface `BaseDriver`
-4. **systemd** — `Restart=always`, `RestartSec=3`
-5. **Logging** Python standard — INFO prod, DEBUG dev
-6. **Config par .cfg** — jamais de hardcoding adresses/pins
+`pulse_us = 500 + (angle/180)*2000` · ramp : step 2°, delay=(10-speed)×3ms/step
+Override séquence : `servo,Servo_M0,open,40,8`
+script_engine route : `Servo_M*` → dome driver · `Servo_S*` → body driver.
 
 ---
 
 ## 📦 Réseau & Dépendances
 
-**Hostnames / IPs :**
 ```
-R2-Master → r2-master.local / 192.168.4.1 (hotspot) / 192.168.2.104 (WiFi maison)
-R2-Slave  → r2-slave.local  / 192.168.4.171
-SSH user  : artoo   Password : deetoo
-```
-
-**UART Pi 4B Trixie** — libérer ttyAMA0 du Bluetooth :
-```bash
-echo "dtoverlay=miniuart-bt" | sudo tee -a /boot/firmware/config.txt
-# ✅ miniuart-bt = BT reste fonctionnel   ❌ disable-bt = BT coupé (plus de manettes)
+Master  192.168.2.104 (WiFi) / 192.168.4.1 (hotspot)
+Slave   192.168.4.171
+SSH     artoo / deetoo
 ```
 
-**bgscan wlan1 désactivé** — le scan WiFi background causait des micro-coupures pendant le joystick.
-Désactivé via dispatcher NM : `/etc/NetworkManager/dispatcher.d/99-disable-bgscan`
-```bash
-# S'exécute automatiquement à chaque connexion wlan1 :
-wpa_cli -i wlan1 set_network 0 bgscan ""
-```
+**UART Pi 4B Trixie :** `dtoverlay=miniuart-bt` (miniuart-bt = BT reste fonctionnel, pas disable-bt).
 
-**Dépendances Master :** `flask` `pyserial` `RPi.GPIO` `adafruit-pca9685` `paramiko` `python3-evdev` (apt uniquement — pas pip)
-**Dépendances Slave :** `pyserial` `smbus2` `adafruit-pca9685` `RPi.GPIO` + `mpg123` `python3-smbus` (apt)
-> ⚠️ **pyvesc NOT required** — VESC communication uses native CRC-16/CCITT in `vesc_can.py`.
-> pyvesc conflicts with wrong `pycrc` package on Python 3.13 (pip case-insensitive). Do NOT add it back.
+**bgscan wlan1 désactivé** via `/etc/NetworkManager/dispatcher.d/99-disable-bgscan` :
+`wpa_cli -i wlan1 set_network 0 bgscan ""` — micro-coupures joystick sinon.
+
+**Dépendances Master :** `flask pyserial RPi.GPIO adafruit-pca9685 paramiko requests` + `python3-evdev` (apt only)
+**Dépendances Slave :** `pyserial smbus2 adafruit-pca9685 RPi.GPIO mpg123 python3-smbus` (apt)
+> ⚠️ pyvesc = NE PAS installer (conflit PyCRC/pycrc Python 3.13)
 
 **Manette BT (evdev) :**
-- `python3-evdev` doit être installé via `apt install python3-evdev` — PAS pip (Trixie externally-managed)
-- Config persistante dans `master/config/bt_config.json`
-- `ecodes.KEY.get(code)` / `ecodes.BTN.get(code)` retourne un **tuple** quand plusieurs alias (ex: `('BTN_B', 'BTN_EAST')`), pas une liste → toujours utiliser `isinstance(raw, (list, tuple))` pour normaliser
-- Shield controller : B=BTN_EAST(305), X=BTN_NORTH(307), Y=BTN_WEST(308), Home=BTN_MODE
-- Jumelage BT via l'UI web (scan/pair/unpair) — pas besoin de SSH
-- `bt_config.json` mappings : `audio`→BTN_EAST, `panel_dome`→BTN_WEST, `panel_body`→BTN_NORTH, `estop`→BTN_MODE
+- `apt install python3-evdev` (pas pip — Trixie externally-managed)
+- `ecodes.KEY.get(code)` retourne un tuple quand plusieurs alias → `isinstance(raw, (list,tuple))`
+- Shield : B=BTN_EAST(305), X=BTN_NORTH(307), Y=BTN_WEST(308), Home=BTN_MODE
+- Config : `bt_config.json` · mappings : `audio`→E, `panel_dome`→W, `panel_body`→N, `estop`→MODE
 
-**MP3 sons — attention :** Les 317 MP3 sont dans `slave/sounds/` sur le Slave Pi uniquement (gitignorés). Si le Slave est réinstallé ou les fichiers perdus, les restaurer depuis le PC de dev :
-```python
-# Tunnel SSH Master → Slave via paramiko + sftp.put()
-# Les fichiers sont dans J:/R2-D2_Build/software/slave/sounds/*.mp3
-# update.sh rsync a --exclude='sounds/*.mp3' mais les fichiers doivent exister initialement
-```
+**MP3 :** 317 fichiers dans `slave/sounds/` sur Slave Pi uniquement (gitignorés). Restaurer via paramiko+sftp si Slave réinstallé.
 
 ---
 
-## 🚀 Phases — État actuel
+## 🚀 État actuel
 
 | Phase | Description | État |
 |-------|-------------|------|
-| 1 | UART + watchdog + audio + Teeces + RP2040 + déploiement | ✅ Complet |
-| 2 | VESCs + moteur dôme + servos MG90S | ✅ Actif — VESC ID1 USB + CAN→ID2, ERPM natif |
-| 3 | 40 séquences comportementales .scr | ✅ Actif |
-| 4 | API REST + dashboard web (6 onglets) + Android | ✅ Actif |
-| 4+ | Manette BT (evdev) + jumelage UI + mapping configurable | ✅ Actif |
-| 5 | Caméra USB + suivi personne | 📋 Planifié |
+| 1 | UART + watchdog + audio + Teeces + RP2040 + déploiement | ✅ |
+| 2 | VESCs + moteur dôme + servos MG90S | ✅ |
+| 3 | 40 séquences comportementales .scr | ✅ |
+| 4 | API REST + dashboard web + Android | ✅ |
+| 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
+| 5 | Caméra USB + suivi personne | 📋 |
 
-**3 watchdogs actifs :** `app_watchdog.py` 600ms · `motion_watchdog.py` 800ms · `slave/watchdog.py` 500ms → coupe VESCs
+**Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
+**E-STOP :** toggle unique ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`).
+**Joystick throttle :** 60 req/s max (visuel immédiat, seuls les POST HTTP sont throttlés).
+**WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
+**Drive tab** : camera MJPEG proxy last-connect-wins · speed arc HUD · direction arrow HUD.
+**VESC tab** : barres temp/current/duty · Power(W) · symétrie L/R · session peaks · fault log.
+**Header** : `#temp-label` min-width fixe — pas de layout shift sur changement de valeur.
 
-**E-STOP :** bouton rouge dans l'UI → coupe tous les servos (PCA9685 SLEEP + `_ready=False`).
-Bouton vert **RESET E-STOP** → `POST /system/estop_reset` → réarme les drivers sans restart.
-
-**Joystick throttle :** `VirtualJoystick._move()` limité à 60 req/s (`performance.now()` throttle).
-Visuel du knob reste immédiat — seuls les POST HTTP sont throttlés.
-
-**RP2040 firmware flash** — `update.sh` synce maintenant `rp2040/` vers le Slave. Mais flasher le RP2040 reste manuel :
+**RP2040 flash (manuel) :**
 ```bash
-# Sur le Slave Pi — trouver le bon port (ACM* dynamique selon boot)
-ls /dev/ttyACM*
-sudo systemctl stop r2d2-slave
-# Toujours effacer avant de copier (mpremote "Up to date" compare timestamps, pas le contenu)
 python3 -m mpremote connect /dev/ttyACM1 rm :display.py
 python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/display.py :display.py
-python3 -m mpremote connect /dev/ttyACM1 reset
-sudo systemctl start r2d2-slave
 ```
-> ⚠️ `mpremote cp` dit "Up to date" si le timestamp device ≥ fichier source — TOUJOURS `rm :file` avant `cp` pour forcer la mise à jour.
+> ⚠️ Toujours `rm` avant `cp` — mpremote compare timestamps, pas contenu.
+> VERSION file : `update.sh` écrit toujours le hash git — si périmé → RP2040 affiche `SYNC FAILED`.
 
-**RP2040 design** — Écrans définis dans `docs/rp2040-mockup.html`. Écran OK = `SYSTEM STATUS: / OPERATIONAL` + barre bus health verte/orange (<80%). Pas de full redraw sur chaque update BUS (incremental via `full=True/False`).
-
-**VERSION file** — `update.sh` écrit toujours `git rev-parse --short HEAD` dans `VERSION` (même si "already up to date"). Si ce fichier est périmé, le Slave voit un mismatch au boot → RP2040 affiche `SYNC FAILED`.
-
-**Backlog :** DiagnosticMonitor (Teeces Show↔Diagnostic) · AstroPixels+ firmware extension (17 missing sequences — blocked on hardware)
+**Backlog :** AstroPixels+ 17 séquences manquantes (bloqué hardware) · DiagnosticMonitor Teeces
 
 ---
 
-## 💡 Lights tab — AstroPixels+ notes
+## 💡 ChoreoPlayer — Gotchas
 
-**AstroPixels+ serial commands** (`@`-prefix, `\r` terminator) :
-```
-@0T{n}\r     FLD+RLD animation (T-codes — see below)
-@{1|2|3}M{text}\r   FLD top / FLD bottom / RLD scrolling text
-@{0|1|2}P{n}\r   PSI sequence (0=both, 1=front, 2=rear)
-@4S{n}\r     PSI mode legacy (0=off, 1–8=colors)
-@HP{target}{effect}\r   Holo projectors
-```
-
-**T-codes valides sur AstroPixels+** (8 sur 22 JawaLite) :
-`T1`=Random, `T2`=Flash, `T3`=Alarm, `T4`=Short Circuit, `T5`=Scream, `T6`=Leia, `T11`=Imperial March, `T20`=Off.
-Les autres T-codes (T7-T10, T12-T19, T21, T92) sont Teeces32-only — silently ignored par AstroPixels+.
-
-**T-codes n'affectent QUE FLD+RLD** — PSI est contrôlé séparément via `@0P{n}`.
-
-**Text targets** (`/teeces/text`) : `fld_top` | `fld_bottom` | `fld_both` | `rld` | `all`
-Color non configurable via serial — firmware utilise `randomColor()`.
-
-**PSI sequences** (`/teeces/psi_seq`) : `normal` | `flash` | `alarm` | `failure` | `redalert` | `leia` | `march`
-7 séquences accessibles via serial sur 24 présentes dans le firmware (les autres = boutons physiques seulement).
-
-**Lights tab** (onglet LIGHT) :
-- Animations : 22 chips one-click (8 réels sur AstroPixels+, 22 sur Teeces32) + STOP ALL (`/teeces/off`)
-- Text : display selector `fld_top/fld_bottom/fld_both/rld/all` + champ texte
-- PSI : target `both/fpsi/rpsi` + sequence selector + SET PSI / RESET PSI
-- La section "Light Sequences" a été retirée de l'onglet (les `.lseq` restent dans le backend)
-- Light Editor admin tab a été retiré du dashboard
+**File :** `master/choreo_player.py` — TICK=50ms
+**Audio multichannel :** jusqu'à 12 tracks simultanés. Si slots pleins → preempt le plus ancien.
+**Drive blocks :** `vesc.drive(left,right)` discret aux timestamps. Pas de software ramping — VESC firmware gère accélération. `0,0` = stop explicite.
+**Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat`=25ms.
+**Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails → `GET /choreo/status` retourne `abort_reason`.
 
 ---
 
-## 🌐 Code Language Standard (effective 2026-03-28)
+## 🌐 Code Standard
 
-**All new code must use English** for comments, docstrings, log messages, and error strings.
-This applies to every file going forward. Existing French in untouched files is acceptable until refactored.
-
-**Commit convention additions:** `Feat:` · `Fix:` · `Config:` · `Docs:` · `Refactor:`
-
----
-
-## ✅ Implementation Status
-
-### ChoreoPlayer — Architecture & Gotchas
-
-**File:** `master/choreo_player.py` — `TICK = 50ms` loop
-
-**Multichannel audio:** Up to 12 simultaneous tracks (configured via Config tab → `[audio] audio_channels` in `local.cfg`).
-Each Choreo `audio` event claims a free slot; if all slots are busy the oldest running track is preempted.
-`audio_channels` propagates automatically to ChoreoPlayer at startup (read from cfg).
-
-**Drive (motion) blocks:** ChoreoPlayer fires discrete `vesc.drive(left, right)` at event timestamps.
-There is **no software ramping** in the player. Progressive movement is handled automatically by VESC firmware
-(acceleration/deceleration ramps configured in VESC Tool per motor profile).
-A `drive` block with value `0,0` sends an explicit stop. The `motion_watchdog.py` (800ms) catches runaway movement if the player crashes mid-sequence.
-
-**Servo interpolation:** Dome servos (I2C, PCA9685 @ 0x40) use easing functions + slew threads → smooth motion.
-Body servos (UART → Slave → PCA9685 @ 0x41) are advanced by `body_servo_uart_lat` (default 25ms) to compensate UART round-trip.
-
-**Telemetry abort thresholds (auto-derived from `[battery] cells`):**
-- `vesc_min_voltage`: `cells × 3.5V` (default: 4S → 14.0V, 6S → 21.0V) — overridable via `[choreo] vesc_min_voltage`
-- `vesc_max_temp`: 80°C
-- `vesc_max_current`: 30A
-- `uart_fail_threshold`: 3 consecutive UART failures → abort
-
-`GET /choreo/status` returns `abort_reason` + `telem` (last known telemetry).
-
-### ChoreoPlayer VESC Telemetry (2026-03-28) — commit `2287eec`
-UART fail-safe, telemetry thresholds, `GET /choreo/status` returns `abort_reason` + `telem`.
-`vesc_min_voltage` default now derived from `[battery] cells` (3.5V/cell) — no longer hardcoded 20V.
-
-### Choreo Timeline UI — Sprint 6.3 (2026-03-28 → 2026-03-31)
-| Feature | Status |
-|---------|--------|
-| Liquid timeline fill + multiplicative zoom + dynamic ruler | ✅ |
-| Block labels: TEXT/HOLO/PSI show mode prefix | ✅ |
-| Choreo dropdown preserved on tab switch | ✅ |
-| Lights tab: STOP ALL → `/teeces/off`, Light Sequences section removed | ✅ |
-| AstroPixels+ text/PSI controls fixed (correct targets, real PSI sequences) | ✅ |
-| PSI simulation independent of T-code animations (per firmware) | ✅ |
-| AstroPixels+ ANIMATIONS override (8 valid T-codes only) | ✅ |
-| Choreo font sizes standardized (blocks 10px, labels 9px, ruler 9px) | ✅ |
-
-### VESC Phase 2 Activation (2026-04-08) — commit `921e257`
-| Feature | Status |
-|---------|--------|
-| Single USB topology: VESC ID1 via `/dev/ttyACM1`, VESC ID2 via `COMM_FORWARD_CAN` (ID 33) | ✅ |
-| Native CRC-16/CCITT packet building — pyvesc removed (PyCRC/pycrc conflict on Py 3.13) | ✅ |
-| ERPM commands: `set_rpm_direct()` + `set_rpm_can()` — synchronous in same lock | ✅ |
-| Telemetry: VESC1 via `get_values_direct()`, VESC2 via `get_values_can()` → TL:/TR: UART | ✅ |
-| Port detection: RP2040 (`display.used_port`) excluded from VESC ACM candidate list | ✅ |
-| `VCFG:erpm:<value>` — runtime MAX_ERPM override (default 50 000) | ✅ |
-| Watchdog callbacks wired: `vesc.stop()` on UART timeout, `vesc.shutdown()` on SIGTERM | ✅ |
-
-**Hardware validé :** Flipsky Mini V6.7, firmware v6.05 (Hardware 60), ID1=USB, ID2=CAN.
-**ERPM par défaut :** 50 000 — à calibrer selon moteurs (pôles × RPM mécanique max).
-**"Multiple ESC over CAN" doit être DÉSACTIVÉ** sur les deux VESCs — sinon même commande sur les deux → impossible de tourner.
-
-### Battery Gauge — Configurable Cell Count (2026-04-08) — commit `d9a06cc`
-| Feature | Status |
-|---------|--------|
-| `GET /settings` + `POST /settings/config` support `battery.cells` (stored in `local.cfg [battery]`) | ✅ |
-| Config tab BATTERY section — 4S/6S/7S/8S selector, APPLY sans restart | ✅ |
-| `BatteryGauge.setCells(n)` — recalcule MIN_V/MAX_V (3.5V/cell → 4.2V/cell) | ✅ |
-| `BatteryGauge.voltToColor(v)` — seuils par cellule : ≥3.8V vert, ≥3.6V orange, <3.6V rouge | ✅ |
-| `BatteryGauge.voltToPct(v)` — pourcentage selon pack configuré | ✅ |
-| Tous les indicateurs utilisent ces helpers : header arc, drive arc, VESC tab bar, ChoreoPlayer | ✅ |
-| `GET /status` retourne `battery_voltage` (v_in de VESC L ou R) | ✅ |
-| Défaut : 4S (batterie de test). Batterie finale prévue : 6S. | ✅ |
-
-### Drive Tab Redesign (2026-04-09) — commit `760654d`
-| Feature | Status |
-|---------|--------|
-| Camera feed : Flask MJPEG proxy `/camera/*` — last-connect-wins, STREAM TAKEN overlay + reclaim | ✅ |
-| Camera proxy forwards upstream `Content-Type` (boundary) — hardcoded `boundary=frame` causait image vide | ✅ |
-| Speed arc HUD (SVG dashoffset) + direction arrow (atan2 throttle/steering) overlay sur feed | ✅ |
-| VESC mini-stats (V, °C) dans bottom bar | ✅ |
-| E-STOP devient un toggle unique ARMED/TRIPPED (remplace bouton rouge + bouton vert séparés) | ✅ |
-| Bouton camera toggle dans bottom bar | ✅ |
-| LOCK button retiré du header, présent uniquement dans Drive tab (absolu top-left) | ✅ |
-| Label LOCK/KIDS/CHILD toujours visible (taille bouton fixe), hover scale + glow par mode | ✅ |
-| WASD = propulsion · Arrow keys = dome rotation (séparés) | ✅ |
-| Header `#temp-label` : `min-width: 42px` + `tabular-nums` — empêche layout shift | ✅ |
-
-### VESC Tab Diagnostic Dashboard (2026-04-09) — commit `3ed91e8`
-| Feature | Status |
-|---------|--------|
-| Barres animées temp/current/duty avec seuils warn/danger (couleur auto) | ✅ |
-| Puissance en Watts (V × I) par moteur | ✅ |
-| Indicateur symétrie L vs R : RPM Δ + Current Δ → BALANCED / ASYMMETRIC / IDLE | ✅ |
-| Session peaks : peak temp, current, duty, fault count — bouton RESET | ✅ |
-| Fault log : 20 derniers faults avec timestamp HH:MM:SS, côté (L/R), nom — bouton CLEAR | ✅ |
-| INVERT LEFT/RIGHT : toggles persistants (orange = inversé), sauvés local.cfg | ✅ |
-| Boutons FOC DETECT retirés (étaient non-fonctionnels — toast uniquement) | ✅ |
-| `GET /vesc/config` → `{power_scale, invert_L, invert_R}` | ✅ |
-| Horodatage dernière mise à jour télémétrie dans status bar | ✅ |
-
-### VESC Power Scale Persistence + Multiplicative Scaling (2026-04-09) — commit `0e96b03`
-`power_scale` sauvegardé dans `local.cfg [vesc]` + relu au boot.
-Slave : multiplication au lieu de clamp → `effective = input × power_scale`.
-Drive 50% × Power 50% = 25% ERPM réel (comportement attendu).
-
-### Servo Hardware IDs + Labels (2026-03-31) — commit `ba0a802`
-| Feature | Status |
-|---------|--------|
-| `dome_panel_N` → `Servo_M{N-1}`, `body_panel_N` → `Servo_S{N-1}` | ✅ |
-| Editable label field per servo, saved in JSON config | ✅ |
-| Labels displayed in CHOREO timeline blocks + inspector dropdown | ✅ |
-| 29 .scr + 30 .chor files migrated | ✅ |
-| Servo tab layout full-width (1fr 1fr) | ✅ |
+All new code → **English** comments/docstrings/logs. Existing French acceptable in untouched files.
+Commits : `Feat:` · `Fix:` · `Config:` · `Docs:` · `Refactor:` · `ci:`
 
 ---
 
@@ -534,28 +281,18 @@ Drive 50% × Power 50% = 25% ERPM réel (comportement attendu).
 Repo : https://github.com/RickDnamps/R2D2_Control.git   Branch : main
 ```
 
-**Workflow :** `git add <fichiers> && git commit -m "Phase X.Y: desc" && git push`
-→ `scripts/update.sh` sur Master déploie automatiquement (rsync slave/ + reboot Slave)
-
-**Bouton dôme :** court = git pull + rsync + reboot Slave | long = rollback HEAD^
-
-**Conventions commit :** `Phase X.Y:` · `Fix:` · `Config:` · `Docs:` · `ci:`
+**Bouton dôme :** court = git pull + rsync + reboot Slave · long = rollback HEAD^
 
 ---
 
 ## 📱 Build Android
 
 ```bash
-# Build APK
 powershell.exe -Command "& { \$env:JAVA_HOME='C:/Program Files/Android/Android Studio/jbr'; Set-Location 'J:/R2-D2_Build/software/android'; ./gradlew.bat assembleDebug }"
 cp android/app/build/outputs/apk/debug/app-debug.apk android/compiled/R2-D2_Control.apk
-git add android/compiled/R2-D2_Control.apk && git commit -m "ci: update APK [skip ci]" && git push
-
-# Installer via ADB
 "C:/Users/erict/AppData/Local/Android/Sdk/platform-tools/adb.exe" install -r android/compiled/R2-D2_Control.apk
 ```
 
-> ⚠️ Sync assets Android si `master/static/` ou `templates/index.html` change :
+> ⚠️ Sync assets si `master/static/` change :
 > `cp master/static/js/app.js android/app/src/main/assets/js/app.js`
 > `cp master/static/css/style.css android/app/src/main/assets/css/style.css`
-> `index.html` : patcher `/static/` → chemins relatifs + désactiver Service Worker
