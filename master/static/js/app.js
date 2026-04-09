@@ -2222,10 +2222,9 @@ const vescTest = {
       clearInterval(this._timer);
       this._keys = {};
       api('/motion/stop', 'POST');
-      api('/motion/dome/stop', 'POST');
       this._updateBars(0, 0);
       this._setStatus('IDLE', '');
-      ['w','a','s','d','left','right'].forEach(k => {
+      ['w','a','s','d'].forEach(k => {
         const e = el(`vt-kbd-${k}`); if (e) e.classList.remove('active');
       });
     }
@@ -2233,7 +2232,7 @@ const vescTest = {
 
   onKey(code, down) {
     if (!this._active) return false;
-    const map = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', ArrowLeft:'left', ArrowRight:'right', Escape:'esc' };
+    const map = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', Escape:'esc' };
     const k = map[code];
     if (!k) return false;
     if (k === 'esc' && down) { this.toggle(); return true; }
@@ -2247,8 +2246,6 @@ const vescTest = {
     const back  = this._keys['s'];
     const left  = this._keys['a'];
     const right = this._keys['d'];
-    const dLeft = this._keys['left'];
-    const dRight= this._keys['right'];
 
     let L = 0, R = 0;
     if (fwd)   { L =  this._SPEED; R =  this._SPEED; }
@@ -2260,12 +2257,6 @@ const vescTest = {
     api('/motion/drive', 'POST', { left: L, right: R });
     this._updateBars(L, R);
     this._setStatus(moving ? 'DRIVING' : 'IDLE', moving ? 'ok' : '');
-
-    // Dome
-    if (dLeft)       api('/motion/dome/turn', 'POST', { speed: -0.4 });
-    else if (dRight) api('/motion/dome/turn', 'POST', { speed:  0.4 });
-    else if (this._keys['_domeWas']) api('/motion/dome/stop', 'POST');
-    this._keys['_domeWas'] = dLeft || dRight;
   },
 
   _updateBars(L, R) {
