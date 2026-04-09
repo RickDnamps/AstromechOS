@@ -392,11 +392,20 @@ class BatteryGauge {
     this._pct      = el('battery-pct');
     this._TOTAL    = 170;   // full arc length (main)
     this._MINI     = 63;    // full arc length (mini header)
-    this._MIN_V    = 20.0;
-    this._MAX_V    = 29.4;
+    this._MIN_V    = 14.0;  // 4S default (testing battery)
+    this._MAX_V    = 16.8;
+    this._lastV    = null;
+  }
+
+  // LiPo: 3.5 V/cell (min) — 4.2 V/cell (max)
+  setCells(cells) {
+    this._MIN_V = cells * 3.5;
+    this._MAX_V = cells * 4.2;
+    if (this._lastV) this.update(this._lastV);
   }
 
   update(voltage) {
+    this._lastV = voltage;
     if (!voltage || voltage < 1) return;
     const pct  = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
     const color = pct > 0.5 ? '#00cc66' : pct > 0.25 ? '#ff8800' : '#ff2244';
@@ -2750,6 +2759,13 @@ async function loadSettings() {
     if (inp) inp.value = data.audio.channels ?? 6;
     _audioChannelsConfig = data.audio.channels ?? 6;
   }
+
+  if (data.battery) {
+    const cells = data.battery.cells ?? 4;
+    const sel = el('battery-cells');
+    if (sel) sel.value = String(cells);
+    batteryGauge.setCells(cells);
+  }
 }
 
 async function saveLightsBackend() {
@@ -2782,6 +2798,21 @@ async function saveAudioChannels() {
     }
   } else {
     toast('Failed to update audio channels', 'error');
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  }
+}
+
+async function saveBatteryCells() {
+  const cells = parseInt(el('battery-cells')?.value) || 4;
+  const status = el('battery-cells-status');
+  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+  const data = await api('/settings/config', 'POST', { 'battery.cells': cells });
+  if (data?.status === 'ok') {
+    batteryGauge.setCells(cells);
+    toast(`Battery: ${cells}S (${(cells * 3.5).toFixed(1)}–${(cells * 4.2).toFixed(1)} V)`, 'ok');
+    if (status) { status.textContent = `${cells}S configured`; status.className = 'settings-status ok'; }
+  } else {
+    toast('Failed to save battery config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
 }

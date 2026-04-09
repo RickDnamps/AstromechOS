@@ -231,6 +231,9 @@ def get_settings():
         'audio': {
             'channels': cfg.getint('audio', 'audio_channels', fallback=6),
         },
+        'battery': {
+            'cells': cfg.getint('battery', 'cells', fallback=4),
+        },
     })
 
 
@@ -353,6 +356,7 @@ def set_config():
         'slave.host', 'deploy.button_pin',
         'lights.backend',
         'audio.channels',
+        'battery.cells',
     }
 
     updated = []

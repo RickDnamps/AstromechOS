@@ -1171,6 +1171,23 @@
       <div class="settings-status" id="audio-channels-status"></div>
     </section>
 
+    <!-- Battery -->
+    <section class="card settings-card">
+      <h2 class="card-title">BATTERY</h2>
+      <p class="settings-note">Number of LiPo cells — sets min/max voltage for all battery gauges.</p>
+      <div class="form-group">
+        <label>Cell count</label>
+        <select id="battery-cells" class="input-text" style="width:120px">
+          <option value="4">4S — 14.0 – 16.8 V</option>
+          <option value="6">6S — 21.0 – 25.2 V</option>
+          <option value="7">7S — 24.5 – 29.4 V</option>
+          <option value="8">8S — 28.0 – 33.6 V</option>
+        </select>
+      </div>
+      <button class="btn" onclick="saveBatteryCells()">APPLY</button>
+      <div class="settings-status" id="battery-cells-status"></div>
+    </section>
+
     <!-- GitHub / Deploy -->
     <section class="card settings-card">
       <h2 class="card-title">GITHUB / DEPLOY</h2>
