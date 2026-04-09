@@ -412,7 +412,7 @@ class BatteryGauge {
   // Per-cell thresholds (LiPo): green > 3.8V, orange 3.6–3.8V, red < 3.6V
   voltToColor(v) {
     const vpc = v / (this._MAX_V / 4.2);
-    return vpc > 3.8 ? '#00cc66' : vpc > 3.6 ? '#ff8800' : '#ff2244';
+    return vpc >= 3.8 ? '#00cc66' : vpc >= 3.6 ? '#ff8800' : '#ff2244';
   }
 
   update(voltage) {
