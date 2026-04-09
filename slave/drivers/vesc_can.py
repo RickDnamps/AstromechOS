@@ -50,6 +50,7 @@ log = logging.getLogger(__name__)
 # VESC command IDs (firmware source: commands.h)
 COMM_FW_VERSION   = 0
 COMM_GET_VALUES   = 4
+COMM_SET_RPM      = 8
 COMM_GET_APP_CONF = 14
 COMM_SET_APP_CONF = 15
 COMM_TERMINAL_CMD = 16
@@ -238,6 +239,44 @@ def check_multi_esc(ser, can_id: int) -> bool | None:
     # Pour l'instant, retourner None (inconnu) — avertissement affiché dans le dashboard
     log.debug(f"check_multi_esc CAN ID {can_id}: non implémenté (AppConf requis)")
     return None
+
+
+def set_rpm_can(ser, can_id: int, erpm: int) -> None:
+    """
+    Sends a SetRPM (ERPM) command to a VESC via CAN forwarding.
+    VESC 1 relays the inner payload to can_id over the CAN bus.
+
+    Args:
+        ser     : open serial.Serial connected to VESC 1 (USB)
+        can_id  : target CAN ID (e.g. 2 for Slave VESC)
+        erpm    : electrical RPM — negative = reverse
+    """
+    inner = bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm))
+    pkt = _can_forward_packet(can_id, inner)
+    ser.write(pkt)
+
+
+def set_rpm_direct(ser, erpm: int, pyvesc_module=None) -> None:
+    """
+    Sends a SetRPM (ERPM) command directly to the USB-connected VESC (no CAN).
+
+    Prefers pyvesc encoding when the module is available; falls back to raw
+    packet construction using the same COMM_SET_RPM (8) command ID.
+
+    Args:
+        ser           : open serial.Serial connected to the VESC
+        erpm          : electrical RPM — negative = reverse
+        pyvesc_module : imported pyvesc module, or None
+    """
+    if pyvesc_module is not None:
+        try:
+            msg = pyvesc_module.encode(pyvesc_module.SetRPM(int(erpm)))
+            ser.write(msg)
+            return
+        except Exception:
+            pass  # fall through to raw packet
+    inner = bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm))
+    ser.write(_build_packet(inner))
 
 
 def set_can_id(ser_local, current_can_id: int, new_can_id: int) -> bool:
