@@ -206,24 +206,9 @@ Sequences **use per-panel calibrated angles automatically** — calibrate once i
 servo,Servo_M0,open,40,8        # open to 40° at speed 8 — nervous peek
 servo,Servo_M0,close,20,9       # snap shut at speed 9
 servo,all,open                  # all 11 dome panels simultaneously
-lseq,alarm_flash,false          # trigger a light sequence in parallel
-wait_light,alarm_flash          # wait for it to finish before continuing
 ```
 
----
-
-## ✏️ Visual Sequence Editor
-
-Build and edit behavioral sequences directly in the browser — no SSH, no file editing.
-
-- **Drag-and-drop** step reordering
-- **Command palette** with all available actions
-- **Per-command builders** — sound picker, servo selector, throttle sliders, animation picker
-- **Built-in sequences are protected** — read-only, can't be accidentally overwritten
-- **Save as new** — user sequences live alongside built-ins
-- **Test without saving** — run directly from the editor to verify timing
-
-**Available commands in the editor:**
+**Available `.scr` commands** (plain CSV files in `master/sequences/`):
 
 | Command | What it does |
 |---------|-------------|
@@ -233,8 +218,10 @@ Build and edit behavioral sequences directly in the browser — no SSH, no file 
 | `dome` | Turn, stop, center, or enable random autonomous wander |
 | `motion` | Drive left + right at a throttle for a duration |
 | `teeces` | Random · Leia · Off · specific animation · scrolling text · raw JawaLite |
-| `lseq` | Launch a light sequence in parallel (doesn't pause the main sequence) |
+| `lseq` | Launch a light sequence in parallel from `master/light_sequences/` |
 | `wait_light` | Block until a named light sequence finishes |
+
+Sequences are launched from the **SEQUENCES tab** in the web UI. For rich timeline choreography (motion + audio + servos + lights in sync), use the **CHOREO tab** instead.
 
 ---
 
