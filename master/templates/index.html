@@ -961,6 +961,11 @@
         DRIVE TEST MODE
         <button id="vesc-test-toggle" class="btn btn-sm vesc-test-toggle-btn" onclick="vescTestToggle()">ENABLE</button>
       </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 10px 0;font-size:10px;letter-spacing:1px;color:var(--text-dim)">
+        DRIVE MODE
+        <button id="vesc-mode-btn" class="btn btn-xs" onclick="vescToggleDriveMode()" style="font-size:9px;letter-spacing:1.5px">RPM</button>
+        <span id="vesc-mode-hint" style="opacity:.6">Closed-loop speed — switch to DUTY for bench testing without motor</span>
+      </div>
       <div class="vesc-test-body" id="vesc-test-body" style="display:none">
         <div class="vesc-test-hint">WASD = propulsion (arcade mix) &nbsp;·&nbsp; BT controller works when no key held &nbsp;·&nbsp; ESC = stop</div>
         <div class="vesc-test-panels">

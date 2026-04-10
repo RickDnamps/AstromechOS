@@ -73,6 +73,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.base_driver import BaseDriver
 from slave.drivers.vesc_can import (
     set_rpm_can, set_rpm_direct,
+    set_duty_direct, set_duty_can,
     get_values_direct, get_values_can,
 )
 
@@ -120,10 +121,11 @@ class VescDriver(BaseDriver):
         self._lock    = threading.Lock()
 
         # Config (adjustable at runtime)
-        self._power_scale = 1.0        # 0.1 – 1.0 — scales max ERPM
+        self._power_scale = 1.0        # 0.1 – 1.0 — scales max ERPM / duty
         self._max_erpm    = MAX_ERPM   # adjustable via VCFG:erpm:<value>
         self._invert_left  = False
         self._invert_right = False
+        self._duty_mode    = False     # VCFG:mode:duty → use COMM_SET_DUTY (bench testing)
 
         self._telem_thread: threading.Thread | None = None
         self._running = False
@@ -210,12 +212,15 @@ class VescDriver(BaseDriver):
         # Software inversion if configured
         if self._invert_left:  left  = -left
         if self._invert_right: right = -right
-        # Convert to electrical RPM
-        erpm_left  = int(left  * self._max_erpm)
-        erpm_right = int(right * self._max_erpm)
         with self._lock:
-            set_rpm_direct(self._serial, erpm_left)
-            set_rpm_can(   self._serial, VESC_ID_CAN, erpm_right)
+            if self._duty_mode:
+                # Duty mode: command is applied directly — useful for bench testing without motor
+                set_duty_direct(self._serial, left)
+                set_duty_can(   self._serial, VESC_ID_CAN, right)
+            else:
+                # RPM mode: closed-loop speed control (default)
+                set_rpm_direct(self._serial, int(left  * self._max_erpm))
+                set_rpm_can(   self._serial, VESC_ID_CAN, int(right * self._max_erpm))
 
     def stop(self) -> None:
         """Emergency stop — sends ERPM 0 to both VESCs."""
@@ -249,6 +254,9 @@ class VescDriver(BaseDriver):
             elif param == 'erpm':
                 self._max_erpm = max(1000, int(float(val)))
                 log.info(f"VESC max ERPM: {self._max_erpm}")
+            elif param == 'mode':
+                self._duty_mode = (val.lower() == 'duty')
+                log.info(f"VESC drive mode: {'DUTY' if self._duty_mode else 'RPM'}")
             else:
                 log.warning(f"Unknown VCFG parameter: {param!r}")
         except (ValueError, IndexError) as e:

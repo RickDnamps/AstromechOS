@@ -126,12 +126,24 @@ def set_config():
 
 @vesc_bp.get('/config')
 def get_config():
-    """Returns current VESC configuration (power_scale + invert states)."""
+    """Returns current VESC configuration (power_scale + invert states + drive mode)."""
     return jsonify({
         'power_scale': getattr(reg, 'vesc_power_scale', 1.0),
         'invert_L':    getattr(reg, 'vesc_invert_L', False),
         'invert_R':    getattr(reg, 'vesc_invert_R', False),
+        'duty_mode':   getattr(reg, 'vesc_duty_mode', False),
     })
+
+
+@vesc_bp.post('/mode')
+def set_mode():
+    """Switches drive mode. Body: {"duty": true/false}. Not persisted — resets on reboot."""
+    body = request.get_json(silent=True) or {}
+    duty = bool(body.get('duty', False))
+    reg.vesc_duty_mode = duty
+    if reg.uart:
+        reg.uart.send('VCFG', f'mode:{"duty" if duty else "rpm"}')
+    return jsonify({'status': 'ok', 'duty_mode': duty})
 
 
 @vesc_bp.post('/invert')

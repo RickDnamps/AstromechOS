@@ -50,6 +50,7 @@ log = logging.getLogger(__name__)
 # VESC command IDs (firmware source: commands.h)
 COMM_FW_VERSION   = 0
 COMM_GET_VALUES   = 4
+COMM_SET_DUTY     = 5
 COMM_SET_RPM      = 8
 COMM_GET_APP_CONF = 14
 COMM_SET_APP_CONF = 15
@@ -184,7 +185,7 @@ def get_values_direct(ser) -> dict | None:
         if not raw:
             return None
         payload = _extract_payload(raw)
-        if payload is None or len(payload) < 52 or payload[0] != COMM_GET_VALUES:
+        if payload is None or len(payload) < 54 or payload[0] != COMM_GET_VALUES:
             return None
         p = 1
         temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
@@ -195,8 +196,8 @@ def get_values_direct(ser) -> dict | None:
         duty     = struct.unpack_from('>h', payload, p)[0] / 1000.0; p += 2
         rpm      = struct.unpack_from('>i', payload, p)[0];           p += 4
         v_in     = struct.unpack_from('>H', payload, p)[0] / 10.0;    p += 2
-        p += 16  # amp_hours, watt_hours, tachometers
-        fault    = payload[p]
+        p += 24  # amp_hours×2 (8B) + watt_hours×2 (8B) + tachometer×2 (8B)
+        fault    = payload[p] if p < len(payload) else 0
         return {
             'v_in':    round(v_in, 2),
             'temp':    round(temp_fet, 1),
@@ -242,7 +243,7 @@ def get_values_can(ser, can_id: int) -> dict | None:
 
         # Fallback: parse manuel
         payload = _extract_payload(raw)
-        if payload is None or len(payload) < 52 or payload[0] != COMM_GET_VALUES:
+        if payload is None or len(payload) < 54 or payload[0] != COMM_GET_VALUES:
             return None
         p = 1
         temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
@@ -253,8 +254,8 @@ def get_values_can(ser, can_id: int) -> dict | None:
         duty     = struct.unpack_from('>h', payload, p)[0] / 1000.0; p += 2
         rpm      = struct.unpack_from('>i', payload, p)[0];          p += 4
         v_in     = struct.unpack_from('>H', payload, p)[0] / 10.0;   p += 2
-        p += 16  # amp_hours, watt_hours, tachometers
-        fault    = payload[p]
+        p += 24  # amp_hours×2 (8B) + watt_hours×2 (8B) + tachometer×2 (8B)
+        fault    = payload[p] if p < len(payload) else 0
         return {
             'v_in':    round(v_in, 2),
             'temp':    round(temp_fet, 1),
@@ -281,6 +282,30 @@ def check_multi_esc(ser, can_id: int) -> bool | None:
     return None
 
 
+def set_rpm_direct(ser, erpm: int) -> None:
+    """Sends COMM_SET_RPM directly to the USB-connected VESC."""
+    pkt = _build_packet(bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm)))
+    ser.write(pkt)
+
+
+def set_duty_direct(ser, duty: float) -> None:
+    """
+    Sends COMM_SET_DUTY directly to the USB-connected VESC.
+    duty: -1.0 to +1.0 (mapped to -100000 to +100000 per VESC protocol).
+    Useful for bench testing without a motor — duty is directly visible in telemetry.
+    """
+    val = int(duty * 100000)
+    pkt = _build_packet(bytes([COMM_SET_DUTY]) + struct.pack('>i', val))
+    ser.write(pkt)
+
+
+def set_duty_can(ser, can_id: int, duty: float) -> None:
+    """Sends COMM_SET_DUTY to a VESC via CAN forwarding."""
+    val = int(duty * 100000)
+    inner = bytes([COMM_SET_DUTY]) + struct.pack('>i', val)
+    ser.write(_can_forward_packet(can_id, inner))
+
+
 def set_rpm_can(ser, can_id: int, erpm: int) -> None:
     """
     Sends a SetRPM (ERPM) command to a VESC via CAN forwarding.
@@ -296,17 +321,6 @@ def set_rpm_can(ser, can_id: int, erpm: int) -> None:
     ser.write(pkt)
 
 
-def set_rpm_direct(ser, erpm: int) -> None:
-    """
-    Sends a SetRPM (ERPM) command directly to the USB-connected VESC (no CAN).
-    Native implementation — does not require pyvesc.
-
-    Args:
-        ser  : open serial.Serial connected to the VESC
-        erpm : electrical RPM — negative = reverse
-    """
-    inner = bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm))
-    ser.write(_build_packet(inner))
 
 
 def set_can_id(ser_local, current_can_id: int, new_can_id: int) -> bool:

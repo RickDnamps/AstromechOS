@@ -1988,6 +1988,14 @@ class VescPanel {
     this._invertR = !!d.invert_R;
     this._applyInvertUI('L', this._invertL);
     this._applyInvertUI('R', this._invertR);
+    // Sync drive mode button
+    _vescDutyMode = !!d.duty_mode;
+    const btn  = el('vesc-mode-btn');
+    const hint = el('vesc-mode-hint');
+    if (btn)  btn.textContent = _vescDutyMode ? 'DUTY' : 'RPM';
+    if (hint) hint.textContent = _vescDutyMode
+      ? 'Direct duty — duty reacts immediately (bench testing without motor)'
+      : 'Closed-loop speed — switch to DUTY for bench testing without motor';
   }
 
   _updateStatus(d) {
@@ -2326,6 +2334,18 @@ const vescTest = {
 };
 
 function vescTestToggle() { vescTest.toggle(); }
+
+let _vescDutyMode = false;
+async function vescToggleDriveMode() {
+  _vescDutyMode = !_vescDutyMode;
+  await api('/vesc/mode', 'POST', { duty: _vescDutyMode });
+  const btn  = el('vesc-mode-btn');
+  const hint = el('vesc-mode-hint');
+  if (btn)  btn.textContent = _vescDutyMode ? 'DUTY' : 'RPM';
+  if (hint) hint.textContent = _vescDutyMode
+    ? 'Direct duty — duty reacts immediately (bench testing without motor)'
+    : 'Closed-loop speed — switch to DUTY for bench testing without motor';
+}
 
 // ================================================================
 // CAN Bus Wizard
