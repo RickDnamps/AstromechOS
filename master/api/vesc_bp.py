@@ -82,20 +82,29 @@ def _fault_str(code: int) -> str:
 @vesc_bp.get('/telemetry')
 def get_telemetry():
     """Live telemetry for both VESCs + current power scale."""
+    import time as _time
     telem = getattr(reg, 'vesc_telem', {'L': None, 'R': None})
     scale = getattr(reg, 'vesc_power_scale', 1.0)
-    connected = (telem.get('L') is not None or telem.get('R') is not None)
+    now   = _time.time()
+
+    # A side is considered live only if its last update was within 3 seconds
+    def _is_live(d):
+        return d is not None and (now - d.get('ts', 0)) < 3.0
 
     def _enrich(d):
-        if d is None:
+        if not _is_live(d):
             return None
         return {**d, 'fault_str': _fault_str(d.get('fault', 0))}
+
+    live_L = _enrich(telem.get('L'))
+    live_R = _enrich(telem.get('R'))
+    connected = (live_L is not None or live_R is not None)
 
     return jsonify({
         'connected':   connected,
         'power_scale': scale,
-        'L': _enrich(telem.get('L')),
-        'R': _enrich(telem.get('R')),
+        'L': live_L,
+        'R': live_R,
     })
 
 

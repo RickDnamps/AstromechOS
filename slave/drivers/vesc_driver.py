@@ -305,22 +305,59 @@ class VescDriver(BaseDriver):
         Reads telemetry from both VESCs and sends it to Master via UART.
           TL → VESC ID 1 (USB direct via get_values_direct)
           TR → VESC ID 2 (CAN forwarding via get_values_can)
+        Auto-reconnects if the serial port is lost (e.g. USB unplug/replug).
         """
+        import serial as _serial
+
         while self._running:
-            if self._ready and self._uart:
+            # --- Reconnect if not ready ---
+            if not self._ready:
+                time.sleep(2.0)
+                log.info("VescDriver: attempting reconnect...")
+                opened = False
+                for port in self._ports:
+                    try:
+                        ser = _serial.Serial(port, VESC_BAUD, timeout=0.05)
+                        with self._lock:
+                            self._serial = ser
+                            self._port   = port
+                        self._ready = True
+                        opened = True
+                        log.info(f"VescDriver reconnected on {port}")
+                        break
+                    except _serial.SerialException:
+                        continue
+                if not opened:
+                    log.debug("VescDriver: no VESC found, retrying...")
+                continue
+
+            # --- Normal telemetry read ---
+            try:
+                if self._uart:
+                    with self._lock:
+                        vl = get_values_direct(self._serial)
+                        vr = get_values_can(self._serial, VESC_ID_CAN)
+                    if vl:
+                        self._uart.send('TL',
+                            f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
+                            f":{vl['rpm']}:{vl['duty']}:{vl['fault']}"
+                        )
+                    if vr:
+                        self._uart.send('TR',
+                            f"{vr['v_in']}:{vr['temp']}:{vr['current']}"
+                            f":{vr['rpm']}:{vr['duty']}:{vr['fault']}"
+                        )
+            except Exception as e:
+                log.warning(f"VescDriver: serial error — marking disconnected: {e}")
                 with self._lock:
-                    vl = get_values_direct(self._serial)
-                    vr = get_values_can(self._serial, VESC_ID_CAN)
-                if vl:
-                    self._uart.send('TL',
-                        f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
-                        f":{vl['rpm']}:{vl['duty']}:{vl['fault']}"
-                    )
-                if vr:
-                    self._uart.send('TR',
-                        f"{vr['v_in']}:{vr['temp']}:{vr['current']}"
-                        f":{vr['rpm']}:{vr['duty']}:{vr['fault']}"
-                    )
+                    try:
+                        if self._serial and self._serial.is_open:
+                            self._serial.close()
+                    except Exception:
+                        pass
+                    self._serial = None
+                self._ready = False
+
             time.sleep(TELEM_INTERVAL)
 
     # ------------------------------------------------------------------
