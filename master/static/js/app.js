@@ -118,6 +118,8 @@ class LockManager {
     const v = el('kids-speed-val');
     if (v) v.textContent = this._kidsSpeed + '%';
     document.body.dataset.lockMode = '0';
+    const dlabel = el('drive-lock-label');
+    if (dlabel) dlabel.textContent = 'LOCK';
   }
 
   setKidsSpeed(val) {
