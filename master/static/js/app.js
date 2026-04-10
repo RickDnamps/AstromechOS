@@ -260,10 +260,11 @@ const lockMgr = new LockManager();
 
 class AdminGuard {
   constructor() {
-    this._unlocked  = false;
-    this._timer     = null;
-    this._TIMEOUT   = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED = new Set(['systems', 'vesc', 'config', 'choreo']);
+    this._unlocked     = false;
+    this._timer        = null;
+    this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
+    this._PROTECTED    = new Set(['systems', 'vesc', 'config', 'choreo']);
+    this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
   }
@@ -306,10 +307,12 @@ class AdminGuard {
     document.body.classList.add('admin-unlocked');
     el('admin-modal').classList.add('hidden');
     toast('Admin access granted — expires in 5 min', 'ok');
-    // Écouter l'activité pour reset le timer quand sur un onglet admin
-    document.addEventListener('mousemove', this._boundActivity, { passive: true });
-    document.addEventListener('click',     this._boundActivity, { passive: true });
-    document.addEventListener('keydown',   this._boundActivity, { passive: true });
+    // Track activity to reset the timer while on a protected tab.
+    // pointerdown is used instead of click: mousedown.preventDefault() in the
+    // Choreo editor suppresses click events, but never suppresses pointerdown.
+    document.addEventListener('mousemove',   this._boundActivity, { passive: true });
+    document.addEventListener('pointerdown', this._boundActivity, { passive: true });
+    document.addEventListener('keydown',     this._boundActivity, { passive: true });
     this._startTimer();
   }
 
@@ -323,28 +326,26 @@ class AdminGuard {
     this._unlocked = false;
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
-    document.removeEventListener('mousemove', this._boundActivity);
-    document.removeEventListener('click',     this._boundActivity);
-    document.removeEventListener('keydown',   this._boundActivity);
+    document.removeEventListener('mousemove',   this._boundActivity);
+    document.removeEventListener('pointerdown', this._boundActivity);
+    document.removeEventListener('keydown',     this._boundActivity);
     // If on a protected tab → return to DRIVE
-    const active = document.querySelector('.tab.active');
-    if (active && this._PROTECTED.has(active.dataset.tab)) {
+    if (this._PROTECTED.has(this._activeTabId)) {
       switchTab('drive');
     }
     toast('Admin access expired', 'info');
   }
 
   onTabSwitch(tabId) {
+    this._activeTabId = tabId;   // always track, even when locked
     if (!this._unlocked) return;
-    // Toujours (re)lancer le timer au changement d'onglet
     this._startTimer();
   }
 
   _onActivity() {
     if (!this._unlocked) return;
-    // Reset le timer uniquement si on est sur un onglet admin
-    const active = document.querySelector('.tab.active');
-    if (active && this._PROTECTED.has(active.dataset.tab)) {
+    // Reset timer only when on a protected tab — use tracked ID, not DOM query
+    if (this._PROTECTED.has(this._activeTabId)) {
       this._startTimer();
     }
   }
