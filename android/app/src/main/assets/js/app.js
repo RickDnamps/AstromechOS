@@ -4055,7 +4055,8 @@ const choreoEditor = (() => {
     }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const sid   = item.servo || '?';
-      const label = _servoSettings[sid]?.label || sid;
+      // Prefer live config label, fall back to stored servo_label, then hardware ID as last resort
+      const label = _servoSettings[sid]?.label || item.servo_label || sid;
       return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
@@ -4087,8 +4088,9 @@ const choreoEditor = (() => {
     }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
-      const name = (item.servo || '?').replace(/_/g, ' ');
-      return `${name} ${item.action || ''}`.trim().toUpperCase();
+      const sid = item.servo || '?';
+      const label = _servoSettings[sid]?.label || item.servo_label || sid;
+      return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left ?? '?'} R${item.right ?? '?'}`;
     return '?';
@@ -4580,7 +4582,10 @@ const choreoEditor = (() => {
         if (item) item.servo_label = settings.label;
       }
       _validateServoRefs();
-      _renderTrack(track);
+      // Re-render ALL servo tracks so badges stay correct everywhere
+      _renderTrack('dome_servos');
+      _renderTrack('body_servos');
+      _renderTrack('arm_servos');
     }
     if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
@@ -4861,7 +4866,18 @@ const choreoEditor = (() => {
         api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
         api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
         api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
-        api('/servo/settings').then(r => { if (r && r.panels) _servoSettings = r.panels; }),
+        api('/servo/settings').then(r => {
+          if (r && r.panels) {
+            _servoSettings = r.panels;
+            // If a choreo was loaded before settings resolved, re-validate and re-render badges
+            if (_chor) {
+              _validateServoRefs();
+              _renderTrack('dome_servos');
+              _renderTrack('body_servos');
+              _renderTrack('arm_servos');
+            }
+          }
+        }),
         // Lights: full T-code list from Animations panel + custom .lseq files
         api('/teeces/animations').then(r => {
           if (r && r.animations) {
