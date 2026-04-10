@@ -560,7 +560,7 @@ bash /home/artoo/r2d2/scripts/deploy.sh --first-install
 
 **Done.** Open **`http://192.168.4.1:5000`** on any device connected to `R2D2_Control`.
 
-📖 **[Full installation guide →](HOWTO_EN.md)** (English — recommended) · [Guide d'installation (Français) →](HOWTO.md)
+📖 **[Full installation guide →](HOWTO.md)** (English — recommended) · [Guide d'installation (Français) →](HOWTO_FR.md)
 
 ### Updates
 
