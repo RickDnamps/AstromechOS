@@ -3643,7 +3643,10 @@ const choreoEditor = (() => {
   function _buildLabelToId() {
     const map = {};
     for (const [id, cfg] of Object.entries(_servoSettings)) {
-      if (cfg.label) map[cfg.label.toLowerCase().replace(/[\s\-]+/g, '_')] = id;
+      if (cfg.label) {
+        const norm = cfg.label.toLowerCase().replace(/[\s\-\.\(\)]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+        map[norm] = id;
+      }
       map[id.toLowerCase()] = id;  // also accept 'servo_m0' → 'Servo_M0'
     }
     return map;
@@ -3653,23 +3656,30 @@ const choreoEditor = (() => {
   const _SERVO_ID_RE   = /^Servo_[MS]\d+$/;
 
   // Upgrade label-based servo refs to hardware IDs in-place.
-  // Returns true if any migration was done (caller should mark _dirty).
+  // Returns 'migrated' if all found refs were resolved,
+  //         'partial'  if some refs could not be resolved (label unknown),
+  //         false      if no legacy refs were found.
   function _migrateLegacyServoRefs() {
     const labelToId = _buildLabelToId();
-    let migrated = false;
+    let migrated   = false;
+    let unresolved = false;
     for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
       for (const ev of (_chor.tracks[track] || [])) {
         if (!ev.servo || _SERVO_SPECIAL.has(ev.servo) || _SERVO_ID_RE.test(ev.servo)) continue;
-        const norm  = ev.servo.toLowerCase().replace(/[\s\-]+/g, '_');
+        const norm  = ev.servo.toLowerCase().replace(/[\s\-\.\(\)]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
         const found = labelToId[norm];
         if (found) {
           ev.servo_label = _servoSettings[found]?.label || ev.servo;
           ev.servo       = found;
           migrated       = true;
+        } else {
+          unresolved = true;
         }
       }
     }
-    return migrated;
+    if (unresolved) return 'partial';
+    if (migrated)   return 'migrated';
+    return false;
   }
 
   // Build _servoIssues map after migration.
@@ -4829,10 +4839,20 @@ const choreoEditor = (() => {
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
       _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
+      // Ensure servo settings are loaded before migration/validation (race guard)
+      if (Object.keys(_servoSettings).length === 0) {
+        const r = await api('/servo/settings');
+        if (r && r.panels) _servoSettings = r.panels;
+      }
       // Migrate legacy label-based servo refs → hardware IDs
-      if (_migrateLegacyServoRefs()) {
+      const _migrateResult = _migrateLegacyServoRefs();
+      if (_migrateResult) {
         _dirty = true;
-        toast('Servo refs migrated to hardware IDs — save to confirm', 'info');
+        if (_migrateResult === 'partial') {
+          toast('Some servo refs could not be migrated — check servo config', 'warn');
+        } else {
+          toast('Servo refs migrated to hardware IDs — save to confirm', 'info');
+        }
       }
       // Validate servo refs against current config
       _validateServoRefs();
