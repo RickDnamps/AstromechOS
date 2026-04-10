@@ -1343,6 +1343,34 @@
       <button class="btn" onclick="saveConfig()">SAVE CONFIG</button>
     </section>
 
+    <!-- Camera -->
+    <section class="card settings-card">
+      <h2 class="card-title">CAMERA</h2>
+      <p class="settings-note">USB camera stream quality. Requires camera service restart (~2s).</p>
+      <div class="form-group">
+        <label class="ctrl-label">RESOLUTION</label>
+        <select id="cam-resolution" class="input-text" style="width:200px">
+          <option value="640x480">640×480 — VGA (default)</option>
+          <option value="1280x720">1280×720 — HD 720p</option>
+          <option value="1920x1080">1920×1080 — Full HD 1080p</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="ctrl-label">FRAMERATE</label>
+        <select id="cam-fps" class="input-text" style="width:120px">
+          <option value="15">15 fps</option>
+          <option value="30">30 fps (default)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span></label>
+        <input type="range" id="cam-quality" min="10" max="100" step="5" value="80"
+               oninput="el('cam-quality-val').textContent=this.value" class="holo-slider">
+      </div>
+      <button class="btn btn-warn" onclick="cameraConfig.save()">APPLY + RESTART CAMERA</button>
+      <div class="settings-status" id="cam-config-status"></div>
+    </section>
+
     <!-- System -->
     <section class="card settings-card">
       <h2 class="card-title">SYSTEM</h2>

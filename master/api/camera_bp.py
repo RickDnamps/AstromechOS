@@ -9,6 +9,8 @@ Endpoints:
   GET  /camera/stream?t=X → MJPEG proxy, stops if token is superseded
   GET  /camera/status     → { active_token: N } — for client polling
 """
+import os
+import subprocess
 import threading
 import logging
 import requests as _requests
@@ -20,7 +22,40 @@ log = logging.getLogger(__name__)
 _lock         = threading.Lock()
 _active_token = 0
 
-MJPG_URL = 'http://127.0.0.1:8080/?action=stream'
+MJPG_URL  = 'http://127.0.0.1:8080/?action=stream'
+_ENV_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'camera.env')
+
+_VALID_RESOLUTIONS = {'640x480', '1280x720', '1920x1080'}
+_VALID_FPS         = {15, 30}
+_VALID_QUALITY     = range(10, 101)
+
+
+def _read_cam_env() -> dict:
+    cfg = {'resolution': '640x480', 'fps': 30, 'quality': 80}
+    try:
+        with open(_ENV_PATH) as f:
+            for line in f:
+                line = line.strip()
+                if '=' not in line or line.startswith('#'):
+                    continue
+                k, v = line.split('=', 1)
+                if k == 'CAMERA_RESOLUTION':
+                    cfg['resolution'] = v
+                elif k == 'CAMERA_FPS':
+                    cfg['fps'] = int(v)
+                elif k == 'CAMERA_QUALITY':
+                    cfg['quality'] = int(v)
+    except FileNotFoundError:
+        pass
+    return cfg
+
+
+def _write_cam_env(resolution: str, fps: int, quality: int) -> None:
+    os.makedirs(os.path.dirname(_ENV_PATH), exist_ok=True)
+    with open(_ENV_PATH, 'w') as f:
+        f.write(f'CAMERA_RESOLUTION={resolution}\n')
+        f.write(f'CAMERA_FPS={fps}\n')
+        f.write(f'CAMERA_QUALITY={quality}\n')
 
 
 @camera_bp.post('/camera/take')
@@ -79,3 +114,37 @@ def camera_stream():
 def camera_status():
     """Returns the current active token. Clients poll this to detect eviction."""
     return jsonify({'active_token': _active_token})
+
+
+@camera_bp.get('/camera/config')
+def camera_config_get():
+    """Returns current camera resolution/fps/quality settings."""
+    return jsonify(_read_cam_env())
+
+
+@camera_bp.post('/camera/config')
+def camera_config_set():
+    """
+    Saves camera settings and restarts r2d2-camera.service.
+    Body: { resolution: '1280x720', fps: 30, quality: 80 }
+    """
+    data       = request.get_json(silent=True) or {}
+    resolution = data.get('resolution', '640x480')
+    fps        = int(data.get('fps', 30))
+    quality    = int(data.get('quality', 80))
+
+    if resolution not in _VALID_RESOLUTIONS:
+        return jsonify({'error': f'Invalid resolution — valid: {sorted(_VALID_RESOLUTIONS)}'}), 400
+    if fps not in _VALID_FPS:
+        return jsonify({'error': f'Invalid fps — valid: {sorted(_VALID_FPS)}'}), 400
+    if quality not in _VALID_QUALITY:
+        return jsonify({'error': 'Quality must be 10–100'}), 400
+
+    _write_cam_env(resolution, fps, quality)
+    log.info("Camera config: %s @ %dfps q%d — restarting service", resolution, fps, quality)
+
+    def _restart():
+        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-camera.service'], check=False)
+
+    threading.Thread(target=_restart, daemon=True).start()
+    return jsonify({'status': 'ok', 'resolution': resolution, 'fps': fps, 'quality': quality})

@@ -5,6 +5,9 @@
 # Config locale — NE JAMAIS commiter (contient WiFi + GitHub URL)
 master/config/local.cfg
 
+# Camera settings — propres à chaque installation
+master/config/camera.env
+
 # Calibrations servo — propres à chaque robot, ne jamais écraser au git pull
 # (les fichiers dans git servent de valeurs par défaut à l'installation initiale seulement)
 master/config/dome_angles.json

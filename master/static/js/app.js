@@ -3306,6 +3306,36 @@ async function saveAudioChannels() {
   }
 }
 
+// ─── Camera config ────────────────────────────────────────────────────────────
+const cameraConfig = {
+  async load() {
+    try {
+      const d = await api('/camera/config');
+      if (!d) return;
+      const resEl = el('cam-resolution');
+      const fpsEl = el('cam-fps');
+      const qEl   = el('cam-quality');
+      if (resEl) resEl.value = d.resolution || '640x480';
+      if (fpsEl) fpsEl.value = String(d.fps   || 30);
+      if (qEl)  { qEl.value = d.quality || 80; el('cam-quality-val').textContent = qEl.value; }
+    } catch(e) {}
+  },
+  async save() {
+    const resolution = el('cam-resolution')?.value || '640x480';
+    const fps        = parseInt(el('cam-fps')?.value) || 30;
+    const quality    = parseInt(el('cam-quality')?.value) || 80;
+    const status     = el('cam-config-status');
+    if (status) { status.textContent = 'Restarting camera…'; status.className = 'settings-status'; }
+    const data = await api('/camera/config', 'POST', { resolution, fps, quality });
+    if (data?.status === 'ok') {
+      if (status) { status.textContent = `✓ ${resolution} @ ${fps}fps q${quality}`; status.className = 'settings-status ok'; }
+      toast(`Camera: ${resolution} @ ${fps}fps`, 'ok');
+    } else {
+      if (status) { status.textContent = '✗ Error — check logs'; status.className = 'settings-status error'; }
+    }
+  },
+};
+
 async function saveBatteryCells() {
   const cells = parseInt(el('battery-cells')?.value) || 4;
   const status = el('battery-cells-status');
@@ -3512,6 +3542,7 @@ async function init() {
     poller.poll(),
     loadServoSettings(),
     btController.loadConfig(),
+    cameraConfig.load(),
   ]);
 
   // Start polling
