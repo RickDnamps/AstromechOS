@@ -306,8 +306,12 @@ class VescDriver(BaseDriver):
           TL → VESC ID 1 (USB direct via get_values_direct)
           TR → VESC ID 2 (CAN forwarding via get_values_can)
         Auto-reconnects if the serial port is lost (e.g. USB unplug/replug).
+        get_values_direct() swallows exceptions and returns None — so we count
+        consecutive None responses to detect a lost connection.
         """
         import serial as _serial
+        _FAIL_THRESHOLD = 5   # consecutive Nones before declaring disconnected (~1s)
+        _fail_count = 0
 
         while self._running:
             # --- Reconnect if not ready ---
@@ -319,44 +323,62 @@ class VescDriver(BaseDriver):
                     try:
                         ser = _serial.Serial(port, VESC_BAUD, timeout=0.05)
                         with self._lock:
+                            if self._serial:
+                                try:
+                                    self._serial.close()
+                                except Exception:
+                                    pass
                             self._serial = ser
                             self._port   = port
-                        self._ready = True
+                        self._ready  = True
+                        _fail_count  = 0
                         opened = True
                         log.info(f"VescDriver reconnected on {port}")
                         break
                     except _serial.SerialException:
                         continue
                 if not opened:
-                    log.debug("VescDriver: no VESC found, retrying...")
+                    log.debug("VescDriver: no VESC found on any port, retrying...")
                 continue
 
             # --- Normal telemetry read ---
             try:
-                if self._uart:
-                    with self._lock:
-                        vl = get_values_direct(self._serial)
-                        vr = get_values_can(self._serial, VESC_ID_CAN)
-                    if vl:
-                        self._uart.send('TL',
-                            f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
-                            f":{vl['rpm']}:{vl['duty']}:{vl['fault']}"
-                        )
-                    if vr:
-                        self._uart.send('TR',
-                            f"{vr['v_in']}:{vr['temp']}:{vr['current']}"
-                            f":{vr['rpm']}:{vr['duty']}:{vr['fault']}"
-                        )
-            except Exception as e:
-                log.warning(f"VescDriver: serial error — marking disconnected: {e}")
                 with self._lock:
-                    try:
-                        if self._serial and self._serial.is_open:
-                            self._serial.close()
-                    except Exception:
-                        pass
-                    self._serial = None
-                self._ready = False
+                    vl = get_values_direct(self._serial)
+                    vr = get_values_can(self._serial, VESC_ID_CAN)
+            except Exception as e:
+                log.warning(f"VescDriver: serial exception — forcing reconnect: {e}")
+                vl = vr = None
+                _fail_count = _FAIL_THRESHOLD  # trigger reconnect immediately
+
+            if vl is None:
+                _fail_count += 1
+                if _fail_count >= _FAIL_THRESHOLD:
+                    log.warning(
+                        f"VescDriver: {_fail_count} consecutive read failures "
+                        f"on {self._port} — marking disconnected"
+                    )
+                    with self._lock:
+                        try:
+                            if self._serial and self._serial.is_open:
+                                self._serial.close()
+                        except Exception:
+                            pass
+                        self._serial = None
+                    self._ready = False
+                    _fail_count = 0
+            else:
+                _fail_count = 0   # reset on any successful read
+                if self._uart:
+                    self._uart.send('TL',
+                        f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
+                        f":{vl['rpm']}:{vl['duty']}:{vl['fault']}"
+                    )
+                if vr and self._uart:
+                    self._uart.send('TR',
+                        f"{vr['v_in']}:{vr['temp']}:{vr['current']}"
+                        f":{vr['rpm']}:{vr['duty']}:{vr['fault']}"
+                    )
 
             time.sleep(TELEM_INTERVAL)
 
