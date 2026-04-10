@@ -3966,7 +3966,16 @@ const choreoEditor = (() => {
     block.style.height  = _BLOCK_H + 'px';
     block.style.bottom  = 'auto';
     block.style.zIndex  = 2 + layer;   // higher layers sit on top; lower layers clickable via exposed strip
+    const isServoTrack = (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos');
+    const issueKey   = `${track}:${idx}`;
+    const issueLevel = isServoTrack ? _servoIssues[issueKey] : undefined;
+    const issueBadge = issueLevel === 'error'
+      ? '<span class="chor-issue-badge error" title="Servo ID not found in config — click to reassign">❌</span>'
+      : issueLevel === 'warn'
+      ? '<span class="chor-issue-badge warn" title="Servo label changed since creation — verify intent">⚠️</span>'
+      : '';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
+                       ${issueBadge}
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
     if (track === 'audio' && _audioOverflowIdxs.has(idx)) {
@@ -4505,6 +4514,17 @@ const choreoEditor = (() => {
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
     if (track === 'audio') _validateAudioOverflow();
+    // Re-validate servo issues when servo assignment changes in inspector
+    if ((track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') && field === 'servo') {
+      // Auto-refresh servo_label from current config when user picks a new servo
+      const settings = _servoSettings[value];
+      if (settings?.label) {
+        const item = (_chor.tracks[track] || [])[idx];
+        if (item) item.servo_label = settings.label;
+      }
+      _validateServoRefs();
+      _renderTrack(track);
+    }
     if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
     const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);

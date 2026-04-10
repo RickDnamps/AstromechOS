@@ -3288,6 +3288,19 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 .chor-block[data-track="propulsion"]  { background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
 .chor-block[data-track="dome"]        { background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
 
+/* Servo config mismatch badges */
+.chor-issue-badge {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+.chor-issue-badge.error { color: #ff2244; }
+.chor-issue-badge.warn  { color: #ff8800; }
+
 /* Block resize handle */
 .chor-block-resize {
   position: absolute;
