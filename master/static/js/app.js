@@ -3723,9 +3723,13 @@ const choreoEditor = (() => {
     if (existing) existing.remove();
     if (!_vescCfgSnapshot || !snapshot) return;
 
-    const invertMismatch = snapshot.vesc_invert_L !== _vescCfgSnapshot.invert_L
-                        || snapshot.vesc_invert_R !== _vescCfgSnapshot.invert_R;
-    const scaleMismatch  = Math.abs((snapshot.vesc_power_scale ?? 1) - (_vescCfgSnapshot.power_scale ?? 1)) > 0.05;
+    // Support both prefixed (vesc_invert_L) and unprefixed (invert_L) key formats
+    const snapInvL  = snapshot.vesc_invert_L  ?? snapshot.invert_L  ?? false;
+    const snapInvR  = snapshot.vesc_invert_R  ?? snapshot.invert_R  ?? false;
+    const snapScale = snapshot.vesc_power_scale ?? snapshot.power_scale ?? 1;
+    const invertMismatch = snapInvL !== _vescCfgSnapshot.invert_L
+                        || snapInvR !== _vescCfgSnapshot.invert_R;
+    const scaleMismatch  = Math.abs(snapScale - (_vescCfgSnapshot.power_scale ?? 1)) > 0.05;
 
     if (!invertMismatch && !scaleMismatch) return;
 
@@ -3733,13 +3737,13 @@ const choreoEditor = (() => {
     if (invertMismatch) {
       lines.push(
         `\u26a0\ufe0f Motor direction mismatch \u2014 ` +
-        `Choreo: L=${snapshot.vesc_invert_L ? 'INV' : 'FWD'} R=${snapshot.vesc_invert_R ? 'INV' : 'FWD'} | ` +
+        `Choreo: L=${snapInvL ? 'INV' : 'FWD'} R=${snapInvR ? 'INV' : 'FWD'} | ` +
         `Current: L=${_vescCfgSnapshot.invert_L ? 'INV' : 'FWD'} R=${_vescCfgSnapshot.invert_R ? 'INV' : 'FWD'}`
       );
     }
     if (scaleMismatch) {
       lines.push(
-        `\u2139\ufe0f Power scale: was ${((snapshot.vesc_power_scale ?? 1) * 100).toFixed(0)}%,` +
+        `\u2139\ufe0f Power scale: was ${(snapScale * 100).toFixed(0)}%,` +
         ` now ${((_vescCfgSnapshot.power_scale ?? 1) * 100).toFixed(0)}%`
       );
     }
@@ -3755,7 +3759,7 @@ const choreoEditor = (() => {
 
     const timeline = document.getElementById('chor-scroll') || document.getElementById('chor-editor');
     if (timeline && timeline.parentElement) {
-      timeline.parentElement.insertBefore(banner, timeline);
+      timeline.after(banner);
     }
   }
 
