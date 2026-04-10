@@ -3588,6 +3588,8 @@ const choreoEditor = (() => {
   let _lastTelem   = null;
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
   let _audioOverflowIdxs = new Set();  // indices of audio events that will be dropped
+  let _servoIssues  = {};  // { 'dome_servos:0': 'warn'|'error', … }
+  let _vescCfgSnapshot = null;  // { invert_L, invert_R, power_scale } — loaded at init
 
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
@@ -3635,6 +3637,126 @@ const choreoEditor = (() => {
     const m   = Math.floor(s / 60);
     const sec = (s % 60).toFixed(3).padStart(6, '0');
     return `${String(m).padStart(2, '0')}:${sec}`;
+  }
+
+  // Build reverse map: normalised_label → servo_id from _servoSettings
+  // e.g. { 'dome_panel_1': 'Servo_M0', 'front_arm': 'Servo_S3' }
+  function _buildLabelToId() {
+    const map = {};
+    for (const [id, cfg] of Object.entries(_servoSettings)) {
+      if (cfg.label) {
+        const norm = cfg.label.toLowerCase().replace(/[\s\-\.\(\)]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+        map[norm] = id;
+      }
+      map[id.toLowerCase()] = id;  // also accept 'servo_m0' → 'Servo_M0'
+    }
+    return map;
+  }
+
+  const _SERVO_SPECIAL = new Set(['all', 'all_dome', 'all_body']);
+  const _SERVO_ID_RE   = /^Servo_[MS]\d+$/;
+
+  // Upgrade label-based servo refs to hardware IDs in-place.
+  // Returns 'migrated' if all found refs were resolved,
+  //         'partial'  if some refs could not be resolved (label unknown),
+  //         false      if no legacy refs were found.
+  function _migrateLegacyServoRefs() {
+    const labelToId = _buildLabelToId();
+    let migrated   = false;
+    let unresolved = false;
+    for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
+      for (const ev of (_chor.tracks[track] || [])) {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo) || _SERVO_ID_RE.test(ev.servo)) continue;
+        const norm  = ev.servo.toLowerCase().replace(/[\s\-\.\(\)]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+        const found = labelToId[norm];
+        if (found) {
+          ev.servo_label = _servoSettings[found]?.label || ev.servo;
+          ev.servo       = found;
+          migrated       = true;
+        } else {
+          unresolved = true;
+        }
+      }
+    }
+    if (unresolved) return 'partial';
+    if (migrated)   return 'migrated';
+    return false;
+  }
+
+  // Build _servoIssues map after migration.
+  // 'warn'  = servo ID valid, but servo_label doesn't match current label (renamed)
+  // 'error' = servo ID not in _servoSettings at all
+  function _validateServoRefs() {
+    _servoIssues = {};
+    if (!_chor) return;
+    for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
+      (_chor.tracks[track] || []).forEach((ev, idx) => {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo)) return;
+        const key     = `${track}:${idx}`;
+        const current = _servoSettings[ev.servo];
+        if (!current) {
+          _servoIssues[key] = 'error';
+        } else if (ev.servo_label && ev.servo_label !== current.label) {
+          _servoIssues[key] = 'warn';
+        }
+      });
+    }
+  }
+
+  // Before saving: refresh servo_label for every servo event from current config.
+  // Keeps the label field as self-documenting metadata, always matching last-known name.
+  function _refreshServoLabels() {
+    if (!_chor) return;
+    for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
+      for (const ev of (_chor.tracks[track] || [])) {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo)) continue;
+        const current = _servoSettings[ev.servo];
+        if (current?.label) ev.servo_label = current.label;
+      }
+    }
+  }
+
+  // Show a dismissible banner above the timeline if the Choreo's VESC config
+  // snapshot differs from the current machine config (invert_L/R or power_scale).
+  function _showVescMismatchBanner(snapshot) {
+    const existing = document.getElementById('chor-vesc-banner');
+    if (existing) existing.remove();
+    if (!_vescCfgSnapshot || !snapshot) return;
+
+    const invertMismatch = snapshot.vesc_invert_L !== _vescCfgSnapshot.invert_L
+                        || snapshot.vesc_invert_R !== _vescCfgSnapshot.invert_R;
+    const scaleMismatch  = Math.abs((snapshot.vesc_power_scale ?? 1) - (_vescCfgSnapshot.power_scale ?? 1)) > 0.05;
+
+    if (!invertMismatch && !scaleMismatch) return;
+
+    const lines = [];
+    if (invertMismatch) {
+      lines.push(
+        `\u26a0\ufe0f Motor direction mismatch \u2014 ` +
+        `Choreo: L=${snapshot.vesc_invert_L ? 'INV' : 'FWD'} R=${snapshot.vesc_invert_R ? 'INV' : 'FWD'} | ` +
+        `Current: L=${_vescCfgSnapshot.invert_L ? 'INV' : 'FWD'} R=${_vescCfgSnapshot.invert_R ? 'INV' : 'FWD'}`
+      );
+    }
+    if (scaleMismatch) {
+      lines.push(
+        `\u2139\ufe0f Power scale: was ${((snapshot.vesc_power_scale ?? 1) * 100).toFixed(0)}%,` +
+        ` now ${((_vescCfgSnapshot.power_scale ?? 1) * 100).toFixed(0)}%`
+      );
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'chor-vesc-banner';
+    banner.style.cssText = invertMismatch
+      ? 'background:#3a0010;border:1px solid #ff2244;color:#ff6688;padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center'
+      : 'background:#2a1a00;border:1px solid #ff8800;color:#ffaa44;padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center';
+    banner.innerHTML =
+      `<span>${lines.join(' &nbsp;|&nbsp; ')}</span>` +
+      `<button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px">\u2715</button>`;
+
+    const timeline = document.getElementById('chor-scroll') || document.getElementById('chor-editor');
+    if (timeline && timeline.parentElement) {
+      timeline.parentElement.insertBefore(banner, timeline);
+    }
   }
 
   // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
@@ -3901,7 +4023,16 @@ const choreoEditor = (() => {
     block.style.height  = _BLOCK_H + 'px';
     block.style.bottom  = 'auto';
     block.style.zIndex  = 2 + layer;   // higher layers sit on top; lower layers clickable via exposed strip
+    const isServoTrack = (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos');
+    const issueKey   = `${track}:${idx}`;
+    const issueLevel = isServoTrack ? _servoIssues[issueKey] : undefined;
+    const issueBadge = issueLevel === 'error'
+      ? '<span class="chor-issue-badge error" title="Servo ID not found in config — click to reassign">❌</span>'
+      : issueLevel === 'warn'
+      ? '<span class="chor-issue-badge warn" title="Servo label changed since creation — verify intent">⚠️</span>'
+      : '';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
+                       ${issueBadge}
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
     if (track === 'audio' && _audioOverflowIdxs.has(idx)) {
@@ -4440,6 +4571,17 @@ const choreoEditor = (() => {
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
     if (track === 'audio') _validateAudioOverflow();
+    // Re-validate servo issues when servo assignment changes in inspector
+    if ((track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') && field === 'servo') {
+      // Auto-refresh servo_label from current config when user picks a new servo
+      const settings = _servoSettings[value];
+      if (settings?.label) {
+        const item = (_chor.tracks[track] || [])[idx];
+        if (item) item.servo_label = settings.label;
+      }
+      _validateServoRefs();
+      _renderTrack(track);
+    }
     if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
     const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
@@ -4731,6 +4873,7 @@ const choreoEditor = (() => {
           if (r && r.sequences)
             r.sequences.forEach(s => { if (!_lightModes[s]) _lightModes[s] = s; });
         }),
+        api('/vesc/config').then(r => { if (r) _vescCfgSnapshot = r; }),
       ]).catch(() => {});
 
       const names = await api('/choreo/list');
@@ -4744,6 +4887,8 @@ const choreoEditor = (() => {
 
     async load(name) {
       if (!name) return;
+      const oldBanner = document.getElementById('chor-vesc-banner');
+      if (oldBanner) oldBanner.remove();
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
@@ -4774,6 +4919,25 @@ const choreoEditor = (() => {
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
       _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
+      // Ensure servo settings are loaded before migration/validation (race guard)
+      if (Object.keys(_servoSettings).length === 0) {
+        const r = await api('/servo/settings');
+        if (r && r.panels) _servoSettings = r.panels;
+      }
+      // Migrate legacy label-based servo refs → hardware IDs
+      const _migrateResult = _migrateLegacyServoRefs();
+      if (_migrateResult) {
+        _dirty = true;
+        if (_migrateResult === 'partial') {
+          toast('Some servo refs could not be migrated — check servo config', 'warn');
+        } else {
+          toast('Servo refs migrated to hardware IDs — save to confirm', 'info');
+        }
+      }
+      // Validate servo refs against current config
+      _validateServoRefs();
+      // Show VESC config mismatch banner if snapshot in file differs from current machine
+      _showVescMismatchBanner(_chor.meta?.config_snapshot);
       _renderAllTracks();
       _validateAudioOverflow();
       toast(`Loaded: ${name}`, 'ok');
@@ -4830,9 +4994,22 @@ const choreoEditor = (() => {
 
     async save() {
       if (!_chor) return;
-      _validateAudioOverflow();  // ensure meta.audio_channels_required is up to date
+      _validateAudioOverflow();
+      _refreshServoLabels();
+      // Write VESC config snapshot into meta for portability validation
+      if (_vescCfgSnapshot) {
+        _chor.meta.config_snapshot = {
+          vesc_invert_L:    _vescCfgSnapshot.invert_L    ?? false,
+          vesc_invert_R:    _vescCfgSnapshot.invert_R    ?? false,
+          vesc_power_scale: _vescCfgSnapshot.power_scale ?? 1.0,
+        };
+      }
       const result = await api('/choreo/save', 'POST', { chor: _chor });
-      if (result) { _dirty = false; toast(`Saved: ${_chor.meta.name}`, 'ok'); }
+      if (result) {
+        _dirty = false;
+        _validateServoRefs();   // refresh badges after label refresh
+        toast(`Saved: ${_chor.meta.name}`, 'ok');
+      }
     },
 
     async exportChor() {
