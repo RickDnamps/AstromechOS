@@ -1404,7 +1404,6 @@ const KBD_IDS = {
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.code === 'Space') { e.preventDefault(); emergencyStop(); return; }
   // VESC test mode captures keys when active
   if (vescTest.onKey(e.code, true)) return;
   if (_keys[e.code]) return;
