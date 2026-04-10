@@ -16,6 +16,8 @@ TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
 _DOME_ANGLES_PATH = '/home/artoo/r2d2/master/config/dome_angles.json'
 _BODY_ANGLES_PATH = '/home/artoo/r2d2/slave/config/servo_angles.json'
 
+_SERVO_SPECIAL = ('all', 'all_dome', 'all_body')
+
 
 def _normalise_label(s: str) -> str:
     """Lower-case, replace spaces/hyphens with underscores."""
@@ -39,8 +41,8 @@ def _build_label_map() -> dict:
                     result[_normalise_label(label)] = servo_id
                 # Also map the ID itself so both forms resolve
                 result[_normalise_label(servo_id)] = servo_id
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning("ChoreoPlayer: could not load label map from %s: %s", path, e)
     return result
 
 # ── Easing functions ─────────────────────────────────────────────────────────
@@ -102,6 +104,7 @@ class ChoreoPlayer:
         self._telem_getter = telem_getter
         self._engine     = engine
         self._label_map: dict = _build_label_map()
+        self._resolved_logged: set = set()
 
         # Threshold config
         if cfg is not None:
@@ -146,8 +149,7 @@ class ChoreoPlayer:
                  or special keywords ('all', 'all_dome', 'all_body').
         Returns the hardware ID, or the original string if unresolvable.
         """
-        _SPECIAL = ('all', 'all_dome', 'all_body')
-        if name in _SPECIAL:
+        if name in _SERVO_SPECIAL:
             return name
         try:
             from master.drivers.dome_servo_driver import SERVO_MAP as _DOME_MAP
@@ -161,7 +163,9 @@ class ChoreoPlayer:
             return name
         resolved = self._label_map.get(_normalise_label(name))
         if resolved:
-            log.info("ChoreoPlayer: resolved servo label %r → %r", name, resolved)
+            if name not in self._resolved_logged:
+                log.info("ChoreoPlayer: resolved servo label %r → %r", name, resolved)
+                self._resolved_logged.add(name)
             return resolved
         log.warning("ChoreoPlayer: unknown servo ref %r — label map has no match", name)
         return name
@@ -501,7 +505,7 @@ class ChoreoPlayer:
                 dur_s   = float(ev.get('duration', 0) or 0)
                 easing  = ev.get('easing', 'ease-in-out')
 
-                is_body     = servo.startswith('body_') or servo.startswith('Servo_S')
+                is_body     = servo.startswith('body_') or servo.startswith('arm_') or servo.startswith('Servo_S')
                 is_all_dome = servo in ('all', 'all_dome')
                 is_all_body = servo == 'all_body'
 
