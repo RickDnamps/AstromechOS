@@ -2206,7 +2206,8 @@ function vescClearLog() {
 const vescTest = {
   _active:  false,
   _keys:    {},          // currently held keys
-  _timer:   null,        // command loop interval
+  _timer:   null,        // command loop interval (10 Hz)
+  _pollTimer: null,      // fast telemetry poll (4 Hz — matches VESC telem rate)
   _SPEED:   0.4,         // test speed (40% — safe for bench)
 
   toggle() {
@@ -2219,9 +2220,12 @@ const vescTest = {
     if (card) card.classList.toggle('active', this._active);
 
     if (this._active) {
-      this._timer = setInterval(() => this._tick(), 100);  // 10 Hz command loop
+      this._timer     = setInterval(() => this._tick(), 100);       // 10 Hz command loop
+      this._pollTimer = setInterval(() => vescPanel.refresh(), 250); // 4 Hz telem refresh
     } else {
       clearInterval(this._timer);
+      clearInterval(this._pollTimer);
+      this._pollTimer = null;
       this._keys = {};
       api('/motion/stop', 'POST');
       this._updateBars(0, 0);
