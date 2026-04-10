@@ -1229,15 +1229,22 @@ function _startCamPoll() {
       .then(r => r.json()).catch(() => null);
     if (!r) return;
     if (r.active_token !== _camToken) {
-      // Another client claimed the slot
-      _camToken = null;
-      const img   = el('cam-stream');
-      const bg    = el('cam-bg');
-      const taken = el('cam-taken');
-      if (img)   { img.src = ''; img.style.display = 'none'; }
-      if (bg)    bg.style.display = 'block';
-      if (taken) taken.style.display = 'flex';
-      clearInterval(_camPollTimer);
+      if (r.active_token < _camToken) {
+        // Server restarted (token reset) — auto-reclaim silently
+        _camToken = null;
+        clearInterval(_camPollTimer);
+        setTimeout(() => _takeCameraStream(), 500);
+      } else {
+        // Another client claimed the slot — show overlay
+        _camToken = null;
+        const img   = el('cam-stream');
+        const bg    = el('cam-bg');
+        const taken = el('cam-taken');
+        if (img)   { img.src = ''; img.style.display = 'none'; }
+        if (bg)    bg.style.display = 'block';
+        if (taken) taken.style.display = 'flex';
+        clearInterval(_camPollTimer);
+      }
     }
   }, 3000);
 }
