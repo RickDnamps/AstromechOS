@@ -4056,9 +4056,12 @@ const choreoEditor = (() => {
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
-      const sid   = item.servo || '?';
-      // Prefer live config label, fall back to stored servo_label, then hardware ID as last resort
-      const label = _servoSettings[sid]?.label || item.servo_label || sid;
+      const sid = item.servo || '?';
+      const configLabel  = _servoSettings[sid]?.label;
+      const storedLabel  = item.servo_label;
+      // When there's a mismatch or unknown ID, show the stored .chor label so user sees what needs fixing
+      const hasMismatch  = !configLabel || (storedLabel && configLabel !== storedLabel);
+      const label = hasMismatch ? (storedLabel || sid) : (configLabel || sid);
       return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
@@ -4091,7 +4094,10 @@ const choreoEditor = (() => {
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const sid = item.servo || '?';
-      const label = _servoSettings[sid]?.label || item.servo_label || sid;
+      const configLabel = _servoSettings[sid]?.label;
+      const storedLabel = item.servo_label;
+      const hasMismatch = !configLabel || (storedLabel && configLabel !== storedLabel);
+      const label = hasMismatch ? (storedLabel || sid) : (configLabel || sid);
       return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left ?? '?'} R${item.right ?? '?'}`;
@@ -4551,6 +4557,26 @@ const choreoEditor = (() => {
       const filtered = _servoList.filter(s => s.startsWith(prefix));
       const pool = filtered.length ? filtered : _servoList;
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
+
+      // Mismatch context banner in inspector
+      const sid = item.servo || '';
+      const configLabel  = _servoSettings[sid]?.label;
+      const storedLabel  = item.servo_label;
+      const isUnknown    = sid && !configLabel;
+      const isMismatch   = configLabel && storedLabel && configLabel !== storedLabel;
+      if (isUnknown) {
+        html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+          ❌ <b>${storedLabel || sid}</b> — servo ID not found in config.<br>
+          Select the correct servo below and save.
+        </div>`;
+      } else if (isMismatch) {
+        html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+          ⚠️ Stored as <b>${storedLabel}</b><br>
+          Current config: <b>${configLabel}</b><br>
+          Select the correct servo below and save to confirm.
+        </div>`;
+      }
+
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
       html += selectRow('SERVO', 'servo', servoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
