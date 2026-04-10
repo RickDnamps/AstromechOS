@@ -166,6 +166,15 @@ rsync -az \
 rsync -az -e "$SSH" "$VERSION_FILE" "$SLAVE:$VERSION_FILE" 2>/dev/null
 ok "VERSION synced → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
 
+# Install the camera autodetect script on the Master
+CAM_SCRIPT="$REPO/scripts/camera-start.sh"
+if [ -f "$CAM_SCRIPT" ]; then
+    sudo cp "$CAM_SCRIPT" /usr/local/bin/r2d2-camera-start.sh \
+        && sudo chmod +x /usr/local/bin/r2d2-camera-start.sh \
+        && ok "Camera autodetect script installed" \
+        || warn "Camera script install failed"
+fi
+
 # Install the service file on the Slave (PYTHONPATH + config up to date)
 SERVICE_SRC="$REPO/slave/services/r2d2-slave.service"
 if [ -f "$SERVICE_SRC" ]; then
