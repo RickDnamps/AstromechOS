@@ -3757,10 +3757,8 @@ const choreoEditor = (() => {
       `<span>${lines.join(' &nbsp;|&nbsp; ')}</span>` +
       `<button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px">\u2715</button>`;
 
-    const tracksBody = document.getElementById('chor-tracks-body');
-    if (tracksBody) {
-      tracksBody.after(banner);
-    }
+    const slot = document.getElementById('chor-banner-slot');
+    if (slot) { slot.innerHTML = ''; slot.appendChild(banner); }
   }
 
   // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
@@ -4907,8 +4905,8 @@ const choreoEditor = (() => {
 
     async load(name) {
       if (!name) return;
-      const oldBanner = document.getElementById('chor-vesc-banner');
-      if (oldBanner) oldBanner.remove();
+      const slot = document.getElementById('chor-banner-slot');
+      if (slot) slot.innerHTML = '';
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
