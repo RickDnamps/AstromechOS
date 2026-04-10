@@ -5,12 +5,43 @@ Reads .chor JSON files and dispatches events to drivers in real time.
 import json
 import logging
 import os
+import re as _re
 import threading
 import time
 
 log = logging.getLogger(__name__)
 
 TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
+
+_DOME_ANGLES_PATH = '/home/artoo/r2d2/master/config/dome_angles.json'
+_BODY_ANGLES_PATH = '/home/artoo/r2d2/slave/config/servo_angles.json'
+
+
+def _normalise_label(s: str) -> str:
+    """Lower-case, replace spaces/hyphens with underscores."""
+    return _re.sub(r'[\s\-]+', '_', s.strip().lower())
+
+
+def _build_label_map() -> dict:
+    """
+    Returns { normalised_label -> servo_id } for all configured servos.
+    Used to resolve legacy label-based Choreo references.
+    """
+    result: dict = {}
+    for path in (_DOME_ANGLES_PATH, _BODY_ANGLES_PATH):
+        try:
+            import json as _json
+            with open(path) as f:
+                data = _json.load(f)
+            for servo_id, cfg in data.items():
+                label = cfg.get('label', '')
+                if label:
+                    result[_normalise_label(label)] = servo_id
+                # Also map the ID itself so both forms resolve
+                result[_normalise_label(servo_id)] = servo_id
+        except Exception:
+            pass
+    return result
 
 # ── Easing functions ─────────────────────────────────────────────────────────
 
@@ -70,6 +101,7 @@ class ChoreoPlayer:
         self._vesc       = vesc
         self._telem_getter = telem_getter
         self._engine     = engine
+        self._label_map: dict = _build_label_map()
 
         # Threshold config
         if cfg is not None:
@@ -106,6 +138,33 @@ class ChoreoPlayer:
             'abort_reason': None,
             'telem':        None,
         }
+
+    def _resolve_servo_id(self, name: str) -> str:
+        """
+        Resolve a servo reference to a hardware ID.
+        Accepts: hardware ID ('Servo_M0'), normalised label ('dome_panel_1'),
+                 or special keywords ('all', 'all_dome', 'all_body').
+        Returns the hardware ID, or the original string if unresolvable.
+        """
+        _SPECIAL = ('all', 'all_dome', 'all_body')
+        if name in _SPECIAL:
+            return name
+        try:
+            from master.drivers.dome_servo_driver import SERVO_MAP as _DOME_MAP
+        except ImportError:
+            _DOME_MAP = {f'Servo_M{i}': i for i in range(11)}
+        try:
+            from slave.drivers.body_servo_driver import SERVO_MAP as _BODY_MAP
+        except ImportError:
+            _BODY_MAP = {f'Servo_S{i}': i for i in range(11)}
+        if name in _DOME_MAP or name in _BODY_MAP:
+            return name
+        resolved = self._label_map.get(_normalise_label(name))
+        if resolved:
+            log.info("ChoreoPlayer: resolved servo label %r → %r", name, resolved)
+            return resolved
+        log.warning("ChoreoPlayer: unknown servo ref %r — label map has no match", name)
+        return name
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -437,7 +496,7 @@ class ChoreoPlayer:
 
             elif track == 'servos':
                 action  = ev.get('action', 'open')
-                servo   = ev.get('servo', '')
+                servo   = self._resolve_servo_id(ev.get('servo', ''))
                 target  = ev.get('target')
                 dur_s   = float(ev.get('duration', 0) or 0)
                 easing  = ev.get('easing', 'ease-in-out')
