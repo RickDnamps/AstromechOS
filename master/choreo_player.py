@@ -501,7 +501,7 @@ class ChoreoPlayer:
                 dur_s   = float(ev.get('duration', 0) or 0)
                 easing  = ev.get('easing', 'ease-in-out')
 
-                is_body     = servo.startswith('body_')
+                is_body     = servo.startswith('body_') or servo.startswith('Servo_S')
                 is_all_dome = servo in ('all', 'all_dome')
                 is_all_body = servo == 'all_body'
 
