@@ -357,6 +357,17 @@ class AdminGuard {
 
 const adminGuard = new AdminGuard();
 
+// VESC tab fast-poll — active only while VESC tab is open
+let _vescTabTimer = null;
+function _startVescTabPoll() {
+  if (_vescTabTimer) return;
+  vescPanel.refresh();
+  _vescTabTimer = setInterval(() => vescPanel.refresh(), 500);
+}
+function _stopVescTabPoll() {
+  if (_vescTabTimer) { clearInterval(_vescTabTimer); _vescTabTimer = null; }
+}
+
 function switchTab(tabId) {
   // Onglet protégé sans accès → ouvrir modal
   if (adminGuard.isProtected(tabId) && !adminGuard.unlocked) {
@@ -378,7 +389,10 @@ function switchTab(tabId) {
   if (tabId === 'lights') loadLightSequences();
   if (tabId === 'audio') loadAudioCategories();
 
-  if (tabId === 'vesc') vescPanel.refresh();
+  // VESC tab: start fast poll on entry, stop on exit
+  if (tabId === 'vesc') { _startVescTabPoll(); }
+  else                  { _stopVescTabPoll(); }
+
   if (tabId === 'choreo') choreoEditor.init();
 }
 
@@ -2220,12 +2234,15 @@ const vescTest = {
     if (card) card.classList.toggle('active', this._active);
 
     if (this._active) {
-      this._timer     = setInterval(() => this._tick(), 100);       // 10 Hz command loop
-      this._pollTimer = setInterval(() => vescPanel.refresh(), 250); // 4 Hz telem refresh
+      this._timer = setInterval(() => this._tick(), 100);  // 10 Hz command loop
+      // Tab already polls at 500ms; boost to 250ms during test mode
+      _stopVescTabPoll();
+      _vescTabTimer = setInterval(() => vescPanel.refresh(), 250);
     } else {
       clearInterval(this._timer);
-      clearInterval(this._pollTimer);
-      this._pollTimer = null;
+      // Restore normal 500ms tab poll
+      _stopVescTabPoll();
+      _startVescTabPoll();
       this._keys = {};
       api('/motion/stop', 'POST');
       this._updateBars(0, 0);
@@ -3025,10 +3042,7 @@ class StatusPoller {
       }
     }
 
-    // VESC telemetry — refresh only if VESC tab is active
-    if (el('tab-vesc') && el('tab-vesc').classList.contains('active')) {
-      vescPanel.refresh();
-    }
+    // VESC tab has its own 500ms poll via _startVescTabPoll() — no refresh needed here
   }
 
   _setOffline(offline) {
