@@ -41,6 +41,27 @@
 
 ---
 
+## 🔨 Priorité 1b — VESC Safety Lock *(critique — avant utilisation en public)*
+
+> Un seul VESC en panne = poussée asymétrique = robot incontrôlable. Le système doit refuser de bouger, pas juste avertir.
+
+- [ ] **Détection VESC_DEGRADED** — trigger si :
+  - VESC L ou R absent au boot (pas de telemetry dans les Xs)
+  - Fault code actif (`fault_str ≠ FAULT_CODE_NONE`) sur l'un ou l'autre
+  - Timeout telemetry en cours d'opération
+  - CAN scan ne trouve pas VESC ID2
+- [ ] **Blocage propulsion total** — aucune commande `M:` envoyée au Slave, quel que soit la source (web / BT gamepad / Android)
+- [ ] **Overlay Drive tab** — alerte rouge évidente sur la zone caméra (style "STREAM TAKEN") ou bannière fixe en bas
+  - Message : `PROPULSION DISABLED — VESC [L/R] not responding`
+  - Joystick web grisé et non-interactif
+  - BT gamepad : axe drive ignoré (keepalive supprimé aussi)
+  - Android : même gate JS
+- [ ] Dome / audio / servos / séquences restent **100% opérationnels**
+
+> ⚠️ Pour l'instant les tests bench avec un seul VESC sont acceptables. Cette protection est obligatoire avant toute utilisation autour de personnes.
+
+---
+
 ## 🔥 Priorité 2 — Télémétrie VESC + Protection batterie
 
 > Le robot ne mourra jamais d'une batterie à plat sans prévenir.
