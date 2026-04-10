@@ -3716,6 +3716,49 @@ const choreoEditor = (() => {
     }
   }
 
+  // Show a dismissible banner above the timeline if the Choreo's VESC config
+  // snapshot differs from the current machine config (invert_L/R or power_scale).
+  function _showVescMismatchBanner(snapshot) {
+    const existing = document.getElementById('chor-vesc-banner');
+    if (existing) existing.remove();
+    if (!_vescCfgSnapshot || !snapshot) return;
+
+    const invertMismatch = snapshot.vesc_invert_L !== _vescCfgSnapshot.invert_L
+                        || snapshot.vesc_invert_R !== _vescCfgSnapshot.invert_R;
+    const scaleMismatch  = Math.abs((snapshot.vesc_power_scale ?? 1) - (_vescCfgSnapshot.power_scale ?? 1)) > 0.05;
+
+    if (!invertMismatch && !scaleMismatch) return;
+
+    const lines = [];
+    if (invertMismatch) {
+      lines.push(
+        `\u26a0\ufe0f Motor direction mismatch \u2014 ` +
+        `Choreo: L=${snapshot.vesc_invert_L ? 'INV' : 'FWD'} R=${snapshot.vesc_invert_R ? 'INV' : 'FWD'} | ` +
+        `Current: L=${_vescCfgSnapshot.invert_L ? 'INV' : 'FWD'} R=${_vescCfgSnapshot.invert_R ? 'INV' : 'FWD'}`
+      );
+    }
+    if (scaleMismatch) {
+      lines.push(
+        `\u2139\ufe0f Power scale: was ${((snapshot.vesc_power_scale ?? 1) * 100).toFixed(0)}%,` +
+        ` now ${((_vescCfgSnapshot.power_scale ?? 1) * 100).toFixed(0)}%`
+      );
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'chor-vesc-banner';
+    banner.style.cssText = invertMismatch
+      ? 'background:#3a0010;border:1px solid #ff2244;color:#ff6688;padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center'
+      : 'background:#2a1a00;border:1px solid #ff8800;color:#ffaa44;padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center';
+    banner.innerHTML =
+      `<span>${lines.join(' &nbsp;|&nbsp; ')}</span>` +
+      `<button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px">\u2715</button>`;
+
+    const timeline = document.getElementById('chor-scroll') || document.getElementById('chor-editor');
+    if (timeline && timeline.parentElement) {
+      timeline.parentElement.insertBefore(banner, timeline);
+    }
+  }
+
   // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
   function _calcTotalDuration() {
     if (!_chor) return 10.0;
@@ -4844,6 +4887,8 @@ const choreoEditor = (() => {
 
     async load(name) {
       if (!name) return;
+      const oldBanner = document.getElementById('chor-vesc-banner');
+      if (oldBanner) oldBanner.remove();
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
@@ -4891,6 +4936,8 @@ const choreoEditor = (() => {
       }
       // Validate servo refs against current config
       _validateServoRefs();
+      // Show VESC config mismatch banner if snapshot in file differs from current machine
+      _showVescMismatchBanner(_chor.meta?.config_snapshot);
       _renderAllTracks();
       _validateAudioOverflow();
       toast(`Loaded: ${name}`, 'ok');
