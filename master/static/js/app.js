@@ -3757,9 +3757,9 @@ const choreoEditor = (() => {
       `<span>${lines.join(' &nbsp;|&nbsp; ')}</span>` +
       `<button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px">\u2715</button>`;
 
-    const timeline = document.getElementById('chor-scroll') || document.getElementById('chor-editor');
-    if (timeline && timeline.parentElement) {
-      timeline.after(banner);
+    const tracksBody = document.getElementById('chor-tracks-body');
+    if (tracksBody) {
+      tracksBody.after(banner);
     }
   }
 
