@@ -119,7 +119,7 @@
 | Feature | Hardware requis | Complexité |
 |---|---|---|
 | 🎙️ **Micro dans le dôme** — contexte émotionnel, commandes vocales, réponse ambiance | Dongle USB audio ~8$ ou jack TRRS Master | ⭐⭐⭐ |
-| 📷 **Caméra USB** — streaming live ✅ · suivi personne 📋 | Caméra USB ~25$ | ⭐⭐⭐⭐ |
+| 📷 **Caméra USB** — streaming live ✅ · suivi personne 📋 | Caméra UVC 3.6mm OTG 720/1080P commandée — holo projector housing, MJPEG hardware natif | ⭐⭐⭐⭐ |
 | 👁️ **Reconnaissance faciale** — saluer par prénom, mémoire visiteurs | Caméra + modèle ML | ⭐⭐⭐⭐⭐ |
 | 🏷️ **NFC/RFID** — tapoter un badge = déclencher une séquence | Module NFC ~8$ | ⭐⭐ |
 | 👥 **Multi-manette** — pilote + opérateur (sons/séquences) | 2e gamepad BT | ⭐⭐ |

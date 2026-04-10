@@ -26,7 +26,7 @@ This system was built from the ground up to make R2-D2 feel **alive** — not ju
 
 If you're building a full-scale R2-D2 and you want a control system actually worthy of the build — **this is it**.
 
-> ⚠️ **Work in Progress** — Software fully functional and battle-tested on bench. Physical assembly in progress (3D parts printing, slip ring ordered). Camera USB autodetect active; person-tracking AI is the next phase.
+> ⚠️ **Work in Progress** — Software fully functional and battle-tested on bench. Physical assembly in progress (3D parts printing, slip ring ordered). Camera USB stream active (temporary webcam). Permanent camera on order: 3.6mm OTG UVC 720/1080P 30FPS — fits inside the holo projector, outputs hardware-compressed MJPEG. Person-tracking AI is the next phase.
 
 ---
 
@@ -177,7 +177,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
-| 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart |
+| 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart · temporary cam active, permanent cam on order |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
 ---
@@ -662,9 +662,12 @@ Sequences are **created visually in the in-browser Sequence Editor** — no file
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
 | **4+** | Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Battery gauge (configurable cell count) · Servo hardware IDs + labels | ✅ Active |
-| **5** | Vision — USB camera stream, person tracking | 📋 Planned |
+| **4++** | Camera USB autodetect + stream auto-reconnect · BT battery/RSSI · BT keep-alive (VESC fix) · BT panels config-aware · admin inactivity all tabs | ✅ Active |
+| **5** | Vision — USB camera stream ✅ · person tracking 📋 | 🔄 In progress |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.
+>
+> **Camera note:** current setup uses a temporary USB webcam. A **3.6mm lens OTG 720/1080P 30FPS UVC USB camera** (drive-free, industrial, Android/Linux compatible) has been ordered — small enough to fit inside the holo projector housing. Being UVC, it outputs **hardware-compressed MJPEG directly** with no CPU overhead on the Pi 4B, and requires zero driver setup (plug-and-play, autodetected by the existing sysfs scan).
 
 ---
 

@@ -241,13 +241,14 @@ SSH     artoo / deetoo
 | 4 | API REST + dashboard web + Android | ✅ |
 | 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
 | 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
-| 5 | Caméra USB stream ✅ · suivi personne AI | 📋 |
+| 5 | Caméra USB stream ✅ (temp webcam) · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
 **E-STOP :** toggle unique ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`).
 **Joystick throttle :** 60 req/s max (visuel immédiat, seuls les POST HTTP sont throttlés).
 **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
 **Drive tab** : camera MJPEG proxy last-connect-wins · auto-reconnect après restart service · USB autodetect via sysfs · speed arc HUD · direction arrow HUD.
+**Caméra permanente commandée :** 3.6mm lens OTG UVC 720/1080P 30FPS, drive-free, Linux plug-and-play. Assez petite pour loger dans le holo projector. Sort du MJPEG hardware-compressé nativement → zéro charge CPU Pi 4B, autodetectée par le scan sysfs existant sans aucun changement de code.
 **VESC tab** : barres temp/current/duty · Power(W) · symétrie L/R · session peaks · fault log.
 **Header** : `#temp-label` min-width fixe — pas de layout shift sur changement de valeur.
 
