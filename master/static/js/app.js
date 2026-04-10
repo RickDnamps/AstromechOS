@@ -2252,17 +2252,29 @@ const vescTest = {
     const back  = this._keys['s'];
     const left  = this._keys['a'];
     const right = this._keys['d'];
+    const anyKey = fwd || back || left || right;
 
-    let L = 0, R = 0;
-    if (fwd)   { L =  this._SPEED; R =  this._SPEED; }
-    if (back)  { L = -this._SPEED; R = -this._SPEED; }
-    if (left)  { L = -this._SPEED * 0.5; R =  this._SPEED * 0.5; }
-    if (right) { L =  this._SPEED * 0.5; R = -this._SPEED * 0.5; }
+    if (!anyKey) {
+      // No keys held — let BT controller drive freely, just show IDLE
+      this._updateBars(0, 0);
+      this._setStatus('BT/IDLE', '');
+      return;
+    }
 
-    const moving = L !== 0 || R !== 0;
+    // Arcade mixing: throttle ± steer
+    // W+A → curves left (L=20%, R=40%)   W+D → curves right (L=40%, R=20%)
+    // A alone → spin left (-20%/+20%)    D alone → spin right (+20%/-20%)
+    const throttle = (fwd ? 1 : 0) - (back ? 1 : 0);   // -1, 0, +1
+    const steer    = (right ? 1 : 0) - (left ? 1 : 0);  // -1=left, +1=right
+
+    let L = Math.max(-1, Math.min(1, throttle + steer * 0.5));
+    let R = Math.max(-1, Math.min(1, throttle - steer * 0.5));
+    L *= this._SPEED;
+    R *= this._SPEED;
+
     api('/motion/drive', 'POST', { left: L, right: R });
     this._updateBars(L, R);
-    this._setStatus(moving ? 'DRIVING' : 'IDLE', moving ? 'ok' : '');
+    this._setStatus('DRIVING', 'ok');
   },
 
   _updateBars(L, R) {
