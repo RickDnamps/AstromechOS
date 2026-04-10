@@ -2764,14 +2764,34 @@ class BTController {
       if (statusText) { statusText.textContent = 'CONNECTED (Pi)'; statusText.classList.add('connected'); }
     }
 
-    // Batterie
-    const pct = data.bt_battery || 0;
+    // Battery
+    const pct    = data.bt_battery || 0;
+    const fillEl = el('bt-battery-fill');
+    const pctEl  = el('bt-battery-pct');
     if (pct > 0) {
-      const fillEl = el('bt-battery-fill');
-      const pctEl  = el('bt-battery-pct');
       const bcolor = pct > 50 ? '#00cc66' : pct > 25 ? '#ff8800' : '#ff2244';
       if (fillEl) { fillEl.style.width = pct + '%'; fillEl.style.background = bcolor; }
       if (pctEl)  pctEl.textContent = pct + '%';
+    } else {
+      if (fillEl) fillEl.style.width = '0%';
+      if (pctEl)  pctEl.textContent = '--%';
+    }
+
+    // RSSI signal strength
+    const rssiEl = el('bt-rssi-val');
+    if (rssiEl) {
+      const rssi = data.bt_rssi;
+      if (rssi !== null && rssi !== undefined) {
+        // dBm: -50=excellent, -70=good, -85=fair, <-90=poor
+        const quality = rssi >= -60 ? 'excellent' : rssi >= -75 ? 'good' : rssi >= -90 ? 'fair' : 'poor';
+        const color   = rssi >= -60 ? '#00cc66'   : rssi >= -75 ? '#88cc00' : rssi >= -90 ? '#ff8800' : '#ff2244';
+        rssiEl.textContent = rssi + ' dBm';
+        rssiEl.style.color = color;
+        rssiEl.title = `Signal: ${quality}`;
+      } else {
+        rssiEl.textContent = '--';
+        rssiEl.style.color = '#4a7a9b';
+      }
     }
 
     this._updatePill();

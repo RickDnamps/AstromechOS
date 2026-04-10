@@ -128,6 +128,7 @@ class BTControllerDriver:
         self._drive_active = False
         self._dome_active  = False
         self._prev_btns    = {}
+        self._rssi         = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -184,6 +185,7 @@ class BTControllerDriver:
             'bt_battery':           self._battery_pct,
             'bt_gamepad_type':      self._cfg.get('gamepad_type', 'ps'),
             'bt_inactivity_timeout': int(self._cfg.get('inactivity_timeout', 30)),
+            'bt_rssi':               self._rssi,
         }
 
     # ------------------------------------------------------------------
@@ -238,6 +240,10 @@ class BTControllerDriver:
             caps = dev.capabilities()
             abs_info = {info[0]: info[1] for info in caps.get(ecodes.EV_ABS, [])}
 
+            # Start background thread to poll battery + RSSI every 30s
+            threading.Thread(target=self._hw_poll_loop, daemon=True,
+                             name='bt-hw-poll').start()
+
             for event in dev.read_loop():
                 if self._stop_evt.is_set():
                     break
@@ -256,7 +262,58 @@ class BTControllerDriver:
                 self._connected   = False
                 self._device      = None
                 self._device_name = '—'
+                self._battery_pct = 0
+                self._rssi        = None
             self._stop_motion()
+
+    def _hw_poll_loop(self) -> None:
+        """Polls battery (sysfs) and RSSI (hcitool) every 30s while connected."""
+        import glob, subprocess, re
+        while self._connected and not self._stop_evt.is_set():
+            # ── Battery via sysfs ───────────────────────────────────────
+            batt = None
+            dev = self._device
+            mac = (dev.uniq or '').lower().replace(':', '_') if dev else ''
+            if mac:
+                patterns = [
+                    f'/sys/class/power_supply/hid-{mac.replace("_",":")}-battery/capacity',
+                    f'/sys/class/power_supply/*{mac}*/capacity',
+                    '/sys/class/power_supply/hid-*battery*/capacity',
+                ]
+                for pat in patterns:
+                    for path in glob.glob(pat):
+                        try:
+                            batt = int(open(path).read().strip())
+                            break
+                        except Exception:
+                            pass
+                    if batt is not None:
+                        break
+
+            # ── RSSI via hcitool ────────────────────────────────────────
+            rssi = None
+            mac_colon = (dev.uniq or '').upper() if dev else ''
+            if mac_colon:
+                try:
+                    out = subprocess.run(
+                        ['hcitool', 'rssi', mac_colon],
+                        capture_output=True, text=True, timeout=2,
+                    )
+                    m = re.search(r'(-?\d+)', out.stdout)
+                    if m:
+                        rssi = int(m.group(1))
+                except Exception:
+                    pass
+
+            with self._lock:
+                if batt is not None:
+                    self._battery_pct = batt
+                self._rssi = rssi
+
+            if batt is not None or rssi is not None:
+                log.debug("BT hw-poll: battery=%s%% rssi=%s dBm", batt, rssi)
+
+            self._stop_evt.wait(30)
 
     # ------------------------------------------------------------------
     # Axes
