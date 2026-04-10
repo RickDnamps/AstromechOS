@@ -395,25 +395,43 @@ class BTControllerDriver:
 
         # Dome panel (held = open, released = closed)
         if _is(m.get('panel_dome', 'BTN_WEST')):
-            if pressed and reg.dome_servo:
-                log.info("BT: open_all dome_servo")
-                try: reg.dome_servo.open_all()
-                except Exception as e: log.warning(f"dome open_all: {e}")
-            if released and reg.dome_servo:
-                log.info("BT: close_all dome_servo")
-                try: reg.dome_servo.close_all()
-                except Exception as e: log.warning(f"dome close_all: {e}")
+            if (pressed or released) and reg.dome_servo:
+                direction = 'open' if pressed else 'close'
+                log.info("BT: %s_all dome_servo (config-aware)", direction)
+                try:
+                    from master.api.servo_bp import _read_panels_cfg, DOME_SERVOS, _panel_angle, _panel_speed
+                    cfg    = _read_panels_cfg()
+                    method = reg.dome_servo.open if pressed else reg.dome_servo.close
+                    threads = [
+                        threading.Thread(
+                            target=method,
+                            args=(n, _panel_angle(n, direction, cfg), _panel_speed(n, cfg)),
+                            daemon=True,
+                        )
+                        for n in DOME_SERVOS
+                    ]
+                    for t in threads:
+                        t.start()
+                except Exception as e:
+                    log.warning("dome %s_all: %s", direction, e)
 
         # Body panel (held = open, released = closed)
         elif _is(m.get('panel_body', 'BTN_NORTH')):
-            if pressed and reg.servo:
-                log.info("BT: open_all body_servo")
-                try: reg.servo.open_all()
-                except Exception as e: log.warning(f"body open_all: {e}")
-            if released and reg.servo:
-                log.info("BT: close_all body_servo")
-                try: reg.servo.close_all()
-                except Exception as e: log.warning(f"body close_all: {e}")
+            if pressed or released:
+                direction = 'open' if pressed else 'close'
+                log.info("BT: %s_all body_servo (config-aware)", direction)
+                try:
+                    from master.api.servo_bp import _read_panels_cfg, BODY_SERVOS, _panel_angle, _panel_speed
+                    cfg    = _read_panels_cfg()
+                    method = reg.servo.open if pressed else reg.servo.close
+                    if reg.servo:
+                        for n in BODY_SERVOS:
+                            method(n, _panel_angle(n, direction, cfg), _panel_speed(n, cfg))
+                    elif reg.uart:
+                        for n in BODY_SERVOS:
+                            reg.uart.send('SRV', f'{n},{_panel_angle(n, direction, cfg)},{_panel_speed(n, cfg)}')
+                except Exception as e:
+                    log.warning("body %s_all: %s", direction, e)
 
         # Random sound (rising edge)
         elif _is(m.get('audio', 'BTN_EAST')):
