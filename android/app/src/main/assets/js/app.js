@@ -55,18 +55,22 @@ function escapeHtml(s) {
 // API Helper
 // ================================================================
 
-async function api(endpoint, method = 'GET', body = null) {
+async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
     const url  = base + endpoint;
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+    const opts = { method, headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
     const data = await res.json();
     return data;
   } catch (e) {
-    console.error(`API ${method} ${endpoint}:`, e);
+    if (e.name !== 'AbortError') console.error(`API ${method} ${endpoint}:`, e);
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
