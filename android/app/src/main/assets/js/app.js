@@ -4556,14 +4556,14 @@ const choreoEditor = (() => {
         </div>`;
       }
 
-      // TYPE toggle — specific file or random category
+      // TYPE selector — specific file or random category
       const isRandom = (item.file || '').toUpperCase().startsWith('RANDOM:');
-      html += `<div class="chor-prop-row-full" style="gap:4px">
+      html += `<div class="chor-prop-row-full">
         <span class="chor-prop-key">TYPE</span>
-        <button onclick="choreoEditor._setAudioType('${track}',${idx},'specific')"
-          style="flex:1;background:${!isRandom?'#005080':'#222'};border:1px solid ${!isRandom?'#00aaff':'#444'};color:${!isRandom?'#fff':'#888'};border-radius:3px;padding:3px;cursor:pointer;font-size:10px">SPECIFIC</button>
-        <button onclick="choreoEditor._setAudioType('${track}',${idx},'random')"
-          style="flex:1;background:${isRandom?'#005080':'#222'};border:1px solid ${isRandom?'#00aaff':'#444'};color:${isRandom?'#fff':'#888'};border-radius:3px;padding:3px;cursor:pointer;font-size:10px">🎲 RANDOM</button>
+        <select class="chor-prop-select" onchange="choreoEditor._setAudioType('${track}',${idx},this.value)">
+          <option value="specific"${!isRandom ? ' selected' : ''}>SPECIFIC FILE</option>
+          <option value="random"${isRandom ? ' selected' : ''}>🎲 RANDOM CATEGORY</option>
+        </select>
       </div>`;
 
       if (isRandom) {
