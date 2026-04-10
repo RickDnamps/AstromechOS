@@ -3589,6 +3589,7 @@ const choreoEditor = (() => {
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
   let _audioOverflowIdxs = new Set();  // indices of audio events that will be dropped
   let _servoIssues  = {};  // { 'dome_servos:0': 'warn'|'error', … }
+  let _vescCfgSnapshot = null;  // { invert_L, invert_R, power_scale } — loaded at init
 
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
@@ -3699,6 +3700,19 @@ const choreoEditor = (() => {
           _servoIssues[key] = 'warn';
         }
       });
+    }
+  }
+
+  // Before saving: refresh servo_label for every servo event from current config.
+  // Keeps the label field as self-documenting metadata, always matching last-known name.
+  function _refreshServoLabels() {
+    if (!_chor) return;
+    for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
+      for (const ev of (_chor.tracks[track] || [])) {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo)) continue;
+        const current = _servoSettings[ev.servo];
+        if (current?.label) ev.servo_label = current.label;
+      }
     }
   }
 
@@ -4816,6 +4830,7 @@ const choreoEditor = (() => {
           if (r && r.sequences)
             r.sequences.forEach(s => { if (!_lightModes[s]) _lightModes[s] = s; });
         }),
+        api('/vesc/config').then(r => { if (r) _vescCfgSnapshot = r; }),
       ]).catch(() => {});
 
       const names = await api('/choreo/list');
@@ -4932,9 +4947,22 @@ const choreoEditor = (() => {
 
     async save() {
       if (!_chor) return;
-      _validateAudioOverflow();  // ensure meta.audio_channels_required is up to date
+      _validateAudioOverflow();
+      _refreshServoLabels();
+      // Write VESC config snapshot into meta for portability validation
+      if (_vescCfgSnapshot) {
+        _chor.meta.config_snapshot = {
+          vesc_invert_L:    _vescCfgSnapshot.invert_L    ?? false,
+          vesc_invert_R:    _vescCfgSnapshot.invert_R    ?? false,
+          vesc_power_scale: _vescCfgSnapshot.power_scale ?? 1.0,
+        };
+      }
       const result = await api('/choreo/save', 'POST', { chor: _chor });
-      if (result) { _dirty = false; toast(`Saved: ${_chor.meta.name}`, 'ok'); }
+      if (result) {
+        _dirty = false;
+        _validateServoRefs();   // refresh badges after label refresh
+        toast(`Saved: ${_chor.meta.name}`, 'ok');
+      }
     },
 
     async exportChor() {
