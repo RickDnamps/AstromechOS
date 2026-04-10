@@ -3589,6 +3589,7 @@ const choreoEditor = (() => {
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
   let _audioOverflowIdxs = new Set();  // indices of audio events that will be dropped
   let _servoIssues  = {};  // { 'dome_servos:0': 'warn'|'error', … }
+  let _audioIssues  = {};  // { 'audio:0': 'error'|'warn', … }
   let _vescCfgSnapshot = null;  // { invert_L, invert_R, power_scale } — loaded at init
 
   // Cached data for inspector dropdowns — loaded once at init
@@ -3701,6 +3702,27 @@ const choreoEditor = (() => {
         }
       });
     }
+  }
+
+  // Build _audioIssues — error if file not on slave, warn if RANDOM category unknown.
+  function _validateAudioRefs() {
+    _audioIssues = {};
+    if (!_chor) return;
+    const scannedSet = new Set(_audioScanned.map(s => s.toUpperCase()));
+    const knownCats  = new Set(Object.keys(_audioIndex).map(c => c.toLowerCase()));
+    (_chor.tracks.audio || []).forEach((ev, idx) => {
+      if (ev.action !== 'play' || !ev.file) return;
+      const file = ev.file;
+      if (file.toUpperCase().startsWith('RANDOM:')) {
+        const cat = file.slice(7).split(':')[0].toLowerCase();
+        if (knownCats.size > 0 && !knownCats.has(cat))
+          _audioIssues[`audio:${idx}`] = 'warn';  // category unknown
+      } else {
+        // Authoritative check: scanned list from slave disk
+        if (scannedSet.size > 0 && !scannedSet.has(file.toUpperCase()))
+          _audioIssues[`audio:${idx}`] = 'error';  // file not found on slave
+      }
+    });
   }
 
   // Before saving: refresh servo_label for every servo event from current config.
@@ -4031,11 +4053,13 @@ const choreoEditor = (() => {
     block.style.zIndex  = 2 + layer;   // higher layers sit on top; lower layers clickable via exposed strip
     const isServoTrack = (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos');
     const issueKey   = `${track}:${idx}`;
-    const issueLevel = isServoTrack ? _servoIssues[issueKey] : undefined;
+    const issueLevel = isServoTrack ? _servoIssues[issueKey]
+                     : track === 'audio' ? _audioIssues[issueKey]
+                     : undefined;
     const issueBadge = issueLevel === 'error'
-      ? '<span class="chor-issue-badge error" title="Servo ID not found in config — click to reassign">❌</span>'
+      ? `<span class="chor-issue-badge error" title="${track === 'audio' ? 'Sound file not found on slave' : 'Servo ID not found in config — click to reassign'}">❌</span>`
       : issueLevel === 'warn'
-      ? '<span class="chor-issue-badge warn" title="Servo label changed since creation — verify intent">⚠️</span>'
+      ? `<span class="chor-issue-badge warn" title="${track === 'audio' ? 'Unknown RANDOM category' : 'Servo label changed since creation — verify intent'}">⚠️</span>`
       : '';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
                        ${issueBadge}
@@ -4052,7 +4076,11 @@ const choreoEditor = (() => {
   }
 
   function _blockLabel(track, item) {
-    if (track === 'audio') return item.file || '?';
+    if (track === 'audio') {
+      const f = item.file || '?';
+      if (f.toUpperCase().startsWith('RANDOM:')) return `🎲 ${f.slice(7).toUpperCase()}`;
+      return f;
+    }
     if (track === 'lights') {
       if (item.mode === 'text') return `TEXT ${(item.display||'fld_top').toUpperCase()} — ${item.text||'...'}`;
       if (item.mode === 'holo') return `HOLO ${(item.target||'fhp').toUpperCase()} — ${(item.effect||'on').toUpperCase()}`;
@@ -4061,9 +4089,12 @@ const choreoEditor = (() => {
     }
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const sid = item.servo || '?';
+      if (_SERVO_SPECIAL.has(sid)) {
+        const names = { all: 'ALL', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+        return `${names[sid] || sid} ${item.action || ''}`.trim().toUpperCase();
+      }
       const configLabel  = _servoSettings[sid]?.label;
       const storedLabel  = item.servo_label;
-      // When there's a mismatch or unknown ID, show the stored .chor label so user sees what needs fixing
       const hasMismatch  = !configLabel || (storedLabel && configLabel !== storedLabel);
       const label = hasMismatch ? (storedLabel || sid) : (configLabel || sid);
       return `${label} ${item.action || ''}`.trim().toUpperCase();
@@ -4087,7 +4118,9 @@ const choreoEditor = (() => {
   function _inspectorLabel(track, item) {
     if (track === 'audio') {
       if (!item.file) return '?';
-      return item.file.replace(/\.[^.]+$/, ''); // strip extension
+      const f = item.file;
+      if (f.toUpperCase().startsWith('RANDOM:')) return `RANDOM — ${f.slice(7).toUpperCase()}`;
+      return f.replace(/\.[^.]+$/, '');
     }
     if (track === 'lights') {
       if (item.mode === 'text') return `TEXT ${(item.display||'fld_top').toUpperCase()} — ${item.text||'...'}`;
@@ -4098,6 +4131,10 @@ const choreoEditor = (() => {
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
     if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
       const sid = item.servo || '?';
+      if (_SERVO_SPECIAL.has(sid)) {
+        const names = { all: 'ALL', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+        return `${names[sid] || sid} ${item.action || ''}`.trim().toUpperCase();
+      }
       const configLabel = _servoSettings[sid]?.label;
       const storedLabel = item.servo_label;
       const hasMismatch = !configLabel || (storedLabel && configLabel !== storedLabel);
@@ -4506,12 +4543,40 @@ const choreoEditor = (() => {
 
     if (track === 'audio') {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
-      // FILE — use disk scan (flat) when available, fall back to grouped index
-      if (_audioScanned.length) {
+
+      // Audio issue banner
+      const audioIssueKey = `audio:${idx}`;
+      if (_audioIssues[audioIssueKey] === 'error') {
+        html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+          ❌ <b>${item.file}</b> — file not found on slave.<br>Select a replacement below.
+        </div>`;
+      } else if (_audioIssues[audioIssueKey] === 'warn') {
+        html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+          ⚠️ Unknown RANDOM category: <b>${item.file?.slice(7)}</b>
+        </div>`;
+      }
+
+      // TYPE toggle — specific file or random category
+      const isRandom = (item.file || '').toUpperCase().startsWith('RANDOM:');
+      html += `<div class="chor-prop-row-full" style="gap:4px">
+        <span class="chor-prop-key">TYPE</span>
+        <button onclick="choreoEditor._setAudioType('${track}',${idx},'specific')"
+          style="flex:1;background:${!isRandom?'#005080':'#222'};border:1px solid ${!isRandom?'#00aaff':'#444'};color:${!isRandom?'#fff':'#888'};border-radius:3px;padding:3px;cursor:pointer;font-size:10px">SPECIFIC</button>
+        <button onclick="choreoEditor._setAudioType('${track}',${idx},'random')"
+          style="flex:1;background:${isRandom?'#005080':'#222'};border:1px solid ${isRandom?'#00aaff':'#444'};color:${isRandom?'#fff':'#888'};border-radius:3px;padding:3px;cursor:pointer;font-size:10px">🎲 RANDOM</button>
+      </div>`;
+
+      if (isRandom) {
+        const curCat = (item.file || '').slice(7).split(':')[0];
+        const cats = Object.fromEntries(Object.keys(_audioIndex).map(c => [c, c.toUpperCase()]));
+        html += selectRow('CATEGORY', 'file',
+          Object.fromEntries(Object.entries(cats).map(([c]) => [`RANDOM:${c}`, c.toUpperCase()])));
+      } else if (_audioScanned.length) {
         html += selectRow('FILE', 'file', Object.fromEntries(_audioScanned.map(s => [s, s])));
       } else {
         html += selectRow('FILE', 'file', _audioIndex, true);
       }
+
       html += numRow('VOLUME', 'volume', { min: 0, max: 100 });
       html += selectRow('CHANNEL', 'ch', { 0: 'CH 0 — Primary (S:)', 1: 'CH 1 — Secondary (S2:)' });
       html += selectRow('PRIORITY', 'priority', {
@@ -4562,27 +4627,38 @@ const choreoEditor = (() => {
       const pool = filtered.length ? filtered : _servoList;
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
 
-      // Mismatch context banner in inspector
+      // Mismatch context banner in inspector — skip for special group keywords
       const sid = item.servo || '';
-      const configLabel  = _servoSettings[sid]?.label;
-      const storedLabel  = item.servo_label;
-      const isUnknown    = sid && !configLabel;
-      const isMismatch   = configLabel && storedLabel && configLabel !== storedLabel;
-      if (isUnknown) {
-        html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
-          ❌ <b>${storedLabel || sid}</b> — servo ID not found in config.<br>
-          Select the correct servo below and save.
+      const isSpecial = _SERVO_SPECIAL.has(sid);
+      if (isSpecial) {
+        html += `<div style="background:#0a1a2a;border:1px solid #0066aa;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#44aaff;line-height:1.5">
+          ℹ️ Group command — controls <b>${sid === 'all' ? 'all servos' : sid === 'all_dome' ? 'all dome servos' : 'all body servos'}</b> at once.
         </div>`;
-      } else if (isMismatch) {
-        html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
-          ⚠️ Stored as <b>${storedLabel}</b><br>
-          Current config: <b>${configLabel}</b><br>
-          Select the correct servo below and save to confirm.
-        </div>`;
+      } else {
+        const configLabel  = _servoSettings[sid]?.label;
+        const storedLabel  = item.servo_label;
+        const isUnknown    = sid && !configLabel;
+        const isMismatch   = configLabel && storedLabel && configLabel !== storedLabel;
+        if (isUnknown) {
+          html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+            ❌ <b>${storedLabel || sid}</b> — servo ID not found in config.<br>
+            Select the correct servo below and save.
+          </div>`;
+        } else if (isMismatch) {
+          html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+            ⚠️ Stored as <b>${storedLabel}</b><br>
+            Current config: <b>${configLabel}</b><br>
+            Select the correct servo below and save to confirm.
+          </div>`;
+        }
       }
 
+      // Servo dropdown — for special keywords, add them as options too
+      const specialOpts = { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+      const allServoOpts = { ...specialOpts, ...servoOpts };
+
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
-      html += selectRow('SERVO', 'servo', servoOpts);
+      html += selectRow('SERVO', 'servo', allServoOpts);
       html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE', degree:'DEGREE' });
       if (item.action === 'degree') {
         html += numRow('TARGET°', 'target', { min: 10, max: 170, step: 1 });
@@ -4613,7 +4689,7 @@ const choreoEditor = (() => {
         const item = (_chor.tracks[track] || [])[idx];
         if (item) item.servo_label = settings.label;
       }
-      _validateServoRefs();
+      _validateServoRefs(); _validateAudioRefs();
       // Re-render ALL servo tracks so badges stay correct everywhere
       _renderTrack('dome_servos');
       _renderTrack('body_servos');
@@ -4903,7 +4979,7 @@ const choreoEditor = (() => {
             _servoSettings = r.panels;
             // If a choreo was loaded before settings resolved, re-validate and re-render badges
             if (_chor) {
-              _validateServoRefs();
+              _validateServoRefs(); _validateAudioRefs();
               _renderTrack('dome_servos');
               _renderTrack('body_servos');
               _renderTrack('arm_servos');
@@ -4983,7 +5059,7 @@ const choreoEditor = (() => {
         }
       }
       // Validate servo refs against current config
-      _validateServoRefs();
+      _validateServoRefs(); _validateAudioRefs();
       // Show VESC config mismatch banner if snapshot in file differs from current machine
       _showVescMismatchBanner(_chor.meta?.config_snapshot);
       _renderAllTracks();
@@ -5055,7 +5131,7 @@ const choreoEditor = (() => {
       const result = await api('/choreo/save', 'POST', { chor: _chor });
       if (result) {
         _dirty = false;
-        _validateServoRefs();   // refresh badges after label refresh
+        _validateServoRefs(); _validateAudioRefs();   // refresh badges after label refresh
         toast(`Saved: ${_chor.meta.name}`, 'ok');
       }
     },
@@ -5150,6 +5226,23 @@ const choreoEditor = (() => {
 
     _deleteSelected() {
       if (_selected) _deleteBlock(_selected.track, _selected.idx);
+    },
+
+    // Switch audio block between specific file and random category
+    _setAudioType(track, idx, type) {
+      const item = (_chor.tracks[track] || [])[idx];
+      if (!item) return;
+      if (type === 'random' && !(item.file || '').toUpperCase().startsWith('RANDOM:')) {
+        const firstCat = Object.keys(_audioIndex)[0] || 'happy';
+        item.file = `RANDOM:${firstCat}`;
+      } else if (type === 'specific' && (item.file || '').toUpperCase().startsWith('RANDOM:')) {
+        item.file = _audioScanned[0] || '';
+      }
+      _dirty = true;
+      _validateAudioRefs();
+      _renderTrack(track);
+      _updatePropsPanel(track, idx);
+      _setInspectorTitle(track, item);
     },
 
     // Called from inline onchange on select elements
