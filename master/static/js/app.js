@@ -3588,6 +3588,7 @@ const choreoEditor = (() => {
   let _lastTelem   = null;
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
   let _audioOverflowIdxs = new Set();  // indices of audio events that will be dropped
+  let _servoIssues  = {};  // { 'dome_servos:0': 'warn'|'error', … }
 
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
@@ -3635,6 +3636,60 @@ const choreoEditor = (() => {
     const m   = Math.floor(s / 60);
     const sec = (s % 60).toFixed(3).padStart(6, '0');
     return `${String(m).padStart(2, '0')}:${sec}`;
+  }
+
+  // Build reverse map: normalised_label → servo_id from _servoSettings
+  // e.g. { 'dome_panel_1': 'Servo_M0', 'front_arm': 'Servo_S3' }
+  function _buildLabelToId() {
+    const map = {};
+    for (const [id, cfg] of Object.entries(_servoSettings)) {
+      if (cfg.label) map[cfg.label.toLowerCase().replace(/[\s\-]+/g, '_')] = id;
+      map[id.toLowerCase()] = id;  // also accept 'servo_m0' → 'Servo_M0'
+    }
+    return map;
+  }
+
+  const _SERVO_SPECIAL = new Set(['all', 'all_dome', 'all_body']);
+  const _SERVO_ID_RE   = /^Servo_[MS]\d+$/;
+
+  // Upgrade label-based servo refs to hardware IDs in-place.
+  // Returns true if any migration was done (caller should mark _dirty).
+  function _migrateLegacyServoRefs() {
+    const labelToId = _buildLabelToId();
+    let migrated = false;
+    for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
+      for (const ev of (_chor.tracks[track] || [])) {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo) || _SERVO_ID_RE.test(ev.servo)) continue;
+        const norm  = ev.servo.toLowerCase().replace(/[\s\-]+/g, '_');
+        const found = labelToId[norm];
+        if (found) {
+          ev.servo_label = _servoSettings[found]?.label || ev.servo;
+          ev.servo       = found;
+          migrated       = true;
+        }
+      }
+    }
+    return migrated;
+  }
+
+  // Build _servoIssues map after migration.
+  // 'warn'  = servo ID valid, but servo_label doesn't match current label (renamed)
+  // 'error' = servo ID not in _servoSettings at all
+  function _validateServoRefs() {
+    _servoIssues = {};
+    if (!_chor) return;
+    for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
+      (_chor.tracks[track] || []).forEach((ev, idx) => {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo)) return;
+        const key     = `${track}:${idx}`;
+        const current = _servoSettings[ev.servo];
+        if (!current) {
+          _servoIssues[key] = 'error';
+        } else if (ev.servo_label && ev.servo_label !== current.label) {
+          _servoIssues[key] = 'warn';
+        }
+      });
+    }
   }
 
   // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
@@ -4774,6 +4829,13 @@ const choreoEditor = (() => {
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
       _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
+      // Migrate legacy label-based servo refs → hardware IDs
+      if (_migrateLegacyServoRefs()) {
+        _dirty = true;
+        toast('Servo refs migrated to hardware IDs — save to confirm', 'info');
+      }
+      // Validate servo refs against current config
+      _validateServoRefs();
       _renderAllTracks();
       _validateAudioOverflow();
       toast(`Loaded: ${name}`, 'ok');
