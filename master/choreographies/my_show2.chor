@@ -80,32 +80,36 @@
         "duration": 1,
         "easing": "",
         "group": "body",
-        "servo": "body_panel_1",
-        "t": 0.30000000000000004
+        "servo": "Servo_S0",
+        "t": 0.30000000000000004,
+        "servo_label": "Body_Panel_1"
       },
       {
         "action": "open",
         "duration": 1,
         "easing": "ease-in-out",
         "group": "body",
-        "servo": "body_panel_2",
+        "servo": "Servo_S1",
         "t": 0.30000000000000004,
-        "target": 50
+        "target": 50,
+        "servo_label": "Body_Panel_2"
       },
       {
         "action": "degree",
         "duration": 1,
         "easing": "ease-in-out",
         "group": "body",
-        "servo": "body_panel_1",
-        "t": 2.1
+        "servo": "Servo_S0",
+        "t": 2.1,
+        "servo_label": "Body_Panel_1"
       },
       {
         "action": "close",
         "duration": 1,
         "group": "body",
-        "servo": "body_panel_2",
-        "t": 4.6000000000000005
+        "servo": "Servo_S1",
+        "t": 4.6000000000000005,
+        "servo_label": "Body_Panel_2"
       }
     ],
     "dome": [
@@ -132,16 +136,18 @@
         "duration": 1,
         "easing": "",
         "group": "dome",
-        "servo": "dome_panel_1",
-        "t": 0.30000000000000004
+        "servo": "Servo_M0",
+        "t": 0.30000000000000004,
+        "servo_label": "Dome_Panel_1"
       },
       {
         "action": "close",
         "duration": 1,
         "easing": "ease-in-out",
         "group": "dome",
-        "servo": "dome_panel_1",
-        "t": 2.1
+        "servo": "Servo_M0",
+        "t": 2.1,
+        "servo_label": "Dome_Panel_1"
       }
     ],
     "lights": [

@@ -81,33 +81,6 @@
         "easing": "ease-in-out"
       }
     ],
-    "servos": [
-      {
-        "t": 3.0,
-        "servo": "Servo_M0",
-        "action": "open",
-        "duration": 0.5
-      },
-      {
-        "t": 6.0,
-        "servo": "all_dome",
-        "action": "open",
-        "duration": 0.3
-      },
-      {
-        "t": 10.0,
-        "servo": "utility_arm",
-        "action": "open",
-        "easing": "ease-out",
-        "duration": 2.0
-      },
-      {
-        "t": 20.0,
-        "servo": "all",
-        "action": "close",
-        "duration": 0.5
-      }
-    ],
     "propulsion": [
       {
         "t": 20.0,
@@ -139,6 +112,39 @@
         "label": "SWITCH TO AUTONOMOUS",
         "type": "mode_switch"
       }
-    ]
+    ],
+    "body_servos": [
+      {
+        "t": 3.0,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 0.5,
+        "group": "body"
+      },
+      {
+        "t": 6.0,
+        "servo": "all_dome",
+        "action": "open",
+        "duration": 0.3,
+        "group": "body"
+      },
+      {
+        "t": 10.0,
+        "servo": "utility_arm",
+        "action": "open",
+        "easing": "ease-out",
+        "duration": 2.0,
+        "group": "body"
+      },
+      {
+        "t": 20.0,
+        "servo": "all",
+        "action": "close",
+        "duration": 0.5,
+        "group": "body"
+      }
+    ],
+    "dome_servos": [],
+    "arm_servos": []
   }
 }
