@@ -178,11 +178,12 @@ class BTControllerDriver:
 
     def get_status(self) -> dict:
         return {
-            'bt_connected':    self._connected,
-            'bt_enabled':      self.is_enabled(),
-            'bt_name':         self._device_name,
-            'bt_battery':      self._battery_pct,
-            'bt_gamepad_type': self._cfg.get('gamepad_type', 'ps'),
+            'bt_connected':         self._connected,
+            'bt_enabled':           self.is_enabled(),
+            'bt_name':              self._device_name,
+            'bt_battery':           self._battery_pct,
+            'bt_gamepad_type':      self._cfg.get('gamepad_type', 'ps'),
+            'bt_inactivity_timeout': int(self._cfg.get('inactivity_timeout', 30)),
         }
 
     # ------------------------------------------------------------------

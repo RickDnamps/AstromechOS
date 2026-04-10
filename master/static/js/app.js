@@ -2812,11 +2812,21 @@ class BTController {
     const data = await api('/bt/status');
     if (!data) return;
     this.updateStatus(data);
-    // type
+    // gamepad type
     const typeEl = el('bt-gamepad-type');
     if (typeEl && data.bt_gamepad_type) {
       for (const o of typeEl.options) if (o.value === data.bt_gamepad_type) { o.selected = true; break; }
       this.onTypeChange(data.bt_gamepad_type);
+    }
+    // inactivity timeout — sync slider + number input + label
+    if (data.bt_inactivity_timeout !== undefined) {
+      const t = data.bt_inactivity_timeout;
+      const slider = el('bt-inactivity-timeout');
+      const num    = el('bt-timeout-num');
+      const lbl    = el('bt-timeout-val');
+      if (slider) slider.value = Math.min(600, t);
+      if (num)    num.value    = t;
+      if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
     }
   }
 
@@ -2834,7 +2844,7 @@ class BTController {
     const cfg = {
       gamepad_type:       el('bt-gamepad-type')?.value          || 'ps',
       deadzone:           (parseInt(el('bt-deadzone')?.value)    || 10) / 100,
-      inactivity_timeout: parseInt(el('bt-inactivity-timeout')?.value) || 30,
+      inactivity_timeout: parseInt(el('bt-timeout-num')?.value || el('bt-inactivity-timeout')?.value) || 30,
       mappings,
     };
     // Aussi sauvegarder localement pour la Gamepad API JS

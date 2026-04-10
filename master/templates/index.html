@@ -1171,8 +1171,13 @@
         </div>
         <div class="speed-wrap" style="flex:1;min-width:140px">
           <label class="ctrl-label">INACTIVITY TIMEOUT <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
-          <input type="range" id="bt-inactivity-timeout" min="0" max="120" value="30"
-                 oninput="el('bt-timeout-val').textContent=this.value+'s'" class="holo-slider">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="bt-inactivity-timeout" min="0" max="600" step="5" value="30"
+                   oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':this.value+'s'" class="holo-slider" style="flex:1">
+            <input type="number" id="bt-timeout-num" min="0" max="3600" value="30" step="5"
+                   oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':v+'s'"
+                   style="width:58px;background:#0a0f1a;border:1px solid #1a3a5c;color:#7eb8d4;padding:3px 5px;font-family:inherit;font-size:11px;text-align:center">
+          </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-active" onclick="btController.saveFullConfig()">SAVE CONFIG</button>
