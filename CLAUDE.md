@@ -222,6 +222,10 @@ SSH     artoo / deetoo
 - `ecodes.KEY.get(code)` retourne un tuple quand plusieurs alias → `isinstance(raw, (list,tuple))`
 - Shield : B=BTN_EAST(305), X=BTN_NORTH(307), Y=BTN_WEST(308), Home=BTN_MODE
 - Config : `bt_config.json` · mappings : `audio`→E, `panel_dome`→W, `panel_body`→N, `estop`→MODE
+- **Keep-alive :** evdev n'envoie `EV_ABS` que sur CHANGEMENT de valeur. Joystick maintenu immobile = aucun event = MotionWatchdog fire à 800ms. Solution : thread `bt-keepalive` renvoie le dernier `(left, right)` toutes les 300ms pendant que `_drive_active=True`.
+- **Panneaux config-aware :** les boutons dome/body utilisent `_read_panels_cfg()` / `_panel_angle()` / `_panel_speed()` de `master.api.servo_bp` pour respecter les angles calibrés.
+- **Batterie + RSSI :** thread `bt-hw-poll` toutes les 30s — batterie via `/sys/class/power_supply/hid-<mac>-battery/capacity` · RSSI via `hcitool rssi <mac>`.
+- **Timeout inactivity :** slider 0-600s + champ numérique 0-3600s dans le Config tab.
 
 **MP3 :** 317 fichiers dans `slave/sounds/` sur Slave Pi uniquement (gitignorés). Restaurer via paramiko+sftp si Slave réinstallé.
 
@@ -236,13 +240,14 @@ SSH     artoo / deetoo
 | 3 | 40 séquences comportementales .scr | ✅ |
 | 4 | API REST + dashboard web + Android | ✅ |
 | 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
-| 5 | Caméra USB + suivi personne | 📋 |
+| 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
+| 5 | Caméra USB stream ✅ · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
 **E-STOP :** toggle unique ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`).
 **Joystick throttle :** 60 req/s max (visuel immédiat, seuls les POST HTTP sont throttlés).
 **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
-**Drive tab** : camera MJPEG proxy last-connect-wins · speed arc HUD · direction arrow HUD.
+**Drive tab** : camera MJPEG proxy last-connect-wins · auto-reconnect après restart service · USB autodetect via sysfs · speed arc HUD · direction arrow HUD.
 **VESC tab** : barres temp/current/duty · Power(W) · symétrie L/R · session peaks · fault log.
 **Header** : `#temp-label` min-width fixe — pas de layout shift sur changement de valeur.
 
@@ -254,6 +259,7 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 > ⚠️ Toujours `rm` avant `cp` — mpremote compare timestamps, pas contenu.
 > VERSION file : `update.sh` écrit toujours le hash git — si périmé → RP2040 affiche `SYNC FAILED`.
 
+**Admin inactivity :** tous les onglets trackés via `_activeTabId` (set dans `onTabSwitch()`) · `pointerdown` au lieu de `click` (Choreo editor bloque `click` via `preventDefault()`).
 **Backlog :** AstroPixels+ 17 séquences manquantes (bloqué hardware) · DiagnosticMonitor Teeces
 
 ---

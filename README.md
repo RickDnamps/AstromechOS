@@ -26,7 +26,7 @@ This system was built from the ground up to make R2-D2 feel **alive** — not ju
 
 If you're building a full-scale R2-D2 and you want a control system actually worthy of the build — **this is it**.
 
-> ⚠️ **Work in Progress** — Software fully functional and battle-tested on bench. Physical assembly in progress (3D parts printing, slip ring ordered). No camera stream yet.
+> ⚠️ **Work in Progress** — Software fully functional and battle-tested on bench. Physical assembly in progress (3D parts printing, slip ring ordered). Camera USB autodetect active; person-tracking AI is the next phase.
 
 ---
 
@@ -49,7 +49,7 @@ The dashboard runs on the Master Pi and is reachable from any phone, tablet, or 
 <td align="center" width="50%">
 
 ### 🕹️ Drive
-Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction HUD · E-Stop toggle · Lock button (LOCK / KIDS / CHILD)
+Dual joystick · WASD + arrow keys · MJPEG camera feed (USB autodetect, auto-reconnect) · Speed arc + direction HUD · E-Stop toggle · Lock button (LOCK / KIDS / CHILD)
 
 ![Drive Interface](Screenshots/Drive.png)
 
@@ -131,7 +131,7 @@ Hardware IDs (Servo_M0/Servo_S0) · Editable labels · Per-panel open/close/spee
 <td align="center" width="50%">
 
 ### 🔧 Config — Bluetooth & Gamepad
-BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout
+BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout (up to 60 min) · Battery % · Signal RSSI
 
 ![Config Bluetooth](Screenshots/Config_Menu_Bluetooth.png)
 
@@ -167,7 +167,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — one-click in SEQUENCES tab |
 | 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
-| 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag |
+| 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag · battery % · RSSI · keep-alive (no VESC cut on hold) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
 | 🔒 **Kids Lock / Child Lock** | Speed cap or full motion block, password-protected |
 | 🛡️ **Triple watchdog** | App 600ms · Drive 800ms · UART 500ms |
@@ -177,6 +177,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
+| 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
 ---
@@ -269,7 +270,13 @@ Compatible with Xbox Series, PS4/PS5, Nintendo Switch Pro, NVIDIA Shield, 8BitDo
 | Home / Options | Emergency stop |
 | R1 (turbo) | Speed boost multiplier |
 
-**Fully configurable from the web UI** — remap any button, adjust deadzone, set inactivity timeout (auto-stop after N seconds idle), all without SSH.
+**Fully configurable from the web UI** — remap any button, adjust deadzone, set inactivity timeout (slider up to 600s + manual entry up to 3600s), all without SSH.
+
+**Battery & signal** — the BT Config panel shows the gamepad battery percentage (read from sysfs) and Bluetooth RSSI signal strength with live color coding (green/orange/red), updated every 30 seconds.
+
+**Keep-alive** — a background thread re-sends the last drive command every 300ms while the joystick is held. This prevents the MotionWatchdog from cutting propulsion when the stick is held steady (evdev only fires on axis *change*, not continuously).
+
+**Panel config-aware** — opening dome or body panels from the gamepad uses the exact open/close angles and speed from the Servo calibration config — same as the dashboard buttons.
 
 ---
 

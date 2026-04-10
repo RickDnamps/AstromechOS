@@ -17,6 +17,12 @@
 | App Android | offline banner, auto-discovery IP |
 | Manette BT evdev (Pi-native) | Shield/Xbox/PS, mapping configurable |
 | Jumelage BT depuis l'UI | scan / pair / unpair sans SSH |
+| BT battery % + RSSI | affiché en live dans Config tab (sysfs + hcitool, polling 30s) |
+| BT keep-alive joystick | thread 300ms — corrige VESC cut quand joystick maintenu immobile |
+| BT panneaux config-aware | angles/vitesse depuis servo_angles.json, pas de valeurs hardcodées |
+| BT inactivity timeout étendu | slider 600s + saisie manuelle jusqu'à 3600s |
+| Caméra USB autodetect | sysfs scan — pas de `/dev/videoN` hardcodé · auto-reconnect stream |
+| Admin inactivity tous onglets | VESC / Choreo / Config trackés via pointerdown + _activeTabId |
 | Déploiement auto (bouton dôme) | git pull + rsync + reboot en un clic |
 | E-STOP + RESET sans restart | PCA9685 SLEEP instantané |
 
@@ -113,7 +119,7 @@
 | Feature | Hardware requis | Complexité |
 |---|---|---|
 | 🎙️ **Micro dans le dôme** — contexte émotionnel, commandes vocales, réponse ambiance | Dongle USB audio ~8$ ou jack TRRS Master | ⭐⭐⭐ |
-| 📷 **Caméra USB** — suivi personne, streaming live | Caméra USB ~25$ | ⭐⭐⭐⭐ |
+| 📷 **Caméra USB** — streaming live ✅ · suivi personne 📋 | Caméra USB ~25$ | ⭐⭐⭐⭐ |
 | 👁️ **Reconnaissance faciale** — saluer par prénom, mémoire visiteurs | Caméra + modèle ML | ⭐⭐⭐⭐⭐ |
 | 🏷️ **NFC/RFID** — tapoter un badge = déclencher une séquence | Module NFC ~8$ | ⭐⭐ |
 | 👥 **Multi-manette** — pilote + opérateur (sons/séquences) | 2e gamepad BT | ⭐⭐ |
@@ -134,4 +140,4 @@ Le Slave Pi (corps) reste concentré sur le hardware physique : propulsion, serv
 
 ---
 
-*Dernière mise à jour : 2026-03-22*
+*Dernière mise à jour : 2026-04-10*
