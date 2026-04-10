@@ -1,6 +1,6 @@
 # R2-D2 — Complete Installation Guide
 
-> 🇫🇷 [Lire en français](HOWTO.md)
+> This is the **primary and most up-to-date guide**. 🇫🇷 [Lire en français](HOWTO.md) *(may lag behind)*
 
 | Phase | Content | Status |
 |-------|---------|--------|
@@ -628,37 +628,189 @@ R2-Master  GND   (pin 6)       ───  GND   (pin 6)        R2-Slave
 
 ---
 
-## STEP 8 — VESC Wiring (Phase 2)
+## STEP 8 — VESC Wiring & Configuration (Phase 2)
 
-### 8.1 — USB connection
+> **Hardware used in this build:** 2× Flipsky FSESC Mini 6.7 PRO (HW60, fw v6.05)
+> **Motors:** 2× phub-29a hub motors — 250W · 24V · 105mm · Hall sensors — one per drive wheel
 
-Both VESCs connect directly to R2-Slave (Pi 4B) via USB:
+### 8.1 — Physical connections
+
+Only **VESC1 uses USB**. VESC2 is connected via **CAN bus** to VESC1 — it never needs its own USB cable after initial configuration.
 
 ```
-R2-Slave  USB  ──→  Left VESC   (/dev/ttyACM0)
-R2-Slave  USB  ──→  Right VESC  (/dev/ttyACM1)
+R2-Slave  USB-A  ──→  VESC1 (Left wheel)   → /dev/ttyACM1
+                                                    │
+                                            CAN H/L ┤
+                                                    │
+                              VESC2 (Right wheel) ──┘  (CAN bus, ID=2)
 ```
 
-Verify ports after plugging in:
+> ⚠️ `/dev/ttyACM0` is **reserved for the RP2040 LCD display** — do NOT connect VESC there.
+> VESC1 must land on `/dev/ttyACM1`. If it shows up on another port, replug the RP2040 first,
+> then plug VESC1 — the OS assigns ttyACM in plug-in order.
+
+**CAN bus wiring between the two VESCs:**
+```
+VESC1 CAN-H  ──────────────  VESC2 CAN-H
+VESC1 CAN-L  ──────────────  VESC2 CAN-L
+(120Ω termination resistor on each end — most VESC Mini have it built-in)
+```
+
+**Motor power wiring:**
+```
+6S LiPo (+) ──→  VESC1 B+  and  VESC2 B+   (parallel or daisy-chain)
+6S LiPo (-) ──→  VESC1 B-  and  VESC2 B-
+VESC1 Motor A/B/C  ──→  Left wheel phase wires
+VESC2 Motor A/B/C  ──→  Right wheel phase wires
+VESC1/2 Hall 5V/GND/H1/H2/H3  ──→  Hub motor Hall connector (5-wire JST)
+```
+
+Verify USB port after plugging in:
 ```bash
 ls /dev/ttyACM*
-# Should show: /dev/ttyACM0  /dev/ttyACM1
+# ttyACM0 = RP2040 (LCD display)
+# ttyACM1 = VESC1 (left wheel)
 ```
 
-### 8.2 — VESC configuration (via VESC Tool)
-
-Configure each VESC via VESC Tool (from a PC):
-- **Motor Type**: FOC or BLDC depending on your motor
-- **Current Limits**: match your motor spec (e.g. 30A max)
-- **Direction**: reverse the right VESC if wheels spin opposite directions
-- **UART Baud**: 115200
-
-### 8.3 — USB permissions on Slave
+### 8.2 — USB permissions on Slave
 
 ```bash
 sudo usermod -a -G dialout artoo
-# SSH disconnect/reconnect required to take effect
+# Log out and back in (or reboot) to take effect
 ```
+
+---
+
+### 8.3 — VESC Tool: Configure VESC1 (USB, ID=1)
+
+> Download VESC Tool (free): https://vesc-project.com/vesc_tool
+> Connect your PC directly to VESC1 via USB for initial configuration.
+> Repeat step 8.4 to configure VESC2 via CAN from the same connection.
+
+#### Motor Detection
+
+1. Open VESC Tool → **Connect** to VESC1 (Auto-Connect or select the USB port)
+2. Go to **Motor Settings → FOC** (or BLDC if FOC detection fails)
+3. Click **Setup Wizard** → **Motor Setup**
+4. Select: **Sensored BLDC** (the phub-29a has Hall sensors)
+5. Click **Run Detection** — the motor will briefly spin and beep
+6. VESC Tool will detect: pole pairs, resistance, inductance, Hall table
+7. **Write configuration** when detection succeeds
+
+> **Expected results for phub-29a 250W 24V:**
+> - Pole pairs: ~15 (verify with detection — do NOT guess)
+> - Resistance: ~0.1–0.3Ω
+> - Hall sensors: detected, all 6 combinations valid
+
+#### Current Limits (Motor Settings → General)
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Motor Current Max | **25 A** | 250W ÷ 24V = 10.4A rated; 25A safe burst |
+| Motor Current Min (braking) | **-25 A** | Electronic brake strength |
+| Absolute Max Current | **60 A** | Hardware protection — do not raise above FSESC 6.7 limit |
+| Battery Current Max | **15 A** | Conservative for 6S pack |
+| Battery Current Max Regen | **-8 A** | Regenerative braking limit |
+
+#### Voltage Limits (Motor Settings → General)
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Battery Voltage Cutoff Start | **21.0 V** | 3.5V × 6 cells — motors begin to slow |
+| Battery Voltage Cutoff End | **18.0 V** | 3.0V × 6 cells — hard stop, protects cells |
+| Battery Voltage Max | **25.5 V** | 4.25V × 6 cells — full charge ceiling |
+
+> These match the battery gauge thresholds shown in the web dashboard VESC tab.
+> Configure your cell count in the Config tab of the dashboard after setup.
+
+#### Temperature Protection
+
+| Parameter | Value |
+|-----------|-------|
+| FET Temp Warning | 75°C |
+| FET Temp Fault (cutoff) | 85°C |
+
+> The phub-29a has no motor temperature sensor — only FET temp is monitored.
+
+#### CAN & ID Settings (App Settings → CAN)
+
+| Parameter | VESC1 | VESC2 |
+|-----------|-------|-------|
+| CAN Baud Rate | 500 kbps | 500 kbps |
+| VESC ID | **1** | **2** |
+| Send Status over CAN | Enabled | Enabled |
+| **Multiple ESC over CAN** | **⚠️ DISABLED** | **⚠️ DISABLED** |
+
+> **Critical:** "Multiple ESC over CAN" MUST be **DISABLED** on both VESCs.
+> If enabled, a single drive command goes to both VESCs simultaneously — turning becomes impossible
+> because left and right receive the same value instead of independent commands.
+> The R2-D2 software sends separate commands to each VESC explicitly.
+
+#### UART Settings (App Settings → UART)
+
+| Parameter | Value |
+|-----------|-------|
+| UART Baud Rate | **115200** |
+| Enable UART | Yes |
+
+---
+
+### 8.4 — Configure VESC2 via CAN (ID=2)
+
+From VESC Tool, still connected to VESC1:
+
+1. Click the **CAN Forward** button → enter VESC ID **2**
+2. VESC Tool is now talking to VESC2 through VESC1's CAN bus
+3. Apply the **same motor detection** (Run Detection with Hall sensors)
+4. Apply the **same current/voltage/temperature limits** as VESC1
+5. Set **VESC ID = 2** in App Settings → CAN
+6. **Disable "Multiple ESC over CAN"** — same as VESC1
+7. Write configuration
+
+> VESC2 will likely need **direction reversed** — one wheel faces opposite direction.
+> Do NOT change motor phase wires. Use the R2-D2 dashboard instead:
+> Config tab → VESC section → toggle the **Invert** switch for the correct side.
+> This is saved persistently to `local.cfg` and survives reboots.
+
+---
+
+### 8.5 — Verify VESC communication from R2-Slave
+
+```bash
+# Check VESC1 is on ttyACM1
+ls -la /dev/ttyACM*
+
+# Scan CAN bus to confirm VESC2 is reachable (via web API after services start)
+curl http://192.168.4.1:5000/vesc/can/scan
+# Expected: {"found": [2], "timeout": false}
+
+# Live telemetry (both VESCs)
+curl http://192.168.4.1:5000/vesc/telemetry
+# Expected: {"connected": true, "L": {...}, "R": {...}}
+```
+
+---
+
+### 8.6 — Speed & Power Tuning
+
+The R2-D2 control system has a software power scale (multiplicative, not a clamp):
+
+```
+effective_speed = joystick_input × power_scale × HARDWARE_SPEED_LIMIT(0.85)
+```
+
+After assembly, start with **power_scale = 0.3** and increase gradually:
+
+1. Open dashboard → **Config tab → VESC section**
+2. Set Power Scale to 0.3
+3. Test drive — verify both wheels spin correctly and in the right direction
+4. Increase to 0.5, 0.7, 1.0 once direction/behavior is confirmed
+
+> **phub-29a note:** at 6S (24V), no-load speed is ~350 RPM.
+> Tire circumference = π × 105mm ≈ 330mm → ~7 km/h max at no-load.
+> Under load (robot weight), real max speed is lower — appropriate for indoor/convention use.
+> The `MAX_ERPM` setting (default 50000 in the system) is well above physical motor limits
+> and acts as a soft ceiling — actual speed is limited by motor RPM, not ERPM math.
 
 ---
 

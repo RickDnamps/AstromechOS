@@ -1,6 +1,6 @@
 # R2-D2 — Guide d'installation complet
 
-> 🇬🇧 [Read in English](HOWTO_EN.md)
+> 🇬🇧 **[Read in English →](HOWTO_EN.md)** *(recommended — more up to date)*
 
 | Phase | Contenu | État |
 |-------|---------|------|
