@@ -3708,11 +3708,15 @@ const choreoEditor = (() => {
   function _refreshServoLabels() {
     if (!_chor) return;
     for (const track of ['dome_servos', 'body_servos', 'arm_servos']) {
-      for (const ev of (_chor.tracks[track] || [])) {
-        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo)) continue;
+      (_chor.tracks[track] || []).forEach((ev, idx) => {
+        if (!ev.servo || _SERVO_SPECIAL.has(ev.servo)) return;
+        // Only refresh label for servos with no issue — servos still flagged ⚠️/❌
+        // keep their stored label so the user knows which ones still need fixing.
+        const issueKey = `${track}:${idx}`;
+        if (_servoIssues[issueKey]) return;
         const current = _servoSettings[ev.servo];
         if (current?.label) ev.servo_label = current.label;
-      }
+      });
     }
   }
 
