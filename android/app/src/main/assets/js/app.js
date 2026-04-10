@@ -3144,12 +3144,12 @@ class StatusPoller {
       label   = 'UART';
       tooltip = 'Serial port not open';
     } else if (health == null) {
-      // Port ouvert mais Slave pas encore pollé / injoignable
-      cls     = masterCrcErrors > 0 ? 'status-pill warn' : 'status-pill ok';
+      // Port ouvert mais Slave injoignable (ou pas encore pollé au démarrage)
+      cls     = 'status-pill warn';
       label   = masterCrcErrors > 0 ? 'UART ERR' : 'UART';
       tooltip = masterCrcErrors > 0
         ? `Slave unreachable | Master invalid CRC: ${masterCrcErrors}`
-        : 'Slave not yet polled';
+        : 'Slave unreachable';
     } else {
       // Port ouvert + données qualité disponibles — 3 niveaux
       const pct = health.health_pct;
