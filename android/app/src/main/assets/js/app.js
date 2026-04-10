@@ -118,6 +118,8 @@ class LockManager {
     const v = el('kids-speed-val');
     if (v) v.textContent = this._kidsSpeed + '%';
     document.body.dataset.lockMode = '0';
+    const dlabel = el('drive-lock-label');
+    if (dlabel) dlabel.textContent = 'LOCK';
   }
 
   setKidsSpeed(val) {
@@ -258,10 +260,11 @@ const lockMgr = new LockManager();
 
 class AdminGuard {
   constructor() {
-    this._unlocked  = false;
-    this._timer     = null;
-    this._TIMEOUT   = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED = new Set(['systems', 'vesc', 'config', 'choreo']);
+    this._unlocked     = false;
+    this._timer        = null;
+    this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
+    this._PROTECTED    = new Set(['systems', 'vesc', 'config', 'choreo']);
+    this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
   }
@@ -304,10 +307,12 @@ class AdminGuard {
     document.body.classList.add('admin-unlocked');
     el('admin-modal').classList.add('hidden');
     toast('Admin access granted — expires in 5 min', 'ok');
-    // Écouter l'activité pour reset le timer quand sur un onglet admin
-    document.addEventListener('mousemove', this._boundActivity, { passive: true });
-    document.addEventListener('click',     this._boundActivity, { passive: true });
-    document.addEventListener('keydown',   this._boundActivity, { passive: true });
+    // Track activity to reset the timer while on a protected tab.
+    // pointerdown is used instead of click: mousedown.preventDefault() in the
+    // Choreo editor suppresses click events, but never suppresses pointerdown.
+    document.addEventListener('mousemove',   this._boundActivity, { passive: true });
+    document.addEventListener('pointerdown', this._boundActivity, { passive: true });
+    document.addEventListener('keydown',     this._boundActivity, { passive: true });
     this._startTimer();
   }
 
@@ -321,28 +326,26 @@ class AdminGuard {
     this._unlocked = false;
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
-    document.removeEventListener('mousemove', this._boundActivity);
-    document.removeEventListener('click',     this._boundActivity);
-    document.removeEventListener('keydown',   this._boundActivity);
+    document.removeEventListener('mousemove',   this._boundActivity);
+    document.removeEventListener('pointerdown', this._boundActivity);
+    document.removeEventListener('keydown',     this._boundActivity);
     // If on a protected tab → return to DRIVE
-    const active = document.querySelector('.tab.active');
-    if (active && this._PROTECTED.has(active.dataset.tab)) {
+    if (this._PROTECTED.has(this._activeTabId)) {
       switchTab('drive');
     }
     toast('Admin access expired', 'info');
   }
 
   onTabSwitch(tabId) {
+    this._activeTabId = tabId;   // always track, even when locked
     if (!this._unlocked) return;
-    // Toujours (re)lancer le timer au changement d'onglet
     this._startTimer();
   }
 
   _onActivity() {
     if (!this._unlocked) return;
-    // Reset le timer uniquement si on est sur un onglet admin
-    const active = document.querySelector('.tab.active');
-    if (active && this._PROTECTED.has(active.dataset.tab)) {
+    // Reset timer only when on a protected tab — use tracked ID, not DOM query
+    if (this._PROTECTED.has(this._activeTabId)) {
       this._startTimer();
     }
   }
@@ -354,6 +357,17 @@ class AdminGuard {
 }
 
 const adminGuard = new AdminGuard();
+
+// VESC tab fast-poll — active only while VESC tab is open
+let _vescTabTimer = null;
+function _startVescTabPoll() {
+  if (_vescTabTimer) return;
+  vescPanel.refresh();
+  _vescTabTimer = setInterval(() => vescPanel.refresh(), 500);
+}
+function _stopVescTabPoll() {
+  if (_vescTabTimer) { clearInterval(_vescTabTimer); _vescTabTimer = null; }
+}
 
 function switchTab(tabId) {
   // Onglet protégé sans accès → ouvrir modal
@@ -376,7 +390,10 @@ function switchTab(tabId) {
   if (tabId === 'lights') loadLightSequences();
   if (tabId === 'audio') loadAudioCategories();
 
-  if (tabId === 'vesc') vescPanel.refresh();
+  // VESC tab: start fast poll on entry, stop on exit
+  if (tabId === 'vesc') { _startVescTabPoll(); }
+  else                  { _stopVescTabPoll(); }
+
   if (tabId === 'choreo') choreoEditor.init();
 }
 
@@ -1179,6 +1196,7 @@ function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on })
 let _camToken     = null;
 let _camEnabled   = true;
 let _camPollTimer = null;
+let _camErrored   = false;   // true when img.onerror fires (mjpg_streamer down)
 
 function _camBase() {
   return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
@@ -1190,15 +1208,19 @@ async function _takeCameraStream() {
   const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
     .then(r => r.json()).catch(() => null);
   if (!r) return;
-  _camToken = r.token;
+  _camToken   = r.token;
+  _camErrored = false;
 
   const img   = el('cam-stream');
   const bg    = el('cam-bg');
   const taken = el('cam-taken');
   if (!img) return;
 
+  // Detect mjpg_streamer going away (service restart / camera unplug)
+  img.onerror = () => { _camErrored = true; };
+
   if (taken) taken.style.display = 'none';
-  img.src = _camBase() + `/camera/stream?t=${_camToken}`;
+  img.src = _camBase() + `/camera/stream?t=${_camToken}&_=${Date.now()}`;
   img.style.display = 'block';
   if (bg) bg.style.display = 'none';
 
@@ -1212,16 +1234,31 @@ function _startCamPoll() {
     const r = await fetch(_camBase() + '/camera/status')
       .then(r => r.json()).catch(() => null);
     if (!r) return;
+
     if (r.active_token !== _camToken) {
-      // Another client claimed the slot
-      _camToken = null;
-      const img   = el('cam-stream');
-      const bg    = el('cam-bg');
-      const taken = el('cam-taken');
-      if (img)   { img.src = ''; img.style.display = 'none'; }
-      if (bg)    bg.style.display = 'block';
-      if (taken) taken.style.display = 'flex';
+      if (r.active_token < _camToken) {
+        // Flask restarted (token reset to 0) — auto-reclaim silently
+        _camToken = null;
+        clearInterval(_camPollTimer);
+        setTimeout(() => _takeCameraStream(), 500);
+      } else {
+        // Another client claimed the slot — show overlay
+        _camToken = null;
+        const img   = el('cam-stream');
+        const bg    = el('cam-bg');
+        const taken = el('cam-taken');
+        if (img)   { img.src = ''; img.style.display = 'none'; }
+        if (bg)    bg.style.display = 'block';
+        if (taken) taken.style.display = 'flex';
+        clearInterval(_camPollTimer);
+      }
+    } else if (_camErrored) {
+      // Same Flask token but stream errored — mjpg_streamer restarted (e.g. resolution change)
+      // Try to reclaim; if mjpg_streamer is back up Flask will serve the stream again
+      _camErrored = false;
+      _camToken   = null;
       clearInterval(_camPollTimer);
+      setTimeout(() => _takeCameraStream(), 1000);
     }
   }, 3000);
 }
@@ -1388,7 +1425,8 @@ const KBD_IDS = {
 
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.code === 'Space') { e.preventDefault(); emergencyStop(); return; }
+  // VESC test mode captures keys when active
+  if (vescTest.onKey(e.code, true)) return;
   if (_keys[e.code]) return;
   _keys[e.code] = true;
   _updateKbdUI();
@@ -1396,6 +1434,7 @@ document.addEventListener('keydown', e => {
 });
 
 document.addEventListener('keyup', e => {
+  if (vescTest.onKey(e.code, false)) return;
   delete _keys[e.code];
   _updateKbdUI();
   _handleKeys();
@@ -1939,6 +1978,14 @@ function audioRandom() {
 class VescPanel {
   constructor() {
     this._scaleDebounce = null;
+    this._lastFault = { L: 0, R: 0 };  // track fault changes for log
+    // Session peaks
+    this._peaks = { tempL: null, tempR: null, currL: null, currR: null, duty: null, faults: 0 };
+    // Invert state
+    this._invertL = false;
+    this._invertR = false;
+    // Fault log entries [{time, side, name}]
+    this._faultLog = [];
   }
 
   // Called by StatusPoller on every refresh
@@ -1949,6 +1996,27 @@ class VescPanel {
     this._updateCard('L', d.L);
     this._updateCard('R', d.R);
     this._updateScale(d.power_scale);
+    this._updateSymmetry(d.L, d.R);
+    this._updateLastUpdate();
+    vescTest.updateTelem(d.L, d.R);
+  }
+
+  async loadConfig() {
+    const d = await api('/vesc/config');
+    if (!d) return;
+    this._updateScale(d.power_scale);
+    this._invertL = !!d.invert_L;
+    this._invertR = !!d.invert_R;
+    this._applyInvertUI('L', this._invertL);
+    this._applyInvertUI('R', this._invertR);
+    // Sync drive mode button
+    _vescDutyMode = !!d.duty_mode;
+    const btn  = el('vesc-mode-btn');
+    const hint = el('vesc-mode-hint');
+    if (btn)  btn.textContent = _vescDutyMode ? 'DUTY' : 'RPM';
+    if (hint) hint.textContent = _vescDutyMode
+      ? 'Direct duty — duty reacts immediately (bench testing without motor)'
+      : 'Closed-loop speed — switch to DUTY for bench testing without motor';
   }
 
   _updateStatus(d) {
@@ -1962,7 +2030,6 @@ class VescPanel {
       pill.classList.remove('online');
       label.textContent = 'OFFLINE';
     }
-    // Battery voltage — use whichever side is available
     const src = d.L || d.R;
     const vEl  = el('vesc-voltage');
     const fill = el('vesc-battery-fill');
@@ -1972,57 +2039,162 @@ class VescPanel {
       vEl.textContent = v.toFixed(1);
       vEl.className = 'vesc-battery-value' + (col === '#ff2244' ? ' danger' : col === '#ff8800' ? ' warn' : '');
       const pct = batteryGauge.voltToPct(v);
-      if (fill) {
-        fill.style.width = pct + '%';
-        fill.style.background = col;
-      }
-    } else if (vEl) {
-      vEl.textContent = '--.-';
-    }
+      if (fill) { fill.style.width = pct + '%'; fill.style.background = col; }
+    } else if (vEl) { vEl.textContent = '--.-'; }
   }
 
   _updateCard(side, data) {
-    const s = side.toLowerCase();
+    const s     = side.toLowerCase();
     const fault = el(`v${s}-fault`);
     const card  = el(`vesc-card-${side}`);
     if (!data) {
       if (fault) { fault.textContent = 'OFFLINE'; fault.className = 'vesc-fault'; }
       if (card)  card.classList.remove('fault-active');
-      ['temp','curr','rpm','duty'].forEach(k => {
-        const e = el(`v${s}-${k}`);
-        if (e) e.textContent = '--';
+      ['temp','curr','rpm','duty','power'].forEach(k => {
+        const e = el(`v${s}-${k}`); if (e) e.textContent = '--';
+      });
+      ['temp-bar','curr-bar','duty-bar'].forEach(k => {
+        const b = el(`v${s}-${k}`); if (b) { b.style.width = '0%'; b.className = 'vesc-brow-fill'; }
       });
       return;
     }
-    // Metrics
-    this._setMetric(`v${s}-temp`, data.temp.toFixed(1), data.temp > 80 ? 'danger' : data.temp > 60 ? 'hot' : '');
-    this._setMetric(`v${s}-curr`, data.current.toFixed(1), '');
-    this._setMetric(`v${s}-rpm`,  Math.abs(data.rpm), '');
-    this._setMetric(`v${s}-duty`, Math.round(Math.abs(data.duty) * 100), '');
+
+    const duty    = Math.abs(data.duty);
+    const dutyPct = Math.round(duty * 100);
+    const currAbs = Math.abs(data.current);
+    const power   = Math.round(data.v_in * currAbs);
+
+    // Temp bar — thresholds: warn 60°C, danger 80°C
+    this._setBar(`v${s}-temp-bar`, data.temp, 100, data.temp >= 80 ? 'danger' : data.temp >= 60 ? 'warn' : '');
+    this._setBar(`v${s}-curr-bar`, currAbs,   30,  currAbs >= 25  ? 'danger' : currAbs >= 20  ? 'warn' : '');
+    this._setBar(`v${s}-duty-bar`, dutyPct,   100, dutyPct >= 90  ? 'danger' : dutyPct >= 75  ? 'warn' : '');
+
+    // Numeric values
+    const tempCls = data.temp >= 80 ? 'danger' : data.temp >= 60 ? 'warn' : '';
+    const currCls = currAbs  >= 25  ? 'danger' : currAbs  >= 20  ? 'warn' : '';
+    const dutyCls = dutyPct  >= 90  ? 'danger' : dutyPct  >= 75  ? 'warn' : '';
+    this._setVal(`v${s}-temp`,  data.temp.toFixed(1), tempCls);
+    this._setVal(`v${s}-curr`,  currAbs.toFixed(1),   currCls);
+    this._setVal(`v${s}-duty`,  dutyPct,               dutyCls);
+    this._setVal(`v${s}-rpm`,   Math.abs(data.rpm),    '');
+    this._setVal(`v${s}-power`, power,                 '');
+
     // Fault
+    const isFault = data.fault !== 0;
     if (fault) {
-      const isFault = data.fault !== 0;
       fault.textContent = data.fault_str || 'NONE';
-      fault.className = 'vesc-fault ' + (isFault ? 'error' : 'ok');
-      if (card) card.classList.toggle('fault-active', isFault);
+      fault.className   = 'vesc-fault ' + (isFault ? 'error' : 'ok');
     }
+    if (card) card.classList.toggle('fault-active', isFault);
+
+    // Log new faults
+    if (isFault && data.fault !== this._lastFault[side]) {
+      this._logFault(side, data.fault_str || `FAULT_${data.fault}`);
+    }
+    this._lastFault[side] = data.fault;
+
+    // Session peaks
+    const p = this._peaks;
+    if (side === 'L') {
+      if (p.tempL === null || data.temp > p.tempL) { p.tempL = data.temp; this._setPeak('peak-temp-l', data.temp.toFixed(1)); }
+      if (p.currL === null || currAbs > p.currL)   { p.currL = currAbs;   this._setPeak('peak-curr-l', currAbs.toFixed(1)); }
+    } else {
+      if (p.tempR === null || data.temp > p.tempR) { p.tempR = data.temp; this._setPeak('peak-temp-r', data.temp.toFixed(1)); }
+      if (p.currR === null || currAbs > p.currR)   { p.currR = currAbs;   this._setPeak('peak-curr-r', currAbs.toFixed(1)); }
+    }
+    if (p.duty === null || dutyPct > p.duty) { p.duty = dutyPct; this._setPeak('peak-duty', dutyPct); }
   }
 
-  _setMetric(id, val, cls) {
-    const e = el(id);
-    if (!e) return;
+  _setBar(id, val, max, cls) {
+    const b = el(id); if (!b) return;
+    b.style.width = Math.min(100, Math.max(0, val / max * 100)).toFixed(1) + '%';
+    b.className   = 'vesc-brow-fill' + (cls ? ' ' + cls : '');
+  }
+
+  _setVal(id, val, cls) {
+    const e = el(id); if (!e) return;
     e.textContent = val;
-    e.className = 'vesc-metric-val' + (cls ? ' ' + cls : '');
+    e.className   = cls ? `vesc-brow-val ${cls}` : '';
+  }
+
+  _setPeak(id, val) {
+    const e = el(id); if (e) e.textContent = val;
   }
 
   _updateScale(scale) {
     const slider = el('vesc-scale-slider');
     const label  = el('vesc-scale-label');
     const info   = el('vesc-scale-pct');
-    const pct = Math.round(scale * 100);
+    const pct    = Math.round(scale * 100);
     if (slider && slider !== document.activeElement) slider.value = pct;
     if (label) label.textContent = pct + '%';
     if (info)  info.textContent  = pct;
+  }
+
+  _updateSymmetry(dL, dR) {
+    const symEl = el('vesc-symmetry');
+    if (!dL || !dR) {
+      ['sym-rpm','sym-curr','sym-status'].forEach(id => { const e = el(id); if (e) e.textContent = '—'; });
+      if (symEl) { el('sym-status').className = 'vesc-sym-status'; }
+      return;
+    }
+    const rpmDelta  = Math.abs(Math.abs(dL.rpm) - Math.abs(dR.rpm));
+    const currDelta = Math.abs(Math.abs(dL.current) - Math.abs(dR.current));
+    const isMoving  = Math.abs(dL.rpm) > 50 || Math.abs(dR.rpm) > 50;
+
+    const rpmEl  = el('sym-rpm');  if (rpmEl)  rpmEl.textContent  = rpmDelta > 0 ? rpmDelta + ' rpm' : '—';
+    const currEl = el('sym-curr'); if (currEl) currEl.textContent = currDelta.toFixed(1) + ' A';
+
+    const statusEl = el('sym-status');
+    if (statusEl) {
+      if (!isMoving) {
+        statusEl.textContent = 'IDLE'; statusEl.className = 'vesc-sym-status';
+      } else if (rpmDelta > 500 || currDelta > 5) {
+        statusEl.textContent = 'ASYMMETRIC'; statusEl.className = 'vesc-sym-status warn';
+      } else {
+        statusEl.textContent = 'BALANCED'; statusEl.className = 'vesc-sym-status ok';
+      }
+    }
+  }
+
+  _updateLastUpdate() {
+    const e = el('vesc-last-update');
+    if (e) {
+      const now = new Date();
+      e.textContent = now.toLocaleTimeString('en-CA', { hour12: false });
+    }
+  }
+
+  _logFault(side, name) {
+    const now  = new Date();
+    const time = now.toLocaleTimeString('en-CA', { hour12: false });
+    this._faultLog.unshift({ time, side, name });
+    if (this._faultLog.length > 20) this._faultLog.pop();
+    this._peaks.faults++;
+    const countEl = el('peak-faults'); if (countEl) countEl.textContent = this._peaks.faults;
+    this._renderFaultLog();
+  }
+
+  _renderFaultLog() {
+    const container = el('vesc-fault-log'); if (!container) return;
+    if (this._faultLog.length === 0) {
+      container.innerHTML = '<div class="vesc-faultlog-empty">No faults this session.</div>';
+      return;
+    }
+    container.innerHTML = this._faultLog.map(e =>
+      `<div class="vesc-fault-entry">` +
+      `<span class="vesc-fault-entry-time">${e.time}</span>` +
+      `<span class="vesc-fault-entry-side">${e.side}</span>` +
+      `<span class="vesc-fault-entry-name">${e.name}</span>` +
+      `</div>`
+    ).join('');
+  }
+
+  _applyInvertUI(side, state) {
+    const btn = el(`vesc-inv-${side}`); if (!btn) return;
+    const label = side === 'L' ? '⟲ LEFT' : 'RIGHT ⟳';
+    btn.textContent = `${label}: ${state ? 'INVERTED' : 'NORMAL'}`;
+    btn.classList.toggle('inverted', state);
   }
 
   initSlider() {
@@ -2046,20 +2218,154 @@ class VescPanel {
 
 const vescPanel = new VescPanel();
 
-function vescInvert(side) {
-  if (!confirm(`Invert ${side === 'L' ? 'LEFT' : 'RIGHT'} motor direction?`)) return;
-  api('/vesc/invert', 'POST', { side }).then(d => {
-    if (d) toast(`Motor ${side} direction inverted`, 'ok');
+function vescToggleInvert(side) {
+  const newState = side === 'L' ? !vescPanel._invertL : !vescPanel._invertR;
+  if (side === 'L') vescPanel._invertL = newState;
+  else              vescPanel._invertR = newState;
+  vescPanel._applyInvertUI(side, newState);
+  api('/vesc/invert', 'POST', { side, state: newState }).then(d => {
+    if (d) toast(`Motor ${side}: ${newState ? 'INVERTED' : 'NORMAL'}`, 'ok');
   });
 }
 
-function vescFocDetect(side) {
-  if (!confirm(
-    `⚡ FOC AUTODETECT — ${side === 'L' ? 'LEFT' : 'RIGHT'} motor\n\n` +
-    `Motor must be FREE TO SPIN.\nDo NOT run this while R2-D2 is on the ground.\n\nContinue?`
-  )) return;
-  // FOC detect is done via VESC Tool directly — this just shows the reminder
-  toast(`FOC Detect: connect via VESC Tool on /dev/ttyACM${side === 'L' ? '0' : '1'}`, 'info');
+function vescResetPeaks() {
+  vescPanel._peaks = { tempL: null, tempR: null, currL: null, currR: null, duty: null, faults: 0 };
+  ['peak-temp-l','peak-temp-r','peak-curr-l','peak-curr-r','peak-duty'].forEach(id => {
+    const e = el(id); if (e) e.textContent = '—';
+  });
+  const fc = el('peak-faults'); if (fc) fc.textContent = '0';
+}
+
+function vescClearLog() {
+  vescPanel._faultLog = [];
+  vescPanel._renderFaultLog();
+}
+
+// ================================================================
+// VESC Drive Test Mode
+// ================================================================
+
+const vescTest = {
+  _active:  false,
+  _keys:    {},          // currently held keys
+  _timer:   null,        // command loop interval (10 Hz)
+  _pollTimer: null,      // fast telemetry poll (4 Hz — matches VESC telem rate)
+  _SPEED:   0.4,         // test speed (40% — safe for bench)
+
+  toggle() {
+    this._active = !this._active;
+    const btn  = el('vesc-test-toggle');
+    const body = el('vesc-test-body');
+    const card = el('vesc-test-card');
+    if (btn)  { btn.textContent = this._active ? 'DISABLE' : 'ENABLE'; btn.classList.toggle('active', this._active); }
+    if (body) body.style.display = this._active ? '' : 'none';
+    if (card) card.classList.toggle('active', this._active);
+
+    if (this._active) {
+      this._timer = setInterval(() => this._tick(), 100);  // 10 Hz command loop
+      // Tab already polls at 500ms; boost to 250ms during test mode
+      _stopVescTabPoll();
+      _vescTabTimer = setInterval(() => vescPanel.refresh(), 250);
+    } else {
+      clearInterval(this._timer);
+      // Restore normal 500ms tab poll
+      _stopVescTabPoll();
+      _startVescTabPoll();
+      this._keys = {};
+      api('/motion/stop', 'POST');
+      this._updateBars(0, 0);
+      this._setStatus('IDLE', '');
+      ['w','a','s','d'].forEach(k => {
+        const e = el(`vt-kbd-${k}`); if (e) e.classList.remove('active');
+      });
+    }
+  },
+
+  onKey(code, down) {
+    if (!this._active) return false;
+    const map = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', Escape:'esc' };
+    const k = map[code];
+    if (!k) return false;
+    if (k === 'esc' && down) { this.toggle(); return true; }
+    this._keys[k] = down;
+    const e = el(`vt-kbd-${k}`); if (e) e.classList.toggle('active', down);
+    return true;  // consumed — don't pass to drive tab
+  },
+
+  _tick() {
+    const fwd   = this._keys['w'];
+    const back  = this._keys['s'];
+    const left  = this._keys['a'];
+    const right = this._keys['d'];
+    const anyKey = fwd || back || left || right;
+
+    if (!anyKey) {
+      // No keys held — let BT controller drive freely, just show IDLE
+      this._updateBars(0, 0);
+      this._setStatus('BT/IDLE', '');
+      return;
+    }
+
+    // Arcade mixing: throttle ± steer
+    // W+A → curves left (L=20%, R=40%)   W+D → curves right (L=40%, R=20%)
+    // A alone → spin left (-20%/+20%)    D alone → spin right (+20%/-20%)
+    const throttle = (fwd ? 1 : 0) - (back ? 1 : 0);   // -1, 0, +1
+    const steer    = (right ? 1 : 0) - (left ? 1 : 0);  // -1=left, +1=right
+
+    let L = Math.max(-1, Math.min(1, throttle + steer * 0.5));
+    let R = Math.max(-1, Math.min(1, throttle - steer * 0.5));
+    L *= this._SPEED;
+    R *= this._SPEED;
+
+    api('/motion/drive', 'POST', { left: L, right: R });
+    this._updateBars(L, R);
+    this._setStatus('DRIVING', 'ok');
+  },
+
+  _updateBars(L, R) {
+    const lpct = Math.round(Math.abs(L) * 100);
+    const rpct = Math.round(Math.abs(R) * 100);
+    const lcls = L < 0 ? 'warn' : '';
+    const rcls = R < 0 ? 'warn' : '';
+
+    const lb = el('vt-left-bar');
+    const rb = el('vt-right-bar');
+    if (lb) { lb.style.width = lpct + '%'; lb.className = 'vesc-brow-fill' + (lcls ? ' ' + lcls : ''); }
+    if (rb) { rb.style.width = rpct + '%'; rb.className = 'vesc-brow-fill' + (rcls ? ' ' + rcls : ''); }
+
+    const lv = el('vt-left-val');  if (lv) lv.textContent = (L < 0 ? '-' : '') + lpct;
+    const rv = el('vt-right-val'); if (rv) rv.textContent = (R < 0 ? '-' : '') + rpct;
+  },
+
+  _setStatus(text, cls) {
+    const e = el('vt-status'); if (!e) return;
+    e.textContent = text;
+    e.className = 'vesc-sym-status' + (cls ? ' ' + cls : '');
+  },
+
+  // Called by VescPanel on each telemetry refresh
+  updateTelem(dL, dR) {
+    if (!this._active) return;
+    const set = (id, val) => { const e = el(id); if (e) e.textContent = val ?? '—'; };
+    set('vt-rpm-l',  dL ? Math.abs(dL.rpm) : null);
+    set('vt-rpm-r',  dR ? Math.abs(dR.rpm) : null);
+    set('vt-curr-l', dL ? dL.current.toFixed(1) + 'A' : null);
+    set('vt-curr-r', dR ? dR.current.toFixed(1) + 'A' : null);
+  },
+};
+
+function vescTestToggle() { vescTest.toggle(); }
+
+let _vescDutyMode = false;
+async function vescToggleDriveMode() {
+  _vescDutyMode = !_vescDutyMode;
+  await api('/vesc/mode', 'POST', { duty: _vescDutyMode });
+  const btn  = el('vesc-mode-btn');
+  const hint = el('vesc-mode-hint');
+  if (btn)  btn.textContent = _vescDutyMode ? 'DUTY' : 'RPM';
+  if (hint) hint.textContent = _vescDutyMode
+    ? 'Direct duty — duty reacts immediately (bench testing without motor)'
+    : 'Closed-loop speed — switch to DUTY for bench testing without motor';
 }
 
 // ================================================================
@@ -2471,14 +2777,34 @@ class BTController {
       if (statusText) { statusText.textContent = 'CONNECTED (Pi)'; statusText.classList.add('connected'); }
     }
 
-    // Batterie
-    const pct = data.bt_battery || 0;
+    // Battery
+    const pct    = data.bt_battery || 0;
+    const fillEl = el('bt-battery-fill');
+    const pctEl  = el('bt-battery-pct');
     if (pct > 0) {
-      const fillEl = el('bt-battery-fill');
-      const pctEl  = el('bt-battery-pct');
       const bcolor = pct > 50 ? '#00cc66' : pct > 25 ? '#ff8800' : '#ff2244';
       if (fillEl) { fillEl.style.width = pct + '%'; fillEl.style.background = bcolor; }
       if (pctEl)  pctEl.textContent = pct + '%';
+    } else {
+      if (fillEl) fillEl.style.width = '0%';
+      if (pctEl)  pctEl.textContent = '--%';
+    }
+
+    // RSSI signal strength
+    const rssiEl = el('bt-rssi-val');
+    if (rssiEl) {
+      const rssi = data.bt_rssi;
+      if (rssi !== null && rssi !== undefined) {
+        // dBm: -50=excellent, -70=good, -85=fair, <-90=poor
+        const quality = rssi >= -60 ? 'excellent' : rssi >= -75 ? 'good' : rssi >= -90 ? 'fair' : 'poor';
+        const color   = rssi >= -60 ? '#00cc66'   : rssi >= -75 ? '#88cc00' : rssi >= -90 ? '#ff8800' : '#ff2244';
+        rssiEl.textContent = rssi + ' dBm';
+        rssiEl.style.color = color;
+        rssiEl.title = `Signal: ${quality}`;
+      } else {
+        rssiEl.textContent = '--';
+        rssiEl.style.color = '#4a7a9b';
+      }
     }
 
     this._updatePill();
@@ -2519,11 +2845,21 @@ class BTController {
     const data = await api('/bt/status');
     if (!data) return;
     this.updateStatus(data);
-    // type
+    // gamepad type
     const typeEl = el('bt-gamepad-type');
     if (typeEl && data.bt_gamepad_type) {
       for (const o of typeEl.options) if (o.value === data.bt_gamepad_type) { o.selected = true; break; }
       this.onTypeChange(data.bt_gamepad_type);
+    }
+    // inactivity timeout — sync slider + number input + label
+    if (data.bt_inactivity_timeout !== undefined) {
+      const t = data.bt_inactivity_timeout;
+      const slider = el('bt-inactivity-timeout');
+      const num    = el('bt-timeout-num');
+      const lbl    = el('bt-timeout-val');
+      if (slider) slider.value = Math.min(600, t);
+      if (num)    num.value    = t;
+      if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
     }
   }
 
@@ -2541,7 +2877,7 @@ class BTController {
     const cfg = {
       gamepad_type:       el('bt-gamepad-type')?.value          || 'ps',
       deadzone:           (parseInt(el('bt-deadzone')?.value)    || 10) / 100,
-      inactivity_timeout: parseInt(el('bt-inactivity-timeout')?.value) || 30,
+      inactivity_timeout: parseInt(el('bt-timeout-num')?.value || el('bt-inactivity-timeout')?.value) || 30,
       mappings,
     };
     // Aussi sauvegarder localement pour la Gamepad API JS
@@ -2776,10 +3112,7 @@ class StatusPoller {
       }
     }
 
-    // VESC telemetry — refresh only if VESC tab is active
-    if (el('tab-vesc') && el('tab-vesc').classList.contains('active')) {
-      vescPanel.refresh();
-    }
+    // VESC tab has its own 500ms poll via _startVescTabPoll() — no refresh needed here
   }
 
   _setOffline(offline) {
@@ -2986,6 +3319,36 @@ async function saveAudioChannels() {
   }
 }
 
+// ─── Camera config ────────────────────────────────────────────────────────────
+const cameraConfig = {
+  async load() {
+    try {
+      const d = await api('/camera/config');
+      if (!d) return;
+      const resEl = el('cam-resolution');
+      const fpsEl = el('cam-fps');
+      const qEl   = el('cam-quality');
+      if (resEl) resEl.value = d.resolution || '640x480';
+      if (fpsEl) fpsEl.value = String(d.fps   || 30);
+      if (qEl)  { qEl.value = d.quality || 80; el('cam-quality-val').textContent = qEl.value; }
+    } catch(e) {}
+  },
+  async save() {
+    const resolution = el('cam-resolution')?.value || '640x480';
+    const fps        = parseInt(el('cam-fps')?.value) || 30;
+    const quality    = parseInt(el('cam-quality')?.value) || 80;
+    const status     = el('cam-config-status');
+    if (status) { status.textContent = 'Restarting camera…'; status.className = 'settings-status'; }
+    const data = await api('/camera/config', 'POST', { resolution, fps, quality });
+    if (data?.status === 'ok') {
+      if (status) { status.textContent = `✓ ${resolution} @ ${fps}fps q${quality}`; status.className = 'settings-status ok'; }
+      toast(`Camera: ${resolution} @ ${fps}fps`, 'ok');
+    } else {
+      if (status) { status.textContent = '✗ Error — check logs'; status.className = 'settings-status error'; }
+    }
+  },
+};
+
 async function saveBatteryCells() {
   const cells = parseInt(el('battery-cells')?.value) || 4;
   const status = el('battery-cells-status');
@@ -3183,6 +3546,7 @@ async function init() {
   // Volume slider + VESC scale slider
   initVolume();
   vescPanel.initSlider();
+  vescPanel.loadConfig();
 
   // Load initial data
   await Promise.all([
@@ -3191,6 +3555,7 @@ async function init() {
     poller.poll(),
     loadServoSettings(),
     btController.loadConfig(),
+    cameraConfig.load(),
   ]);
 
   // Start polling

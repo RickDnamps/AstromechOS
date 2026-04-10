@@ -1196,6 +1196,7 @@ function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on })
 let _camToken     = null;
 let _camEnabled   = true;
 let _camPollTimer = null;
+let _camErrored   = false;   // true when img.onerror fires (mjpg_streamer down)
 
 function _camBase() {
   return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
@@ -1207,15 +1208,19 @@ async function _takeCameraStream() {
   const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
     .then(r => r.json()).catch(() => null);
   if (!r) return;
-  _camToken = r.token;
+  _camToken   = r.token;
+  _camErrored = false;
 
   const img   = el('cam-stream');
   const bg    = el('cam-bg');
   const taken = el('cam-taken');
   if (!img) return;
 
+  // Detect mjpg_streamer going away (service restart / camera unplug)
+  img.onerror = () => { _camErrored = true; };
+
   if (taken) taken.style.display = 'none';
-  img.src = _camBase() + `/camera/stream?t=${_camToken}`;
+  img.src = _camBase() + `/camera/stream?t=${_camToken}&_=${Date.now()}`;
   img.style.display = 'block';
   if (bg) bg.style.display = 'none';
 
@@ -1229,9 +1234,10 @@ function _startCamPoll() {
     const r = await fetch(_camBase() + '/camera/status')
       .then(r => r.json()).catch(() => null);
     if (!r) return;
+
     if (r.active_token !== _camToken) {
       if (r.active_token < _camToken) {
-        // Server restarted (token reset) — auto-reclaim silently
+        // Flask restarted (token reset to 0) — auto-reclaim silently
         _camToken = null;
         clearInterval(_camPollTimer);
         setTimeout(() => _takeCameraStream(), 500);
@@ -1246,6 +1252,13 @@ function _startCamPoll() {
         if (taken) taken.style.display = 'flex';
         clearInterval(_camPollTimer);
       }
+    } else if (_camErrored) {
+      // Same Flask token but stream errored — mjpg_streamer restarted (e.g. resolution change)
+      // Try to reclaim; if mjpg_streamer is back up Flask will serve the stream again
+      _camErrored = false;
+      _camToken   = null;
+      clearInterval(_camPollTimer);
+      setTimeout(() => _takeCameraStream(), 1000);
     }
   }, 3000);
 }
