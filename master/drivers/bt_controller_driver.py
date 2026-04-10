@@ -129,6 +129,8 @@ class BTControllerDriver:
         self._dome_active  = False
         self._prev_btns    = {}
         self._rssi         = None
+        self._last_drive   = (0.0, 0.0)   # last computed (left, right) for keep-alive
+        self._last_dome    = 0.0           # last dome speed for keep-alive
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -140,6 +142,7 @@ class BTControllerDriver:
         self._stop_evt.clear()
         threading.Thread(target=self._reconnect_loop,    name='bt-reconnect',   daemon=True).start()
         threading.Thread(target=self._inactivity_loop,   name='bt-inactivity',  daemon=True).start()
+        threading.Thread(target=self._drive_keepalive_loop, name='bt-keepalive', daemon=True).start()
         log.info("BTControllerDriver started")
 
     def stop(self) -> None:
@@ -315,6 +318,35 @@ class BTControllerDriver:
 
             self._stop_evt.wait(30)
 
+    def _drive_keepalive_loop(self) -> None:
+        """Re-sends the last drive/dome command every 300ms while the joystick is held.
+
+        evdev only fires EV_ABS events on value CHANGE — holding still sends nothing.
+        Without this, MotionWatchdog (800ms timeout) would cut propulsion after <1s.
+        """
+        INTERVAL = 0.30  # seconds — well under the 800ms watchdog timeout
+        while not self._stop_evt.wait(INTERVAL):
+            if not self._connected or not self.is_enabled():
+                continue
+            try:
+                import master.registry as reg
+                if getattr(reg, 'estop_active', False):
+                    continue
+                if getattr(reg, 'lock_mode', 0) == 2:
+                    continue
+                # Keep-alive for propulsion
+                if self._drive_active:
+                    left, right = self._last_drive
+                    if abs(left) > 0.01 or abs(right) > 0.01:
+                        self._do_drive(left, right, reg)
+                # Keep-alive for dome
+                if self._dome_active:
+                    spd = self._last_dome
+                    if abs(spd) > 0.01:
+                        self._do_dome(spd, reg)
+            except Exception as e:
+                log.debug("keepalive: %s", e)
+
     # ------------------------------------------------------------------
     # Axes
     # ------------------------------------------------------------------
@@ -399,9 +431,11 @@ class BTControllerDriver:
         right    = max(-1.0, min(1.0, throttle - steering))
 
         if abs(left) > 0.01 or abs(right) > 0.01:
+            self._last_drive = (left, right)
             self._do_drive(left, right, reg)
             self._drive_active = True
         elif self._drive_active:
+            self._last_drive = (0.0, 0.0)
             self._do_stop(reg)
             self._drive_active = False
 
@@ -412,9 +446,11 @@ class BTControllerDriver:
         if time.time() - getattr(reg, 'web_last_dome_t', 0) < 0.5:
             return
         if abs(val) > 0.01:
+            self._last_dome = val * 0.85
             self._do_dome(val * 0.85, reg)
             self._dome_active = True
         elif self._dome_active:
+            self._last_dome = 0.0
             self._do_dome(0.0, reg)
             self._dome_active = False
 
