@@ -1,0 +1,113 @@
+{
+  "meta": {
+    "audio_channels_required": 6,
+    "author": "R2-D2 Control",
+    "created": "2026-04-10",
+    "duration": 18.1,
+    "name": "my_show3",
+    "version": "1.0",
+    "config_snapshot": {
+      "invert_L": true,
+      "invert_R": false,
+      "power_scale": 0.8
+    }
+  },
+  "tracks": {
+    "arm_servos": [],
+    "audio": [
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 16.1,
+        "file": "CANTINA",
+        "t": 0,
+        "volume": 10,
+        "priority": "normal"
+      },
+      {
+        "action": "play",
+        "ch": 1,
+        "duration": 2.2,
+        "file": "SCREA002",
+        "t": 1.2,
+        "volume": 85,
+        "priority": "normal"
+      }
+    ],
+    "body_servos": [
+      {
+        "action": "open",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "body",
+        "servo": "Servo_S0",
+        "t": 0.5,
+        "servo_label": "Old_Left_Arm"
+      },
+      {
+        "action": "close",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "body",
+        "servo": "Servo_S1",
+        "t": 2.0,
+        "servo_label": "Old_Right_Arm"
+      },
+      {
+        "action": "open",
+        "duration": 1,
+        "easing": "",
+        "group": "body",
+        "servo": "Servo_S99",
+        "t": 4.0,
+        "servo_label": "Ghost_Servo_That_Never_Existed"
+      }
+    ],
+    "dome": [
+      {
+        "accel": 1,
+        "angle": 0,
+        "duration": 3000,
+        "easing": "ease-in-out",
+        "power": 50,
+        "t": 2.0
+      }
+    ],
+    "dome_servos": [
+      {
+        "action": "open",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "dome",
+        "servo": "Servo_M0",
+        "t": 1.0,
+        "servo_label": "Old_Front_Panel"
+      },
+      {
+        "action": "close",
+        "duration": 1,
+        "easing": "ease-in-out",
+        "group": "dome",
+        "servo": "Servo_M1",
+        "t": 5.0,
+        "servo_label": "Dome_Panel_2"
+      }
+    ],
+    "lights": [
+      {
+        "duration": 4,
+        "mode": "t14",
+        "t": 1.0
+      }
+    ],
+    "markers": [],
+    "propulsion": [
+      {
+        "duration": 3,
+        "left": 0.4,
+        "right": 0.4,
+        "t": 8.0
+      }
+    ]
+  }
+}
