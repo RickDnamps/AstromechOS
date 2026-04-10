@@ -82,7 +82,7 @@
         "group": "body",
         "servo": "Servo_S0",
         "t": 0.30000000000000004,
-        "servo_label": "Body_Panel_1"
+        "servo_label": "Bras_Gauche"
       },
       {
         "action": "open",
@@ -92,7 +92,7 @@
         "servo": "Servo_S1",
         "t": 0.30000000000000004,
         "target": 50,
-        "servo_label": "Body_Panel_2"
+        "servo_label": "Bras_Droit"
       },
       {
         "action": "degree",
@@ -101,7 +101,7 @@
         "group": "body",
         "servo": "Servo_S0",
         "t": 2.1,
-        "servo_label": "Body_Panel_1"
+        "servo_label": "Bras_Gauche"
       },
       {
         "action": "close",
@@ -109,7 +109,7 @@
         "group": "body",
         "servo": "Servo_S1",
         "t": 4.6000000000000005,
-        "servo_label": "Body_Panel_2"
+        "servo_label": "Bras_Droit"
       }
     ],
     "dome": [
@@ -138,7 +138,7 @@
         "group": "dome",
         "servo": "Servo_M0",
         "t": 0.30000000000000004,
-        "servo_label": "Dome_Panel_1"
+        "servo_label": "Panneau_Avant_Dome"
       },
       {
         "action": "close",
@@ -147,7 +147,7 @@
         "group": "dome",
         "servo": "Servo_M0",
         "t": 2.1,
-        "servo_label": "Dome_Panel_1"
+        "servo_label": "Panneau_Avant_Dome"
       }
     ],
     "lights": [
