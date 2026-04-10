@@ -325,6 +325,7 @@ class BTControllerDriver:
         Without this, MotionWatchdog (800ms timeout) would cut propulsion after <1s.
         """
         INTERVAL = 0.30  # seconds — well under the 800ms watchdog timeout
+        _ka_count = 0
         while not self._stop_evt.wait(INTERVAL):
             if not self._connected or not self.is_enabled():
                 continue
@@ -338,6 +339,9 @@ class BTControllerDriver:
                 if self._drive_active:
                     left, right = self._last_drive
                     if abs(left) > 0.01 or abs(right) > 0.01:
+                        _ka_count += 1
+                        if _ka_count % 10 == 1:  # log every ~3s (10 × 300ms)
+                            log.info("BT keepalive #%d: drive=(%.3f, %.3f)", _ka_count, left, right)
                         self._do_drive(left, right, reg)
                 # Keep-alive for dome
                 if self._dome_active:
@@ -345,7 +349,7 @@ class BTControllerDriver:
                     if abs(spd) > 0.01:
                         self._do_dome(spd, reg)
             except Exception as e:
-                log.debug("keepalive: %s", e)
+                log.warning("keepalive error: %s", e)
 
     # ------------------------------------------------------------------
     # Axes
