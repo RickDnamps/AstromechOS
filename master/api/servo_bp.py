@@ -409,7 +409,7 @@ def arms_config_save():
     os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
     with open(_LOCAL_CFG, 'w') as f:
         cfg.write(f)
-    log.info("Arms config saved: count=%d servos=%s panels=%s", count, servos, panels)
+    import logging; logging.getLogger(__name__).info("Arms config saved: count=%d servos=%s panels=%s", count, servos, panels)
     return jsonify({'status': 'ok', **_read_arms_cfg()})
 
 
