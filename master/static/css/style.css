@@ -2770,7 +2770,7 @@ select.input-text option { background: #0a1525; }
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin: 8px 0 0;
+  margin: 8px 0;
   color: var(--text-dim);
   line-height: 1.6;
 }
