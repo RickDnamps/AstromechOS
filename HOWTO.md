@@ -88,6 +88,14 @@ ssh artoo@r2-master.local
 # or: ssh artoo@<MASTER_IP>  if .local doesn't resolve
 ```
 
+**Before running the installer**, note the Master's current IP on your home network —
+you'll need it to reconnect after the reboot:
+
+```bash
+hostname -I
+# example output: 192.168.1.42  — write this down
+```
+
 Run the one-line installer:
 
 ```bash
@@ -107,12 +115,39 @@ This script handles everything automatically:
 
 **At the end it asks to reboot — answer Y.**
 
-After reboot, the Master hotspot `R2D2_Control` is live.
-SSH from now on uses the hotspot IP:
+---
 
-```bash
-ssh artoo@192.168.4.1
+### After the reboot — reconnecting to the Master
+
+After reboot, the Master's Wi-Fi changes:
+
 ```
+Before:  wlan0 → your home Wi-Fi  (accessible from your PC)
+After:   wlan0 → hotspot R2D2_Control  192.168.4.1  (only from hotspot)
+         wlan1 → your home Wi-Fi  (new IP assigned by your router)
+```
+
+Your PC is still on the home network, so you have **two options** to reconnect:
+
+**Option A — Connect your PC to the R2D2_Control hotspot (recommended)**
+
+1. On your PC, connect to Wi-Fi network: **R2D2_Control**
+2. SSH using the fixed hotspot IP:
+   ```bash
+   ssh artoo@192.168.4.1
+   ```
+   This IP never changes — use it for all future SSH sessions.
+
+**Option B — Stay on home network, use the new wlan1 IP**
+
+The Master's wlan1 gets a new DHCP IP from your router.
+Find it in one of these ways:
+- Check your router's admin page (look for `r2-master`)
+- Try: `ssh artoo@r2-master.local` (works on Linux/Mac via mDNS, unreliable on Windows)
+- Use a network scanner app (e.g. Fing on phone, Angry IP Scanner on PC)
+
+> Option A is simpler and what you'll use permanently — the hotspot IP 192.168.4.1 is fixed forever.
+> Switch to it now and you won't need to look up IPs again.
 
 ---
 
