@@ -3187,32 +3187,9 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   white-space: nowrap;
   flex-shrink: 0;
 }
-.chor-cmd-timecode {
-  font-family: 'Courier New', monospace;
-  font-size: 18px;
-  color: #00ffea;
-  text-shadow: 0 0 10px rgba(0,255,234,.45);
-  letter-spacing: 2px;
-  flex-shrink: 0;
-  min-width: 90px;
-}
-.chor-cmd-gauges {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-}
-.chor-cmd-gauge {
-  font-family: 'Courier New', monospace;
-  font-size: 9px;
-  letter-spacing: 1px;
-  color: #00cc88;
-  transition: color .4s;
-}
-.chor-cmd-gauge.dim { color: rgba(0,170,255,.4); }
+.chor-cmd-gauge.dim  { color: rgba(0,170,255,.4); }
 .chor-cmd-gauge.warn { color: var(--amber); }
 .chor-cmd-gauge.crit { color: var(--red); text-shadow: 0 0 6px var(--red); }
-.chor-cmd-gauge-sep { color: rgba(0,170,255,.3); font-size: 9px; }
 .chor-cmd-sep {
   width: 1px;
   height: 18px;
@@ -3251,6 +3228,40 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   background: rgba(0,170,255,.12);
   border-color: var(--blue);
   color: var(--blue);
+}
+
+/* ── Footer — timecode + duration status bar ─────────────────── */
+.chor-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 26px;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(0,170,255,.10);
+  background: rgba(4,10,22,.97);
+}
+.chor-footer-label {
+  font-size: 11px;
+  color: rgba(0,170,255,.4);
+}
+.chor-footer-time {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #00ffea;
+  text-shadow: 0 0 8px rgba(0,255,234,.35);
+  letter-spacing: 1.5px;
+  min-width: 82px;
+}
+.chor-footer-sep {
+  font-size: 10px;
+  color: rgba(0,170,255,.3);
+}
+.chor-footer-dur {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: rgba(0,170,255,.5);
+  letter-spacing: 1px;
 }
 
 /* ── Body ─────────────────────────────────────────────────────── */

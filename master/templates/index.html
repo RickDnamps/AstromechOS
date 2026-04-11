@@ -607,16 +607,14 @@
 
     <!-- ── Single Command Bar ─────────────────────────────────────── -->
     <div class="chor-command-bar">
-      <div class="chor-cmd-timecode" id="chor-timecode">00:00.000</div>
-      <div class="chor-cmd-sep"></div>
-      <span class="chor-cmd-gauge dim"><span id="chor-duration">—</span></span>
-      <div class="chor-cmd-sep"></div>
+      <!-- LEFT GROUP: file selector + new/delete -->
       <select id="chor-select" class="input-select-sm" style="width:150px">
         <option value="">— select —</option>
       </select>
       <button class="btn btn-sm" onclick="choreoEditor.newChor()">+ NEW</button>
       <button class="btn btn-danger btn-sm" onclick="choreoEditor.deleteChor()">🗑 DELETE</button>
       <div class="chor-cmd-sep"></div>
+      <!-- TRANSPORT: play / stop -->
       <button class="btn btn-active btn-sm" id="chor-btn-play" onclick="choreoEditor.play()">▶ PLAY</button>
       <button class="btn btn-danger btn-sm" id="chor-btn-stop" onclick="choreoEditor.stop()">⏹ STOP</button>
       <div class="chor-cmd-sep"></div>
@@ -782,6 +780,14 @@
       </div><!-- /chor-props -->
 
     </div><!-- /chor-body -->
+
+    <!-- ── Footer status bar — timecode + duration ──────────────── -->
+    <div class="chor-footer">
+      <span class="chor-footer-label">⏱</span>
+      <span class="chor-footer-time" id="chor-timecode">00:00.000</span>
+      <span class="chor-footer-sep">/</span>
+      <span class="chor-footer-dur" id="chor-duration">—</span>
+    </div>
 
   </div><!-- /chor-layout -->
   <div id="chor-banner-slot"></div>
