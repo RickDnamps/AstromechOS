@@ -440,12 +440,14 @@
         <div class="waveform-bar"></div>
       </div>
       <div class="now-playing-info">
-        <span id="now-playing-text" class="now-playing-text">IDLE</span>
-        <span id="now-playing-time" class="now-playing-time"></span>
-      </div>
-      <div class="audio-quick-btns">
-        <button class="btn btn-sm" onclick="audioRandom()">RANDOM</button>
-        <button class="btn btn-sm btn-danger" onclick="audioStop()">STOP</button>
+        <div class="now-playing-top">
+          <span id="now-playing-text" class="now-playing-text">IDLE</span>
+          <span id="now-playing-time" class="now-playing-time"></span>
+          <button class="now-playing-stop-btn" onclick="audioStop()" title="Stop">⏹</button>
+        </div>
+        <div class="now-playing-progress" id="now-playing-progress">
+          <div class="now-playing-progress-fill" id="now-playing-progress-fill"></div>
+        </div>
       </div>
     </div>
 

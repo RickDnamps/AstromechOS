@@ -1969,6 +1969,8 @@ class AudioBoard {
     if (this._tickInterval) { clearInterval(this._tickInterval); this._tickInterval = null; }
     const timeEl = el('now-playing-time');
     if (timeEl) timeEl.textContent = '';
+    const fill = el('now-playing-progress-fill');
+    if (fill) fill.style.width = '0%';
     this._timedSound = '';
     this._totalMs = 0;
   }
@@ -1990,11 +1992,17 @@ class AudioBoard {
     }
 
     const timeEl = el('now-playing-time');
+    const fill = el('now-playing-progress-fill');
     this._tickInterval = setInterval(() => {
-      if (!timeEl) return;
-      const elapsed = this._fmtTime(Date.now() - this._startTime);
-      const total   = this._totalMs > 0 ? this._fmtTime(this._totalMs) : '--:--';
-      timeEl.textContent = `${elapsed} / ${total}`;
+      const elapsedMs = Date.now() - this._startTime;
+      if (timeEl) {
+        const elapsed = this._fmtTime(elapsedMs);
+        const total   = this._totalMs > 0 ? this._fmtTime(this._totalMs) : '--:--';
+        timeEl.textContent = `${elapsed} / ${total}`;
+      }
+      if (fill && this._totalMs > 0) {
+        fill.style.width = `${Math.min(100, (elapsedMs / this._totalMs) * 100)}%`;
+      }
     }, 500);
   }
 

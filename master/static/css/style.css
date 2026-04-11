@@ -1225,6 +1225,14 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .now-playing-info {
   flex: 1;
   display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.now-playing-top {
+  display: flex;
   align-items: center;
   gap: 10px;
   overflow: hidden;
@@ -1246,6 +1254,42 @@ body[data-lock-mode="2"] #js-left-ring::after {
   color: var(--text-muted, #555e7a);
   letter-spacing: 0.5px;
   white-space: nowrap;
+}
+
+.now-playing-stop-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted, #555e7a);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: border-color 0.2s, color 0.2s;
+}
+.now-playing-stop-btn:hover {
+  border-color: var(--red, #e53);
+  color: var(--red, #e53);
+}
+
+.now-playing-progress {
+  height: 2px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.now-playing-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--cyan);
+  border-radius: 1px;
+  transition: width 0.5s linear;
 }
 
 .audio-quick-btns {
