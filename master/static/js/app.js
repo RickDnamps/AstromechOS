@@ -278,6 +278,7 @@ class AdminGuard {
     this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
     this._PROTECTED    = new Set(['settings']);
     this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
+    this._pendingTab   = null;             // tab to open after successful unlock
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
   }
@@ -285,7 +286,8 @@ class AdminGuard {
   get unlocked() { return this._unlocked; }
   isProtected(tabId) { return this._PROTECTED.has(tabId); }
 
-  showModal() {
+  showModal(pendingTab = null) {
+    this._pendingTab = pendingTab;
     const m = el('admin-modal');
     if (!m) return;
     m.classList.remove('hidden');
@@ -332,6 +334,12 @@ class AdminGuard {
     el('admin-modal').classList.add('hidden');
     toast('Admin access granted — expires in 5 min', 'ok');
     audioBoard?.showUploadZone(true);
+    // Navigate to the tab that triggered the auth prompt
+    if (this._pendingTab) {
+      const t = this._pendingTab;
+      this._pendingTab = null;
+      switchTab(t);
+    }
     // Track activity to reset the timer while on a protected tab.
     // pointerdown is used instead of click: mousedown.preventDefault() in the
     // Choreo editor suppresses click events, but never suppresses pointerdown.
@@ -396,9 +404,9 @@ function _stopVescTabPoll() {
 }
 
 function switchTab(tabId) {
-  // Onglet protégé sans accès → ouvrir modal
+  // Onglet protégé sans accès → ouvrir modal, puis y revenir après unlock
   if (adminGuard.isProtected(tabId) && !adminGuard.unlocked) {
-    adminGuard.showModal();
+    adminGuard.showModal(tabId);
     return;
   }
 
