@@ -2708,15 +2708,22 @@ class ScriptEngine {
 
   run(name, loop, type = 'seq') {
     if (type === 'choreo') {
+      // Optimistic lock — prevent double-click 409s
+      this._running.add(name);
+      const card = el(`script-card-${name}`);
+      if (card) card.classList.add('running');
       api('/choreo/play', 'POST', { name }).then(d => {
         if (d) {
           this._running.clear();
-          document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+          document.querySelectorAll('.seq-btn').forEach(c => c.classList.remove('running'));
           this._running.add(name);
-          const card = el(`script-card-${name}`);
           if (card) card.classList.add('running');
           toast(`🎬 ${name.toUpperCase()} playing`, 'ok');
           poller.poll();
+        } else {
+          // Rollback if API rejected
+          this._running.delete(name);
+          if (card) card.classList.remove('running');
         }
       });
       return;
