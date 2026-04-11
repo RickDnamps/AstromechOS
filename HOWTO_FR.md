@@ -210,10 +210,24 @@ ssh-copy-id artoo@r2-slave.local
 
 ## Connexion au dashboard
 
-1. Connecter son téléphone / tablette / PC au hotspot WiFi : **R2D2_Control**
-2. Ouvrir un navigateur : **http://192.168.4.1:5000**
+Flask écoute sur toutes les interfaces réseau — pas besoin de changer de WiFi, le dashboard est accessible **depuis les deux réseaux**.
 
-L'application Android se connecte automatiquement sur le même hotspot.
+**Depuis le WiFi maison (le plus pratique — rester sur son réseau normal) :**
+
+Trouver l'IP de wlan1 du Master (celle assignée par le routeur) :
+- Dans la page admin du routeur (chercher `r2-master`)
+- Ou en SSH sur le Master : `hostname -I` — la deuxième IP est wlan1
+- Ou essayer directement dans un navigateur : `http://r2-master.local:5000` (fonctionne sur Linux/Mac/Android)
+
+Puis ouvrir : `http://<IP-wlan1>:5000`
+
+> Cette IP peut changer si le routeur la réassigne. Pour la figer, créer un bail DHCP statique dans les paramètres du routeur pour l'adresse MAC du Master.
+
+**Depuis le hotspot R2D2_Control (IP fixe, toujours disponible — idéal en convention) :**
+
+Se connecter au WiFi **R2D2_Control**, puis ouvrir : **http://192.168.4.1:5000**
+
+**L'application Android** détecte automatiquement le Master sur le réseau auquel elle est connectée.
 
 ---
 
