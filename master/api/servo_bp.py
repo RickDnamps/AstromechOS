@@ -365,6 +365,52 @@ def dome_close_all():
 
 
 # ================================================================
+# ARMS CONFIG — which body servos are the arm servos
+# ================================================================
+
+_ARM_COUNT_MAX = 4
+
+
+def _read_arms_cfg() -> dict:
+    """Returns {count: int, servos: [str x4]} from local.cfg [arms].
+    Always returns exactly 4 servo slots (empty string = not assigned).
+    Values are always servo IDs (e.g. 'Servo_S12'), never labels.
+    """
+    cfg = configparser.ConfigParser()
+    cfg.read(_LOCAL_CFG)
+    count = max(0, min(_ARM_COUNT_MAX, cfg.getint('arms', 'count', fallback=0)))
+    servos = [cfg.get('arms', f'arm_{i}', fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
+    return {'count': count, 'servos': servos}
+
+
+@servo_bp.get('/arms')
+def arms_config_get():
+    return jsonify(_read_arms_cfg())
+
+
+@servo_bp.post('/arms')
+def arms_config_save():
+    data   = request.get_json(silent=True) or {}
+    count  = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
+    servos = data.get('servos', [])
+    cfg = configparser.ConfigParser()
+    cfg.read(_LOCAL_CFG)
+    if not cfg.has_section('arms'):
+        cfg.add_section('arms')
+    cfg.set('arms', 'count', str(count))
+    for i in range(1, _ARM_COUNT_MAX + 1):
+        raw = servos[i - 1] if i - 1 < len(servos) else ''
+        # Only accept valid body servo IDs — never store labels
+        cfg.set('arms', f'arm_{i}', raw if raw in BODY_SERVOS else '')
+    os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
+    with open(_LOCAL_CFG, 'w') as f:
+        cfg.write(f)
+    import logging
+    logging.getLogger(__name__).info("Arms config saved: count=%d servos=%s", count, servos)
+    return jsonify({'status': 'ok', **_read_arms_cfg()})
+
+
+# ================================================================
 # Backward compat — /servo/open_all|close_all (script_bp, legacy calls)
 # ================================================================
 

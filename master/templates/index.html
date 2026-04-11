@@ -1261,6 +1261,25 @@
       <p class="settings-note" style="margin-top:10px">Cycle: Normal → <span style="color:var(--orange)">KIDS</span> → <span style="color:var(--red)">CHILD LOCK</span> → (password) → Normal</p>
     </section>
 
+    <!-- Arms Configuration -->
+    <section class="card settings-card">
+      <h2 class="card-title">ARMS</h2>
+      <p class="settings-note">Select which body servos control the arms. Arms retract automatically before any new sequence starts.</p>
+      <div class="form-group">
+        <label>Number of arms</label>
+        <select id="arms-count" class="input-text" style="width:80px" onchange="armsConfig.onCountChange()">
+          <option value="0">0</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+      <div id="arms-selectors"></div>
+      <button class="btn" onclick="armsConfig.save()">SAVE ARMS</button>
+      <div class="settings-status" id="arms-status"></div>
+    </section>
+
     <!-- WiFi Internet (wlan1) -->
     <section class="card settings-card">
       <h2 class="card-title">WiFi INTERNET (wlan1)</h2>

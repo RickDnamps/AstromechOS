@@ -3620,6 +3620,75 @@ async function saveBatteryCells() {
   }
 }
 
+// ─── Arms config ──────────────────────────────────────────────────────────────
+const armsConfig = {
+  _count:  0,
+  _servos: ['', '', '', ''],   // 4 slots, always servo IDs (never labels)
+  _labels: {},                 // {Servo_S0: 'My Label', ...}
+
+  async load() {
+    const [armsData, settingsData] = await Promise.all([
+      api('/servo/arms'),
+      api('/servo/settings'),
+    ]);
+    if (!armsData) return;
+    this._count  = armsData.count  || 0;
+    this._servos = armsData.servos || ['', '', '', ''];
+    // Build label map — only body servos (Servo_S*)
+    const panels = settingsData?.panels || {};
+    this._labels = {};
+    for (const [id, cfg] of Object.entries(panels)) {
+      if (id.startsWith('Servo_S')) this._labels[id] = cfg.label || id;
+    }
+    const countEl = el('arms-count');
+    if (countEl) countEl.value = String(this._count);
+    this._renderSelectors();
+  },
+
+  _renderSelectors() {
+    const container = el('arms-selectors');
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < this._count; i++) {
+      const div = document.createElement('div');
+      div.className = 'form-group';
+      const opts = Array.from({length: 16}, (_, j) => {
+        const id  = `Servo_S${j}`;
+        const lbl = this._labels[id] || id;
+        const sel = this._servos[i] === id ? ' selected' : '';
+        return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
+      }).join('');
+      div.innerHTML = `<label>ARM ${i + 1}</label>
+        <select id="arm-servo-${i}" class="input-text">
+          <option value="">— not assigned —</option>${opts}
+        </select>`;
+      container.appendChild(div);
+    }
+  },
+
+  onCountChange() {
+    this._count = parseInt(el('arms-count')?.value) || 0;
+    this._renderSelectors();
+  },
+
+  async save() {
+    const count  = parseInt(el('arms-count')?.value) || 0;
+    const servos = Array.from({length: 4}, (_, i) => el(`arm-servo-${i}`)?.value || '');
+    const status = el('arms-status');
+    if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+    const data = await api('/servo/arms', 'POST', { count, servos });
+    if (data?.status === 'ok') {
+      this._count  = data.count;
+      this._servos = data.servos;
+      toast(`Arms: ${count} arm(s) configured`, 'ok');
+      if (status) { status.textContent = `${count} arm(s) saved`; status.className = 'settings-status ok'; }
+    } else {
+      toast('Failed to save arms config', 'error');
+      if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+    }
+  },
+};
+
 async function scanWifi() {
   const btn = el('btn-scan');
   if (btn) { btn.textContent = 'SCANNING...'; btn.disabled = true; }
@@ -3840,6 +3909,7 @@ async function init() {
     loadServoSettings(),
     btController.loadConfig(),
     cameraConfig.load(),
+    armsConfig.load(),
   ]);
 
   // Start polling

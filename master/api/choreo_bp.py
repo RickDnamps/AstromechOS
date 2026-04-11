@@ -3,6 +3,7 @@ Blueprint Flask — Choreography API
 Routes: /choreo/play, /choreo/stop, /choreo/status,
         /choreo/list, /choreo/load, /choreo/save, /choreo/export_scr
 """
+import configparser
 import json
 import logging
 import os
@@ -13,6 +14,8 @@ import master.registry as reg
 
 log = logging.getLogger(__name__)
 choreo_bp = Blueprint('choreo', __name__)
+
+_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
 
 _CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
 
@@ -83,11 +86,23 @@ def choreo_delete(name: str):
         return jsonify({'error': str(e)}), 500
 
 
-_ARM_SERVOS   = ['Servo_S12', 'Servo_S13', 'Servo_S14', 'Servo_S15']
-_BODY_PANELS  = [f'Servo_S{i}' for i in range(12)]   # S0–S11 — body panels only
+_BODY_PANELS = [f'Servo_S{i}' for i in range(12)]   # S0–S11 — body panels only (arms excluded)
 
 # How long to wait (seconds) for servos to physically reach closed position
 _SERVO_RESET_DELAY = 1.5
+
+
+def _get_arm_servos() -> list:
+    """Read arm servo IDs from local.cfg [arms]. Returns empty list if not configured."""
+    cfg = configparser.ConfigParser()
+    cfg.read(_LOCAL_CFG)
+    count = cfg.getint('arms', 'count', fallback=0)
+    servos = []
+    for i in range(1, count + 1):
+        s = cfg.get('arms', f'arm_{i}', fallback='').strip()
+        if s:
+            servos.append(s)
+    return servos
 
 
 def _reset_servos():
@@ -95,21 +110,22 @@ def _reset_servos():
     from master.api.servo_bp import (
         _read_panels_cfg, _panel_angle, _panel_speed, DOME_SERVOS
     )
-    cfg = _read_panels_cfg()
+    panels_cfg  = _read_panels_cfg()
+    arm_servos  = _get_arm_servos()
 
     # Close arm servos first (arms must retract before body panels move)
-    for name in _ARM_SERVOS:
-        angle = _panel_angle(name, 'close', cfg)
-        speed = _panel_speed(name, cfg)
+    for name in arm_servos:
+        angle = _panel_angle(name, 'close', panels_cfg)
+        speed = _panel_speed(name, panels_cfg)
         if reg.servo:
             reg.servo.close(name, angle, speed)
         elif reg.uart:
             reg.uart.send('SRV', f'{name},{angle},{speed}')
 
-    # Close body panels S0–S11 (not arms)
+    # Close body panels S0–S11 (arms excluded)
     for name in _BODY_PANELS:
-        angle = _panel_angle(name, 'close', cfg)
-        speed = _panel_speed(name, cfg)
+        angle = _panel_angle(name, 'close', panels_cfg)
+        speed = _panel_speed(name, panels_cfg)
         if reg.servo:
             reg.servo.close(name, angle, speed)
         elif reg.uart:
@@ -118,8 +134,8 @@ def _reset_servos():
     # Close all dome panels
     if reg.dome_servo:
         for name in DOME_SERVOS:
-            angle = _panel_angle(name, 'close', cfg)
-            speed = _panel_speed(name, cfg)
+            angle = _panel_angle(name, 'close', panels_cfg)
+            speed = _panel_speed(name, panels_cfg)
             reg.dome_servo.close(name, angle, speed)
 
 
