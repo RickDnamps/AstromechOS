@@ -250,10 +250,9 @@ ssh artoo@r2-slave.local
 
 ### Update R2-D2
 
-**From the dashboard:** the Config tab is admin-protected.
-Click the **Config** tab → enter password **`deetoo`** → System → Update button (git pull + rsync + restart, all automatic).
+**From the dashboard:** click the **Admin** button (top right) → enter password **`deetoo`** → the Config tab and other protected menus become visible → Config → System → Update button (git pull + rsync + restart, all automatic).
 
-> Admin session expires after 5 minutes of inactivity. The password can be changed in the Config tab itself once logged in.
+> Admin session expires after 5 minutes of inactivity. The password can be changed in the Config tab once logged in.
 
 **Or from SSH on the Master:**
 
