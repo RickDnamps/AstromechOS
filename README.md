@@ -57,7 +57,7 @@ Dual joystick · WASD + arrow keys · MJPEG camera feed (USB autodetect, auto-re
 <td align="center" width="50%">
 
 ### 🔊 Audio
-317 R2-D2 sounds · 14 mood categories · Animated waveform · Volume with perceptual curve
+317 R2-D2 sounds · 14 mood categories · Play specific or random by category · Animated waveform · Volume with perceptual curve · Upload MP3 + create categories (admin)
 
 ![Audio Interface](Screenshots/Audio.png)
 
@@ -102,22 +102,22 @@ Teeces32 or AstroPixels+ · 22 animations · FLD/RLD/BOTH text · PSI sequences
 <tr>
 <td align="center" width="50%">
 
-### ✏️ Sequence Editor (admin)
-Drag-and-drop step builder · Command palette · Per-command builders · Test without saving
-
-![Sequence Editor](Screenshots/Sequence_Editor_admin.png)
-
-</td>
-<td align="center" width="50%">
-
 ### 🎼 Choreography Timeline Editor
-Multi-track timeline · Drag-and-drop blocks · Digital Twin monitor · VESC telemetry gauges
+Multi-track timeline · Drag-and-drop blocks · VESC drive · audio · servos · lights in sync · Servo validation badges (❌/⚠️) · VESC config mismatch banner · Digital Twin monitor
 
 ![Choreo Timeline Editor](Screenshots/Choreo_Sequence_Editor.png)
 
 </td>
 </tr>
 <tr>
+<td align="center" width="50%">
+
+### 🔐 Admin Login
+Password-protected admin mode · Unlocks upload zone, category creation, sequence editor
+
+![Admin Login](Screenshots/Admin_Login.png)
+
+</td>
 <td align="center" width="50%">
 
 ### 🦾 Servo Calibration
@@ -138,10 +138,20 @@ BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout (up to
 </td>
 <td align="center" width="50%">
 
-### ⚙️ Config — Wi-Fi & Others
-Hotspot · Home Wi-Fi · Lights driver hot-swap · Battery cell count · Auto-deploy · Git branch
+### ⚙️ Config — Wi-Fi, Audio & Battery
+Hotspot · Home Wi-Fi · Audio channels · Battery cell count · Dome light · Auto-deploy
 
-![Config WiFi](Screenshots/Config_Menu_Wifi_Others.png)
+![Config WiFi](Screenshots/Config_Menu_Wifi_Audio_Battery_DomeLight.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🔧 Config — Git, Camera & System
+Git branch · Camera resolution/FPS/quality · System update · Reboot
+
+![Config Git Camera](Screenshots/Config_Menu_Git_Camera_Systemupdate.png)
 
 </td>
 </tr>
@@ -165,7 +175,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | | |
 |---|---|
 | 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — one-click in SEQUENCES tab |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag · battery % · RSSI · keep-alive (no VESC cut on hold) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -174,7 +184,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🚨 **E-Stop** | Space bar shortcut · hard-cuts all PWM instantly |
 | 🚀 **One-button deploy** | Dome button → git pull + rsync Slave + reboot |
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
-| 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category |
+| 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category · MP3 upload + category creation (admin) |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
 | 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart · temporary cam active, permanent cam on order |
@@ -185,6 +195,12 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 ## 🎼 Choreography Timeline Editor
 
 The **CHOREO tab** is the main authoring tool. Build multi-track timelines that synchronize every subsystem in real time: VESC drive motion, servo panels, dome rotation, audio (up to 12 simultaneous tracks), and lights — with drag-and-drop blocks, easing curves, and a Digital Twin preview.
+
+**Servo validation** — each servo block is validated against the current config at load time. ✅ exact label match · ⚠️ ID exists but label has changed · ❌ ID no longer in config. Stored labels are shown for easy diagnosis. Special keywords (`ALL`, `ALL DOME`, `ALL BODY`) are always valid.
+
+**Audio validation** — audio blocks are validated against the sound index. ❌ file missing from slave · ⚠️ unknown RANDOM category. Audio blocks support both specific files and `🎲 RANDOM CATEGORY` mode (plays any sound from the chosen mood category at runtime).
+
+**VESC mismatch banner** — if the choreography was saved with different motor invert settings than the current config, a warning banner appears before playback to prevent the robot moving backwards.
 
 Telemetry abort safeguards: ChoreoPlayer monitors VESC voltage (min = cells × 3.5V), temperature (max 80°C), current (max 30A), and UART reliability (3 consecutive failures). Any threshold breach stops the sequence and logs the reason, readable via `GET /choreo/status`.
 
