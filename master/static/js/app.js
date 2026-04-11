@@ -72,6 +72,7 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
     const opts = { method, headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
+    if (!res.ok) { console.warn(`API ${method} ${endpoint}: HTTP ${res.status}`); return null; }
     const data = await res.json();
     return data;
   } catch (e) {
@@ -3332,9 +3333,15 @@ class StatusPoller {
       audioBoard.setPlaying(data.audio_playing, data.audio_current || '');
     }
 
-    // Scripts running
-    if (data.scripts_running) {
-      scriptEngine.updateRunning(data.scripts_running);
+    // Scripts running — merge choreo playing state into scripts_running list
+    if (data.scripts_running !== undefined) {
+      const running = [...(data.scripts_running || [])];
+      if (data.choreo_playing && data.choreo_name) {
+        if (!running.find(s => s.name === data.choreo_name)) {
+          running.push({ name: data.choreo_name, id: 'choreo' });
+        }
+      }
+      scriptEngine.updateRunning(running);
     }
 
     // Lock mode — sync si reconnexion ou autre client
