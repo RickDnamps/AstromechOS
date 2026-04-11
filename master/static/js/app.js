@@ -273,12 +273,13 @@ const lockMgr = new LockManager();
 
 class AdminGuard {
   constructor() {
-    this._unlocked     = false;
-    this._timer        = null;
-    this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED    = new Set(['settings']);
-    this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
-    this._pendingTab   = null;             // tab to open after successful unlock
+    this._unlocked      = false;
+    this._timer         = null;
+    this._TIMEOUT       = 5 * 60 * 1000;   // 5 minutes
+    this._PROTECTED     = new Set(['settings']);
+    this._activeTabId   = '';               // updated by onTabSwitch (always, even when locked)
+    this._pendingTab    = null;             // tab to open after successful unlock
+    this._pendingCallback = null;           // callback to run after successful unlock (choreo guard)
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
   }
@@ -286,8 +287,9 @@ class AdminGuard {
   get unlocked() { return this._unlocked; }
   isProtected(tabId) { return this._PROTECTED.has(tabId); }
 
-  showModal(pendingTab = null) {
-    this._pendingTab = pendingTab;
+  showModal(pendingTab = null, pendingCallback = null) {
+    this._pendingTab      = pendingTab;
+    this._pendingCallback = pendingCallback;
     const m = el('admin-modal');
     if (!m) return;
     m.classList.remove('hidden');
@@ -339,6 +341,13 @@ class AdminGuard {
       const t = this._pendingTab;
       this._pendingTab = null;
       switchTab(t);
+    }
+    // Run choreo action that triggered the auth prompt
+    if (this._pendingCallback) {
+      const cb = this._pendingCallback;
+      this._pendingCallback = null;
+      _choreoUnlocked = true;
+      cb();
     }
     // Track activity to reset the timer while on a protected tab.
     // pointerdown is used instead of click: mousedown.preventDefault() in the
@@ -392,6 +401,10 @@ class AdminGuard {
 
 const adminGuard = new AdminGuard();
 
+// Choreo tab session unlock — true after first admin auth while in choreo tab.
+// Resets when leaving the choreo tab so the next visit requires re-auth.
+let _choreoUnlocked = false;
+
 // VESC tab fast-poll — active only while VESC tab is open
 let _vescTabTimer = null;
 function _startVescTabPoll() {
@@ -437,6 +450,9 @@ function switchTab(tabId) {
 
   // Stop VESC fast poll when leaving settings/vesc panel
   if (tabId !== 'settings') _stopVescTabPoll();
+
+  // Reset choreo session unlock when leaving the choreo tab
+  if (tabId !== 'choreo') _choreoUnlocked = false;
 
   if (tabId === 'choreo') choreoEditor.init();
 }
@@ -5460,6 +5476,10 @@ const choreoEditor = (() => {
     },
 
     async deleteChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.deleteChor());
+        return;
+      }
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       const name = _chor.meta.name;
       if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
@@ -5479,6 +5499,10 @@ const choreoEditor = (() => {
     },
 
     newChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.newChor());
+        return;
+      }
       const name = prompt('Choreography name:', 'my_show');
       if (!name) return;
       _chor = {
@@ -5493,7 +5517,12 @@ const choreoEditor = (() => {
 
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
-      if (_dirty) await this.save();
+      // Auto-save only if authed — otherwise play the last saved version
+      if (_dirty && (adminGuard.unlocked || _choreoUnlocked)) {
+        await this.save();
+      } else if (_dirty) {
+        toast('Playing last saved version (save requires admin)', 'info');
+      }
       const result = await api('/choreo/play', 'POST', { name: _chor.meta.name });
       if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
     },
@@ -5509,6 +5538,10 @@ const choreoEditor = (() => {
     },
 
     async save() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.save());
+        return;
+      }
       if (!_chor) return;
       _validateAudioOverflow();
       _refreshServoLabels();
@@ -5529,6 +5562,10 @@ const choreoEditor = (() => {
     },
 
     async exportChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.exportChor());
+        return;
+      }
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       if (_dirty) await this.save();
       const json = JSON.stringify(_chor, null, 2);
@@ -5541,6 +5578,10 @@ const choreoEditor = (() => {
     },
 
     async importChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.importChor());
+        return;
+      }
       const input = document.createElement('input');
       input.type = 'file'; input.accept = '.chor,application/json';
       input.onchange = async () => {
