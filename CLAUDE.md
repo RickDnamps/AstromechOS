@@ -34,8 +34,8 @@
 
 ## 🎯 Architecture
 
-**Master Pi** (dôme) — Flask API, séquences, servos dôme, Teeces32, déploiement.
-**Slave Pi** (corps) — VESCs propulsion, servos body, audio, moteur dôme, RP2040 LCD.
+**Master Pi 4B 4GB** (dôme, tourne avec slipring) — Flask API, séquences, servos dôme, Teeces32, déploiement. Future AI : face/voice recognition en local (Vosk/Whisper.cpp + OpenCV) — toujours sur le Master.
+**Slave Pi 4B 2GB** (corps, fixe) — VESCs propulsion, servos body, audio mpg123, moteur dôme, RP2040 LCD. Délibérément léger (pas d'IA, pas de Flask) — réactivité temps-réel prioritaire.
 UART physique 115200 baud à travers le slipring. Inspiré de [r2_control by dpoulson](https://github.com/dpoulson/r2_control).
 
 ```
@@ -110,6 +110,10 @@ POST /servo/body/open_all|close_all
 GET  /servo/list
 GET  /servo/settings
 POST /servo/settings            {"panels":{"Servo_M0":{"label":"..","open":110,"close":20,"speed":10}}}
+
+GET  /servo/arms                {count, servos:["Servo_S0",...], panels:["Servo_S5",...]}
+POST /servo/arms                {count:2, servos:["Servo_S0","Servo_S1"], panels:["Servo_S5","Servo_S6"]}
+  → local.cfg [arms] count/arm_1..arm_N/panel_1..panel_N
 
 POST /scripts/run               {"name":"patrol","loop":false}
 POST /scripts/stop_all
@@ -187,8 +191,18 @@ PSI sequences : `normal|flash|alarm|failure|redalert|leia|march`.
 ## 🦾 Servos — IDs + Labels
 
 `Servo_M0`–`M10` = canaux 0–10 Master PCA9685 @ 0x40 (dome).
-`Servo_S0`–`S10` = canaux 0–10 Slave PCA9685 @ 0x41 (body).
+`Servo_S0`–`S11` = canaux 0–11 Slave PCA9685 @ 0x41 (body).
 ID hardware immuable. Label éditable, sauvé dans `dome_angles.json` / `servo_angles.json`.
+
+**Arms config (`local.cfg [arms]`) :**
+```ini
+count = 2
+arm_1 = Servo_S0
+arm_2 = Servo_S1
+panel_1 = Servo_S5    # body panel à ouvrir avant l'extension du bras 1
+panel_2 = Servo_S6
+```
+Les panels body (S0–S11 seulement, pas S12–S15) sont optionnels — si non défini, le bras s'ouvre directement.
 
 ```json
 {"Servo_M0": {"label":"Dome_Panel_1","open":110,"close":20,"speed":10}}
@@ -241,6 +255,7 @@ SSH     artoo / deetoo
 | 4 | API REST + dashboard web + Android | ✅ |
 | 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
 | 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
+| 4+++ | Choreo admin guard · Arms body-panel auto-dispatch · Settings sidebar refonte · Choreo toolbar/footer | ✅ |
 | 5 | Caméra USB stream ✅ (temp webcam) · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -261,7 +276,25 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 > VERSION file : `update.sh` écrit toujours le hash git — si périmé → RP2040 affiche `SYNC FAILED`.
 
 **Admin inactivity :** tous les onglets trackés via `_activeTabId` (set dans `onTabSwitch()`) · `pointerdown` au lieu de `click` (Choreo editor bloque `click` via `preventDefault()`).
+
+**Choreo Admin Guard :**
+- Save / Delete / Export / Import → protégés par mot de pass admin
+- New / Play / Stop / Load → libres (pas de auth)
+- `_choreoUnlocked` flag de session : mis à `true` après première auth dans CHOREO tab, reset à `false` en quittant l'onglet
+- `adminGuard._pendingCallback` : callback stocké dans `showModal()`, exécuté dans `_unlock()` après auth réussie
+- `choreoEditor.save({ requireAuth: false })` — contourne la garde pour les auto-saves internes (ex: play sur fichier modifié)
+
+**Settings menu (iPad-style sidebar) :**
+12 panneaux : Bluetooth · Lock Mode · Arms · Calibration (ex-Servos) · VESC · Lights · Battery · Audio · Camera · Network · Deploy · System
+`switchSettingsPanel(panelId)` → lazy-load par panneau · `if (panelId === 'arms') armsConfig.load()`
+
+**Choreo toolbar layout :**
+- Dropdown + NEW + DELETE → groupe gauche
+- `chor-cmd-gap` (margin: 0 20px = 41px) entre DELETE et PLAY
+- Timecode + durée déplacés dans `chor-footer` (barre 26px en bas de la timeline)
+
 **Backlog :** AstroPixels+ 17 séquences manquantes (bloqué hardware) · DiagnosticMonitor Teeces
+**Backlog futur :** AS5600 encoder I2C absolu magnétique pour position dôme (0–360° absolu, pas de dérive) · VESC safety lock si VESC absent/fault · IP Pi sur RP2040 LCD au boot
 
 ---
 
@@ -272,6 +305,17 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 **Drive blocks :** `vesc.drive(left,right)` discret aux timestamps. Pas de software ramping — VESC firmware gère accélération. `0,0` = stop explicite.
 **Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat`=25ms.
 **Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails → `GET /choreo/status` retourne `abort_reason`.
+
+**Arms — auto-dispatch panel body :**
+- `_ARM_PANEL_DELAY = 0.5` secondes entre panel open et arm extension (et entre arm close et panel close)
+- `_read_arm_panel_map()` lit `local.cfg [arms]` au début de chaque `_run()` → retourne `{arm_servo_id: panel_servo_id}`
+- Si bras a un panel associé : open arm → ouvre panel → attend 0.5s → ouvre bras. Close arm → ferme bras → attend 0.5s → ferme panel.
+- `threading.Timer` non-bloquant, daemon=True
+
+**Durée playback vs durée visuelle :**
+- `_calcTotalDuration()` = max(last_event_end + 2.0, 5.0) → canvas/ruler (padding visuel)
+- `_calcPlaybackDuration()` = max(last_event_end + 0.1, 1.0) → `meta.duration` envoyé au Pi
+- Pi s'arrête 100ms après le dernier event (plus les 2s de silence d'avant)
 
 ---
 

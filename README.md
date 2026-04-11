@@ -34,8 +34,8 @@ If you're building a full-scale R2-D2 and you want a control system actually wor
 
 A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 40 expressive behavioral sequences that give R2-D2 a real personality.
 
-- **Master Pi 4B** (dome, rotates) — Flask REST API, web dashboard, dome servos & panels, LED logics, visual editors, BT gamepad
-- **Slave Pi 4B** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 317-sound audio system, RP2040 diagnostic LCD
+- **Master Pi 4B 4GB** (dome, rotates) — Flask REST API, web dashboard, dome servos & panels, LED logics, visual editors, BT gamepad. The 4GB is intentional headroom for future local AI (face detection, voice recognition — all on-device, no cloud)
+- **Slave Pi 4B 2GB** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 317-sound audio system, RP2040 diagnostic LCD. Kept deliberately lightweight — only real-time I/O, no AI workloads
 - If the UART link drops for more than 500ms, drive motors **cut immediately** — no runaway robot, ever
 
 The dashboard runs on the Master Pi and is reachable from any phone, tablet, or browser on the local Wi-Fi hotspot. An Android app wraps the same interface with offline detection and network auto-discovery. A Bluetooth gamepad pairs directly to the Pi — no phone middleman, zero lag.
@@ -175,7 +175,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | | |
 |---|---|
 | 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — one-click in SEQUENCES tab |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag · battery % · RSSI · keep-alive (no VESC cut on hold) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -185,7 +185,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🚀 **One-button deploy** | Dome button → git pull + rsync Slave + reboot |
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category · MP3 upload + category creation (admin) |
-| 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration |
+| 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration · arm body-panel auto-open/close |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
 | 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart · temporary cam active, permanent cam on order |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
@@ -201,6 +201,12 @@ The **CHOREO tab** is the main authoring tool. Build multi-track timelines that 
 **Audio validation** — audio blocks are validated against the sound index. ❌ file missing from slave · ⚠️ unknown RANDOM category. Audio blocks support both specific files and `🎲 RANDOM CATEGORY` mode (plays any sound from the chosen mood category at runtime).
 
 **VESC mismatch banner** — if the choreography was saved with different motor invert settings than the current config, a warning banner appears before playback to prevent the robot moving backwards.
+
+**Admin guard** — Save, Delete, Export, and Import require admin password. New, Play, Stop, and Load are always free. Once authenticated in the Choreo tab, the session stays unlocked until you switch tabs — no repeated prompts during editing.
+
+**Smart arm dispatch** — each arm servo can have an associated body panel servo configured in Settings → Arms. When ChoreoPlayer fires an arm-open event, it opens the body panel first, waits 500ms, then extends the arm. On close, it retracts the arm first, then closes the panel after 500ms. Fully automatic — no extra events needed in the choreography.
+
+**Timecode footer** — the current playback position and total duration are shown in a fixed bar below the timeline (not in the toolbar), keeping the toolbar clean.
 
 Telemetry abort safeguards: ChoreoPlayer monitors VESC voltage (min = cells × 3.5V), temperature (max 80°C), current (max 30A), and UART reliability (3 consecutive failures). Any threshold breach stops the sequence and logs the reason, readable via `GET /choreo/status`.
 
