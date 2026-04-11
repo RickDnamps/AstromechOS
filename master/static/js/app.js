@@ -1828,12 +1828,17 @@ const bodyServoPanel = new ServoPanel('body-servo-list', BODY_SERVOS, '/servo/bo
 
 class AudioBoard {
   constructor() {
-    this._currentCat  = null;
-    this._playing     = false;
-    this._tickInterval = null;
-    this._timedSound  = '';
-    this._startTime   = 0;
-    this._totalMs     = 0;
+    this._currentCat    = null;
+    this._playing       = false;
+    this._tickInterval  = null;
+    this._timedSound    = '';
+    this._startTime     = 0;
+    this._totalMs       = 0;
+    this._repeat        = false;
+    this._autoRandom    = false;
+    this._userStopped   = false;
+    this._lastRandomCat = null;
+    this._fullIndex     = {};
     this._ICONS = {
       alarm:'🚨', happy:'😄', hum:'🎵', misc:'🎲', proc:'⚙️', quote:'💬',
       razz:'🤪', sad:'😢', sent:'🤔', ooh:'😲', whistle:'🎶', scream:'😱',
@@ -1860,7 +1865,11 @@ class AudioBoard {
   }
 
   async loadCategories() {
-    const data = await api('/audio/categories');
+    const [data, indexData] = await Promise.all([
+      api('/audio/categories'),
+      api('/audio/index'),
+    ]);
+    if (indexData?.categories) this._fullIndex = indexData.categories;
     if (!data || !data.categories) return;
     const wrap = el('audio-categories');
     if (!wrap) return;
@@ -1952,12 +1961,45 @@ class AudioBoard {
 
   playRandom(cat) {
     const c = cat || this._currentCat || 'happy';
+    this._lastRandomCat = c;
     api('/audio/random', 'POST', { category: c }).then(d => {
       if (d) {
         const label = this._CAT_LABELS[c] || c;
         this.setPlaying(true, `🎲 ${label}`);
       }
     });
+  }
+
+  toggleRepeat() {
+    this._repeat = !this._repeat;
+    if (this._repeat) this._autoRandom = false;
+    el('now-playing-repeat')?.classList.toggle('active', this._repeat);
+    el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
+  }
+
+  toggleAutoRandom() {
+    this._autoRandom = !this._autoRandom;
+    if (this._autoRandom) this._repeat = false;
+    el('now-playing-repeat')?.classList.toggle('active', this._repeat);
+    el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
+  }
+
+  playNext() {
+    this.playRandom(this._currentCat || 'happy');
+  }
+
+  stopPlayback() {
+    this._userStopped = true;
+    api('/audio/stop', 'POST').then(d => {
+      if (d) this.setPlaying(false);
+    });
+  }
+
+  _getCatForSound(sound) {
+    for (const [cat, sounds] of Object.entries(this._fullIndex)) {
+      if (sounds.includes(sound)) return cat;
+    }
+    return null;
   }
 
   _fmtTime(ms) {
@@ -2013,11 +2055,34 @@ class AudioBoard {
     const waveform = el('waveform');
     const text     = el('now-playing-text');
     if (waveform) waveform.classList.toggle('playing', active);
-    if (text) text.textContent = active ? name : 'IDLE';
+
+    // Category badge on specific sounds
+    let displayName = active ? name : 'IDLE';
+    if (active && name && !name.startsWith('🎲')) {
+      const cat = this._getCatForSound(name);
+      if (cat) displayName = `${this._ICONS[cat] || '🔊'} ${name}`;
+    }
+    if (text) text.textContent = displayName;
+
     if (active && (!wasPlaying || !sameSong)) {
       this._startTimer(name);
     } else if (!active) {
+      const soundToRepeat = this._timedSound;
       this._stopTimer();
+      if (wasPlaying && !this._userStopped) {
+        if (this._repeat) {
+          setTimeout(() => {
+            if (soundToRepeat && !soundToRepeat.startsWith('🎲')) {
+              this.play(soundToRepeat);
+            } else {
+              this.playRandom(this._lastRandomCat || this._currentCat);
+            }
+          }, 300);
+        } else if (this._autoRandom) {
+          setTimeout(() => this.playNext(), 300);
+        }
+      }
+      this._userStopped = false;
     }
   }
 
@@ -2106,9 +2171,7 @@ class AudioBoard {
 const audioBoard = new AudioBoard();
 
 function audioStop() {
-  api('/audio/stop', 'POST').then(d => {
-    if (d) { audioBoard.setPlaying(false); toast('Audio stopped', 'ok'); }
-  });
+  audioBoard.stopPlayback();
 }
 
 function audioRandom() {

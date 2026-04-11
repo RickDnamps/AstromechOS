@@ -1256,23 +1256,39 @@ body[data-lock-mode="2"] #js-left-ring::after {
   white-space: nowrap;
 }
 
-.now-playing-stop-btn {
+.now-playing-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
+}
+
+.now-playing-ctrl-btn {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-muted, #555e7a);
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  transition: border-color 0.2s, color 0.2s;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
 }
-.now-playing-stop-btn:hover {
+.now-playing-ctrl-btn:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.now-playing-ctrl-btn.active {
+  background: rgba(0,200,255,0.12);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+.now-playing-ctrl-btn.now-playing-stop:hover {
   border-color: var(--red, #e53);
   color: var(--red, #e53);
 }
