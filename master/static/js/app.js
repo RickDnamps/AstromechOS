@@ -2660,12 +2660,30 @@ class ScriptEngine {
   constructor() {
     this._scripts = [];
     this._running = new Set();
-    this._DESCRIPTIONS = {
-      patrol:    'R2-D2 patrols with sounds + dome movement',
-      celebrate: 'Victory celebration with lights and sounds',
-      cantina:   'Cantina dance routine with audio',
-      leia:      'Help me Obi-Wan... holographic message',
-    };
+  }
+
+  _emoji(name) {
+    const n = name.toLowerCase();
+    if (/cantina|tune|dance|disco|music|song/.test(n)) return '🎵';
+    if (/alert|alarm/.test(n))                         return '🚨';
+    if (/scan/.test(n))                                return '🔍';
+    if (/celebrat|happy|cheer|joy/.test(n))            return '🎉';
+    if (/leia/.test(n))                                return '📡';
+    if (/patrol|stroll|walk/.test(n))                  return '🚶';
+    if (/test/.test(n))                                return '🔧';
+    if (/fall|strike|multi/.test(n))                   return '⚡';
+    if (/charg/.test(n))                               return '🔋';
+    if (/panel/.test(n))                               return '🚪';
+    if (/demo|boot/.test(n))                           return '🤖';
+    if (/show|home/.test(n))                           return '🎭';
+    if (/dome/.test(n))                                return '🔵';
+    if (/babble|excit|idea/.test(n))                   return '💬';
+    if (/circle/.test(n))                              return '🔄';
+    if (/blip|bip/.test(n))                            return '📻';
+    if (/bird/.test(n))                                return '🐦';
+    if (/play/.test(n))                                return '▶️';
+    if (/stil|still/.test(n))                          return '🧍';
+    return '🎬';
   }
 
   async load() {
@@ -2677,29 +2695,13 @@ class ScriptEngine {
   render() {
     const grid = el('script-list');
     if (!grid) return;
-    grid.innerHTML = this._scripts.map(entry => {
-      const { name, type } = entry;
-      const desc = this._DESCRIPTIONS[name] ||
-        (type === 'light'  ? 'Light sequence' :
-         type === 'choreo' ? 'Choreography (timeline with interpolation)' :
-                             'Custom sequence script');
+    grid.innerHTML = this._scripts.map(({ name, type }) => {
       const isRunning = this._running.has(name);
-      const badge = type === 'light'  ? '<span class="script-badge-light">LIGHT</span>' :
-                    type === 'choreo' ? '<span class="script-badge-choreo">🎬 CHOREO</span>' : '';
-      const loopBtn = type !== 'choreo'
-        ? `<button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>` : '';
-      return `
-        <div class="script-card${isRunning ? ' running' : ''}" id="script-card-${name}">
-          <div class="script-name">${name.toUpperCase()}${badge}</div>
-          <div class="script-desc">${desc}</div>
-          <div class="script-btns">
-            <div class="running-indicator"></div>
-            <button class="btn btn-sm btn-active" onclick="scriptEngine.run('${name}', false, '${type}')">RUN</button>
-            ${loopBtn}
-            <button class="btn btn-sm btn-danger" onclick="scriptEngine.stopName('${name}', '${type}')">STOP</button>
-          </div>
-        </div>
-      `;
+      const emoji     = this._emoji(name);
+      const label     = name.toUpperCase().replace(/_/g, ' ');
+      return `<button class="seq-btn${isRunning ? ' running' : ''}" id="script-card-${name}"
+                onclick="scriptEngine.toggle('${name}','${type}')"
+                title="${isRunning ? '⏹ Click to stop' : '▶ Click to run'}">${emoji}<span class="seq-btn-label">${label}</span></button>`;
     }).join('');
   }
 
@@ -2760,11 +2762,16 @@ class ScriptEngine {
     });
   }
 
+  toggle(name, type) {
+    if (this._running.has(name)) this.stopName(name, type);
+    else this.run(name, false, type);
+  }
+
   stopAll() {
     api('/scripts/stop_all', 'POST').then(d => {
       if (d) {
         this._running.clear();
-        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
+        document.querySelectorAll('.seq-btn').forEach(c => c.classList.remove('running'));
         const count = el('running-count');
         if (count) count.textContent = '0';
         const list = el('running-scripts');
@@ -2778,9 +2785,9 @@ class ScriptEngine {
     const names = new Set(running.map(s => s.name));
     this._running = names;
 
-    document.querySelectorAll('.script-card').forEach(card => {
-      const name = card.id.replace('script-card-', '');
-      card.classList.toggle('running', names.has(name));
+    document.querySelectorAll('.seq-btn').forEach(btn => {
+      const name = btn.id.replace('script-card-', '');
+      btn.classList.toggle('running', names.has(name));
     });
 
     const count = el('running-count');

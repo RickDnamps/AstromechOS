@@ -1968,47 +1968,60 @@ body[data-lock-mode="2"] #js-left-ring::after {
 
 .scripts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 6px;
 }
 
-.script-card {
-  background: var(--bg-card);
+/* Compact sequence tile — emoji + name, click = run/stop */
+.seq-btn {
+  padding: 12px 6px 10px;
+  background: rgba(10, 20, 40, 0.7);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  backdrop-filter: blur(8px);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s;
+  touch-action: manipulation;
+  user-select: none;
+  line-height: 1;
 }
-
-.script-card:hover {
-  border-color: var(--border-hi);
-  box-shadow: var(--glow);
-}
-
-.script-card.running {
-  border-color: var(--green);
-  box-shadow: 0 0 12px rgba(0,204,102,0.25);
-  animation: script-run-pulse 2s ease-in-out infinite;
-}
-
-@keyframes script-run-pulse {
-  0%, 100% { box-shadow: 0 0 12px rgba(0,204,102,0.25); }
-  50%       { box-shadow: 0 0 24px rgba(0,204,102,0.5); }
-}
-
-.script-name {
-  font-size: 13px;
+.seq-btn:hover {
+  border-color: var(--blue);
   color: var(--blue);
-  letter-spacing: 1px;
-  margin-bottom: 4px;
+  background: rgba(0,170,255,0.06);
+  box-shadow: 0 0 8px rgba(0,170,255,0.2);
 }
-
-.script-desc {
+.seq-btn.running {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgba(0,204,102,0.1);
+  box-shadow: 0 0 10px rgba(0,204,102,0.3);
+  animation: seq-pulse 2s ease-in-out infinite;
+}
+.seq-btn.running:hover {
+  border-color: #ff2244;
+  color: #ff2244;
+  background: rgba(255,30,60,0.1);
+  box-shadow: 0 0 10px rgba(255,30,60,0.2);
+  animation: none;
+}
+@keyframes seq-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(0,204,102,0.3); }
+  50%       { box-shadow: 0 0 20px rgba(0,204,102,0.6); }
+}
+.seq-btn-label {
   font-size: 10px;
-  color: var(--text-dim);
-  margin-bottom: 10px;
-  letter-spacing: 0.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  line-height: 1.2;
+  word-break: break-word;
 }
 
 .anim-grid {
