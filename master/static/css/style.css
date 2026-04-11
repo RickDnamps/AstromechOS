@@ -1112,7 +1112,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
 
 .audio-sounds-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 6px;
   margin-top: 4px;
 }
@@ -2886,7 +2886,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 @media (max-width: 500px) {
   .topbar-center { display: none; }
   .scripts-grid  { grid-template-columns: 1fr; }
-  .audio-sounds-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .audio-sounds-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
 /* ================================================================
    CHOREO TAB — Ultratime Edition

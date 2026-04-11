@@ -245,6 +245,13 @@ body::after {
 .stat-val  { color: var(--cyan); }
 .stat-sep  { color: var(--text-dim); }
 
+#temp-label {
+  display: inline-block;
+  min-width: 42px;        /* enough for "99.9°C" */
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .uptime-label {
   font-size: 10px;
   color: var(--text-dim);
@@ -1105,7 +1112,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
 
 .audio-sounds-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 6px;
   margin-top: 4px;
 }
@@ -1398,35 +1405,73 @@ body[data-lock-mode="2"] #js-left-ring::after {
   gap: 6px;
 }
 
-.vesc-metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.vesc-metric {
+/* Bar metrics (new card layout) */
+.vesc-bar-metrics {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 7px;
 }
-.vesc-metric-val {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+.vesc-brow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
-.vesc-metric-unit {
-  font-size: 10px;
-  color: var(--text-dim);
-}
-.vesc-metric-label {
+.vesc-brow-lbl {
   font-size: 9px;
   color: var(--text-dim);
   letter-spacing: 1px;
-  margin-top: 2px;
+  width: 58px;
+  flex-shrink: 0;
+}
+.vesc-brow-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.vesc-brow-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 3px;
+  transition: width 0.4s, background-color 0.4s;
+  background: var(--cyan);
+}
+.vesc-brow-fill.warn   { background: var(--orange); }
+.vesc-brow-fill.danger { background: #ff4455; }
+
+.vesc-brow-val {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  min-width: 36px;
+  text-align: right;
+}
+.vesc-brow-val.warn   { color: var(--orange); }
+.vesc-brow-val.danger { color: #ff4455; }
+.vesc-brow-unit {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-left: 2px;
 }
 
+.vesc-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.vesc-footer-val {
+  color: var(--text);
+  font-weight: 700;
+}
+.vesc-footer-sep { color: var(--border); }
+
+/* Keep old metric classes for backward compat (not used in new layout) */
 .vesc-metric-val.hot    { color: #ffcc00; }
 .vesc-metric-val.danger { color: #ff4455; }
 
@@ -1481,31 +1526,190 @@ body[data-lock-mode="2"] #js-left-ring::after {
   flex: 1;
 }
 
-/* Actions */
-.vesc-actions {
+/* Symmetry row */
+.vesc-symmetry {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  background: rgba(0,0,0,0.3);
+  align-items: center;
+  gap: 0;
+  background: rgba(0,0,0,0.25);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
+  padding: 8px 14px;
 }
-.vesc-action-group {
+.vesc-sym-item {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
 }
-.vesc-action-title {
-  font-size: 10px;
-  font-weight: 700;
+.vesc-sym-lbl {
+  font-size: 9px;
   color: var(--text-dim);
   letter-spacing: 1px;
 }
-.vesc-action-hint {
-  font-weight: 400;
-  color: #ffcc00;
+.vesc-sym-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+.vesc-sym-status {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.05);
+  color: var(--text-dim);
+}
+.vesc-sym-status.ok      { color: #00ff88; background: rgba(0,255,136,0.1); }
+.vesc-sym-status.warn    { color: var(--orange); background: rgba(255,136,0,0.1); }
+
+/* Direction toggle */
+.vesc-dir-row { margin-top: 4px; }
+.vesc-inv-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.vesc-inv-btn.inverted {
+  background: rgba(255,136,0,0.15);
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+/* Status bar extras */
+.vesc-last-update {
   font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  margin-left: auto;
+}
+
+/* Session + fault log row */
+.vesc-diag-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.vesc-diag-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.vesc-session-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 10px;
+}
+.vesc-session-item {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 10px;
+}
+.vesc-session-lbl {
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+.vesc-session-val {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.vesc-session-unit { font-size: 9px; color: var(--text-dim); }
+
+.vesc-reset-peaks, .vesc-clear-log {
+  margin-top: 8px;
+  align-self: flex-end;
+  font-size: 9px;
+  padding: 3px 8px;
+  opacity: 0.6;
+}
+.vesc-reset-peaks:hover, .vesc-clear-log:hover { opacity: 1; }
+.vesc-session-card, .vesc-faultlog-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.vesc-faultlog {
+  flex: 1;
+  max-height: 100px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vesc-faultlog-empty {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+.vesc-fault-entry {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  gap: 6px;
+}
+.vesc-fault-entry-time { color: var(--text-dim); }
+.vesc-fault-entry-side { color: var(--cyan); font-weight: 700; }
+.vesc-fault-entry-name { color: #ff4455; font-weight: 700; }
+
+/* Drive Test Mode */
+.vesc-test-card.active {
+  border-color: var(--orange);
+  box-shadow: 0 0 12px rgba(255,136,0,0.2);
+}
+.vesc-test-toggle-btn {
+  font-size: 9px;
+  padding: 3px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.vesc-test-toggle-btn.active {
+  background: rgba(255,136,0,0.15);
+  border-color: var(--orange);
+  color: var(--orange);
+}
+.vesc-test-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+.vesc-test-panels {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.vesc-test-cmd-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.vesc-test-keys {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+.vesc-test-resp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 /* Info box */
@@ -2682,7 +2886,7 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 @media (max-width: 500px) {
   .topbar-center { display: none; }
   .scripts-grid  { grid-template-columns: 1fr; }
-  .audio-sounds-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .audio-sounds-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
 /* ================================================================
    CHOREO TAB — Ultratime Edition
@@ -3083,6 +3287,19 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 .chor-block[data-track="arm_servos"]  { background:rgba(45,160,90,.16);  color:#2da05a; border-color:rgba(45,160,90,.45); }
 .chor-block[data-track="propulsion"]  { background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
 .chor-block[data-track="dome"]        { background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
+
+/* Servo config mismatch badges */
+.chor-issue-badge {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+.chor-issue-badge.error { color: #ff2244; }
+.chor-issue-badge.warn  { color: #ff8800; }
 
 /* Block resize handle */
 .chor-block-resize {
