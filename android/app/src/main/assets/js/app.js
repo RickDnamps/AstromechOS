@@ -1967,12 +1967,29 @@ class AudioBoard {
   // ── Upload ────────────────────────────────────────────────────────
   showUploadZone(show) {
     const zone = el('audio-upload-zone');
-    if (!zone) return;
-    zone.style.display = show ? 'block' : 'none';
+    if (zone) zone.style.display = show ? 'block' : 'none';
     const catName = el('audio-upload-cat-name');
     if (catName) {
       const label = this._CAT_LABELS[this._currentCat] || this._currentCat || '?';
       catName.textContent = label.toUpperCase();
+    }
+    const newCatRow = el('audio-new-cat-row');
+    if (newCatRow) newCatRow.style.display = show ? 'flex' : 'none';
+  }
+
+  async createCategory() {
+    const input = el('audio-new-cat-input');
+    if (!input) return;
+    const name = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    if (!name) { this._uploadStatus('Enter a category name', 'error'); return; }
+    const d = await api('/audio/category/create', 'POST', { name });
+    if (d?.ok) {
+      input.value = '';
+      toast(`Category "${name}" created`, 'ok');
+      await this.loadCategories();
+      this.selectCategory(name);
+    } else {
+      this._uploadStatus(d?.error || 'Failed to create category', 'error');
     }
   }
 

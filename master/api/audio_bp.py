@@ -246,22 +246,60 @@ def upload_sound():
     return jsonify({'ok': True, 'filename': stem, 'category': category})
 
 
+@audio_bp.post('/category/create')
+def create_category():
+    """Create a new empty audio category. Body: {"name": "mycat"}"""
+    body = request.get_json(silent=True) or {}
+    name = (body.get('name') or '').strip().lower()
+    if not name or not re.match(r'^[a-z0-9_]+$', name):
+        return jsonify({'ok': False, 'error': 'Invalid category name'}), 400
+
+    with _upload_lock:
+        try:
+            index = json.loads(Path(_INDEX_FILE).read_text(encoding='utf-8'))
+        except Exception:
+            index = {'categories': {}}
+        cats = index.setdefault('categories', {})
+        if name in cats:
+            return jsonify({'ok': False, 'error': f'Category "{name}" already exists'}), 409
+        cats[name] = []
+        Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
+        global _INDEX_CACHE
+        _INDEX_CACHE = index
+        # Sync index to slave
+        _sftp_sync_index(index)
+
+    return jsonify({'ok': True, 'name': name})
+
+
+def _sftp_sync_index(index: dict) -> None:
+    """Sync sounds_index.json to slave."""
+    try:
+        import paramiko, io
+        c = paramiko.SSHClient()
+        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.connect('192.168.4.171', username='artoo', password='deetoo', timeout=8)
+        sftp = c.open_sftp()
+        data = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
+        sftp.putfo(io.BytesIO(data), '/home/artoo/r2d2/slave/sounds/sounds_index.json')
+        sftp.close(); c.close()
+    except Exception as e:
+        log.warning(f'SFTP index sync failed: {e}')
+
+
 def _sftp_sync_sound(local_mp3: str, stem: str, index: dict) -> None:
     """SFTP the new MP3 and updated index to the slave Pi."""
     try:
-        import paramiko
+        import paramiko, io
         c = paramiko.SSHClient()
         c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         c.connect('192.168.4.171', username='artoo', password='deetoo', timeout=8)
         sftp = c.open_sftp()
         remote_sounds = '/home/artoo/r2d2/slave/sounds'
         sftp.put(local_mp3, f'{remote_sounds}/{stem}.mp3')
-        # Write updated index to slave
-        import io
-        index_bytes = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
-        sftp.putfo(io.BytesIO(index_bytes), f'{remote_sounds}/sounds_index.json')
-        sftp.close()
-        c.close()
+        data = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
+        sftp.putfo(io.BytesIO(data), f'{remote_sounds}/sounds_index.json')
+        sftp.close(); c.close()
         log.info(f'Audio upload: synced {stem}.mp3 to slave')
     except Exception as e:
         log.warning(f'Audio upload: SFTP sync failed — {e}. File saved locally only.')
