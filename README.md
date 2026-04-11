@@ -288,7 +288,7 @@ Compatible with Xbox Series, PS4/PS5, Nintendo Switch Pro, NVIDIA Shield, 8BitDo
 
 **Fully configurable from the web UI** — remap any button, adjust deadzone, set inactivity timeout (slider up to 600s + manual entry up to 3600s), all without SSH.
 
-**Battery & signal** — the BT Config panel shows the gamepad battery percentage (read from sysfs) and Bluetooth RSSI signal strength with live color coding (green/orange/red), updated every 30 seconds.
+**Battery & signal** — the BT Config panel shows the gamepad battery percentage and Bluetooth RSSI signal strength with live color coding (green/orange/red), updated every 30 seconds. Battery is read via the standard Linux sysfs HID power supply interface and upower, which is supported by **PS4, PS5, and Xbox** controllers. The **NVIDIA Shield** controller uses a proprietary Bluetooth protocol and does not expose battery level through any standard Linux mechanism — battery will show 0% for that device.
 
 **Keep-alive** — a background thread re-sends the last drive command every 300ms while the joystick is held. This prevents the MotionWatchdog from cutting propulsion when the stick is held steady (evdev only fires on axis *change*, not continuously).
 
