@@ -5052,9 +5052,16 @@ const choreoEditor = (() => {
       });
 
     } else if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
-      const prefix = track === 'dome_servos' ? 'Servo_M' : track === 'body_servos' ? 'Servo_S' : 'Servo_';
-      const filtered = _servoList.filter(s => s.startsWith(prefix));
-      const pool = filtered.length ? filtered : _servoList;
+      let pool;
+      if (track === 'arm_servos') {
+        // Only show servos configured as arms in Settings > Arms
+        const configured = armsConfig._servos.slice(0, armsConfig._count).filter(s => s);
+        pool = configured.length ? configured : _servoList.filter(s => s.startsWith('Servo_S'));
+      } else {
+        const prefix   = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
+        const filtered = _servoList.filter(s => s.startsWith(prefix));
+        pool = filtered.length ? filtered : _servoList;
+      }
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
 
       // Mismatch context banner in inspector — skip for special group keywords
@@ -5083,8 +5090,8 @@ const choreoEditor = (() => {
         }
       }
 
-      // Servo dropdown — for special keywords, add them as options too
-      const specialOpts = { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+      // Special group keywords — not applicable to arm track
+      const specialOpts = track === 'arm_servos' ? {} : { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
       const allServoOpts = { ...specialOpts, ...servoOpts };
 
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });

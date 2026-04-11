@@ -2,6 +2,7 @@
 ChoreoPlayer — R2-D2 Choreography Timeline Engine.
 Reads .chor JSON files and dispatches events to drivers in real time.
 """
+import configparser
 import json
 import logging
 import os
@@ -15,8 +16,28 @@ TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
 
 _DOME_ANGLES_PATH = '/home/artoo/r2d2/master/config/dome_angles.json'
 _BODY_ANGLES_PATH = '/home/artoo/r2d2/slave/config/servo_angles.json'
+_LOCAL_CFG        = '/home/artoo/r2d2/master/config/local.cfg'
 
 _SERVO_SPECIAL = ('all', 'all_dome', 'all_body')
+
+# Delay between body panel open and arm extension (and between arm close and panel close)
+_ARM_PANEL_DELAY = 0.5
+
+
+def _read_arm_panel_map() -> dict:
+    """Returns {arm_servo_id: panel_servo_id} from local.cfg [arms].
+    Only includes entries where both arm and panel are configured.
+    """
+    cfg = configparser.ConfigParser()
+    cfg.read(_LOCAL_CFG)
+    count  = cfg.getint('arms', 'count', fallback=0)
+    result = {}
+    for i in range(1, count + 1):
+        arm   = cfg.get('arms', f'arm_{i}',   fallback='').strip()
+        panel = cfg.get('arms', f'panel_{i}', fallback='').strip()
+        if arm and panel:
+            result[arm] = panel
+    return result
 
 
 def _normalise_label(s: str) -> str:
@@ -306,6 +327,8 @@ class ChoreoPlayer:
         name     = chor['meta']['name']
         duration = float(chor['meta']['duration'])
         events   = self._build_event_queue(tracks)
+        # Read arm→panel associations once per playback (picks up Settings changes)
+        self._arm_panel_map = _read_arm_panel_map()
 
         ev_idx = 0
 
@@ -504,6 +527,45 @@ class ChoreoPlayer:
                 target  = ev.get('target')
                 dur_s   = float(ev.get('duration', 0) or 0)
                 easing  = ev.get('easing', 'ease-in-out')
+                group   = ev.get('group', '')
+
+                # Arm servo with associated body panel — auto open/close panel
+                if group == 'arms' and servo and self._body_servo:
+                    panel = getattr(self, '_arm_panel_map', {}).get(servo)
+                    if panel:
+                        if action == 'open':
+                            # Open body panel immediately, then extend arm after delay
+                            try:
+                                self._body_servo.open(panel)
+                            except Exception:
+                                log.exception("Arm panel open failed: %s", panel)
+                            arm_servo = servo
+                            arm_driver = self._body_servo
+                            def _delayed_arm_open(drv=arm_driver, s=arm_servo):
+                                try:
+                                    drv.open(s)
+                                except Exception:
+                                    log.exception("Delayed arm open failed: %s", s)
+                            t = threading.Timer(_ARM_PANEL_DELAY, _delayed_arm_open)
+                            t.daemon = True
+                            t.start()
+                            return
+                        elif action == 'close':
+                            # Retract arm immediately, then close body panel after delay
+                            try:
+                                self._body_servo.close(servo)
+                            except Exception:
+                                log.exception("Arm close failed: %s", servo)
+                            def _delayed_panel_close(drv=self._body_servo, s=panel):
+                                try:
+                                    drv.close(s)
+                                except Exception:
+                                    log.exception("Delayed panel close failed: %s", s)
+                            t = threading.Timer(_ARM_PANEL_DELAY, _delayed_panel_close)
+                            t.daemon = True
+                            t.start()
+                            return
+                    # No panel configured — fall through to normal servo dispatch
 
                 is_body     = servo.startswith('body_') or servo.startswith('arm_') or servo.startswith('Servo_S')
                 is_all_dome = servo in ('all', 'all_dome')
