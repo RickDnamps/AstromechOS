@@ -268,7 +268,7 @@ class LockManager {
 const lockMgr = new LockManager();
 
 // ================================================================
-// Admin Guard — onglets protégés (SERVO / VESC / CONFIG)
+// Admin Guard — onglets protégés (SETTINGS / CHOREO)
 // ================================================================
 
 class AdminGuard {
@@ -276,7 +276,7 @@ class AdminGuard {
     this._unlocked     = false;
     this._timer        = null;
     this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED    = new Set(['systems', 'vesc', 'config', 'choreo']);
+    this._PROTECTED    = new Set(['settings', 'choreo']);
     this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
@@ -411,16 +411,40 @@ function switchTab(tabId) {
 
   adminGuard.onTabSwitch(tabId);
 
-  if (tabId === 'config') { loadSettings(); loadServoSettings(); }
+  if (tabId === 'settings') {
+    loadSettings();
+    loadServoSettings();
+    armsConfig.load();
+    // Activate first sidebar item if none selected yet
+    if (!document.querySelector('.settings-nav-item.active')) {
+      switchSettingsPanel('bluetooth');
+    }
+  }
   if (tabId === 'sequences') loadScripts();
   if (tabId === 'lights') loadLightSequences();
   if (tabId === 'audio') loadAudioCategories();
 
-  // VESC tab: start fast poll on entry, stop on exit
-  if (tabId === 'vesc') { _startVescTabPoll(); }
-  else                  { _stopVescTabPoll(); }
+  // Stop VESC fast poll when leaving settings/vesc panel
+  if (tabId !== 'settings') _stopVescTabPoll();
 
   if (tabId === 'choreo') choreoEditor.init();
+}
+
+function switchSettingsPanel(panelId) {
+  document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+  const btn   = document.querySelector(`.settings-nav-item[data-panel="${panelId}"]`);
+  const panel = el(`spanel-${panelId}`);
+  if (btn)   btn.classList.add('active');
+  if (panel) panel.classList.add('active');
+
+  // VESC fast poll only while VESC panel is visible
+  if (panelId === 'vesc') _startVescTabPoll();
+  else                    _stopVescTabPoll();
+
+  // Lazy-load network status when opening that panel
+  if (panelId === 'network') loadSettings();
+  if (panelId === 'servos')  loadServoSettings();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
