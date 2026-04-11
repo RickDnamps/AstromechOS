@@ -5513,12 +5513,8 @@ const choreoEditor = (() => {
 
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
-      // Auto-save only if authed — otherwise play the last saved version
-      if (_dirty && (adminGuard.unlocked || _choreoUnlocked)) {
-        await this.save();
-      } else if (_dirty) {
-        toast('Playing last saved version (save requires admin)', 'info');
-      }
+      // Auto-save before playing (no auth required — this is an internal save for playback only)
+      if (_dirty) await this.save({ requireAuth: false });
       const result = await api('/choreo/play', 'POST', { name: _chor.meta.name });
       if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
     },
@@ -5533,8 +5529,8 @@ const choreoEditor = (() => {
       toast('Choreo stopped', 'ok');
     },
 
-    async save() {
-      if (!adminGuard.unlocked && !_choreoUnlocked) {
+    async save({ requireAuth = true } = {}) {
+      if (requireAuth && !adminGuard.unlocked && !_choreoUnlocked) {
         adminGuard.showModal(null, () => choreoEditor.save());
         return;
       }
