@@ -2352,7 +2352,7 @@ class VescPanel {
     const label  = el('vesc-scale-label');
     const info   = el('vesc-scale-pct');
     const pct    = Math.round(scale * 100);
-    if (slider && slider !== document.activeElement) slider.value = pct;
+    if (slider && slider !== document.activeElement) { slider.value = pct; _updateSliderBg(slider); }
     if (label) label.textContent = pct + '%';
     if (info)  info.textContent  = pct;
   }
@@ -3751,7 +3751,7 @@ function initVolume() {
 
 function _updateSliderBg(slider) {
   const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
-  slider.style.background = `linear-gradient(to right, var(--blue) ${pct}%, var(--border) ${pct}%)`;
+  slider.style.setProperty('--val', pct.toFixed(1) + '%');
 }
 
 // ================================================================

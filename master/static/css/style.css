@@ -1354,7 +1354,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .volume-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--blue) 0%, var(--blue) 80%, var(--border) 80%);
+  background: linear-gradient(to right, var(--blue) var(--val, 80%), var(--border) var(--val, 80%));
 }
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1369,7 +1369,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .volume-slider::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--blue) 0%, var(--blue) 80%, var(--border) 80%);
+  background: linear-gradient(to right, var(--blue) var(--val, 80%), var(--border) var(--val, 80%));
 }
 .volume-slider::-moz-range-thumb {
   width: 16px;
