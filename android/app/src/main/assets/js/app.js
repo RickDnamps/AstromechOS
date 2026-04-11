@@ -311,6 +311,7 @@ class AdminGuard {
     document.body.classList.add('admin-unlocked');
     el('admin-modal').classList.add('hidden');
     toast('Admin access granted — expires in 5 min', 'ok');
+    audioBoard?.showUploadZone(true);
     // Track activity to reset the timer while on a protected tab.
     // pointerdown is used instead of click: mousedown.preventDefault() in the
     // Choreo editor suppresses click events, but never suppresses pointerdown.
@@ -330,6 +331,7 @@ class AdminGuard {
     this._unlocked = false;
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
+    audioBoard?.showUploadZone(false);
     document.removeEventListener('mousemove',   this._boundActivity);
     document.removeEventListener('pointerdown', this._boundActivity);
     document.removeEventListener('keydown',     this._boundActivity);
@@ -1848,11 +1850,9 @@ class AudioBoard {
     };
   }
 
-  // Formate un nom de fichier pour l'affichage
-  // "Happy001" → "001"  |  "Cantina" → "Cantina"
+  // Formate un nom de fichier pour l'affichage — show full filename
   _formatSound(filename) {
-    const m = filename.match(/^[A-Za-z_]+?(\d+)$/);
-    return m ? m[1].replace(/^0+/, '') || '1' : filename;
+    return filename;
   }
 
   async loadCategories() {
@@ -1882,6 +1882,7 @@ class AudioBoard {
 
     // Sélectionner la première catégorie par défaut
     if (cats.length > 0) this.selectCategory(cats[0].name);
+    this.showUploadZone(adminGuard?.unlocked === true);
   }
 
   async selectCategory(cat) {
@@ -1908,6 +1909,7 @@ class AudioBoard {
     const grid = el('audio-sounds-grid');
     if (!grid) return;
     grid.innerHTML = '<div class="sounds-loading">Loading...</div>';
+    this.showUploadZone(adminGuard?.unlocked === true);
 
     const data = await api(`/audio/sounds?category=${cat}`);
 
@@ -1960,6 +1962,70 @@ class AudioBoard {
     const text     = el('now-playing-text');
     if (waveform) waveform.classList.toggle('playing', active);
     if (text) text.textContent = active ? name : 'IDLE';
+  }
+
+  // ── Upload ────────────────────────────────────────────────────────
+  showUploadZone(show) {
+    const zone = el('audio-upload-zone');
+    if (!zone) return;
+    zone.style.display = show ? 'block' : 'none';
+    const catName = el('audio-upload-cat-name');
+    if (catName) {
+      const label = this._CAT_LABELS[this._currentCat] || this._currentCat || '?';
+      catName.textContent = label.toUpperCase();
+    }
+  }
+
+  uploadDragOver(e) {
+    e.preventDefault();
+    const zone = el('audio-upload-zone');
+    if (zone) { zone.style.borderColor = '#00aaff'; zone.style.color = '#00aaff'; }
+  }
+
+  uploadDragLeave(e) {
+    const zone = el('audio-upload-zone');
+    if (zone) { zone.style.borderColor = '#333'; zone.style.color = '#666'; }
+  }
+
+  uploadDrop(e) {
+    e.preventDefault();
+    this.uploadDragLeave(e);
+    const files = [...e.dataTransfer.files].filter(f => f.name.toLowerCase().endsWith('.mp3'));
+    if (!files.length) { this._uploadStatus('Only .mp3 files accepted', 'error'); return; }
+    this.uploadFiles(files);
+  }
+
+  async uploadFiles(fileList) {
+    const files = [...fileList];
+    if (!files.length) return;
+    const cat = this._currentCat;
+    if (!cat) { this._uploadStatus('Select a category first', 'error'); return; }
+
+    this._uploadStatus(`Uploading ${files.length} file(s)…`, 'info');
+    let ok = 0, fail = 0;
+    for (const file of files) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('category', cat);
+      try {
+        const res = await fetch((window.R2D2_API_BASE || '') + '/audio/upload', { method: 'POST', body: form });
+        const d = await res.json();
+        if (d && d.ok) ok++; else { fail++; console.warn('Upload failed:', d?.error); }
+      } catch (e) { fail++; }
+    }
+    if (ok)   this._uploadStatus(`✓ ${ok} file(s) uploaded to ${cat.toUpperCase()}`, 'ok');
+    if (fail) this._uploadStatus(`✗ ${fail} file(s) failed`, 'error');
+    if (ok)   await this.selectCategory(cat);  // refresh grid
+  }
+
+  _uploadStatus(msg, type) {
+    const s = el('audio-upload-status');
+    if (!s) return;
+    const colors = { ok: '#00cc66', error: '#ff4444', info: '#00aaff' };
+    s.textContent = msg;
+    s.style.color = colors[type] || '#aaa';
+    s.style.display = 'block';
+    if (type !== 'info') setTimeout(() => { s.style.display = 'none'; }, 4000);
   }
 }
 

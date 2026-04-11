@@ -39,10 +39,16 @@ Endpoints:
 """
 
 import json
+import logging
 import os
+import re
+import threading
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file, abort
 import master.registry as reg
+
+log = logging.getLogger(__name__)
+_upload_lock = threading.Lock()
 
 _SOUNDS_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', 'slave', 'sounds')
@@ -189,3 +195,73 @@ def set_volume():
     if reg.uart:
         reg.uart.send('VOL', str(vol))
     return jsonify({'status': 'ok', 'volume': vol})
+
+
+@audio_bp.post('/upload')
+def upload_sound():
+    """Upload an MP3 to a category.
+    Form fields: file (MP3), category (str).
+    Saves to slave/sounds/, updates sounds_index.json, syncs to slave via SFTP.
+    """
+    f = request.files.get('file')
+    category = (request.form.get('category') or '').strip().lower()
+
+    if not f or not f.filename:
+        return jsonify({'ok': False, 'error': 'No file provided'}), 400
+    if not category:
+        return jsonify({'ok': False, 'error': 'No category provided'}), 400
+
+    # Sanitize filename — uppercase, alphanumeric + underscore only
+    stem = re.sub(r'[^A-Za-z0-9_]', '_', Path(f.filename).stem).strip('_')
+    stem = re.sub(r'_+', '_', stem).upper()
+    if not stem:
+        return jsonify({'ok': False, 'error': 'Invalid filename'}), 400
+    if not f.filename.lower().endswith('.mp3'):
+        return jsonify({'ok': False, 'error': 'Only .mp3 files accepted'}), 400
+
+    dest_path = os.path.join(_SOUNDS_DIR, stem + '.mp3')
+
+    with _upload_lock:
+        # Save file locally (slave/sounds/ is shared between PC dev and Pi via git-ignored)
+        os.makedirs(_SOUNDS_DIR, exist_ok=True)
+        f.save(dest_path)
+
+        # Update sounds_index.json
+        try:
+            index = json.loads(Path(_INDEX_FILE).read_text(encoding='utf-8'))
+        except Exception:
+            index = {'categories': {}}
+        cats = index.setdefault('categories', {})
+        sounds = cats.setdefault(category, [])
+        if stem not in sounds:
+            sounds.append(stem)
+            sounds.sort()
+        Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
+        global _INDEX_CACHE
+        _INDEX_CACHE = index  # refresh in-memory cache
+
+        # Sync to slave via SFTP
+        _sftp_sync_sound(dest_path, stem, index)
+
+    return jsonify({'ok': True, 'filename': stem, 'category': category})
+
+
+def _sftp_sync_sound(local_mp3: str, stem: str, index: dict) -> None:
+    """SFTP the new MP3 and updated index to the slave Pi."""
+    try:
+        import paramiko
+        c = paramiko.SSHClient()
+        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.connect('192.168.4.171', username='artoo', password='deetoo', timeout=8)
+        sftp = c.open_sftp()
+        remote_sounds = '/home/artoo/r2d2/slave/sounds'
+        sftp.put(local_mp3, f'{remote_sounds}/{stem}.mp3')
+        # Write updated index to slave
+        import io
+        index_bytes = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
+        sftp.putfo(io.BytesIO(index_bytes), f'{remote_sounds}/sounds_index.json')
+        sftp.close()
+        c.close()
+        log.info(f'Audio upload: synced {stem}.mp3 to slave')
+    except Exception as e:
+        log.warning(f'Audio upload: SFTP sync failed — {e}. File saved locally only.')

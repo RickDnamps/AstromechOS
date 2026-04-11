@@ -405,6 +405,19 @@
       <div class="audio-sounds-grid" id="audio-sounds-grid">
         <div class="audio-empty">Select a category above to browse sounds</div>
       </div>
+
+      <!-- Upload drop zone (admin only) -->
+      <div id="audio-upload-zone"
+           style="display:none;margin-top:10px;border:2px dashed #333;border-radius:6px;padding:14px 10px;text-align:center;font-size:11px;color:#666;letter-spacing:.05em;transition:border-color .2s,color .2s;cursor:pointer"
+           ondragover="audioBoard.uploadDragOver(event)"
+           ondragleave="audioBoard.uploadDragLeave(event)"
+           ondrop="audioBoard.uploadDrop(event)"
+           onclick="document.getElementById('audio-upload-input').click()">
+        ⬆ DROP MP3 HERE — adds to <b id="audio-upload-cat-name">selected category</b>
+        <input type="file" id="audio-upload-input" accept=".mp3" multiple style="display:none"
+               onchange="audioBoard.uploadFiles(this.files)">
+      </div>
+      <div id="audio-upload-status" style="display:none;margin-top:6px;font-size:10px;padding:4px 8px;border-radius:3px"></div>
     </div>
 
     <!-- Now playing bar -->
