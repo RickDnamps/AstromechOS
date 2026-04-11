@@ -938,14 +938,22 @@ body[data-lock-mode="2"] #js-left-ring::after {
 
 .holo-slider {
   width: 100%;
-  height: 3px;
+  height: 14px;           /* full click area — thumb height */
   -webkit-appearance: none;
   appearance: none;
-  background: linear-gradient(to right, var(--blue) var(--val, 60%), rgba(0,170,255,0.15) var(--val, 60%));
-  border-radius: 2px;
+  background: transparent; /* background lives on the track pseudo-element */
   outline: none;
+  cursor: pointer;
 }
 
+/* WebKit track — the visible 3px bar */
+.holo-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--blue) var(--val, 60%), rgba(0,170,255,0.15) var(--val, 60%));
+}
+
+/* WebKit thumb — centered on the 3px track: margin-top = -(thumb - track) / 2 */
 .holo-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px;
@@ -954,8 +962,17 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: var(--blue);
   cursor: pointer;
   box-shadow: 0 0 8px var(--blue);
+  margin-top: -5.5px;   /* (14px - 3px) / 2 */
 }
 
+/* Firefox track */
+.holo-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--blue) var(--val, 60%), rgba(0,170,255,0.15) var(--val, 60%));
+}
+
+/* Firefox thumb — auto-centered by browser */
 .holo-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
@@ -1328,11 +1345,16 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .volume-slider {
   flex: 1;
   -webkit-appearance: none;
+  appearance: none;
+  height: 16px;          /* full click area */
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+.volume-slider::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
   background: linear-gradient(to right, var(--blue) 0%, var(--blue) 80%, var(--border) 80%);
-  outline: none;
-  cursor: pointer;
 }
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -1342,6 +1364,12 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: var(--blue);
   cursor: pointer;
   box-shadow: 0 0 6px rgba(0,170,255,0.6);
+  margin-top: -6px;      /* (16px - 4px) / 2 */
+}
+.volume-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--blue) 0%, var(--blue) 80%, var(--border) 80%);
 }
 .volume-slider::-moz-range-thumb {
   width: 16px;
@@ -1350,6 +1378,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: var(--blue);
   border: none;
   cursor: pointer;
+  box-shadow: 0 0 6px rgba(0,170,255,0.6);
 }
 
 .volume-label {
