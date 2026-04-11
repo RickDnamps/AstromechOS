@@ -199,4 +199,41 @@ Le panneau Servos a déjà tout : labels, angles, test open/close, save.
 
 ---
 
+## 🧠 Phase Future — Intelligence Artificielle (non prioritaire)
+
+**Vision :** R2 semble vraiment vivant — il reconnaît les gens, réagit aux voix, répond intelligemment.
+
+**Contrainte matérielle :** Tout doit tourner **en local** sur le Pi (offline, autonome en convention).  
+**Plan B hardware :** Pi 5 si le Pi 4B 2GB est trop limité pour l'inférence locale.
+
+### Reconnaissance faciale
+- Caméra USB déjà en place (holo projector)
+- **Face detection** → R2 tourne le dôme vers la personne (dome motor)
+- **Face tracking** → suit la personne qui se déplace
+- **Face recognition** → reconnaît des visages enregistrés → réaction personnalisée ("Hey, c'est Jean!")
+- Stack envisagée : OpenCV + `face_recognition` (dlib) sur Pi
+
+### Reconnaissance vocale
+- Nécessite un **microphone USB** (pas encore dans le système)
+- **Wake word** : "Hey Artoo" → R2 sort de veille
+- **Speech-to-text** offline : Vosk ou Whisper.cpp (léger, Pi-compatible)
+- Commandes vocales → déclenche sons/choreos/réponses
+
+### Personnalité IA
+- R2 "comprend" son environnement et réagit de façon contextuelle
+- Génère des séquences de bips/sons R2 appropriés selon la situation
+- Potentiellement : petit LLM local (Ollama + modèle quantisé) pour des réponses contextuelles
+
+### Panneau Settings futur : `🧠 Intelligence`
+- Toggle face tracking ON/OFF + sensibilité
+- Gestion des visages connus (ajouter/supprimer)
+- Wake word configuration
+- Mode privacy (désactiver tout)
+- Sélection du modèle STT
+
+**Priorité :** 🔮 Phase 5+ — après assemblage final et tests complets  
+**Hardware requis :** Microphone USB + potentiellement Pi 5
+
+---
+
 *Document en attente de validation — aucun code écrit*
