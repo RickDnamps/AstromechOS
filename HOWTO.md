@@ -20,6 +20,48 @@ Everything is automated. The full installation is **3 commands + 2 reboots**.
 
 ---
 
+## UART wiring — connect the two Pi before anything else
+
+The Master and Slave communicate over a **physical UART serial link** at 115200 baud.
+Without this wire, nothing works: no heartbeat → Slave watchdog cuts motors after 500ms,
+no audio commands, no servo control, no telemetry.
+
+**Connect 3 wires between the two Pi boards:**
+
+```
+Master Pi 4B              Slave Pi 4B
+─────────────────         ─────────────────
+Pin 8  GPIO14 TX  ──────→  Pin 10 GPIO15 RX
+Pin 10 GPIO15 RX  ←──────  Pin 8  GPIO14 TX
+Pin 6  GND        ─────── Pin 6  GND
+```
+
+> Both Pi 4B use 3.3V GPIO — no level shifter needed.
+> Use female-female jumper wires for bench testing.
+> In the assembled robot these 3 wires run through the slip ring (wires 7, 8, and GND).
+
+**GPIO pin map (physical header numbering):**
+
+```
+ Pi GPIO header (looking at the pins from above, USB ports at bottom)
+ ┌─────┬─────┐
+ │ 3V3 │ 5V  │  ← pins 1, 2
+ │ SDA │ 5V  │  ← pins 3, 4
+ │ SCL │ GND │  ← pins 5, 6  ← GND here
+ │  4  │ 14  │  ← pins 7, 8  ← TX here (GPIO14)
+ │ GND │ 15  │  ← pins 9, 10 ← RX here (GPIO15)
+ │ 17  │ 18  │
+ ...
+```
+
+The UART port used is `/dev/ttyAMA0` (hardware UART, freed from Bluetooth by the install scripts).
+
+> **Bench testing without the robot assembled?**
+> Place both Pi side by side and use 10cm jumper wires.
+> The system works exactly the same — the slip ring is just a longer version of the same 3 wires.
+
+---
+
 ## Step 0 — Flash both SD cards
 
 Use **Raspberry Pi Imager** → click ⚙️ Options before writing:

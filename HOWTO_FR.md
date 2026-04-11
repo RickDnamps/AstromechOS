@@ -19,6 +19,48 @@ Tout est automatisé. L'installation complète = **3 commandes + 2 reboots**.
 
 ---
 
+## Câblage UART — connecter les deux Pi avant toute chose
+
+Le Master et le Slave communiquent via un **lien série UART physique** à 115200 baud.
+Sans ce câble, rien ne fonctionne : pas de heartbeat → le watchdog du Slave coupe les moteurs
+après 500ms, pas de commandes audio, pas de servos, pas de télémétrie.
+
+**Connecter 3 fils entre les deux Pi :**
+
+```
+Master Pi 4B              Slave Pi 4B
+─────────────────         ─────────────────
+Pin 8  GPIO14 TX  ──────→  Pin 10 GPIO15 RX
+Pin 10 GPIO15 RX  ←──────  Pin 8  GPIO14 TX
+Pin 6  GND        ─────── Pin 6  GND
+```
+
+> Les deux Pi 4B utilisent du GPIO 3.3V — pas de convertisseur de niveau nécessaire.
+> Utiliser des fils jumper femelle-femelle pour les tests sur établi.
+> Dans le robot assemblé, ces 3 fils passent par le slip ring (fils 7, 8 et GND).
+
+**Plan de la broche GPIO (numérotation physique du connecteur) :**
+
+```
+ Connecteur GPIO Pi (vu de dessus, ports USB en bas)
+ ┌─────┬─────┐
+ │ 3V3 │ 5V  │  ← broches 1, 2
+ │ SDA │ 5V  │  ← broches 3, 4
+ │ SCL │ GND │  ← broches 5, 6  ← GND ici
+ │  4  │ 14  │  ← broches 7, 8  ← TX ici (GPIO14)
+ │ GND │ 15  │  ← broches 9, 10 ← RX ici (GPIO15)
+ │ 17  │ 18  │
+ ...
+```
+
+Le port UART utilisé est `/dev/ttyAMA0` (UART matériel, libéré du Bluetooth par les scripts d'install).
+
+> **Test sur établi sans le robot assemblé ?**
+> Poser les deux Pi côte à côte et utiliser des fils jumper de 10cm.
+> Le système fonctionne exactement pareil — le slip ring n'est qu'une version plus longue des mêmes 3 fils.
+
+---
+
 ## Étape 0 — Graver les deux cartes SD
 
 Utiliser **Raspberry Pi Imager** → cliquer ⚙️ Options avant d'écrire :
