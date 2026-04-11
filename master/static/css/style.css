@@ -3013,6 +3013,7 @@ body.admin-unlocked .tab.tab-protected { display: flex; }
   transition: color 0.2s, background 0.2s;
 }
 .admin-gear-btn:hover { color: var(--blue); background: rgba(0,170,255,0.06); }
+.admin-gear-btn.active { color: var(--accent); background: rgba(0,170,255,0.1); }
 body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--orange); }
 
 /* Overlay modal */

@@ -276,7 +276,7 @@ class AdminGuard {
     this._unlocked     = false;
     this._timer        = null;
     this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED    = new Set(['settings', 'choreo']);
+    this._PROTECTED    = new Set(['settings']);
     this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
@@ -404,10 +404,13 @@ function switchTab(tabId) {
 
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  el('admin-gear-btn')?.classList.remove('active');
   const tabBtn = document.querySelector(`.tab[data-tab="${tabId}"]`);
   const tabContent = el(`tab-${tabId}`);
   if (tabBtn) tabBtn.classList.add('active');
   if (tabContent) tabContent.classList.add('active');
+  // Gear button highlights when settings tab is active
+  if (tabId === 'settings') el('admin-gear-btn')?.classList.add('active');
 
   adminGuard.onTabSwitch(tabId);
 
