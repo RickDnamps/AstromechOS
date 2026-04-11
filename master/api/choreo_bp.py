@@ -6,6 +6,7 @@ Routes: /choreo/play, /choreo/stop, /choreo/status,
 import json
 import logging
 import os
+import time
 
 from flask import Blueprint, jsonify, request
 import master.registry as reg
@@ -82,6 +83,45 @@ def choreo_delete(name: str):
         return jsonify({'error': str(e)}), 500
 
 
+_ARM_SERVOS = ['Servo_S12', 'Servo_S13', 'Servo_S14', 'Servo_S15']
+
+# How long to wait (seconds) for servos to physically reach closed position
+_SERVO_RESET_DELAY = 1.5
+
+
+def _reset_servos():
+    """Close all servos (arms, body panels, dome panels) before starting a new choreo."""
+    from master.api.servo_bp import (
+        _read_panels_cfg, _panel_angle, _panel_speed, BODY_SERVOS, DOME_SERVOS
+    )
+    cfg = _read_panels_cfg()
+
+    # Close arm servos first (priority — arms must retract before body panels)
+    for name in _ARM_SERVOS:
+        angle = _panel_angle(name, 'close', cfg)
+        speed = _panel_speed(name, cfg)
+        if reg.servo:
+            reg.servo.close(name, angle, speed)
+        elif reg.uart:
+            reg.uart.send('SRV', f'{name},{angle},{speed}')
+
+    # Close all body panels (includes arms, but idempotent)
+    for name in BODY_SERVOS:
+        angle = _panel_angle(name, 'close', cfg)
+        speed = _panel_speed(name, cfg)
+        if reg.servo:
+            reg.servo.close(name, angle, speed)
+        elif reg.uart:
+            reg.uart.send('SRV', f'{name},{angle},{speed}')
+
+    # Close all dome panels
+    if reg.dome_servo:
+        for name in DOME_SERVOS:
+            angle = _panel_angle(name, 'close', cfg)
+            speed = _panel_speed(name, cfg)
+            reg.dome_servo.close(name, angle, speed)
+
+
 @choreo_bp.post('/choreo/play')
 def choreo_play():
     if not reg.choreo:
@@ -95,6 +135,17 @@ def choreo_play():
         return jsonify({'error': f'choreography not found: {name}'}), 404
     with open(path) as f:
         chor = json.load(f)
+
+    # If a choreo is already playing: stop it, reset all servos, then start the new one
+    if reg.choreo.is_playing():
+        log.info("Choreo already playing — stopping and resetting servos before starting '%s'", name)
+        reg.choreo.stop()
+        try:
+            _reset_servos()
+        except Exception:
+            log.exception("Servo reset failed — continuing with choreo start anyway")
+        time.sleep(_SERVO_RESET_DELAY)
+
     ok = reg.choreo.play(chor)
     if not ok:
         return jsonify({'error': 'already playing'}), 409
