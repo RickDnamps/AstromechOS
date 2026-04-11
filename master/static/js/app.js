@@ -5499,10 +5499,6 @@ const choreoEditor = (() => {
     },
 
     newChor() {
-      if (!adminGuard.unlocked && !_choreoUnlocked) {
-        adminGuard.showModal(null, () => choreoEditor.newChor());
-        return;
-      }
       const name = prompt('Choreography name:', 'my_show');
       if (!name) return;
       _chor = {
