@@ -1420,6 +1420,23 @@
           SHUTDOWN MASTER
         </button>
       </div>
+
+      <div class="settings-divider"></div>
+      <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
+      <div class="settings-row">
+        <label class="settings-label">Current password</label>
+        <input type="password" id="admin-pwd-current" class="settings-input" placeholder="Current password">
+      </div>
+      <div class="settings-row">
+        <label class="settings-label">New password</label>
+        <input type="password" id="admin-pwd-new" class="settings-input" placeholder="New password (min 4 chars)">
+      </div>
+      <div class="settings-row">
+        <label class="settings-label">Confirm</label>
+        <input type="password" id="admin-pwd-confirm" class="settings-input" placeholder="Confirm new password">
+      </div>
+      <button class="btn btn-primary" onclick="adminChangePassword()">CHANGE PASSWORD</button>
+      <div class="settings-status" id="admin-pwd-status"></div>
     </section>
 
   </div>

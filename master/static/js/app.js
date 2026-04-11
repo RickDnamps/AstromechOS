@@ -293,17 +293,28 @@ class AdminGuard {
 
   submit() {
     const pwd = el('admin-pwd-input').value;
-    if (pwd === 'deetoo') {
-      this._unlock();
-    } else {
-      el('admin-pwd-error').classList.remove('hidden');
-      const inp = el('admin-pwd-input');
-      inp.value = '';
-      inp.classList.remove('shake');
-      void inp.offsetWidth;
-      inp.classList.add('shake');
-      inp.focus();
-    }
+    const btn = el('admin-modal').querySelector('.btn-active');
+    if (btn) btn.disabled = true;
+    api('/settings/admin/verify', 'POST', { password: pwd })
+      .then(d => {
+        if (d && d.ok) {
+          this._unlock();
+        } else {
+          this._showError();
+        }
+      })
+      .catch(() => this._showError())
+      .finally(() => { if (btn) btn.disabled = false; });
+  }
+
+  _showError() {
+    el('admin-pwd-error').classList.remove('hidden');
+    const inp = el('admin-pwd-input');
+    inp.value = '';
+    inp.classList.remove('shake');
+    void inp.offsetWidth;
+    inp.classList.add('shake');
+    inp.focus();
   }
 
   _unlock() {
@@ -3663,6 +3674,34 @@ async function systemUpdate() {
   toast('Update started…', 'info');
   const d = await api('/system/update', 'POST');
   if (d) toast('Update in progress — Slave will reboot', 'ok');
+}
+
+async function adminChangePassword() {
+  const current  = el('admin-pwd-current')?.value  || '';
+  const newPwd   = el('admin-pwd-new')?.value      || '';
+  const confirm_ = el('admin-pwd-confirm')?.value  || '';
+  const status   = el('admin-pwd-status');
+
+  const setStatus = (msg, ok) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.style.color = ok ? 'var(--ok)' : 'var(--warn)';
+  };
+
+  if (!current)           return setStatus('Enter your current password.', false);
+  if (newPwd.length < 4)  return setStatus('New password must be at least 4 characters.', false);
+  if (newPwd !== confirm_) return setStatus('Passwords do not match.', false);
+
+  const d = await api('/settings/admin/password', 'POST', { current, new: newPwd });
+  if (d && d.ok) {
+    setStatus('Password changed ✓', true);
+    el('admin-pwd-current').value  = '';
+    el('admin-pwd-new').value      = '';
+    el('admin-pwd-confirm').value  = '';
+    toast('Admin password updated', 'ok');
+  } else {
+    setStatus(d?.error || 'Error — check your current password.', false);
+  }
 }
 
 // ================================================================

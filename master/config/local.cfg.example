@@ -38,3 +38,8 @@ button_pin = 17
 [slave]
 # Hostname du Slave sur le hotspot (username: artoo)
 host = r2-slave.local
+
+[admin]
+# Dashboard admin password (protects SERVO / VESC / CONFIG / CHOREO tabs)
+# Change it from the dashboard: Admin → Config → System → Change Admin Password
+password = deetoo

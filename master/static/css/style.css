@@ -2752,6 +2752,50 @@ select.input-text option { background: #0a1525; }
   letter-spacing: 0.5px;
 }
 
+.settings-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0 12px;
+}
+
+.settings-sub-title {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.settings-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.settings-input {
+  flex: 1;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--cyan);
+}
+
 /* ================================================================
    TOAST NOTIFICATIONS
 ================================================================ */

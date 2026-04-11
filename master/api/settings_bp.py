@@ -376,6 +376,38 @@ def set_config():
     return jsonify({'status': 'ok', 'updated': updated})
 
 
+def _get_admin_password() -> str:
+    """Returns the current admin password from local.cfg (default: deetoo)."""
+    return _read_cfg().get('admin', 'password', fallback='deetoo')
+
+
+@settings_bp.post('/settings/admin/verify')
+def admin_verify():
+    """Verifies the admin password. Body: {\"password\": \"...\"}"""
+    data = request.get_json() or {}
+    pwd  = data.get('password', '')
+    if pwd == _get_admin_password():
+        return jsonify({'ok': True})
+    return jsonify({'ok': False}), 401
+
+
+@settings_bp.post('/settings/admin/password')
+def admin_change_password():
+    """Changes the admin password. Body: {\"current\": \"...\", \"new\": \"...\"}"""
+    data    = request.get_json() or {}
+    current = data.get('current', '')
+    new_pwd = data.get('new', '').strip()
+
+    if current != _get_admin_password():
+        return jsonify({'error': 'Incorrect current password'}), 401
+    if len(new_pwd) < 4:
+        return jsonify({'error': 'New password must be at least 4 characters'}), 400
+
+    _write_key('admin', 'password', new_pwd)
+    log.info("Admin password changed")
+    return jsonify({'ok': True})
+
+
 @settings_bp.post('/settings/lights')
 def set_lights_backend():
     """Changes the lights driver at runtime (no reboot). Body: {\"backend\": \"astropixels\"}"""
