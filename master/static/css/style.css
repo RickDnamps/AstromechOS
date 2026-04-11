@@ -953,7 +953,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: linear-gradient(to right, var(--blue) var(--val, 60%), rgba(0,170,255,0.15) var(--val, 60%));
 }
 
-/* WebKit thumb — Chrome 124+ auto-centres on track, no margin-top needed */
+/* WebKit thumb — centered on the 3px track: margin-top = -(thumb - track) / 2 */
 .holo-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 14px;
@@ -962,6 +962,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: var(--blue);
   cursor: pointer;
   box-shadow: 0 0 8px var(--blue);
+  margin-top: -5.5px;   /* (14px - 3px) / 2 */
 }
 
 /* Firefox track */
@@ -1363,7 +1364,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: var(--blue);
   cursor: pointer;
   box-shadow: 0 0 6px rgba(0,170,255,0.6);
-  /* Chrome 124+ auto-centres on track */
+  margin-top: -6px;      /* (16px - 4px) / 2 */
 }
 .volume-slider::-moz-range-track {
   height: 4px;
