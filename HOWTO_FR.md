@@ -181,11 +181,10 @@ Le Slave est maintenant connecté au hotspot Master à `192.168.4.171`.
 
 ## Étape 3 — Premier déploiement du code (depuis le Master)
 
-Se connecter en SSH au Master :
+Se connecter en SSH au Master avec la même méthode qu'à l'étape 1 :
 
-```bash
-ssh artoo@192.168.4.1
-```
+- **Option A (hotspot) :** ton PC est sur `R2D2_Control` → `ssh artoo@192.168.4.1`
+- **Option B (réseau maison) :** `ssh artoo@r2-master.local` ou l'IP trouvée dans le routeur
 
 Lancer le premier déploiement :
 
