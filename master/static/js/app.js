@@ -43,6 +43,14 @@
 
 function el(id) { return document.getElementById(id); }
 
+// Sync .holo-slider gradient fill (--val) to the slider's current value.
+// Must be called after any programmatic value assignment AND on input events.
+function syncHoloSlider(s) {
+  if (!s) return;
+  const pct = ((s.value - s.min) / (s.max - s.min) * 100).toFixed(1);
+  s.style.setProperty('--val', pct + '%');
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g,'&amp;')
@@ -118,7 +126,7 @@ class LockManager {
 
   init() {
     const s = el('kids-speed-slider');
-    if (s) s.value = this._kidsSpeed;
+    if (s) { s.value = this._kidsSpeed; syncHoloSlider(s); }
     const v = el('kids-speed-val');
     if (v) v.textContent = this._kidsSpeed + '%';
     document.body.dataset.lockMode = '0';
@@ -3083,7 +3091,7 @@ class BTController {
       const lbl    = el('bt-timeout-val');
       const active = document.activeElement;
       if (active !== slider && active !== num) {
-        if (slider) slider.value = Math.min(600, t);
+        if (slider) { slider.value = Math.min(600, t); syncHoloSlider(slider); }
         if (num)    num.value    = t;
         if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
       }
@@ -3130,7 +3138,7 @@ class BTController {
       sel('bt-map-steer',    m.steer);
       sel('bt-map-dome',     m.dome);
       const dz = el('bt-deadzone');
-      if (dz && m.deadzone) { dz.value = m.deadzone; const dzv = el('bt-deadzone-val'); if (dzv) dzv.textContent = m.deadzone + '%'; }
+      if (dz && m.deadzone) { dz.value = m.deadzone; syncHoloSlider(dz); const dzv = el('bt-deadzone-val'); if (dzv) dzv.textContent = m.deadzone + '%'; }
     } catch { /* ignore */ }
   }
 
@@ -3557,7 +3565,7 @@ const cameraConfig = {
       const qEl   = el('cam-quality');
       if (resEl) resEl.value = d.resolution || '640x480';
       if (fpsEl) fpsEl.value = String(d.fps   || 30);
-      if (qEl)  { qEl.value = d.quality || 80; el('cam-quality-val').textContent = qEl.value; }
+      if (qEl)  { qEl.value = d.quality || 80; syncHoloSlider(qEl); el('cam-quality-val').textContent = qEl.value; }
     } catch(e) {}
   },
   async save() {
@@ -3821,7 +3829,14 @@ async function init() {
 
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  // Sync all holo-slider fills on input and on page load
+  document.querySelectorAll('.holo-slider').forEach(s => {
+    s.addEventListener('input', () => syncHoloSlider(s));
+    syncHoloSlider(s);
+  });
+  init();
+});
 
 // ─── REMOVED: LightEditor + SequenceEditor (replaced by Choreo tab) ──────────
 // ─── Choreo editor follows ───────────────────────────────────────────────────
