@@ -83,20 +83,21 @@ def choreo_delete(name: str):
         return jsonify({'error': str(e)}), 500
 
 
-_ARM_SERVOS = ['Servo_S12', 'Servo_S13', 'Servo_S14', 'Servo_S15']
+_ARM_SERVOS   = ['Servo_S12', 'Servo_S13', 'Servo_S14', 'Servo_S15']
+_BODY_PANELS  = [f'Servo_S{i}' for i in range(12)]   # S0–S11 — body panels only
 
 # How long to wait (seconds) for servos to physically reach closed position
 _SERVO_RESET_DELAY = 1.5
 
 
 def _reset_servos():
-    """Close all servos (arms, body panels, dome panels) before starting a new choreo."""
+    """Close arms + body panels (S0–S11) + dome panels before starting a new choreo."""
     from master.api.servo_bp import (
-        _read_panels_cfg, _panel_angle, _panel_speed, BODY_SERVOS, DOME_SERVOS
+        _read_panels_cfg, _panel_angle, _panel_speed, DOME_SERVOS
     )
     cfg = _read_panels_cfg()
 
-    # Close arm servos first (priority — arms must retract before body panels)
+    # Close arm servos first (arms must retract before body panels move)
     for name in _ARM_SERVOS:
         angle = _panel_angle(name, 'close', cfg)
         speed = _panel_speed(name, cfg)
@@ -105,8 +106,8 @@ def _reset_servos():
         elif reg.uart:
             reg.uart.send('SRV', f'{name},{angle},{speed}')
 
-    # Close all body panels (includes arms, but idempotent)
-    for name in BODY_SERVOS:
+    # Close body panels S0–S11 (not arms)
+    for name in _BODY_PANELS:
         angle = _panel_angle(name, 'close', cfg)
         speed = _panel_speed(name, cfg)
         if reg.servo:
