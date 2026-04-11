@@ -1396,8 +1396,8 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .vesc-layout {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px 0;
+  gap: 8px;
+  padding: 0;
 }
 
 /* Status bar */
@@ -1405,7 +1405,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 14px;
+  padding: 7px 12px;
   background: rgba(0,0,0,0.4);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1488,10 +1488,10 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: rgba(0,10,30,0.7);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 7px;
 }
 .vesc-card.fault-active {
   border-color: #ff4455;
@@ -1596,10 +1596,10 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: rgba(0,0,0,0.3);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 .vesc-config-row {
   display: flex;
@@ -1637,7 +1637,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   background: rgba(0,0,0,0.25);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 6px 12px;
 }
 .vesc-sym-item {
   display: flex;
@@ -1831,10 +1831,40 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .vesc-info-box svg { flex-shrink: 0; margin-top: 2px; }
 .vesc-info-box strong { color: var(--cyan); }
 
-/* CAN Bus Wizard */
+/* CAN Bus Wizard — inside collapsible <details> */
+.vesc-can-details {
+  border: 1px solid rgba(0,180,255,.12);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.vesc-can-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.vesc-can-summary::-webkit-details-marker { display: none; }
+.vesc-can-summary::after {
+  content: '▶';
+  margin-left: auto;
+  font-size: 9px;
+  transition: transform .2s;
+}
+.vesc-can-details[open] .vesc-can-summary::after { transform: rotate(90deg); }
+.vesc-can-summary:hover { color: var(--accent); background: rgba(0,170,255,.05); }
+.vesc-can-details[open] { padding-bottom: 8px; }
+.vesc-can-details > .vesc-config-card { margin: 0 8px; }
+
 .vesc-can-wizard {
-  border-top: 1px solid rgba(0, 180, 255, 0.15);
-  padding-top: 14px;
+  border: none;
+  padding: 0;
 }
 .vesc-can-header {
   display: flex;
