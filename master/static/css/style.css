@@ -3196,6 +3196,14 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
   background: rgba(0,170,255,.12);
   flex-shrink: 0;
 }
+/* Wide gap between file group and transport — visual breathing room */
+.chor-cmd-gap {
+  width: 1px;
+  height: 18px;
+  background: rgba(0,170,255,.12);
+  flex-shrink: 0;
+  margin: 0 20px;
+}
 .chor-cmd-label {
   font-size: 9px;
   letter-spacing: 1.2px;
