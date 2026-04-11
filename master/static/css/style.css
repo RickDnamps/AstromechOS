@@ -1222,8 +1222,15 @@ body[data-lock-mode="2"] #js-left-ring::after {
   50%       { height: 20px; opacity: 1.0; }
 }
 
-.now-playing-text {
+.now-playing-info {
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.now-playing-text {
   font-size: 11px;
   color: var(--cyan);
   letter-spacing: 1px;
@@ -1238,8 +1245,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   font-family: 'Courier New', monospace;
   color: var(--text-muted, #555e7a);
   letter-spacing: 0.5px;
-  min-width: 72px;
-  text-align: right;
+  white-space: nowrap;
 }
 
 .audio-quick-btns {
