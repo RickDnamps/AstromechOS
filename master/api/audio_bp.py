@@ -49,6 +49,33 @@ import master.registry as reg
 
 log = logging.getLogger(__name__)
 _upload_lock = threading.Lock()
+_play_timer: threading.Timer | None = None
+
+
+def _get_sound_duration_ms(sound: str, fallback_ms: int = 60000) -> int:
+    """Estimate MP3 duration from file size (assumes ~128 kbps CBR). Returns ms."""
+    path = os.path.join(_SOUNDS_DIR, sound + '.mp3')
+    if not os.path.isfile(path):
+        return fallback_ms
+    try:
+        size = os.path.getsize(path)
+        return int(size * 8 / 128) + 800   # 128 kbps + 800ms buffer
+    except Exception:
+        return fallback_ms
+
+
+def _schedule_audio_reset(duration_ms: int) -> None:
+    global _play_timer
+    if _play_timer and _play_timer.is_alive():
+        _play_timer.cancel()
+
+    def _reset():
+        reg.audio_playing = False
+        reg.audio_current = ''
+
+    _play_timer = threading.Timer(duration_ms / 1000.0, _reset)
+    _play_timer.daemon = True
+    _play_timer.start()
 
 _SOUNDS_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', 'slave', 'sounds')
@@ -128,6 +155,7 @@ def play_sound():
         reg.uart.send('S', sound)
     reg.audio_playing = True
     reg.audio_current = sound
+    _schedule_audio_reset(_get_sound_duration_ms(sound))
     return jsonify({'status': 'ok', 'sound': sound})
 
 
@@ -142,6 +170,7 @@ def play_random():
         reg.uart.send('S', f'RANDOM:{category}')
     reg.audio_playing = True
     reg.audio_current = f'🎲 {category}'
+    _schedule_audio_reset(60000)  # random duration unknown — 60s max
     return jsonify({'status': 'ok', 'category': category})
 
 
@@ -170,6 +199,8 @@ def stream_sound_file(sound):
 @audio_bp.post('/stop')
 def stop_audio():
     """Stops the current sound."""
+    if _play_timer and _play_timer.is_alive():
+        _play_timer.cancel()
     if reg.uart:
         reg.uart.send('S', 'STOP')
     reg.audio_playing = False
