@@ -2884,6 +2884,17 @@ select.input-text option { background: #0a1525; }
   letter-spacing: 0.5px;
 }
 
+/* Arms config — two dropdowns side by side per arm */
+.arms-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0,170,255,.08);
+}
+.arms-row:last-child { border-bottom: none; margin-bottom: 0; }
+
 .settings-divider {
   border: none;
   border-top: 1px solid var(--border);

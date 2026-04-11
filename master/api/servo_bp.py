@@ -372,15 +372,16 @@ _ARM_COUNT_MAX = 4
 
 
 def _read_arms_cfg() -> dict:
-    """Returns {count: int, servos: [str x4]} from local.cfg [arms].
-    Always returns exactly 4 servo slots (empty string = not assigned).
-    Values are always servo IDs (e.g. 'Servo_S12'), never labels.
+    """Returns {count, servos[4], panels[4]} from local.cfg [arms].
+    Always returns exactly 4 slots (empty string = not assigned).
+    Values are servo IDs (e.g. 'Servo_S12'), never labels.
     """
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
-    count = max(0, min(_ARM_COUNT_MAX, cfg.getint('arms', 'count', fallback=0)))
-    servos = [cfg.get('arms', f'arm_{i}', fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
-    return {'count': count, 'servos': servos}
+    count  = max(0, min(_ARM_COUNT_MAX, cfg.getint('arms', 'count', fallback=0)))
+    servos = [cfg.get('arms', f'arm_{i}',   fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
+    panels = [cfg.get('arms', f'panel_{i}', fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
+    return {'count': count, 'servos': servos, 'panels': panels}
 
 
 @servo_bp.get('/arms')
@@ -393,20 +394,22 @@ def arms_config_save():
     data   = request.get_json(silent=True) or {}
     count  = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
     servos = data.get('servos', [])
+    panels = data.get('panels', [])
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
     if not cfg.has_section('arms'):
         cfg.add_section('arms')
     cfg.set('arms', 'count', str(count))
     for i in range(1, _ARM_COUNT_MAX + 1):
-        raw = servos[i - 1] if i - 1 < len(servos) else ''
+        raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
+        raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
         # Only accept valid body servo IDs — never store labels
-        cfg.set('arms', f'arm_{i}', raw if raw in BODY_SERVOS else '')
+        cfg.set('arms', f'arm_{i}',   raw_servo if raw_servo in BODY_SERVOS else '')
+        cfg.set('arms', f'panel_{i}', raw_panel if raw_panel in BODY_SERVOS else '')
     os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
     with open(_LOCAL_CFG, 'w') as f:
         cfg.write(f)
-    import logging
-    logging.getLogger(__name__).info("Arms config saved: count=%d servos=%s", count, servos)
+    log.info("Arms config saved: count=%d servos=%s panels=%s", count, servos, panels)
     return jsonify({'status': 'ok', **_read_arms_cfg()})
 
 

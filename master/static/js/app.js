@@ -3674,7 +3674,8 @@ async function saveBatteryCells() {
 // ─── Arms config ──────────────────────────────────────────────────────────────
 const armsConfig = {
   _count:  0,
-  _servos: ['', '', '', ''],   // 4 slots, always servo IDs (never labels)
+  _servos: ['', '', '', ''],   // 4 slots, servo IDs (never labels)
+  _panels: ['', '', '', ''],   // 4 slots, body panel that opens before arm extends
   _labels: {},                 // {Servo_S0: 'My Label', ...}
 
   async load() {
@@ -3685,6 +3686,7 @@ const armsConfig = {
     if (!armsData) return;
     this._count  = armsData.count  || 0;
     this._servos = armsData.servos || ['', '', '', ''];
+    this._panels = armsData.panels || ['', '', '', ''];
     // Build label map — only body servos (Servo_S*)
     const panels = settingsData?.panels || {};
     this._labels = {};
@@ -3702,17 +3704,34 @@ const armsConfig = {
     container.innerHTML = '';
     for (let i = 0; i < this._count; i++) {
       const div = document.createElement('div');
-      div.className = 'form-group';
-      const opts = Array.from({length: 16}, (_, j) => {
+      div.className = 'arms-row';
+      // Arm servo options (S0–S15)
+      const armOpts = Array.from({length: 16}, (_, j) => {
         const id  = `Servo_S${j}`;
         const lbl = this._labels[id] || id;
         const sel = this._servos[i] === id ? ' selected' : '';
         return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
       }).join('');
-      div.innerHTML = `<label>ARM ${i + 1}</label>
-        <select id="arm-servo-${i}" class="input-text">
-          <option value="">— not assigned —</option>${opts}
-        </select>`;
+      // Body panel options (S0–S11 only — arm servos excluded from panels)
+      const panelOpts = Array.from({length: 12}, (_, j) => {
+        const id  = `Servo_S${j}`;
+        const lbl = this._labels[id] || id;
+        const sel = this._panels[i] === id ? ' selected' : '';
+        return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
+      }).join('');
+      div.innerHTML = `
+        <div class="form-group">
+          <label>ARM ${i + 1} — Servo</label>
+          <select id="arm-servo-${i}" class="input-text">
+            <option value="">— not assigned —</option>${armOpts}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>ARM ${i + 1} — Body panel</label>
+          <select id="arm-panel-${i}" class="input-text">
+            <option value="">— none —</option>${panelOpts}
+          </select>
+        </div>`;
       container.appendChild(div);
     }
   },
@@ -3725,12 +3744,14 @@ const armsConfig = {
   async save() {
     const count  = parseInt(el('arms-count')?.value) || 0;
     const servos = Array.from({length: 4}, (_, i) => el(`arm-servo-${i}`)?.value || '');
+    const panels = Array.from({length: 4}, (_, i) => el(`arm-panel-${i}`)?.value || '');
     const status = el('arms-status');
     if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-    const data = await api('/servo/arms', 'POST', { count, servos });
+    const data = await api('/servo/arms', 'POST', { count, servos, panels });
     if (data?.status === 'ok') {
       this._count  = data.count;
       this._servos = data.servos;
+      this._panels = data.panels;
       toast(`Arms: ${count} arm(s) configured`, 'ok');
       if (status) { status.textContent = `${count} arm(s) saved`; status.className = 'settings-status ok'; }
     } else {
