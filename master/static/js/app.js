@@ -2787,6 +2787,9 @@ async function loadScripts() { await scriptEngine.load(); }
 class BTController {
   constructor() {
     this._connected   = false;
+    this._piConnected = false;
+    this._piEnabled   = true;
+    this._batteryPct  = 0;
     this._gamepadIdx  = null;
     this._prevBtns    = {};
     this._driveActive = false;
@@ -2958,7 +2961,8 @@ class BTController {
     if (!enabled) {
       cls = 'status-pill error'; txt = 'BT OFF';
     } else if (connected) {
-      cls = 'status-pill ok';   txt = 'BT';
+      cls = 'status-pill ok';
+      txt = (this._batteryPct > 0) ? `BT ${this._batteryPct}%` : 'BT';
     } else {
       cls = 'status-pill';      txt = 'BT';
     }
@@ -2986,6 +2990,7 @@ class BTController {
 
     // Battery
     const pct    = data.bt_battery || 0;
+    this._batteryPct = pct;
     const fillEl = el('bt-battery-fill');
     const pctEl  = el('bt-battery-pct');
     if (pct > 0) {
@@ -2996,6 +3001,7 @@ class BTController {
       if (fillEl) fillEl.style.width = '0%';
       if (pctEl)  pctEl.textContent = '--%';
     }
+    this._updatePill();
 
     // RSSI signal strength
     const rssiEl = el('bt-rssi-val');
@@ -3058,15 +3064,18 @@ class BTController {
       for (const o of typeEl.options) if (o.value === data.bt_gamepad_type) { o.selected = true; break; }
       this.onTypeChange(data.bt_gamepad_type);
     }
-    // inactivity timeout — sync slider + number input + label
+    // inactivity timeout — sync only if user is not actively editing
     if (data.bt_inactivity_timeout !== undefined) {
-      const t = data.bt_inactivity_timeout;
+      const t      = data.bt_inactivity_timeout;
       const slider = el('bt-inactivity-timeout');
       const num    = el('bt-timeout-num');
       const lbl    = el('bt-timeout-val');
-      if (slider) slider.value = Math.min(600, t);
-      if (num)    num.value    = t;
-      if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
+      const active = document.activeElement;
+      if (active !== slider && active !== num) {
+        if (slider) slider.value = Math.min(600, t);
+        if (num)    num.value    = t;
+        if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
+      }
     }
   }
 

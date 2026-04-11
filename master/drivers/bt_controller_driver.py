@@ -270,20 +270,52 @@ class BTControllerDriver:
             self._stop_motion()
 
     def _hw_poll_loop(self) -> None:
-        """Polls battery (sysfs) and RSSI (hcitool) every 30s while connected."""
-        import glob, subprocess, re
+        """Polls battery (upower/sysfs) and RSSI (hcitool) every 30s while connected."""
+        import glob, subprocess, re, os as _os
         while self._connected and not self._stop_evt.is_set():
-            # ── Battery via sysfs ───────────────────────────────────────
-            batt = None
             dev = self._device
-            mac = (dev.uniq or '').lower().replace(':', '_') if dev else ''
-            if mac:
-                patterns = [
-                    f'/sys/class/power_supply/hid-{mac.replace("_",":")}-battery/capacity',
-                    f'/sys/class/power_supply/*{mac}*/capacity',
-                    '/sys/class/power_supply/hid-*battery*/capacity',
-                ]
-                for pat in patterns:
+            mac_raw    = (dev.uniq or '') if dev else ''
+            mac_colon  = mac_raw.upper()
+            mac_under  = mac_raw.lower().replace(':', '_')
+
+            # ── Battery — try upower first, then broad sysfs scan ───────
+            batt = None
+
+            # 1. upower (most reliable — enumerates all BT HID devices)
+            try:
+                devices = subprocess.run(
+                    ['upower', '-e'], capture_output=True, text=True, timeout=3,
+                ).stdout.splitlines()
+                for dpath in devices:
+                    if 'hid' in dpath.lower() and 'battery' in dpath.lower():
+                        info = subprocess.run(
+                            ['upower', '-i', dpath.strip()],
+                            capture_output=True, text=True, timeout=3,
+                        ).stdout
+                        m = re.search(r'percentage:\s+(\d+)', info)
+                        if m:
+                            batt = int(m.group(1))
+                            break
+            except Exception:
+                pass
+
+            # 2. Sysfs — scan all power_supply entries for any HID battery
+            if batt is None:
+                for path in glob.glob('/sys/class/power_supply/*/capacity'):
+                    supply = _os.path.basename(_os.path.dirname(path))
+                    if 'hid' in supply.lower():
+                        try:
+                            batt = int(open(path).read().strip())
+                            break
+                        except Exception:
+                            pass
+
+            # 3. Specific MAC sysfs path (original logic, last resort)
+            if batt is None and mac_under:
+                for pat in [
+                    f'/sys/class/power_supply/hid-{mac_colon}-battery/capacity',
+                    f'/sys/class/power_supply/*{mac_under}*/capacity',
+                ]:
                     for path in glob.glob(pat):
                         try:
                             batt = int(open(path).read().strip())
@@ -295,7 +327,6 @@ class BTControllerDriver:
 
             # ── RSSI via hcitool ────────────────────────────────────────
             rssi = None
-            mac_colon = (dev.uniq or '').upper() if dev else ''
             if mac_colon:
                 try:
                     out = subprocess.run(
@@ -313,9 +344,7 @@ class BTControllerDriver:
                     self._battery_pct = batt
                 self._rssi = rssi
 
-            if batt is not None or rssi is not None:
-                log.debug("BT hw-poll: battery=%s%% rssi=%s dBm", batt, rssi)
-
+            log.debug("BT hw-poll: battery=%s%% rssi=%s dBm", batt, rssi)
             self._stop_evt.wait(30)
 
     def _drive_keepalive_loop(self) -> None:
