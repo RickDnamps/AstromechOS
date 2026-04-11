@@ -237,13 +237,40 @@ class BTControllerDriver:
     # Read loop
     # ------------------------------------------------------------------
 
+    def _find_hidraw(self, dev) -> str | None:
+        """Find the /dev/hidrawN path corresponding to this evdev device."""
+        import glob as _glob, os as _os
+        vid = f'{dev.info.vendor:04x}'
+        pid = f'{dev.info.product:04x}'
+        for hr_sys in sorted(_glob.glob('/sys/class/hidraw/hidraw*')):
+            try:
+                uevent = open(_os.path.join(hr_sys, 'device', 'uevent')).read().lower()
+                if vid in uevent and pid in uevent:
+                    name = _os.path.basename(hr_sys)
+                    return f'/dev/{name}'
+            except Exception:
+                pass
+        hids = sorted(_glob.glob('/dev/hidraw*'))
+        return hids[0] if hids else None
+
     def _poll_loop(self) -> None:
+        import os as _os, select as _select
         try:
             dev  = self._device
             caps = dev.capabilities()
             abs_info = {info[0]: info[1] for info in caps.get(ecodes.EV_ABS, [])}
 
-            # Start background thread to poll battery + RSSI every 30s
+            # Open hidraw for battery reading (non-blocking)
+            hidraw_path = self._find_hidraw(dev)
+            hidraw_fd   = None
+            if hidraw_path:
+                try:
+                    hidraw_fd = _os.open(hidraw_path, _os.O_RDONLY | _os.O_NONBLOCK)
+                    log.debug(f"Hidraw opened for battery: {hidraw_path}")
+                except Exception as e:
+                    log.debug(f"Cannot open hidraw ({hidraw_path}): {e}")
+
+            # Start background thread to poll RSSI every 30s
             threading.Thread(target=self._hw_poll_loop, daemon=True,
                              name='bt-hw-poll').start()
 
@@ -253,6 +280,25 @@ class BTControllerDriver:
                 if not self.is_enabled():
                     continue
                 self._last_input_t = time.time()
+
+                # Read battery from hidraw on each event (non-blocking peek)
+                if hidraw_fd is not None:
+                    try:
+                        rdy, _, _ = _select.select([hidraw_fd], [], [], 0)
+                        if rdy:
+                            data = _os.read(hidraw_fd, 64)
+                            # Report ID 1, byte 1 = battery % (0-100)
+                            # Declared as "constant" in HID descriptor but
+                            # contains battery level on NVIDIA Shield and similar
+                            if data and data[0] == 1 and len(data) >= 2:
+                                val = data[1]
+                                if 0 < val <= 100:
+                                    with self._lock:
+                                        self._battery_pct = val
+                                    log.debug(f"HID battery: {val}%")
+                    except Exception:
+                        pass
+
                 if event.type == ecodes.EV_ABS:
                     self._handle_axis(event, abs_info)
                 elif event.type == ecodes.EV_KEY:
@@ -261,6 +307,9 @@ class BTControllerDriver:
         except Exception as e:
             log.warning(f"Gamepad disconnected: {e}")
         finally:
+            if hidraw_fd is not None:
+                try: _os.close(hidraw_fd)
+                except Exception: pass
             with self._lock:
                 self._connected   = False
                 self._device      = None
@@ -270,62 +319,11 @@ class BTControllerDriver:
             self._stop_motion()
 
     def _hw_poll_loop(self) -> None:
-        """Polls battery (upower/sysfs) and RSSI (hcitool) every 30s while connected."""
-        import glob, subprocess, re, os as _os
+        """Polls RSSI every 30s. Battery is read from hidraw in _poll_loop."""
+        import subprocess, re
         while self._connected and not self._stop_evt.is_set():
             dev = self._device
-            mac_raw    = (dev.uniq or '') if dev else ''
-            mac_colon  = mac_raw.upper()
-            mac_under  = mac_raw.lower().replace(':', '_')
-
-            # ── Battery — try upower first, then broad sysfs scan ───────
-            batt = None
-
-            # 1. upower (most reliable — enumerates all BT HID devices)
-            try:
-                devices = subprocess.run(
-                    ['upower', '-e'], capture_output=True, text=True, timeout=3,
-                ).stdout.splitlines()
-                for dpath in devices:
-                    if 'hid' in dpath.lower() and 'battery' in dpath.lower():
-                        info = subprocess.run(
-                            ['upower', '-i', dpath.strip()],
-                            capture_output=True, text=True, timeout=3,
-                        ).stdout
-                        m = re.search(r'percentage:\s+(\d+)', info)
-                        if m:
-                            batt = int(m.group(1))
-                            break
-            except Exception:
-                pass
-
-            # 2. Sysfs — scan all power_supply entries for any HID battery
-            if batt is None:
-                for path in glob.glob('/sys/class/power_supply/*/capacity'):
-                    supply = _os.path.basename(_os.path.dirname(path))
-                    if 'hid' in supply.lower():
-                        try:
-                            batt = int(open(path).read().strip())
-                            break
-                        except Exception:
-                            pass
-
-            # 3. Specific MAC sysfs path (original logic, last resort)
-            if batt is None and mac_under:
-                for pat in [
-                    f'/sys/class/power_supply/hid-{mac_colon}-battery/capacity',
-                    f'/sys/class/power_supply/*{mac_under}*/capacity',
-                ]:
-                    for path in glob.glob(pat):
-                        try:
-                            batt = int(open(path).read().strip())
-                            break
-                        except Exception:
-                            pass
-                    if batt is not None:
-                        break
-
-            # ── RSSI via hcitool ────────────────────────────────────────
+            mac_colon = (dev.uniq or '').upper() if dev else ''
             rssi = None
             if mac_colon:
                 try:
@@ -338,13 +336,9 @@ class BTControllerDriver:
                         rssi = int(m.group(1))
                 except Exception:
                     pass
-
             with self._lock:
-                if batt is not None:
-                    self._battery_pct = batt
                 self._rssi = rssi
-
-            log.debug("BT hw-poll: battery=%s%% rssi=%s dBm", batt, rssi)
+            log.debug("BT rssi-poll: rssi=%s dBm", rssi)
             self._stop_evt.wait(30)
 
     def _drive_keepalive_loop(self) -> None:
