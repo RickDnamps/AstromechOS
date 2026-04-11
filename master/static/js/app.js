@@ -1828,8 +1828,12 @@ const bodyServoPanel = new ServoPanel('body-servo-list', BODY_SERVOS, '/servo/bo
 
 class AudioBoard {
   constructor() {
-    this._currentCat = null;
-    this._playing    = false;
+    this._currentCat  = null;
+    this._playing     = false;
+    this._tickInterval = null;
+    this._timedSound  = '';
+    this._startTime   = 0;
+    this._totalMs     = 0;
     this._ICONS = {
       alarm:'🚨', happy:'😄', hum:'🎵', misc:'🎲', proc:'⚙️', quote:'💬',
       razz:'🤪', sad:'😢', sent:'🤔', ooh:'😲', whistle:'🎶', scream:'😱',
@@ -1956,12 +1960,57 @@ class AudioBoard {
     });
   }
 
+  _fmtTime(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  _stopTimer() {
+    if (this._tickInterval) { clearInterval(this._tickInterval); this._tickInterval = null; }
+    const timeEl = el('now-playing-time');
+    if (timeEl) timeEl.textContent = '';
+    this._timedSound = '';
+    this._totalMs = 0;
+  }
+
+  _startTimer(sound) {
+    this._stopTimer();
+    this._startTime = Date.now();
+    this._timedSound = sound;
+    this._totalMs = 0;
+
+    // Fetch real MP3 duration via Audio element (specific files only, not RANDOM)
+    if (sound && !sound.startsWith('🎲')) {
+      const a = new Audio(`/audio/file/${sound}`);
+      a.addEventListener('loadedmetadata', () => {
+        if (this._timedSound === sound && isFinite(a.duration))
+          this._totalMs = a.duration * 1000;
+      });
+      a.load();
+    }
+
+    const timeEl = el('now-playing-time');
+    this._tickInterval = setInterval(() => {
+      if (!timeEl) return;
+      const elapsed = this._fmtTime(Date.now() - this._startTime);
+      const total   = this._totalMs > 0 ? this._fmtTime(this._totalMs) : '--:--';
+      timeEl.textContent = `${elapsed} / ${total}`;
+    }, 500);
+  }
+
   setPlaying(active, name = '') {
+    const wasPlaying = this._playing;
+    const sameSong   = name && name === this._timedSound;
     this._playing = active;
     const waveform = el('waveform');
     const text     = el('now-playing-text');
     if (waveform) waveform.classList.toggle('playing', active);
     if (text) text.textContent = active ? name : 'IDLE';
+    if (active && (!wasPlaying || !sameSong)) {
+      this._startTimer(name);
+    } else if (!active) {
+      this._stopTimer();
+    }
   }
 
   // ── Upload ────────────────────────────────────────────────────────

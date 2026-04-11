@@ -1232,6 +1232,16 @@ body[data-lock-mode="2"] #js-left-ring::after {
   white-space: nowrap;
 }
 
+.now-playing-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  color: var(--text-muted, #555e7a);
+  letter-spacing: 0.5px;
+  min-width: 72px;
+  text-align: right;
+}
+
 .audio-quick-btns {
   display: flex;
   gap: 8px;
