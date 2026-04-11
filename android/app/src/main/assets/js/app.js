@@ -1942,7 +1942,10 @@ class AudioBoard {
 
   play(sound) {
     api('/audio/play', 'POST', { sound }).then(d => {
-      if (d && d.ok !== false) this.setPlaying(true, sound);
+      if (d && d.ok !== false) {
+        this.setPlaying(true, sound);
+        this._scheduleAutoStop(sound);
+      }
     });
   }
 
@@ -1952,12 +1955,32 @@ class AudioBoard {
       if (d) {
         const label = this._CAT_LABELS[c] || c;
         this.setPlaying(true, `🎲 ${label}`);
+        // Random duration unknown — reset UI after a generous 60s max
+        this._scheduleAutoStop(null, 60000);
       }
+    });
+  }
+
+  _scheduleAutoStop(sound, fixedMs = null) {
+    clearTimeout(this._autoStopTimer);
+    if (fixedMs) {
+      this._autoStopTimer = setTimeout(() => this.setPlaying(false), fixedMs);
+      return;
+    }
+    // Detect actual duration via Audio element
+    const a = new Audio(`${window.R2D2_API_BASE || ''}/audio/file/${encodeURIComponent(sound)}`);
+    a.addEventListener('loadedmetadata', () => {
+      const ms = isFinite(a.duration) ? Math.ceil(a.duration * 1000) + 500 : 30000;
+      this._autoStopTimer = setTimeout(() => this.setPlaying(false), ms);
+    });
+    a.addEventListener('error', () => {
+      this._autoStopTimer = setTimeout(() => this.setPlaying(false), 30000);
     });
   }
 
   setPlaying(active, name = '') {
     this._playing = active;
+    if (!active) clearTimeout(this._autoStopTimer);
     const waveform = el('waveform');
     const text     = el('now-playing-text');
     if (waveform) waveform.classList.toggle('playing', active);
