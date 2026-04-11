@@ -2711,8 +2711,8 @@ select.input-text option { background: #0a1525; }
 .settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 16px;
+  gap: 10px;
+  padding: 10px;
   max-width: 1200px;
   margin: 0 auto;
 }
@@ -2720,26 +2720,34 @@ select.input-text option { background: #0a1525; }
 .settings-card { }
 .settings-card-wide { grid-column: 1 / -1; }
 
-.form-group { margin-bottom: 12px; }
+/* Compact cards in Config tab */
+.settings-card.card { padding: 12px; }
+.settings-card .card-title,
+.settings-card.card h2 { margin-bottom: 10px; padding-bottom: 6px; }
+
+.form-group { margin-bottom: 8px; }
 
 .form-group > label:not(.toggle-label) {
   display: block;
   font-size: 9px;
   letter-spacing: 2px;
   color: var(--text-dim);
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 
 .settings-status {
   font-size: 11px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   background: rgba(0, 0, 0, 0.4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 12px;
+  margin: 8px 0 0;
   color: var(--text-dim);
   line-height: 1.6;
 }
+
+/* Hide status boxes when empty — no more dark blue ghost rectangles */
+.settings-status:empty { display: none; margin: 0; }
 
 .settings-status.ok    { border-color: var(--green); color: var(--green); }
 .settings-status.error { border-color: var(--red);   color: var(--red); }
@@ -2747,7 +2755,7 @@ select.input-text option { background: #0a1525; }
 .settings-note {
   font-size: 10px;
   color: var(--orange);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   line-height: 1.5;
   letter-spacing: 0.5px;
 }
