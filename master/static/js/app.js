@@ -4219,6 +4219,7 @@ const choreoEditor = (() => {
 
   // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
   function _calcTotalDuration() {
+    // Visual duration — canvas + ruler sizing (2s padding for editing comfort)
     if (!_chor) return 10.0;
     let max = 0;
     for (const [track, events] of Object.entries(_chor.tracks || {})) {
@@ -4231,17 +4232,32 @@ const choreoEditor = (() => {
     return Math.max(max + 2.0, 5.0);
   }
 
+  function _calcPlaybackDuration() {
+    // Playback duration sent to Pi — 100ms buffer after last event, then stop
+    if (!_chor) return 5.0;
+    let max = 0;
+    for (const [track, events] of Object.entries(_chor.tracks || {})) {
+      for (const ev of (events || [])) {
+        const t   = ev.t || 0;
+        const dur = (track === 'dome') ? ((ev.duration || 0) / 1000) : (ev.duration || 0);
+        if (t + dur > max) max = t + dur;
+      }
+    }
+    return Math.max(max + 0.1, 1.0);
+  }
+
   // Update ruler + canvas width + duration display without full re-render
   function _refreshLayout() {
     if (!_chor) return;
     _fitToScreen();
-    const dur = _calcTotalDuration();
-    _chor.meta.duration = dur;
-    _renderRuler(dur);
-    _syncLaneWidths(dur);
+    const durVisual   = _calcTotalDuration();
+    const durPlayback = _calcPlaybackDuration();
+    _chor.meta.duration = durPlayback;   // Pi stops 100ms after last event
+    _renderRuler(durVisual);
+    _syncLaneWidths(durVisual);
     _drawWaveform();
     const durEl = document.getElementById('chor-duration');
-    if (durEl) durEl.textContent = _fmtTime(dur);
+    if (durEl) durEl.textContent = _fmtTime(durPlayback);
   }
 
   // Fit pxPerSec so that total duration exactly fills the scroll-wrap width.
@@ -4415,13 +4431,14 @@ const choreoEditor = (() => {
     _fitToScreen();
     ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
-    const dur = _calcTotalDuration();
-    _chor.meta.duration = dur;
-    _renderRuler(dur);
-    _syncLaneWidths(dur);
+    const durVisual   = _calcTotalDuration();
+    const durPlayback = _calcPlaybackDuration();
+    _chor.meta.duration = durPlayback;
+    _renderRuler(durVisual);
+    _syncLaneWidths(durVisual);
     _drawWaveform();
     const durEl = document.getElementById('chor-duration');
-    if (durEl) durEl.textContent = _fmtTime(dur);
+    if (durEl) durEl.textContent = _fmtTime(durPlayback);
   }
 
   // Block cascade constants — shingled layout
