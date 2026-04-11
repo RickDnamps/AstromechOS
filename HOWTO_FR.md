@@ -249,7 +249,10 @@ ssh artoo@r2-slave.local
 
 ### Mettre à jour R2-D2
 
-**Depuis le dashboard :** onglet Config → System → bouton Update (git pull + rsync + restart, tout automatique).
+**Depuis le dashboard :** l'onglet Config est protégé par mot de passe admin.
+Cliquer sur **Config** → entrer le mot de passe **`deetoo`** → System → bouton Update (git pull + rsync + restart, tout automatique).
+
+> La session admin expire après 5 minutes d'inactivité. Le mot de passe peut être changé dans l'onglet Config une fois connecté.
 
 **Ou depuis SSH sur le Master :**
 
