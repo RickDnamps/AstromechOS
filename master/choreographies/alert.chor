@@ -1,37 +1,40 @@
 {
   "meta": {
-    "name": "alert",
-    "version": "1.0",
-    "duration": 222.1,
+    "audio_channels_required": 1,
+    "author": "scr_to_chor converter",
     "bpm": 0,
     "created": "2026-03-31",
-    "author": "scr_to_chor converter",
+    "duration": 5.1,
+    "name": "alert",
     "source": "alert.scr",
-    "audio_channels_required": 1
+    "version": "1.0",
+    "config_snapshot": {
+      "vesc_invert_L": false,
+      "vesc_invert_R": false,
+      "vesc_power_scale": 0.29
+    }
   },
   "tracks": {
     "audio": [
       {
-        "t": 0.0,
         "action": "play",
-        "file": "ALARM003",
-        "volume": 85,
-        "duration": 2,
         "ch": 0,
-        "priority": "normal"
+        "duration": 2,
+        "file": "ALARM003",
+        "priority": "normal",
+        "t": 0,
+        "volume": 85
       }
     ],
     "lights": [
       {
-        "t": 0.0,
-        "mode": "random",
-        "duration": 220.0
-      },
-      {
-        "t": 220.0,
-        "mode": "off",
-        "duration": 2.0
+        "duration": 5,
+        "mode": "t3",
+        "t": 0
       }
-    ]
+    ],
+    "dome_servos": [],
+    "body_servos": [],
+    "arm_servos": []
   }
 }
