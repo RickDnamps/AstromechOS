@@ -469,9 +469,10 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'vesc') _startVescTabPoll();
   else                    _stopVescTabPoll();
 
-  // Lazy-load network status when opening that panel
+  // Lazy-load panel data when opening
   if (panelId === 'network') loadSettings();
   if (panelId === 'servos')  loadServoSettings();
+  if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
