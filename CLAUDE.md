@@ -47,8 +47,8 @@ master/
   registry.py        injection dépendances Flask
   flask_app.py       app factory + blueprints
   drivers/           dome_servo(PCA9685@0x40)  dome_motor  body_servo(UART)
-  api/               blueprints audio/motion/servo/script/teeces/status/vesc/camera
-  config/            main.cfg  local.cfg(gitignored)  dome_angles.json(gitignored)
+  api/               blueprints audio/motion/servo/script/teeces/status/vesc/camera/choreo
+  config/            main.cfg  local.cfg(gitignored)  dome_angles.json(gitignored)  choreo_categories.json
 slave/
   uart_listener.py   parse CRC + callbacks
   watchdog.py        coupe VESC si heartbeat >500ms
@@ -136,6 +136,16 @@ GET  /vesc/can/scan             CAN bus scan via VESC1 USB (timeout 8s)
 POST /camera/take               claim MJPEG stream → {token}
 GET  /camera/stream?t=TOKEN     proxy last-connect-wins (evicted client → STREAM TAKEN overlay)
 GET  /camera/status             {active_token}
+
+GET  /choreo/list               [{name, label, category, emoji, duration}, …]  ← retourne objets, PAS strings
+POST /choreo/play               {"name":"foo","loop":true}
+POST /choreo/stop
+GET  /choreo/status             {running, name, progress, loop, abort_reason}
+GET  /choreo/categories         [{id, label, emoji, order}, …]
+POST /choreo/categories         create/update/reorder/delete categories
+POST /choreo/category           {"name":"foo.chor","category":"emotion"}
+POST /choreo/emoji              {"name":"foo.chor","emoji":"🎭"}
+POST /choreo/label              {"name":"foo.chor","label":"My Label"}
 ```
 
 ---
@@ -256,6 +266,7 @@ SSH     artoo / deetoo
 | 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
 | 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
 | 4+++ | Choreo admin guard · Arms body-panel auto-dispatch · Settings sidebar refonte · Choreo toolbar/footer | ✅ |
+| 4++++ | Sequences tab redesign : catégories + emoji + pills/grid + drag-to-pill + loop + playing state · Choreo body servo inspector filtre les arm servos | ✅ |
 | 5 | Caméra USB stream ✅ (temp webcam) · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -293,6 +304,19 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 - `chor-cmd-gap` (margin: 0 20px = 41px) entre DELETE et PLAY
 - Timecode + durée déplacés dans `chor-footer` (barre 26px en bas de la timeline)
 
+**Sequences tab (pills + grid layout) :**
+- `master/config/choreo_categories.json` — 6 catégories persistantes : `performance/emotion/behavior/dome/test/newchoreo`. Écriture atomique via `.tmp` + `os.replace()`.
+- `/choreo/list` retourne **objets** `{name, label, category, emoji, duration}` (plus des strings) — backward-compat dans le dropdown choreo editor via `n.name || n`.
+- `ScriptEngine` JS : `_renderPills()` (catégories) + `_renderGrid()` (cartes) + `_attachCardEvents()` + `_attachDrag()` + `_startRename()`.
+- **Loop mode :** `choreo_player.py` — `self._loop` flag, `play(loop=)` param, restart de `t_start`/`ev_idx` quand `t_now >= duration` dans `_run()`.
+- **Body servo inspector filtering :** `choreoEditor` — quand `armsConfig._count > 0`, les servo IDs de bras sont exclus du dropdown `body_servos`. Si count=0, tous les servos apparaissent.
+
+**Gotchas JS critiques :**
+- `.hidden` n'est PAS une classe utilitaire globale — seulement définie pour sélecteurs spécifiques. Utiliser `style.display` ou ajouter une règle CSS dédiée.
+- `setPointerCapture` dans `pointerdown` = casse tous les clicks enfants. Doit être appelé uniquement dans `pointermove` APRÈS le seuil de drag (8px).
+- `--teal` n'existait PAS dans `:root` (seulement `--cyan`). Ajouter une variable CSS custom nécessite de vérifier sa définition dans `:root`.
+- Quand git pull échoue sur le Pi (local changes non committées) → `git stash` puis pull.
+
 **Backlog :** AstroPixels+ 17 séquences manquantes (bloqué hardware) · DiagnosticMonitor Teeces
 **Backlog futur :** AS5600 encoder I2C absolu magnétique pour position dôme (0–360° absolu, pas de dérive) · VESC safety lock si VESC absent/fault · IP Pi sur RP2040 LCD au boot
 
@@ -305,6 +329,7 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 **Drive blocks :** `vesc.drive(left,right)` discret aux timestamps. Pas de software ramping — VESC firmware gère accélération. `0,0` = stop explicite.
 **Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat`=25ms.
 **Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails → `GET /choreo/status` retourne `abort_reason`.
+**Loop :** `play(chor, loop=True)` → `self._loop=True` → en fin de sequence dans `_run()`, reset `t_start = time.monotonic()` et `ev_idx = 0` sans sortir du loop si `not self._stop_flag.is_set()`.
 
 **Arms — auto-dispatch panel body :**
 - `_ARM_PANEL_DELAY = 0.5` secondes entre panel open et arm extension (et entre arm close et panel close)

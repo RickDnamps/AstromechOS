@@ -85,7 +85,7 @@ All motion blocked — R2 on display safely, lights & sounds still work
 <td align="center" width="50%">
 
 ### 🎬 Sequences
-40 behavioral sequences · Custom sequences · Loop mode · Running status
+40 behavioral sequences · 6 pill categories (Performance, Emotion, Behavior, Dome, Test, New) · Emoji picker · Loop mode · Animated playing state · Admin drag-to-reorder
 
 ![Sequences Interface](Screenshots/Sequences.png)
 
@@ -174,8 +174,8 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 
 | | |
 |---|---|
-| 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — one-click in SEQUENCES tab |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer |
+| 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — pill categories · emoji picker · loop mode · playing state animations · drag-to-reorder (admin) |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer · body servo dropdown filters out configured arm servos |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag · battery % · RSSI · keep-alive (no VESC cut on hold) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -206,6 +206,8 @@ The **CHOREO tab** is the main authoring tool. Build multi-track timelines that 
 
 **Smart arm dispatch** — each arm servo can have an associated body panel servo configured in Settings → Arms. When ChoreoPlayer fires an arm-open event, it opens the body panel first, waits 500ms, then extends the arm. On close, it retracts the arm first, then closes the panel after 500ms. Fully automatic — no extra events needed in the choreography.
 
+**Body servo filtering** — the body servo block inspector automatically excludes servos configured as arms (Settings → Arms) from its dropdown. If no arms are configured, all body servos appear. This prevents accidentally assigning an arm servo to a generic body servo event.
+
 **Timecode footer** — the current playback position and total duration are shown in a fixed bar below the timeline (not in the toolbar), keeping the toolbar clean.
 
 Telemetry abort safeguards: ChoreoPlayer monitors VESC voltage (min = cells × 3.5V), temperature (max 80°C), current (max 30A), and UART reliability (3 consecutive failures). Any threshold breach stops the sequence and logs the reason, readable via `GET /choreo/status`.
@@ -214,7 +216,7 @@ Telemetry abort safeguards: ChoreoPlayer monitors VESC voltage (min = cells × 3
 
 ## 🎭 Built-in Behavioral Sequences
 
-40 legacy `.scr` sequences are still available in the **SEQUENCES tab** — one-click launch of coordinated emotional performances (sound + panels + dome + lights):
+40 `.scr` sequences available in the **SEQUENCES tab** — organised in pill categories, each with a custom emoji. One-click launch of coordinated emotional performances (sound + panels + dome + lights). **Loop mode** keeps sequences running continuously (🔁 badge on card). Admin mode unlocks emoji editing, sequence renaming, and drag-to-reorder between categories.
 
 | Sequence | What R2 does |
 |----------|-------------|
