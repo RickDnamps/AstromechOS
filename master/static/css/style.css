@@ -2049,7 +2049,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   50%       { box-shadow: 0 0 0 6px rgba(0,255,234,0), 0 0 22px rgba(0,255,234,0.45); border-color: rgba(0,255,234,0.85); }
 }
 @keyframes seq-wave {
-  0%, 100% { transform: scaleY(0.35); }
+  0%, 100% { transform: scaleY(0.5); }
   50%       { transform: scaleY(1.0); }
 }
 @keyframes seq-progress {
@@ -2204,6 +2204,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   width: 3px;
   background: var(--teal);
   border-radius: 2px;
+  transform-origin: bottom;
   animation: seq-wave 0.6s ease-in-out infinite;
 }
 .seq-card-wave span:nth-child(1) { height: 6px;  animation-delay: 0s; }
