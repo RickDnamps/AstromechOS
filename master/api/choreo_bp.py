@@ -95,11 +95,30 @@ def _choreo_path(name: str) -> str:
 @choreo_bp.get('/choreo/list')
 def choreo_list():
     os.makedirs(_CHOREO_DIR, exist_ok=True)
-    names = [
-        f[:-5] for f in os.listdir(_CHOREO_DIR)
-        if f.endswith('.chor')
-    ]
-    return jsonify(sorted(names))
+    result = []
+    for fname in sorted(os.listdir(_CHOREO_DIR)):
+        if not fname.endswith('.chor'):
+            continue
+        name = fname[:-5]
+        try:
+            with open(os.path.join(_CHOREO_DIR, fname), encoding='utf-8') as f:
+                meta = json.load(f).get('meta', {})
+        except Exception:
+            meta = {}
+        result.append({
+            'name':     name,
+            'label':    meta.get('label', '') or '',
+            'category': meta.get('category', '') or _SYSTEM_CATEGORY,
+            'emoji':    meta.get('emoji', '') or _auto_emoji(name),
+            'duration': meta.get('duration', 0),
+        })
+    return jsonify(result)
+
+
+@choreo_bp.get('/choreo/categories')
+def get_categories():
+    cats = sorted(_load_categories(), key=lambda c: c.get('order', 99))
+    return jsonify(cats)
 
 
 @choreo_bp.get('/choreo/load')
