@@ -25,25 +25,30 @@ _SYSTEM_CATEGORY = 'newchoreo'
 
 def _load_categories() -> list:
     """Load categories from JSON, creating defaults if missing."""
+    defaults = [
+        {"id": "performance", "label": "Performance", "emoji": "🎭", "order": 0},
+        {"id": "emotion",     "label": "Emotions",    "emoji": "😤", "order": 1},
+        {"id": "behavior",    "label": "Behavior",    "emoji": "🚶", "order": 2},
+        {"id": "dome",        "label": "Dome",        "emoji": "🔵", "order": 3},
+        {"id": "test",        "label": "Tests",       "emoji": "🔧", "order": 4},
+        {"id": "newchoreo",   "label": "New Choreo",  "emoji": "📦", "order": 5},
+    ]
     if not os.path.exists(_CATEGORIES_PATH):
-        defaults = [
-            {"id": "performance", "label": "Performance", "emoji": "🎭", "order": 0},
-            {"id": "emotion",     "label": "Emotions",    "emoji": "😤", "order": 1},
-            {"id": "behavior",    "label": "Behavior",    "emoji": "🚶", "order": 2},
-            {"id": "dome",        "label": "Dome",        "emoji": "🔵", "order": 3},
-            {"id": "test",        "label": "Tests",       "emoji": "🔧", "order": 4},
-            {"id": "newchoreo",   "label": "New Choreo",  "emoji": "📦", "order": 5},
-        ]
         _save_categories(defaults)
         return defaults
-    with open(_CATEGORIES_PATH, encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open(_CATEGORIES_PATH, encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return defaults
 
 
 def _save_categories(cats: list) -> None:
     os.makedirs(os.path.dirname(_CATEGORIES_PATH), exist_ok=True)
-    with open(_CATEGORIES_PATH, 'w', encoding='utf-8') as f:
+    tmp = _CATEGORIES_PATH + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(cats, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, _CATEGORIES_PATH)
 
 
 def _auto_emoji(name: str) -> str:
