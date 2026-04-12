@@ -10,7 +10,10 @@
       "invert_L": true,
       "invert_R": false,
       "power_scale": 0.8
-    }
+    },
+    "category": "newchoreo",
+    "emoji": "",
+    "label": ""
   },
   "tracks": {
     "arm_servos": [],

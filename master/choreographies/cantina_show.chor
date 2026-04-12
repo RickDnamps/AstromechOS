@@ -6,7 +6,10 @@
     "bpm": 120,
     "created": "2026-03-27",
     "author": "R2-D2 Control",
-    "audio_channels_required": 1
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "",
+    "label": ""
   },
   "tracks": {
     "audio": [

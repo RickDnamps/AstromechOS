@@ -6,7 +6,10 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "hp_twitch.scr"
+    "source": "hp_twitch.scr",
+    "category": "dome",
+    "emoji": "",
+    "label": ""
   },
   "tracks": {
     "dome_servos": [

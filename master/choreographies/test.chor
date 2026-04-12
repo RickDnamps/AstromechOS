@@ -6,7 +6,10 @@
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
-    "source": "test.scr"
+    "source": "test.scr",
+    "category": "test",
+    "emoji": "",
+    "label": ""
   },
   "tracks": {
     "dome_servos": [
