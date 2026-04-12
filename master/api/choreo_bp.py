@@ -121,6 +121,136 @@ def get_categories():
     return jsonify(cats)
 
 
+@choreo_bp.post('/choreo/categories')
+def manage_categories():
+    data = request.get_json(silent=True) or {}
+    action = data.get('action', '')
+    cats = _load_categories()
+    ids = [c['id'] for c in cats]
+
+    if action == 'create':
+        cat_id    = data.get('id', '').strip().lower().replace(' ', '_')
+        cat_label = data.get('label', '').strip()
+        cat_emoji = data.get('emoji', '📦').strip()
+        if not cat_id or not cat_label:
+            return jsonify({'error': 'id and label required'}), 400
+        if cat_id in ids:
+            return jsonify({'error': 'id already exists'}), 409
+        cats.append({'id': cat_id, 'label': cat_label, 'emoji': cat_emoji,
+                     'order': max((c.get('order', 0) for c in cats), default=0) + 1})
+        _save_categories(cats)
+        return jsonify({'status': 'ok', 'id': cat_id})
+
+    elif action == 'update':
+        cat_id    = data.get('id', '')
+        cat_emoji = data.get('emoji', '').strip()
+        cat_label = data.get('label', '').strip()
+        for c in cats:
+            if c['id'] == cat_id:
+                if cat_emoji:
+                    c['emoji'] = cat_emoji
+                if cat_label:
+                    c['label'] = cat_label
+                _save_categories(cats)
+                return jsonify({'status': 'ok'})
+        return jsonify({'error': 'category not found'}), 404
+
+    elif action == 'reorder':
+        new_order = data.get('order', [])
+        cat_map = {c['id']: c for c in cats}
+        reordered = []
+        for i, cat_id in enumerate(new_order):
+            if cat_id in cat_map:
+                cat_map[cat_id]['order'] = i
+                reordered.append(cat_map[cat_id])
+        # Add any missing cats at end
+        for c in cats:
+            if c['id'] not in new_order:
+                reordered.append(c)
+        _save_categories(reordered)
+        return jsonify({'status': 'ok'})
+
+    elif action == 'delete':
+        cat_id = data.get('id', '')
+        if cat_id == _SYSTEM_CATEGORY:
+            return jsonify({'error': 'cannot delete system category'}), 400
+        if cat_id not in ids:
+            return jsonify({'error': 'category not found'}), 404
+        # Move sequences in this category to newchoreo
+        for fname in os.listdir(_CHOREO_DIR):
+            if not fname.endswith('.chor'):
+                continue
+            fpath = os.path.join(_CHOREO_DIR, fname)
+            try:
+                with open(fpath, encoding='utf-8') as f:
+                    chor = json.load(f)
+                if chor.get('meta', {}).get('category') == cat_id:
+                    chor['meta']['category'] = _SYSTEM_CATEGORY
+                    with open(fpath, 'w', encoding='utf-8') as f:
+                        json.dump(chor, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass
+        cats = [c for c in cats if c['id'] != cat_id]
+        _save_categories(cats)
+        return jsonify({'status': 'ok'})
+
+    return jsonify({'error': f'unknown action: {action}'}), 400
+
+
+@choreo_bp.post('/choreo/set-category')
+def set_choreo_category():
+    data = request.get_json(silent=True) or {}
+    name     = data.get('name', '').strip()
+    category = data.get('category', '').strip()
+    if not name or not category:
+        return jsonify({'error': 'name and category required'}), 400
+    path = _choreo_path(name)
+    if not os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+    with open(path, encoding='utf-8') as f:
+        chor = json.load(f)
+    chor.setdefault('meta', {})['category'] = category
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(chor, f, indent=2, ensure_ascii=False)
+    return jsonify({'status': 'ok'})
+
+
+@choreo_bp.post('/choreo/set-emoji')
+def set_choreo_emoji():
+    data = request.get_json(silent=True) or {}
+    name  = data.get('name', '').strip()
+    emoji = data.get('emoji', '').strip()
+    if not name:
+        return jsonify({'error': 'name required'}), 400
+    path = _choreo_path(name)
+    if not os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+    with open(path, encoding='utf-8') as f:
+        chor = json.load(f)
+    chor.setdefault('meta', {})['emoji'] = emoji  # empty string = revert to auto
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(chor, f, indent=2, ensure_ascii=False)
+    return jsonify({'status': 'ok'})
+
+
+@choreo_bp.post('/choreo/set-label')
+def set_choreo_label():
+    data = request.get_json(silent=True) or {}
+    name  = data.get('name', '').strip()
+    label = data.get('label', '').strip()
+    if not name:
+        return jsonify({'error': 'name required'}), 400
+    path = _choreo_path(name)
+    if not os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+    with open(path, encoding='utf-8') as f:
+        chor = json.load(f)
+    chor.setdefault('meta', {})['label'] = label  # empty string = revert to filename
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(chor, f, indent=2, ensure_ascii=False)
+    return jsonify({'status': 'ok'})
+
+
 @choreo_bp.get('/choreo/load')
 def choreo_load():
     name = request.args.get('name', '')
