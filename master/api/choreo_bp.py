@@ -377,7 +377,8 @@ def choreo_play():
             log.exception("Servo reset failed — continuing with choreo start anyway")
         time.sleep(_SERVO_RESET_DELAY)
 
-    ok = reg.choreo.play(chor)
+    loop = bool(data.get('loop', False))
+    ok = reg.choreo.play(chor, loop=loop)
     if not ok:
         return jsonify({'error': 'already playing'}), 409
     return jsonify({'status': 'ok', 'name': name, 'duration': chor['meta']['duration']})

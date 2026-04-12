@@ -151,6 +151,7 @@ class ChoreoPlayer:
         self._last_telem_check: float     = 0.0
 
         self._stop_flag  = threading.Event()
+        self._loop       = False
         self._thread: threading.Thread | None = None
         self._servo_pos: dict[str, float] = {}   # last commanded angle per servo (for slew start)
         self._status_lock = threading.Lock()
@@ -207,7 +208,7 @@ class ChoreoPlayer:
         with self._status_lock:
             return dict(self._status)
 
-    def play(self, chor: dict) -> bool:
+    def play(self, chor: dict, loop: bool = False) -> bool:
         """Start playback of a chor dict. Returns False if already playing."""
         if self.is_playing():
             log.warning("ChoreoPlayer: already playing, stop first")
@@ -221,6 +222,7 @@ class ChoreoPlayer:
                 meta.get('name', '?'), required, self._audio_channels,
             )
 
+        self._loop             = loop
         self._drive_fail_count = 0
         self._abort_reason     = None
         self._last_telem       = None
@@ -357,6 +359,11 @@ class ChoreoPlayer:
                 self._status['telem'] = self._last_telem
 
             if t_now >= duration:
+                if self._loop and not self._stop_flag.is_set():
+                    log.info(f"Choreo '{name}' looping")
+                    t_start = time.monotonic()
+                    ev_idx  = 0
+                    continue
                 log.info(f"Choreo '{name}' finished")
                 break
 

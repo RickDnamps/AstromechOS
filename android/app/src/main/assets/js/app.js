@@ -3102,7 +3102,7 @@ class ScriptEngine {
       card.classList.toggle('looping', loop);
       this._startProgress(card, name);
     }
-    api('/choreo/play', 'POST', { name }).then(d => {
+    api('/choreo/play', 'POST', { name, loop }).then(d => {
       if (!d) {
         this._running.delete(name);
         this._looping.delete(name);
