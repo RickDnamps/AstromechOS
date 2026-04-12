@@ -19,6 +19,66 @@ _LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
 
 _CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
 
+_CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'choreo_categories.json')
+_SYSTEM_CATEGORY = 'newchoreo'
+
+
+def _load_categories() -> list:
+    """Load categories from JSON, creating defaults if missing."""
+    if not os.path.exists(_CATEGORIES_PATH):
+        defaults = [
+            {"id": "performance", "label": "Performance", "emoji": "🎭", "order": 0},
+            {"id": "emotion",     "label": "Emotions",    "emoji": "😤", "order": 1},
+            {"id": "behavior",    "label": "Behavior",    "emoji": "🚶", "order": 2},
+            {"id": "dome",        "label": "Dome",        "emoji": "🔵", "order": 3},
+            {"id": "test",        "label": "Tests",       "emoji": "🔧", "order": 4},
+            {"id": "newchoreo",   "label": "New Choreo",  "emoji": "📦", "order": 5},
+        ]
+        _save_categories(defaults)
+        return defaults
+    with open(_CATEGORIES_PATH, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def _save_categories(cats: list) -> None:
+    os.makedirs(os.path.dirname(_CATEGORIES_PATH), exist_ok=True)
+    with open(_CATEGORIES_PATH, 'w', encoding='utf-8') as f:
+        json.dump(cats, f, indent=2, ensure_ascii=False)
+
+
+def _auto_emoji(name: str) -> str:
+    """Derive emoji from sequence name — same logic as JS _emoji()."""
+    n = name.lower()
+    if any(x in n for x in ['cantina', 'tune', 'dance', 'disco', 'music', 'song']): return '🎵'
+    if any(x in n for x in ['alert', 'alarm']): return '🚨'
+    if 'scan' in n:       return '🔍'
+    if any(x in n for x in ['celebrat', 'happy', 'cheer', 'joy']): return '🎉'
+    if 'leia' in n:       return '📡'
+    if any(x in n for x in ['patrol', 'stroll', 'walk']): return '🚶'
+    if 'test' in n:       return '🔧'
+    if any(x in n for x in ['fall', 'strike', 'multi']): return '⚡'
+    if 'panel' in n:      return '🚪'
+    if any(x in n for x in ['dome']): return '🔵'
+    if any(x in n for x in ['excit', 'idea']): return '💬'
+    if 'show' in n:       return '🎭'
+    if 'birthday' in n:   return '🎂'
+    if 'march' in n:      return '🎖️'
+    if 'party' in n:      return '🥳'
+    if 'startup' in n:    return '🤖'
+    if 'scared' in n:     return '😱'
+    if 'angry' in n:      return '😡'
+    if 'evil' in n:       return '😈'
+    if 'curious' in n:    return '🤔'
+    if 'taunt' in n:      return '😏'
+    if 'malfunction' in n: return '💥'
+    if 'failure' in n:    return '⚡'
+    if 'wolfwhistle' in n: return '🐺'
+    if 'message' in n:    return '📨'
+    if 'ripple' in n:     return '🌀'
+    if 'flap' in n:       return '🚪'
+    if 'hp_twitch' in n:  return '🔦'
+    return '🎬'
+
 
 def _choreo_path(name: str) -> str:
     safe = os.path.basename(name).replace('..', '')

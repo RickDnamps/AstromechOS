@@ -1,0 +1,8 @@
+[
+  { "id": "performance", "label": "Performance", "emoji": "🎭", "order": 0 },
+  { "id": "emotion",     "label": "Emotions",    "emoji": "😤", "order": 1 },
+  { "id": "behavior",    "label": "Behavior",    "emoji": "🚶", "order": 2 },
+  { "id": "dome",        "label": "Dome",        "emoji": "🔵", "order": 3 },
+  { "id": "test",        "label": "Tests",       "emoji": "🔧", "order": 4 },
+  { "id": "newchoreo",   "label": "New Choreo",  "emoji": "📦", "order": 5 }
+]
