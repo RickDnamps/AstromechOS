@@ -2,7 +2,7 @@
   "meta": {
     "name": "wolfwhistle",
     "version": "1.0",
-    "duration": 59.25,
+    "duration": 3.25,
     "bpm": 0,
     "created": "2026-03-31",
     "author": "scr_to_chor converter",
@@ -28,12 +28,12 @@
       {
         "t": 0.0,
         "mode": "random",
-        "duration": 57.15
+        "duration": 2.5
       },
       {
-        "t": 57.15,
+        "t": 2.5,
         "mode": "off",
-        "duration": 2.0
+        "duration": 0.5
       }
     ],
     "dome_servos": [
