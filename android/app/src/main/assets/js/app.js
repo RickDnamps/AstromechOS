@@ -3007,16 +3007,19 @@ class ScriptEngine {
   // ── Admin drag to pill ────────────────────────────────────────
 
   _attachDrag(card, name) {
+    let pressed  = false;
     let dragging = false;
     let startX = 0, startY = 0;
     let ghost = null;
 
     card.addEventListener('pointerdown', (e) => {
+      pressed = true;
       startX = e.clientX; startY = e.clientY;
       card.setPointerCapture(e.pointerId);
     });
 
     card.addEventListener('pointermove', (e) => {
+      if (!pressed) return;
       const dx = Math.abs(e.clientX - startX);
       const dy = Math.abs(e.clientY - startY);
       if (!dragging && (dx > 8 || dy > 8)) {
@@ -3037,6 +3040,7 @@ class ScriptEngine {
     });
 
     card.addEventListener('pointerup', async (e) => {
+      pressed = false;
       if (!dragging) return;
       dragging = false;
       card.classList.remove('dragging');
@@ -3054,6 +3058,7 @@ class ScriptEngine {
     });
 
     card.addEventListener('pointercancel', () => {
+      pressed = false;
       dragging = false;
       card.classList.remove('dragging');
       if (ghost) { ghost.remove(); ghost = null; }
