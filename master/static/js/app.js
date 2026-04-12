@@ -5386,7 +5386,12 @@ const choreoEditor = (() => {
         pool = configured.length ? configured : _servoList.filter(s => s.startsWith('Servo_S'));
       } else {
         const prefix   = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
-        const filtered = _servoList.filter(s => s.startsWith(prefix));
+        let filtered = _servoList.filter(s => s.startsWith(prefix));
+        if (track === 'body_servos' && armsConfig._count > 0) {
+          // Exclude servos configured as arms — only when at least 1 arm is configured
+          const armSet = new Set(armsConfig._servos.slice(0, armsConfig._count).filter(s => s));
+          if (armSet.size > 0) filtered = filtered.filter(s => !armSet.has(s));
+        }
         pool = filtered.length ? filtered : _servoList;
       }
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
