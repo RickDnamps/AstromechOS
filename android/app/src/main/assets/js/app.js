@@ -43,6 +43,14 @@
 
 function el(id) { return document.getElementById(id); }
 
+// Sync .holo-slider gradient fill (--val) to the slider's current value.
+// Must be called after any programmatic value assignment AND on input events.
+function syncHoloSlider(s) {
+  if (!s) return;
+  const pct = ((s.value - s.min) / (s.max - s.min) * 100).toFixed(1);
+  s.style.setProperty('--val', pct + '%');
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g,'&amp;')
@@ -64,6 +72,7 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
     const opts = { method, headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
+    if (!res.ok) { console.warn(`API ${method} ${endpoint}: HTTP ${res.status}`); return null; }
     const data = await res.json();
     return data;
   } catch (e) {
@@ -118,7 +127,7 @@ class LockManager {
 
   init() {
     const s = el('kids-speed-slider');
-    if (s) s.value = this._kidsSpeed;
+    if (s) { s.value = this._kidsSpeed; syncHoloSlider(s); }
     const v = el('kids-speed-val');
     if (v) v.textContent = this._kidsSpeed + '%';
     document.body.dataset.lockMode = '0';
@@ -259,16 +268,18 @@ class LockManager {
 const lockMgr = new LockManager();
 
 // ================================================================
-// Admin Guard — onglets protégés (SERVO / VESC / CONFIG)
+// Admin Guard — onglets protégés (SETTINGS / CHOREO)
 // ================================================================
 
 class AdminGuard {
   constructor() {
-    this._unlocked     = false;
-    this._timer        = null;
-    this._TIMEOUT      = 5 * 60 * 1000;   // 5 minutes
-    this._PROTECTED    = new Set(['systems', 'vesc', 'config', 'choreo']);
-    this._activeTabId  = '';               // updated by onTabSwitch (always, even when locked)
+    this._unlocked      = false;
+    this._timer         = null;
+    this._TIMEOUT       = 5 * 60 * 1000;   // 5 minutes
+    this._PROTECTED     = new Set(['settings']);
+    this._activeTabId   = '';               // updated by onTabSwitch (always, even when locked)
+    this._pendingTab    = null;             // tab to open after successful unlock
+    this._pendingCallback = null;           // callback to run after successful unlock (choreo guard)
     // Bound handler — stored to allow removeEventListener
     this._boundActivity = () => this._onActivity();
   }
@@ -276,7 +287,9 @@ class AdminGuard {
   get unlocked() { return this._unlocked; }
   isProtected(tabId) { return this._PROTECTED.has(tabId); }
 
-  showModal() {
+  showModal(pendingTab = null, pendingCallback = null) {
+    this._pendingTab      = pendingTab;
+    this._pendingCallback = pendingCallback;
     const m = el('admin-modal');
     if (!m) return;
     m.classList.remove('hidden');
@@ -293,17 +306,28 @@ class AdminGuard {
 
   submit() {
     const pwd = el('admin-pwd-input').value;
-    if (pwd === 'deetoo') {
-      this._unlock();
-    } else {
-      el('admin-pwd-error').classList.remove('hidden');
-      const inp = el('admin-pwd-input');
-      inp.value = '';
-      inp.classList.remove('shake');
-      void inp.offsetWidth;
-      inp.classList.add('shake');
-      inp.focus();
-    }
+    const btn = el('admin-modal').querySelector('.btn-active');
+    if (btn) btn.disabled = true;
+    api('/settings/admin/verify', 'POST', { password: pwd })
+      .then(d => {
+        if (d && d.ok) {
+          this._unlock();
+        } else {
+          this._showError();
+        }
+      })
+      .catch(() => this._showError())
+      .finally(() => { if (btn) btn.disabled = false; });
+  }
+
+  _showError() {
+    el('admin-pwd-error').classList.remove('hidden');
+    const inp = el('admin-pwd-input');
+    inp.value = '';
+    inp.classList.remove('shake');
+    void inp.offsetWidth;
+    inp.classList.add('shake');
+    inp.focus();
   }
 
   _unlock() {
@@ -312,6 +336,20 @@ class AdminGuard {
     el('admin-modal').classList.add('hidden');
     toast('Admin access granted — expires in 5 min', 'ok');
     audioBoard?.showUploadZone(true);
+    // Navigate to the tab that triggered the auth prompt
+    if (this._pendingTab) {
+      const t = this._pendingTab;
+      this._pendingTab = null;
+      switchTab(t);
+    }
+    // Run choreo action that triggered the auth prompt
+    if (this._pendingCallback) {
+      const cb = this._pendingCallback;
+      this._pendingCallback = null;
+      _choreoUnlocked = true;
+      cb();
+    }
+    scriptEngine._syncAdminMode();
     // Track activity to reset the timer while on a protected tab.
     // pointerdown is used instead of click: mousedown.preventDefault() in the
     // Choreo editor suppresses click events, but never suppresses pointerdown.
@@ -340,6 +378,7 @@ class AdminGuard {
       switchTab('drive');
     }
     toast('Admin access expired', 'info');
+    scriptEngine._syncAdminMode();
   }
 
   onTabSwitch(tabId) {
@@ -364,6 +403,10 @@ class AdminGuard {
 
 const adminGuard = new AdminGuard();
 
+// Choreo tab session unlock — true after first admin auth while in choreo tab.
+// Resets when leaving the choreo tab so the next visit requires re-auth.
+let _choreoUnlocked = false;
+
 // VESC tab fast-poll — active only while VESC tab is open
 let _vescTabTimer = null;
 function _startVescTabPoll() {
@@ -376,31 +419,62 @@ function _stopVescTabPoll() {
 }
 
 function switchTab(tabId) {
-  // Onglet protégé sans accès → ouvrir modal
+  // Onglet protégé sans accès → ouvrir modal, puis y revenir après unlock
   if (adminGuard.isProtected(tabId) && !adminGuard.unlocked) {
-    adminGuard.showModal();
+    adminGuard.showModal(tabId);
     return;
   }
 
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  el('admin-gear-btn')?.classList.remove('active');
   const tabBtn = document.querySelector(`.tab[data-tab="${tabId}"]`);
   const tabContent = el(`tab-${tabId}`);
   if (tabBtn) tabBtn.classList.add('active');
   if (tabContent) tabContent.classList.add('active');
+  // Gear button highlights when settings tab is active
+  if (tabId === 'settings') el('admin-gear-btn')?.classList.add('active');
 
   adminGuard.onTabSwitch(tabId);
 
-  if (tabId === 'config') { loadSettings(); loadServoSettings(); }
+  if (tabId === 'settings') {
+    loadSettings();
+    loadServoSettings();
+    armsConfig.load();
+    // Activate first sidebar item if none selected yet
+    if (!document.querySelector('.settings-nav-item.active')) {
+      switchSettingsPanel('bluetooth');
+    }
+  }
   if (tabId === 'sequences') loadScripts();
   if (tabId === 'lights') loadLightSequences();
   if (tabId === 'audio') loadAudioCategories();
 
-  // VESC tab: start fast poll on entry, stop on exit
-  if (tabId === 'vesc') { _startVescTabPoll(); }
-  else                  { _stopVescTabPoll(); }
+  // Stop VESC fast poll when leaving settings/vesc panel
+  if (tabId !== 'settings') _stopVescTabPoll();
+
+  // Reset choreo session unlock when leaving the choreo tab
+  if (tabId !== 'choreo') _choreoUnlocked = false;
 
   if (tabId === 'choreo') choreoEditor.init();
+}
+
+function switchSettingsPanel(panelId) {
+  document.querySelectorAll('.settings-nav-item').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+  const btn   = document.querySelector(`.settings-nav-item[data-panel="${panelId}"]`);
+  const panel = el(`spanel-${panelId}`);
+  if (btn)   btn.classList.add('active');
+  if (panel) panel.classList.add('active');
+
+  // VESC fast poll only while VESC panel is visible
+  if (panelId === 'vesc') _startVescTabPoll();
+  else                    _stopVescTabPoll();
+
+  // Lazy-load panel data when opening
+  if (panelId === 'network') loadSettings();
+  if (panelId === 'servos')  loadServoSettings();
+  if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1828,8 +1902,17 @@ const bodyServoPanel = new ServoPanel('body-servo-list', BODY_SERVOS, '/servo/bo
 
 class AudioBoard {
   constructor() {
-    this._currentCat = null;
-    this._playing    = false;
+    this._currentCat    = null;
+    this._playing       = false;
+    this._tickInterval  = null;
+    this._timedSound    = '';
+    this._startTime     = 0;
+    this._totalMs       = 0;
+    this._repeat        = false;
+    this._autoRandom    = false;
+    this._userStopped   = false;
+    this._lastRandomCat = null;
+    this._fullIndex     = {};
     this._ICONS = {
       alarm:'🚨', happy:'😄', hum:'🎵', misc:'🎲', proc:'⚙️', quote:'💬',
       razz:'🤪', sad:'😢', sent:'🤔', ooh:'😲', whistle:'🎶', scream:'😱',
@@ -1856,7 +1939,11 @@ class AudioBoard {
   }
 
   async loadCategories() {
-    const data = await api('/audio/categories');
+    const [data, indexData] = await Promise.all([
+      api('/audio/categories'),
+      api('/audio/index'),
+    ]);
+    if (indexData?.categories) this._fullIndex = indexData.categories;
     if (!data || !data.categories) return;
     const wrap = el('audio-categories');
     if (!wrap) return;
@@ -1948,6 +2035,7 @@ class AudioBoard {
 
   playRandom(cat) {
     const c = cat || this._currentCat || 'happy';
+    this._lastRandomCat = c;
     api('/audio/random', 'POST', { category: c }).then(d => {
       if (d) {
         const label = this._CAT_LABELS[c] || c;
@@ -1956,12 +2044,120 @@ class AudioBoard {
     });
   }
 
+  toggleRepeat() {
+    this._repeat = !this._repeat;
+    if (this._repeat) this._autoRandom = false;
+    el('now-playing-repeat')?.classList.toggle('active', this._repeat);
+    el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
+  }
+
+  toggleAutoRandom() {
+    this._autoRandom = !this._autoRandom;
+    if (this._autoRandom) this._repeat = false;
+    el('now-playing-repeat')?.classList.toggle('active', this._repeat);
+    el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
+  }
+
+  playNext() {
+    this.playRandom(this._currentCat || 'happy');
+  }
+
+  stopPlayback() {
+    this._userStopped = true;
+    api('/audio/stop', 'POST').then(d => {
+      if (d) this.setPlaying(false);
+    });
+  }
+
+  _getCatForSound(sound) {
+    for (const [cat, sounds] of Object.entries(this._fullIndex)) {
+      if (sounds.includes(sound)) return cat;
+    }
+    return null;
+  }
+
+  _fmtTime(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  _stopTimer() {
+    if (this._tickInterval) { clearInterval(this._tickInterval); this._tickInterval = null; }
+    const timeEl = el('now-playing-time');
+    if (timeEl) timeEl.textContent = '';
+    const fill = el('now-playing-progress-fill');
+    if (fill) fill.style.width = '0%';
+    this._timedSound = '';
+    this._totalMs = 0;
+  }
+
+  _startTimer(sound) {
+    this._stopTimer();
+    this._startTime = Date.now();
+    this._timedSound = sound;
+    this._totalMs = 0;
+
+    // Fetch real MP3 duration via Audio element (specific files only, not RANDOM)
+    if (sound && !sound.startsWith('🎲')) {
+      const a = new Audio(`/audio/file/${sound}`);
+      a.addEventListener('loadedmetadata', () => {
+        if (this._timedSound === sound && isFinite(a.duration))
+          this._totalMs = a.duration * 1000;
+      });
+      a.load();
+    }
+
+    const timeEl = el('now-playing-time');
+    const fill = el('now-playing-progress-fill');
+    this._tickInterval = setInterval(() => {
+      const elapsedMs = Date.now() - this._startTime;
+      if (timeEl) {
+        const elapsed = this._fmtTime(elapsedMs);
+        const total   = this._totalMs > 0 ? this._fmtTime(this._totalMs) : '--:--';
+        timeEl.textContent = `${elapsed} / ${total}`;
+      }
+      if (fill && this._totalMs > 0) {
+        fill.style.width = `${Math.min(100, (elapsedMs / this._totalMs) * 100)}%`;
+      }
+    }, 500);
+  }
+
   setPlaying(active, name = '') {
+    const wasPlaying = this._playing;
+    const sameSong   = name && name === this._timedSound;
     this._playing = active;
     const waveform = el('waveform');
     const text     = el('now-playing-text');
     if (waveform) waveform.classList.toggle('playing', active);
-    if (text) text.textContent = active ? name : 'IDLE';
+
+    // Category badge on specific sounds
+    let displayName = active ? name : 'IDLE';
+    if (active && name && !name.startsWith('🎲')) {
+      const cat = this._getCatForSound(name);
+      if (cat) displayName = `${this._ICONS[cat] || '🔊'} ${name}`;
+    }
+    if (text) text.textContent = displayName;
+
+    if (active && (!wasPlaying || !sameSong)) {
+      this._startTimer(name);
+    } else if (!active) {
+      const soundToRepeat = this._timedSound;
+      this._stopTimer();
+      if (wasPlaying && !this._userStopped) {
+        if (this._repeat) {
+          setTimeout(() => {
+            if (soundToRepeat && !soundToRepeat.startsWith('🎲')) {
+              this.play(soundToRepeat);
+            } else {
+              this.playRandom(this._lastRandomCat || this._currentCat);
+            }
+          }, 300);
+        } else if (this._autoRandom) {
+          setTimeout(() => this.playNext(), 300);
+        }
+      }
+      this._userStopped = false;
+    }
   }
 
   // ── Upload ────────────────────────────────────────────────────────
@@ -2049,9 +2245,7 @@ class AudioBoard {
 const audioBoard = new AudioBoard();
 
 function audioStop() {
-  api('/audio/stop', 'POST').then(d => {
-    if (d) { audioBoard.setPlaying(false); toast('Audio stopped', 'ok'); }
-  });
+  audioBoard.stopPlayback();
 }
 
 function audioRandom() {
@@ -2213,7 +2407,7 @@ class VescPanel {
     const label  = el('vesc-scale-label');
     const info   = el('vesc-scale-pct');
     const pct    = Math.round(scale * 100);
-    if (slider && slider !== document.activeElement) slider.value = pct;
+    if (slider && slider !== document.activeElement) { slider.value = pct; _updateSliderBg(slider); }
     if (label) label.textContent = pct + '%';
     if (info)  info.textContent  = pct;
   }
@@ -2514,145 +2708,461 @@ const canWizard = {
 };
 
 // ================================================================
-// Script Engine
+// EmojiPicker — shared emoji picker component
+// ================================================================
+
+const EMOJI_SECTIONS = [
+  { label: '😤 Émotions', emojis: ['😡','🤬','😤','😠','😱','😨','😰','😮','😲','🥹','🤩','😎','🥳','😏','🤔','🥸','😴','🤯','🫡','😈','👻','💀','🤖','👾'] },
+  { label: '🎵 Musique & Sons', emojis: ['🎵','🎶','🎸','🎺','🪗','🥁','🎤','🎼','🪩','💿','📻','🔊','🔔','🎹','🎻','🎷'] },
+  { label: '🎭 Show & Fête', emojis: ['🎭','🎉','🎊','🎂','🎈','🪅','🎆','🎇','🏆','🥇','🎖️','👑'] },
+  { label: '🏃 Mouvement & Danse', emojis: ['🏃','🚶','💃','🕺','🌀','💫','🔄','↩️','🎯','🏹','👋','🫳'] },
+  { label: '⚡ Actions & Alertes', emojis: ['⚡','🚨','🔴','🟠','🟡','🟢','💥','🔥','❄️','💣','🧨','☢️'] },
+  { label: '🔧 Tech & Robot', emojis: ['🔧','⚙️','🔬','📡','🔍','💡','🔋','📱','🖥️','🎮','🕹️','🔌'] },
+  { label: '⭐ Star Wars & Espace', emojis: ['⭐','🌟','✨','🚀','🛸','🌙','🪐','☄️','⚔️','🗡️','🔫','🐺','🦅','🏜️','🌌','👁️'] },
+  { label: '🚪 Panneaux & Dôme', emojis: ['🚪','🔵','🟣','⭕','🔘','🪞','🎪','🎠'] },
+];
+
+class EmojiPicker {
+  constructor() {
+    this._selected   = '';
+    this._callback   = null;
+    this._allEmojis  = EMOJI_SECTIONS.flatMap(s => s.emojis);
+    this._buildSections();
+  }
+
+  _buildSections() {
+    const scroll = el('emoji-picker-scroll');
+    if (!scroll) return;
+    scroll.innerHTML = EMOJI_SECTIONS.map(sec => `
+      <div class="emoji-picker-section-label">${sec.label}</div>
+      <div class="emoji-picker-grid">
+        ${sec.emojis.map(e =>
+          `<div class="emoji-picker-btn" data-emoji="${e}" onclick="emojiPicker._pick('${e}')">${e}</div>`
+        ).join('')}
+      </div>`
+    ).join('');
+  }
+
+  open(currentEmoji, callback) {
+    this._selected = currentEmoji || '';
+    this._callback = callback;
+    el('emoji-picker-preview').textContent = this._selected || '?';
+    el('emoji-picker-search').value = '';
+    this._highlightSelected();
+    el('emoji-picker-overlay').classList.remove('hidden');
+    el('emoji-picker-search').focus();
+  }
+
+  _highlightSelected() {
+    document.querySelectorAll('.emoji-picker-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.emoji === this._selected);
+      b.style.display = '';
+    });
+    document.querySelectorAll('.emoji-picker-section-label').forEach(l => l.style.display = '');
+  }
+
+  _pick(emoji) {
+    this._selected = emoji;
+    el('emoji-picker-preview').textContent = emoji;
+    document.querySelectorAll('.emoji-picker-btn').forEach(b =>
+      b.classList.toggle('selected', b.dataset.emoji === emoji));
+  }
+
+  filter(query) {
+    const q = query.trim().toLowerCase();
+    document.querySelectorAll('.emoji-picker-btn').forEach(b => {
+      b.style.display = (!q || b.dataset.emoji.includes(q)) ? '' : 'none';
+    });
+  }
+
+  confirm() {
+    if (this._callback) this._callback(this._selected);
+    this.cancel();
+  }
+
+  cancel() {
+    el('emoji-picker-overlay').classList.add('hidden');
+    this._callback = null;
+  }
+
+  onOverlayClick(e) {
+    if (e.target === el('emoji-picker-overlay')) this.cancel();
+  }
+}
+
+const emojiPicker = new EmojiPicker();
+
+// ================================================================
+// ScriptEngine — Sequences tab with categories
 // ================================================================
 
 class ScriptEngine {
   constructor() {
-    this._scripts = [];
-    this._running = new Set();
-    this._DESCRIPTIONS = {
-      patrol:    'R2-D2 patrols with sounds + dome movement',
-      celebrate: 'Victory celebration with lights and sounds',
-      cantina:   'Cantina dance routine with audio',
-      leia:      'Help me Obi-Wan... holographic message',
-    };
+    this._scripts    = [];   // [{name, label, category, emoji, duration}]
+    this._categories = [];   // [{id, label, emoji, order}]
+    this._running    = new Set();
+    this._looping    = new Set();
+    this._activeCategory = 'all';
+    this._pillSortable   = null;
+    this._longPressTimer = null;
+    this._dragCard       = null;
   }
+
+  // ── Data loading ─────────────────────────────────────────────
 
   async load() {
-    const chorNames = await api('/choreo/list');
-    this._scripts = (chorNames || []).map(name => ({ name, type: 'choreo' }));
-    this.render();
+    const [scripts, cats] = await Promise.all([
+      api('/choreo/list'),
+      api('/choreo/categories'),
+    ]);
+    this._scripts    = scripts    || [];
+    this._categories = (cats || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    this._renderPills();
+    this._renderGrid();
+    this._syncAdminMode();
   }
 
-  render() {
-    const grid = el('script-list');
-    if (!grid) return;
-    grid.innerHTML = this._scripts.map(entry => {
-      const { name, type } = entry;
-      const desc = this._DESCRIPTIONS[name] ||
-        (type === 'light'  ? 'Light sequence' :
-         type === 'choreo' ? 'Choreography (timeline with interpolation)' :
-                             'Custom sequence script');
-      const isRunning = this._running.has(name);
-      const badge = type === 'light'  ? '<span class="script-badge-light">LIGHT</span>' :
-                    type === 'choreo' ? '<span class="script-badge-choreo">🎬 CHOREO</span>' : '';
-      const loopBtn = type !== 'choreo'
-        ? `<button class="btn btn-sm" onclick="scriptEngine.run('${name}', true, '${type}')">LOOP</button>` : '';
-      return `
-        <div class="script-card${isRunning ? ' running' : ''}" id="script-card-${name}">
-          <div class="script-name">${name.toUpperCase()}${badge}</div>
-          <div class="script-desc">${desc}</div>
-          <div class="script-btns">
-            <div class="running-indicator"></div>
-            <button class="btn btn-sm btn-active" onclick="scriptEngine.run('${name}', false, '${type}')">RUN</button>
-            ${loopBtn}
-            <button class="btn btn-sm btn-danger" onclick="scriptEngine.stopName('${name}', '${type}')">STOP</button>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
+  // ── Pills ─────────────────────────────────────────────────────
 
-  run(name, loop, type = 'seq') {
-    if (type === 'choreo') {
-      api('/choreo/play', 'POST', { name }).then(d => {
-        if (d) {
-          this._running.clear();
-          document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
-          this._running.add(name);
-          const card = el(`script-card-${name}`);
-          if (card) card.classList.add('running');
-          toast(`🎬 ${name.toUpperCase()} playing`, 'ok');
-          poller.poll();
-        }
+  _renderPills() {
+    const container = el('seq-pills');
+    if (!container) return;
+    const isAdmin = adminGuard.unlocked;
+    const cats = this._categories;
+
+    const allPill = `<div class="seq-pill${this._activeCategory === 'all' ? ' active' : ''}"
+        data-cat="all" onclick="scriptEngine.selectCategory('all')">
+        <span>🌐</span> ALL
+      </div>`;
+
+    const catPills = cats.map(c => `
+      <div class="seq-pill${this._activeCategory === c.id ? ' active' : ''}${isAdmin ? ' admin-mode' : ''}"
+           data-cat="${c.id}" onclick="scriptEngine.selectCategory('${c.id}')">
+        <span class="seq-pill-emoji" ${isAdmin ? `onclick="scriptEngine.onPillEmojiClick(event,'${c.id}')"` : ''}
+        >${c.emoji}</span>
+        ${escapeHtml(c.label)}
+        ${isAdmin && c.id !== 'newchoreo'
+          ? `<span class="seq-pill-close" onclick="scriptEngine.deleteCategory(event,'${c.id}')">✕</span>`
+          : ''}
+      </div>`).join('');
+
+    const addPill = isAdmin
+      ? `<div class="seq-pill pill-add" onclick="scriptEngine.createCategory()">+ Cat</div>`
+      : '';
+
+    container.innerHTML = allPill + catPills + addPill;
+
+    if (this._pillSortable) { this._pillSortable.destroy(); this._pillSortable = null; }
+    if (isAdmin) {
+      this._pillSortable = Sortable.create(container, {
+        animation: 150,
+        filter: '[data-cat="all"], .pill-add',
+        onEnd: () => this._savePillOrder(),
       });
-      return;
     }
-    const endpoint = type === 'light' ? '/light/run' : '/scripts/run';
-    api(endpoint, 'POST', { name, loop }).then(d => {
-      if (d) {
-        this._running.clear();
-        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
-        const count = el('running-count');
-        if (count) count.textContent = '1';
-        const list = el('running-scripts');
-        if (list) list.textContent = `${name}#${d.id}`;
-        this._running.add(name);
-        const card = el(`script-card-${name}`);
-        if (card) card.classList.add('running');
-        toast(`${name.toUpperCase()} started${loop ? ' (loop)' : ''}`, 'ok');
+
+    const hint = el('seq-admin-hint');
+    if (hint) hint.classList.toggle('hidden', !isAdmin);
+  }
+
+  _savePillOrder() {
+    const pills = el('seq-pills').querySelectorAll('.seq-pill[data-cat]');
+    const order = [...pills].map(p => p.dataset.cat).filter(id => id !== 'all');
+    api('/choreo/categories', 'POST', { action: 'reorder', order });
+  }
+
+  selectCategory(catId) {
+    this._activeCategory = catId;
+    this._renderPills();
+    this._renderGrid();
+  }
+
+  onPillEmojiClick(event, catId) {
+    event.stopPropagation();
+    const cat = this._categories.find(c => c.id === catId);
+    if (!cat) return;
+    emojiPicker.open(cat.emoji, async (emoji) => {
+      if (!emoji) return;
+      await api('/choreo/categories', 'POST', { action: 'update', id: catId, emoji });
+      await this.load();
+    });
+  }
+
+  async createCategory() {
+    const label = prompt('Category name:');
+    if (!label) return;
+    const id = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    emojiPicker.open('📦', async (emoji) => {
+      await api('/choreo/categories', 'POST', { action: 'create', id, label, emoji: emoji || '📦' });
+      await this.load();
+    });
+  }
+
+  async deleteCategory(event, catId) {
+    event.stopPropagation();
+    const cat = this._categories.find(c => c.id === catId);
+    const count = this._scripts.filter(s => s.category === catId).length;
+    const msg = count > 0
+      ? `Delete "${cat.label}"? ${count} sequence(s) will move to New Choreo.`
+      : `Delete "${cat.label}"?`;
+    if (!confirm(msg)) return;
+    await api('/choreo/categories', 'POST', { action: 'delete', id: catId });
+    if (this._activeCategory === catId) this._activeCategory = 'all';
+    await this.load();
+  }
+
+  // ── Grid ──────────────────────────────────────────────────────
+
+  _renderGrid() {
+    const grid = el('seq-grid');
+    if (!grid) return;
+    const isAdmin = adminGuard.unlocked;
+    const scripts = this._activeCategory === 'all'
+      ? this._scripts
+      : this._scripts.filter(s => s.category === this._activeCategory);
+
+    grid.innerHTML = scripts.map(s => {
+      const isRunning = this._running.has(s.name);
+      const isLooping = this._looping.has(s.name);
+      const label = s.label || s.name.toUpperCase().replace(/_/g, ' ');
+      return `
+        <div class="seq-card${isRunning ? ' running' : ''}${isLooping ? ' looping' : ''}"
+             id="seq-card-${s.name}"
+             data-name="${s.name}"
+             data-duration="${s.duration || 5}">
+          ${isAdmin ? `<div class="seq-card-handle">⠿</div>` : ''}
+          <span class="seq-card-loop">🔄</span>
+          <span class="seq-card-emoji">${s.emoji}</span>
+          <div class="seq-card-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <span class="seq-card-label">${escapeHtml(label)}</span>
+          <div class="seq-card-progress"><div class="seq-card-progress-fill" id="seq-prog-${s.name}"></div></div>
+          ${isAdmin ? `<div class="seq-card-play" onclick="scriptEngine.play(event,'${s.name}')">▶</div>` : ''}
+        </div>`;
+    }).join('');
+
+    this._attachCardEvents(grid, isAdmin);
+  }
+
+  _attachCardEvents(grid, isAdmin) {
+    grid.querySelectorAll('.seq-card').forEach(card => {
+      const name = card.dataset.name;
+
+      if (isAdmin) {
+        const emojiEl = card.querySelector('.seq-card-emoji');
+        emojiEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const s = this._scripts.find(x => x.name === name);
+          emojiPicker.open(s.emoji, async (emoji) => {
+            await api('/choreo/set-emoji', 'POST', { name, emoji });
+            await this.load();
+          });
+        });
+
+        const labelEl = card.querySelector('.seq-card-label');
+        labelEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._startRename(card, name);
+        });
+
+        this._attachDrag(card, name);
+
+      } else {
+        card.addEventListener('pointerdown', (e) => this._onPointerDown(e, name));
+        card.addEventListener('pointerup',   (e) => this._onPointerUp(e, name));
+        card.addEventListener('pointermove', (e) => this._onPointerMove(e));
+        card.addEventListener('pointercancel', () => this._clearLongPress());
+      }
+    });
+  }
+
+  // ── Long press (normal mode) ──────────────────────────────────
+
+  _onPointerDown(e, name) {
+    this._longPressTimer = setTimeout(() => {
+      this._longPressTimer = null;
+      this.play(e, name, true);
+    }, 500);
+  }
+
+  _onPointerUp(e, name) {
+    if (this._longPressTimer) {
+      clearTimeout(this._longPressTimer);
+      this._longPressTimer = null;
+      if (this._running.has(name)) this.stop(name);
+      else this.play(e, name, false);
+    }
+  }
+
+  _onPointerMove(e) {
+    if (this._longPressTimer) {
+      clearTimeout(this._longPressTimer);
+      this._longPressTimer = null;
+    }
+  }
+
+  _clearLongPress() {
+    if (this._longPressTimer) { clearTimeout(this._longPressTimer); this._longPressTimer = null; }
+  }
+
+  // ── Admin drag to pill ────────────────────────────────────────
+
+  _attachDrag(card, name) {
+    let dragging = false;
+    let startX = 0, startY = 0;
+    let ghost = null;
+
+    card.addEventListener('pointerdown', (e) => {
+      startX = e.clientX; startY = e.clientY;
+      card.setPointerCapture(e.pointerId);
+    });
+
+    card.addEventListener('pointermove', (e) => {
+      const dx = Math.abs(e.clientX - startX);
+      const dy = Math.abs(e.clientY - startY);
+      if (!dragging && (dx > 8 || dy > 8)) {
+        dragging = true;
+        card.classList.add('dragging');
+        document.querySelectorAll('.seq-pill[data-cat]:not([data-cat="all"])').forEach(p => {
+          p.classList.add('drop-target');
+        });
+        ghost = document.createElement('div');
+        ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;opacity:0.8;font-size:28px;';
+        ghost.textContent = card.querySelector('.seq-card-emoji').textContent;
+        document.body.appendChild(ghost);
+      }
+      if (dragging && ghost) {
+        ghost.style.left = (e.clientX - 16) + 'px';
+        ghost.style.top  = (e.clientY - 16) + 'px';
+      }
+    });
+
+    card.addEventListener('pointerup', async (e) => {
+      if (!dragging) return;
+      dragging = false;
+      card.classList.remove('dragging');
+      if (ghost) { ghost.remove(); ghost = null; }
+      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
+
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const pill = target?.closest('.seq-pill[data-cat]');
+      if (pill && pill.dataset.cat !== 'all') {
+        const newCat = pill.dataset.cat;
+        await api('/choreo/set-category', 'POST', { name, category: newCat });
+        toast(`Moved to ${newCat}`, 'ok');
+        await this.load();
+      }
+    });
+
+    card.addEventListener('pointercancel', () => {
+      dragging = false;
+      card.classList.remove('dragging');
+      if (ghost) { ghost.remove(); ghost = null; }
+      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
+    });
+  }
+
+  // ── Inline rename ─────────────────────────────────────────────
+
+  _startRename(card, name) {
+    const labelEl = card.querySelector('.seq-card-label');
+    const current = labelEl.textContent;
+    const input = document.createElement('input');
+    input.className = 'input-text';
+    input.style.cssText = 'width:100%;font-size:10px;padding:2px 4px;text-align:center;';
+    input.value = current;
+    labelEl.replaceWith(input);
+    input.focus(); input.select();
+
+    const save = async () => {
+      const newLabel = input.value.trim();
+      await api('/choreo/set-label', 'POST', { name, label: newLabel });
+      await this.load();
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') this.load();
+    });
+    input.addEventListener('blur', save);
+  }
+
+  // ── Playback ──────────────────────────────────────────────────
+
+  play(event, name, loop = false) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    this._running.add(name);
+    if (loop) this._looping.add(name); else this._looping.delete(name);
+    const card = el(`seq-card-${name}`);
+    if (card) {
+      card.classList.add('running');
+      card.classList.toggle('looping', loop);
+      this._startProgress(card, name);
+    }
+    api('/choreo/play', 'POST', { name }).then(d => {
+      if (!d) {
+        this._running.delete(name);
+        this._looping.delete(name);
+        if (card) { card.classList.remove('running', 'looping'); }
+      } else {
+        toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
         poller.poll();
       }
     });
   }
 
-  stopName(name, type = 'seq') {
-    if (type === 'choreo') {
-      api('/choreo/stop', 'POST').then(() => {
-        this._running.delete(name);
-        const card = el(`script-card-${name}`);
-        if (card) card.classList.remove('running');
-        toast(`${name.toUpperCase()} stopped`, 'ok');
-      });
-      return;
-    }
-    const endpoint = type === 'light' ? '/light/stop_all' : '/scripts/stop_all';
-    api(endpoint, 'POST').then(d => {
-      if (d) {
-        this._running.clear();
-        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
-        const count = el('running-count');
-        if (count) count.textContent = '0';
-        const list = el('running-scripts');
-        if (list) list.textContent = '—';
-        toast('Sequences stopped', 'ok');
-      }
+  stop(name) {
+    api('/choreo/stop', 'POST').then(() => {
+      this._running.delete(name);
+      this._looping.delete(name);
+      const card = el(`seq-card-${name}`);
+      if (card) { card.classList.remove('running', 'looping'); }
+      toast(`${name.toUpperCase()} stopped`, 'ok');
     });
   }
 
   stopAll() {
-    api('/scripts/stop_all', 'POST').then(d => {
-      if (d) {
-        this._running.clear();
-        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
-        const count = el('running-count');
-        if (count) count.textContent = '0';
-        const list = el('running-scripts');
-        if (list) list.textContent = '—';
-        toast('Sequences stopped', 'ok');
-      }
+    api('/choreo/stop', 'POST').then(() => {
+      this._running.clear();
+      this._looping.clear();
+      document.querySelectorAll('.seq-card').forEach(c => c.classList.remove('running', 'looping'));
+      const list = el('running-scripts');
+      if (list) list.textContent = '—';
+      toast('Sequences stopped', 'ok');
+    });
+  }
+
+  _startProgress(card, name) {
+    const fill = el(`seq-prog-${name}`);
+    if (!fill) return;
+    const dur = parseFloat(card.dataset.duration) || 5;
+    fill.style.transition = 'none';
+    fill.style.width = '0%';
+    requestAnimationFrame(() => {
+      fill.style.transition = `width ${dur}s linear`;
+      fill.style.width = '100%';
     });
   }
 
   updateRunning(running) {
     const names = new Set(running.map(s => s.name));
     this._running = names;
-
-    document.querySelectorAll('.script-card').forEach(card => {
-      const name = card.id.replace('script-card-', '');
-      card.classList.toggle('running', names.has(name));
+    document.querySelectorAll('.seq-card').forEach(card => {
+      const name = card.dataset.name;
+      const isRunning = names.has(name);
+      card.classList.toggle('running', isRunning);
+      if (!isRunning) {
+        this._looping.delete(name);
+        card.classList.remove('looping');
+        const fill = el(`seq-prog-${name}`);
+        if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+      }
     });
-
-    const count = el('running-count');
-    if (count) count.textContent = names.size;
-
     const list = el('running-scripts');
-    if (list) {
-      list.textContent = running.length
-        ? running.map(s => `${s.name}#${s.id}`).join(', ')
-        : '—';
-    }
+    if (list) list.textContent = running.length ? running.map(s => s.name).join(', ') : '—';
+  }
+
+  _syncAdminMode() {
+    this._renderPills();
+    this._renderGrid();
   }
 }
 
@@ -2667,6 +3177,9 @@ async function loadScripts() { await scriptEngine.load(); }
 class BTController {
   constructor() {
     this._connected   = false;
+    this._piConnected = false;
+    this._piEnabled   = true;
+    this._batteryPct  = 0;
     this._gamepadIdx  = null;
     this._prevBtns    = {};
     this._driveActive = false;
@@ -2838,7 +3351,8 @@ class BTController {
     if (!enabled) {
       cls = 'status-pill error'; txt = 'BT OFF';
     } else if (connected) {
-      cls = 'status-pill ok';   txt = 'BT';
+      cls = 'status-pill ok';
+      txt = (this._batteryPct > 0) ? `BT ${this._batteryPct}%` : 'BT';
     } else {
       cls = 'status-pill';      txt = 'BT';
     }
@@ -2866,6 +3380,7 @@ class BTController {
 
     // Battery
     const pct    = data.bt_battery || 0;
+    this._batteryPct = pct;
     const fillEl = el('bt-battery-fill');
     const pctEl  = el('bt-battery-pct');
     if (pct > 0) {
@@ -2876,6 +3391,7 @@ class BTController {
       if (fillEl) fillEl.style.width = '0%';
       if (pctEl)  pctEl.textContent = '--%';
     }
+    this._updatePill();
 
     // RSSI signal strength
     const rssiEl = el('bt-rssi-val');
@@ -2938,15 +3454,18 @@ class BTController {
       for (const o of typeEl.options) if (o.value === data.bt_gamepad_type) { o.selected = true; break; }
       this.onTypeChange(data.bt_gamepad_type);
     }
-    // inactivity timeout — sync slider + number input + label
+    // inactivity timeout — sync only if user is not actively editing
     if (data.bt_inactivity_timeout !== undefined) {
-      const t = data.bt_inactivity_timeout;
+      const t      = data.bt_inactivity_timeout;
       const slider = el('bt-inactivity-timeout');
       const num    = el('bt-timeout-num');
       const lbl    = el('bt-timeout-val');
-      if (slider) slider.value = Math.min(600, t);
-      if (num)    num.value    = t;
-      if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
+      const active = document.activeElement;
+      if (active !== slider && active !== num) {
+        if (slider) { slider.value = Math.min(600, t); syncHoloSlider(slider); }
+        if (num)    num.value    = t;
+        if (lbl)    lbl.textContent = t === 0 ? 'OFF' : t + 's';
+      }
     }
   }
 
@@ -2990,7 +3509,7 @@ class BTController {
       sel('bt-map-steer',    m.steer);
       sel('bt-map-dome',     m.dome);
       const dz = el('bt-deadzone');
-      if (dz && m.deadzone) { dz.value = m.deadzone; const dzv = el('bt-deadzone-val'); if (dzv) dzv.textContent = m.deadzone + '%'; }
+      if (dz && m.deadzone) { dz.value = m.deadzone; syncHoloSlider(dz); const dzv = el('bt-deadzone-val'); if (dzv) dzv.textContent = m.deadzone + '%'; }
     } catch { /* ignore */ }
   }
 
@@ -3177,9 +3696,15 @@ class StatusPoller {
       audioBoard.setPlaying(data.audio_playing, data.audio_current || '');
     }
 
-    // Scripts running
-    if (data.scripts_running) {
-      scriptEngine.updateRunning(data.scripts_running);
+    // Scripts running — merge choreo playing state into scripts_running list
+    if (data.scripts_running !== undefined) {
+      const running = [...(data.scripts_running || [])];
+      if (data.choreo_playing && data.choreo_name) {
+        if (!running.find(s => s.name === data.choreo_name)) {
+          running.push({ name: data.choreo_name, id: 'choreo' });
+        }
+      }
+      scriptEngine.updateRunning(running);
     }
 
     // Lock mode — sync si reconnexion ou autre client
@@ -3417,7 +3942,7 @@ const cameraConfig = {
       const qEl   = el('cam-quality');
       if (resEl) resEl.value = d.resolution || '640x480';
       if (fpsEl) fpsEl.value = String(d.fps   || 30);
-      if (qEl)  { qEl.value = d.quality || 80; el('cam-quality-val').textContent = qEl.value; }
+      if (qEl)  { qEl.value = d.quality || 80; syncHoloSlider(qEl); el('cam-quality-val').textContent = qEl.value; }
     } catch(e) {}
   },
   async save() {
@@ -3450,6 +3975,96 @@ async function saveBatteryCells() {
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
 }
+
+// ─── Arms config ──────────────────────────────────────────────────────────────
+const armsConfig = {
+  _count:  0,
+  _servos: ['', '', '', ''],   // 4 slots, servo IDs (never labels)
+  _panels: ['', '', '', ''],   // 4 slots, body panel that opens before arm extends
+  _labels: {},                 // {Servo_S0: 'My Label', ...}
+
+  async load() {
+    const [armsData, settingsData] = await Promise.all([
+      api('/servo/arms'),
+      api('/servo/settings'),
+    ]);
+    if (!armsData) return;
+    this._count  = armsData.count  || 0;
+    this._servos = armsData.servos || ['', '', '', ''];
+    this._panels = armsData.panels || ['', '', '', ''];
+    // Build label map — only body servos (Servo_S*)
+    const panels = settingsData?.panels || {};
+    this._labels = {};
+    for (const [id, cfg] of Object.entries(panels)) {
+      if (id.startsWith('Servo_S')) this._labels[id] = cfg.label || id;
+    }
+    const countEl = el('arms-count');
+    if (countEl) countEl.value = String(this._count);
+    this._renderSelectors();
+  },
+
+  _renderSelectors() {
+    const container = el('arms-selectors');
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < this._count; i++) {
+      const div = document.createElement('div');
+      div.className = 'arms-row';
+      // Arm servo options (S0–S15)
+      const armOpts = Array.from({length: 16}, (_, j) => {
+        const id  = `Servo_S${j}`;
+        const lbl = this._labels[id] || id;
+        const sel = this._servos[i] === id ? ' selected' : '';
+        return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
+      }).join('');
+      // Body panel options (S0–S11 only — arm servos excluded from panels)
+      const panelOpts = Array.from({length: 12}, (_, j) => {
+        const id  = `Servo_S${j}`;
+        const lbl = this._labels[id] || id;
+        const sel = this._panels[i] === id ? ' selected' : '';
+        return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
+      }).join('');
+      div.innerHTML = `
+        <div class="form-group">
+          <label>ARM ${i + 1} — Servo</label>
+          <select id="arm-servo-${i}" class="input-text">
+            <option value="">— not assigned —</option>${armOpts}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>ARM ${i + 1} — Body panel</label>
+          <select id="arm-panel-${i}" class="input-text">
+            <option value="">— none —</option>${panelOpts}
+          </select>
+        </div>`;
+      container.appendChild(div);
+    }
+  },
+
+  onCountChange() {
+    this._count = parseInt(el('arms-count')?.value) || 0;
+    this._renderSelectors();
+  },
+
+  async save() {
+    const count  = parseInt(el('arms-count')?.value) || 0;
+    const servos = Array.from({length: 4}, (_, i) => el(`arm-servo-${i}`)?.value || '');
+    const panels = Array.from({length: 4}, (_, i) => el(`arm-panel-${i}`)?.value || '');
+    const status = el('arms-status');
+    if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+    const data = await api('/servo/arms', 'POST', { count, servos, panels });
+    if (data?.status === 'ok') {
+      this._count  = data.count;
+      this._servos = data.servos;
+      this._panels = data.panels;
+      toast(`Arms: ${count} arm(s) configured`, 'ok');
+      if (status) { status.textContent = `${count} arm(s) saved`; status.className = 'settings-status ok'; }
+    } else {
+      toast('Failed to save arms config', 'error');
+      if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+    }
+  },
+};
 
 async function scanWifi() {
   const btn = el('btn-scan');
@@ -3536,6 +4151,34 @@ async function systemUpdate() {
   if (d) toast('Update in progress — Slave will reboot', 'ok');
 }
 
+async function adminChangePassword() {
+  const current  = el('admin-pwd-current')?.value  || '';
+  const newPwd   = el('admin-pwd-new')?.value      || '';
+  const confirm_ = el('admin-pwd-confirm')?.value  || '';
+  const status   = el('admin-pwd-status');
+
+  const setStatus = (msg, ok) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.style.color = ok ? 'var(--ok)' : 'var(--warn)';
+  };
+
+  if (!current)           return setStatus('Enter your current password.', false);
+  if (newPwd.length < 4)  return setStatus('New password must be at least 4 characters.', false);
+  if (newPwd !== confirm_) return setStatus('Passwords do not match.', false);
+
+  const d = await api('/settings/admin/password', 'POST', { current, new: newPwd });
+  if (d && d.ok) {
+    setStatus('Password changed ✓', true);
+    el('admin-pwd-current').value  = '';
+    el('admin-pwd-new').value      = '';
+    el('admin-pwd-confirm').value  = '';
+    toast('Admin password updated', 'ok');
+  } else {
+    setStatus(d?.error || 'Error — check your current password.', false);
+  }
+}
+
 // ================================================================
 // Volume slider
 // ================================================================
@@ -3575,7 +4218,7 @@ function initVolume() {
 
 function _updateSliderBg(slider) {
   const pct = ((slider.value - slider.min) / (slider.max - slider.min)) * 100;
-  slider.style.background = `linear-gradient(to right, var(--blue) ${pct}%, var(--border) ${pct}%)`;
+  slider.style.setProperty('--val', pct.toFixed(1) + '%');
 }
 
 // ================================================================
@@ -3643,6 +4286,7 @@ async function init() {
     loadServoSettings(),
     btController.loadConfig(),
     cameraConfig.load(),
+    armsConfig.load(),
   ]);
 
   // Start polling
@@ -3653,7 +4297,14 @@ async function init() {
 
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  // Sync all holo-slider fills on input and on page load
+  document.querySelectorAll('.holo-slider').forEach(s => {
+    s.addEventListener('input', () => syncHoloSlider(s));
+    syncHoloSlider(s);
+  });
+  init();
+});
 
 // ─── REMOVED: LightEditor + SequenceEditor (replaced by Choreo tab) ──────────
 // ─── Choreo editor follows ───────────────────────────────────────────────────
@@ -3872,6 +4523,7 @@ const choreoEditor = (() => {
 
   // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
   function _calcTotalDuration() {
+    // Visual duration — canvas + ruler sizing (2s padding for editing comfort)
     if (!_chor) return 10.0;
     let max = 0;
     for (const [track, events] of Object.entries(_chor.tracks || {})) {
@@ -3884,17 +4536,32 @@ const choreoEditor = (() => {
     return Math.max(max + 2.0, 5.0);
   }
 
+  function _calcPlaybackDuration() {
+    // Playback duration sent to Pi — 100ms buffer after last event, then stop
+    if (!_chor) return 5.0;
+    let max = 0;
+    for (const [track, events] of Object.entries(_chor.tracks || {})) {
+      for (const ev of (events || [])) {
+        const t   = ev.t || 0;
+        const dur = (track === 'dome') ? ((ev.duration || 0) / 1000) : (ev.duration || 0);
+        if (t + dur > max) max = t + dur;
+      }
+    }
+    return Math.max(max + 0.1, 1.0);
+  }
+
   // Update ruler + canvas width + duration display without full re-render
   function _refreshLayout() {
     if (!_chor) return;
     _fitToScreen();
-    const dur = _calcTotalDuration();
-    _chor.meta.duration = dur;
-    _renderRuler(dur);
-    _syncLaneWidths(dur);
+    const durVisual   = _calcTotalDuration();
+    const durPlayback = _calcPlaybackDuration();
+    _chor.meta.duration = durPlayback;   // Pi stops 100ms after last event
+    _renderRuler(durVisual);
+    _syncLaneWidths(durVisual);
     _drawWaveform();
     const durEl = document.getElementById('chor-duration');
-    if (durEl) durEl.textContent = _fmtTime(dur);
+    if (durEl) durEl.textContent = _fmtTime(durPlayback);
   }
 
   // Fit pxPerSec so that total duration exactly fills the scroll-wrap width.
@@ -4068,13 +4735,14 @@ const choreoEditor = (() => {
     _fitToScreen();
     ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
     _renderMarkers();
-    const dur = _calcTotalDuration();
-    _chor.meta.duration = dur;
-    _renderRuler(dur);
-    _syncLaneWidths(dur);
+    const durVisual   = _calcTotalDuration();
+    const durPlayback = _calcPlaybackDuration();
+    _chor.meta.duration = durPlayback;
+    _renderRuler(durVisual);
+    _syncLaneWidths(durVisual);
     _drawWaveform();
     const durEl = document.getElementById('chor-duration');
-    if (durEl) durEl.textContent = _fmtTime(dur);
+    if (durEl) durEl.textContent = _fmtTime(durPlayback);
   }
 
   // Block cascade constants — shingled layout
@@ -4705,9 +5373,16 @@ const choreoEditor = (() => {
       });
 
     } else if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
-      const prefix = track === 'dome_servos' ? 'Servo_M' : track === 'body_servos' ? 'Servo_S' : 'Servo_';
-      const filtered = _servoList.filter(s => s.startsWith(prefix));
-      const pool = filtered.length ? filtered : _servoList;
+      let pool;
+      if (track === 'arm_servos') {
+        // Only show servos configured as arms in Settings > Arms
+        const configured = armsConfig._servos.slice(0, armsConfig._count).filter(s => s);
+        pool = configured.length ? configured : _servoList.filter(s => s.startsWith('Servo_S'));
+      } else {
+        const prefix   = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
+        const filtered = _servoList.filter(s => s.startsWith(prefix));
+        pool = filtered.length ? filtered : _servoList;
+      }
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
 
       // Mismatch context banner in inspector — skip for special group keywords
@@ -4736,8 +5411,8 @@ const choreoEditor = (() => {
         }
       }
 
-      // Servo dropdown — for special keywords, add them as options too
-      const specialOpts = { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+      // Special group keywords — not applicable to arm track
+      const specialOpts = track === 'arm_servos' ? {} : { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
       const allServoOpts = { ...specialOpts, ...servoOpts };
 
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
@@ -5151,6 +5826,10 @@ const choreoEditor = (() => {
     },
 
     async deleteChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.deleteChor());
+        return;
+      }
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       const name = _chor.meta.name;
       if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
@@ -5184,7 +5863,8 @@ const choreoEditor = (() => {
 
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
-      if (_dirty) await this.save();
+      // Auto-save before playing (no auth required — this is an internal save for playback only)
+      if (_dirty) await this.save({ requireAuth: false });
       const result = await api('/choreo/play', 'POST', { name: _chor.meta.name });
       if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
     },
@@ -5199,7 +5879,11 @@ const choreoEditor = (() => {
       toast('Choreo stopped', 'ok');
     },
 
-    async save() {
+    async save({ requireAuth = true } = {}) {
+      if (requireAuth && !adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.save());
+        return;
+      }
       if (!_chor) return;
       _validateAudioOverflow();
       _refreshServoLabels();
@@ -5220,6 +5904,10 @@ const choreoEditor = (() => {
     },
 
     async exportChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.exportChor());
+        return;
+      }
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       if (_dirty) await this.save();
       const json = JSON.stringify(_chor, null, 2);
@@ -5232,6 +5920,10 @@ const choreoEditor = (() => {
     },
 
     async importChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.importChor());
+        return;
+      }
       const input = document.createElement('input');
       input.type = 'file'; input.accept = '.chor,application/json';
       input.onchange = async () => {
