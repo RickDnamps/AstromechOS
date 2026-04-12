@@ -349,6 +349,7 @@ class AdminGuard {
       _choreoUnlocked = true;
       cb();
     }
+    scriptEngine._syncAdminMode();
     // Track activity to reset the timer while on a protected tab.
     // pointerdown is used instead of click: mousedown.preventDefault() in the
     // Choreo editor suppresses click events, but never suppresses pointerdown.
@@ -377,6 +378,7 @@ class AdminGuard {
       switchTab('drive');
     }
     toast('Admin access expired', 'info');
+    scriptEngine._syncAdminMode();
   }
 
   onTabSwitch(tabId) {
@@ -2706,159 +2708,461 @@ const canWizard = {
 };
 
 // ================================================================
-// Script Engine
+// EmojiPicker — shared emoji picker component
+// ================================================================
+
+const EMOJI_SECTIONS = [
+  { label: '😤 Émotions', emojis: ['😡','🤬','😤','😠','😱','😨','😰','😮','😲','🥹','🤩','😎','🥳','😏','🤔','🥸','😴','🤯','🫡','😈','👻','💀','🤖','👾'] },
+  { label: '🎵 Musique & Sons', emojis: ['🎵','🎶','🎸','🎺','🪗','🥁','🎤','🎼','🪩','💿','📻','🔊','🔔','🎹','🎻','🎷'] },
+  { label: '🎭 Show & Fête', emojis: ['🎭','🎉','🎊','🎂','🎈','🪅','🎆','🎇','🏆','🥇','🎖️','👑'] },
+  { label: '🏃 Mouvement & Danse', emojis: ['🏃','🚶','💃','🕺','🌀','💫','🔄','↩️','🎯','🏹','👋','🫳'] },
+  { label: '⚡ Actions & Alertes', emojis: ['⚡','🚨','🔴','🟠','🟡','🟢','💥','🔥','❄️','💣','🧨','☢️'] },
+  { label: '🔧 Tech & Robot', emojis: ['🔧','⚙️','🔬','📡','🔍','💡','🔋','📱','🖥️','🎮','🕹️','🔌'] },
+  { label: '⭐ Star Wars & Espace', emojis: ['⭐','🌟','✨','🚀','🛸','🌙','🪐','☄️','⚔️','🗡️','🔫','🐺','🦅','🏜️','🌌','👁️'] },
+  { label: '🚪 Panneaux & Dôme', emojis: ['🚪','🔵','🟣','⭕','🔘','🪞','🎪','🎠'] },
+];
+
+class EmojiPicker {
+  constructor() {
+    this._selected   = '';
+    this._callback   = null;
+    this._allEmojis  = EMOJI_SECTIONS.flatMap(s => s.emojis);
+    this._buildSections();
+  }
+
+  _buildSections() {
+    const scroll = el('emoji-picker-scroll');
+    if (!scroll) return;
+    scroll.innerHTML = EMOJI_SECTIONS.map(sec => `
+      <div class="emoji-picker-section-label">${sec.label}</div>
+      <div class="emoji-picker-grid">
+        ${sec.emojis.map(e =>
+          `<div class="emoji-picker-btn" data-emoji="${e}" onclick="emojiPicker._pick('${e}')">${e}</div>`
+        ).join('')}
+      </div>`
+    ).join('');
+  }
+
+  open(currentEmoji, callback) {
+    this._selected = currentEmoji || '';
+    this._callback = callback;
+    el('emoji-picker-preview').textContent = this._selected || '?';
+    el('emoji-picker-search').value = '';
+    this._highlightSelected();
+    el('emoji-picker-overlay').classList.remove('hidden');
+    el('emoji-picker-search').focus();
+  }
+
+  _highlightSelected() {
+    document.querySelectorAll('.emoji-picker-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.emoji === this._selected);
+      b.style.display = '';
+    });
+    document.querySelectorAll('.emoji-picker-section-label').forEach(l => l.style.display = '');
+  }
+
+  _pick(emoji) {
+    this._selected = emoji;
+    el('emoji-picker-preview').textContent = emoji;
+    document.querySelectorAll('.emoji-picker-btn').forEach(b =>
+      b.classList.toggle('selected', b.dataset.emoji === emoji));
+  }
+
+  filter(query) {
+    const q = query.trim().toLowerCase();
+    document.querySelectorAll('.emoji-picker-btn').forEach(b => {
+      b.style.display = (!q || b.dataset.emoji.includes(q)) ? '' : 'none';
+    });
+  }
+
+  confirm() {
+    if (this._callback) this._callback(this._selected);
+    this.cancel();
+  }
+
+  cancel() {
+    el('emoji-picker-overlay').classList.add('hidden');
+    this._callback = null;
+  }
+
+  onOverlayClick(e) {
+    if (e.target === el('emoji-picker-overlay')) this.cancel();
+  }
+}
+
+const emojiPicker = new EmojiPicker();
+
+// ================================================================
+// ScriptEngine — Sequences tab with categories
 // ================================================================
 
 class ScriptEngine {
   constructor() {
-    this._scripts = [];
-    this._running = new Set();
+    this._scripts    = [];   // [{name, label, category, emoji, duration}]
+    this._categories = [];   // [{id, label, emoji, order}]
+    this._running    = new Set();
+    this._looping    = new Set();
+    this._activeCategory = 'all';
+    this._pillSortable   = null;
+    this._longPressTimer = null;
+    this._dragCard       = null;
   }
 
-  _emoji(name) {
-    const n = name.toLowerCase();
-    if (/cantina|tune|dance|disco|music|song/.test(n)) return '🎵';
-    if (/alert|alarm/.test(n))                         return '🚨';
-    if (/scan/.test(n))                                return '🔍';
-    if (/celebrat|happy|cheer|joy/.test(n))            return '🎉';
-    if (/leia/.test(n))                                return '📡';
-    if (/patrol|stroll|walk/.test(n))                  return '🚶';
-    if (/test/.test(n))                                return '🔧';
-    if (/fall|strike|multi/.test(n))                   return '⚡';
-    if (/charg/.test(n))                               return '🔋';
-    if (/panel/.test(n))                               return '🚪';
-    if (/demo|boot/.test(n))                           return '🤖';
-    if (/show|home/.test(n))                           return '🎭';
-    if (/dome/.test(n))                                return '🔵';
-    if (/babble|excit|idea/.test(n))                   return '💬';
-    if (/circle/.test(n))                              return '🔄';
-    if (/blip|bip/.test(n))                            return '📻';
-    if (/bird/.test(n))                                return '🐦';
-    if (/play/.test(n))                                return '▶️';
-    if (/stil|still/.test(n))                          return '🧍';
-    return '🎬';
-  }
+  // ── Data loading ─────────────────────────────────────────────
 
   async load() {
-    const chorNames = await api('/choreo/list');
-    this._scripts = (chorNames || []).map(name => ({ name, type: 'choreo' }));
-    this.render();
+    const [scripts, cats] = await Promise.all([
+      api('/choreo/list'),
+      api('/choreo/categories'),
+    ]);
+    this._scripts    = scripts    || [];
+    this._categories = (cats || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+    this._renderPills();
+    this._renderGrid();
+    this._syncAdminMode();
   }
 
-  render() {
-    const grid = el('script-list');
-    if (!grid) return;
-    grid.innerHTML = this._scripts.map(({ name, type }) => {
-      const isRunning = this._running.has(name);
-      const emoji     = this._emoji(name);
-      const label     = name.toUpperCase().replace(/_/g, ' ');
-      return `<button class="seq-btn${isRunning ? ' running' : ''}" id="script-card-${name}"
-                onclick="scriptEngine.toggle('${name}','${type}')"
-                title="${isRunning ? '⏹ Click to stop' : '▶ Click to run'}">${emoji}<span class="seq-btn-label">${label}</span></button>`;
-    }).join('');
-  }
+  // ── Pills ─────────────────────────────────────────────────────
 
-  run(name, loop, type = 'seq') {
-    if (type === 'choreo') {
-      // Optimistic lock — prevent double-click 409s
-      this._running.add(name);
-      const card = el(`script-card-${name}`);
-      if (card) card.classList.add('running');
-      api('/choreo/play', 'POST', { name }).then(d => {
-        if (d) {
-          this._running.clear();
-          document.querySelectorAll('.seq-btn').forEach(c => c.classList.remove('running'));
-          this._running.add(name);
-          if (card) card.classList.add('running');
-          toast(`🎬 ${name.toUpperCase()} playing`, 'ok');
-          poller.poll();
-        } else {
-          // Rollback if API rejected
-          this._running.delete(name);
-          if (card) card.classList.remove('running');
-        }
+  _renderPills() {
+    const container = el('seq-pills');
+    if (!container) return;
+    const isAdmin = adminGuard.unlocked;
+    const cats = this._categories;
+
+    const allPill = `<div class="seq-pill${this._activeCategory === 'all' ? ' active' : ''}"
+        data-cat="all" onclick="scriptEngine.selectCategory('all')">
+        <span>🌐</span> ALL
+      </div>`;
+
+    const catPills = cats.map(c => `
+      <div class="seq-pill${this._activeCategory === c.id ? ' active' : ''}${isAdmin ? ' admin-mode' : ''}"
+           data-cat="${c.id}" onclick="scriptEngine.selectCategory('${c.id}')">
+        <span class="seq-pill-emoji" ${isAdmin ? `onclick="scriptEngine.onPillEmojiClick(event,'${c.id}')"` : ''}
+        >${c.emoji}</span>
+        ${escapeHtml(c.label)}
+        ${isAdmin && c.id !== 'newchoreo'
+          ? `<span class="seq-pill-close" onclick="scriptEngine.deleteCategory(event,'${c.id}')">✕</span>`
+          : ''}
+      </div>`).join('');
+
+    const addPill = isAdmin
+      ? `<div class="seq-pill pill-add" onclick="scriptEngine.createCategory()">+ Cat</div>`
+      : '';
+
+    container.innerHTML = allPill + catPills + addPill;
+
+    if (this._pillSortable) { this._pillSortable.destroy(); this._pillSortable = null; }
+    if (isAdmin) {
+      this._pillSortable = Sortable.create(container, {
+        animation: 150,
+        filter: '[data-cat="all"], .pill-add',
+        onEnd: () => this._savePillOrder(),
       });
-      return;
     }
-    const endpoint = type === 'light' ? '/light/run' : '/scripts/run';
-    api(endpoint, 'POST', { name, loop }).then(d => {
-      if (d) {
-        this._running.clear();
-        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
-        const count = el('running-count');
-        if (count) count.textContent = '1';
-        const list = el('running-scripts');
-        if (list) list.textContent = `${name}#${d.id}`;
-        this._running.add(name);
-        const card = el(`script-card-${name}`);
-        if (card) card.classList.add('running');
-        toast(`${name.toUpperCase()} started${loop ? ' (loop)' : ''}`, 'ok');
+
+    const hint = el('seq-admin-hint');
+    if (hint) hint.classList.toggle('hidden', !isAdmin);
+  }
+
+  _savePillOrder() {
+    const pills = el('seq-pills').querySelectorAll('.seq-pill[data-cat]');
+    const order = [...pills].map(p => p.dataset.cat).filter(id => id !== 'all');
+    api('/choreo/categories', 'POST', { action: 'reorder', order });
+  }
+
+  selectCategory(catId) {
+    this._activeCategory = catId;
+    this._renderPills();
+    this._renderGrid();
+  }
+
+  onPillEmojiClick(event, catId) {
+    event.stopPropagation();
+    const cat = this._categories.find(c => c.id === catId);
+    if (!cat) return;
+    emojiPicker.open(cat.emoji, async (emoji) => {
+      if (!emoji) return;
+      await api('/choreo/categories', 'POST', { action: 'update', id: catId, emoji });
+      await this.load();
+    });
+  }
+
+  async createCategory() {
+    const label = prompt('Category name:');
+    if (!label) return;
+    const id = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    emojiPicker.open('📦', async (emoji) => {
+      await api('/choreo/categories', 'POST', { action: 'create', id, label, emoji: emoji || '📦' });
+      await this.load();
+    });
+  }
+
+  async deleteCategory(event, catId) {
+    event.stopPropagation();
+    const cat = this._categories.find(c => c.id === catId);
+    const count = this._scripts.filter(s => s.category === catId).length;
+    const msg = count > 0
+      ? `Delete "${cat.label}"? ${count} sequence(s) will move to New Choreo.`
+      : `Delete "${cat.label}"?`;
+    if (!confirm(msg)) return;
+    await api('/choreo/categories', 'POST', { action: 'delete', id: catId });
+    if (this._activeCategory === catId) this._activeCategory = 'all';
+    await this.load();
+  }
+
+  // ── Grid ──────────────────────────────────────────────────────
+
+  _renderGrid() {
+    const grid = el('seq-grid');
+    if (!grid) return;
+    const isAdmin = adminGuard.unlocked;
+    const scripts = this._activeCategory === 'all'
+      ? this._scripts
+      : this._scripts.filter(s => s.category === this._activeCategory);
+
+    grid.innerHTML = scripts.map(s => {
+      const isRunning = this._running.has(s.name);
+      const isLooping = this._looping.has(s.name);
+      const label = s.label || s.name.toUpperCase().replace(/_/g, ' ');
+      return `
+        <div class="seq-card${isRunning ? ' running' : ''}${isLooping ? ' looping' : ''}"
+             id="seq-card-${s.name}"
+             data-name="${s.name}"
+             data-duration="${s.duration || 5}">
+          ${isAdmin ? `<div class="seq-card-handle">⠿</div>` : ''}
+          <span class="seq-card-loop">🔄</span>
+          <span class="seq-card-emoji">${s.emoji}</span>
+          <div class="seq-card-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <span class="seq-card-label">${escapeHtml(label)}</span>
+          <div class="seq-card-progress"><div class="seq-card-progress-fill" id="seq-prog-${s.name}"></div></div>
+          ${isAdmin ? `<div class="seq-card-play" onclick="scriptEngine.play(event,'${s.name}')">▶</div>` : ''}
+        </div>`;
+    }).join('');
+
+    this._attachCardEvents(grid, isAdmin);
+  }
+
+  _attachCardEvents(grid, isAdmin) {
+    grid.querySelectorAll('.seq-card').forEach(card => {
+      const name = card.dataset.name;
+
+      if (isAdmin) {
+        const emojiEl = card.querySelector('.seq-card-emoji');
+        emojiEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const s = this._scripts.find(x => x.name === name);
+          emojiPicker.open(s.emoji, async (emoji) => {
+            await api('/choreo/set-emoji', 'POST', { name, emoji });
+            await this.load();
+          });
+        });
+
+        const labelEl = card.querySelector('.seq-card-label');
+        labelEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this._startRename(card, name);
+        });
+
+        this._attachDrag(card, name);
+
+      } else {
+        card.addEventListener('pointerdown', (e) => this._onPointerDown(e, name));
+        card.addEventListener('pointerup',   (e) => this._onPointerUp(e, name));
+        card.addEventListener('pointermove', (e) => this._onPointerMove(e));
+        card.addEventListener('pointercancel', () => this._clearLongPress());
+      }
+    });
+  }
+
+  // ── Long press (normal mode) ──────────────────────────────────
+
+  _onPointerDown(e, name) {
+    this._longPressTimer = setTimeout(() => {
+      this._longPressTimer = null;
+      this.play(e, name, true);
+    }, 500);
+  }
+
+  _onPointerUp(e, name) {
+    if (this._longPressTimer) {
+      clearTimeout(this._longPressTimer);
+      this._longPressTimer = null;
+      if (this._running.has(name)) this.stop(name);
+      else this.play(e, name, false);
+    }
+  }
+
+  _onPointerMove(e) {
+    if (this._longPressTimer) {
+      clearTimeout(this._longPressTimer);
+      this._longPressTimer = null;
+    }
+  }
+
+  _clearLongPress() {
+    if (this._longPressTimer) { clearTimeout(this._longPressTimer); this._longPressTimer = null; }
+  }
+
+  // ── Admin drag to pill ────────────────────────────────────────
+
+  _attachDrag(card, name) {
+    let dragging = false;
+    let startX = 0, startY = 0;
+    let ghost = null;
+
+    card.addEventListener('pointerdown', (e) => {
+      startX = e.clientX; startY = e.clientY;
+      card.setPointerCapture(e.pointerId);
+    });
+
+    card.addEventListener('pointermove', (e) => {
+      const dx = Math.abs(e.clientX - startX);
+      const dy = Math.abs(e.clientY - startY);
+      if (!dragging && (dx > 8 || dy > 8)) {
+        dragging = true;
+        card.classList.add('dragging');
+        document.querySelectorAll('.seq-pill[data-cat]:not([data-cat="all"])').forEach(p => {
+          p.classList.add('drop-target');
+        });
+        ghost = document.createElement('div');
+        ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;opacity:0.8;font-size:28px;';
+        ghost.textContent = card.querySelector('.seq-card-emoji').textContent;
+        document.body.appendChild(ghost);
+      }
+      if (dragging && ghost) {
+        ghost.style.left = (e.clientX - 16) + 'px';
+        ghost.style.top  = (e.clientY - 16) + 'px';
+      }
+    });
+
+    card.addEventListener('pointerup', async (e) => {
+      if (!dragging) return;
+      dragging = false;
+      card.classList.remove('dragging');
+      if (ghost) { ghost.remove(); ghost = null; }
+      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
+
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      const pill = target?.closest('.seq-pill[data-cat]');
+      if (pill && pill.dataset.cat !== 'all') {
+        const newCat = pill.dataset.cat;
+        await api('/choreo/set-category', 'POST', { name, category: newCat });
+        toast(`Moved to ${newCat}`, 'ok');
+        await this.load();
+      }
+    });
+
+    card.addEventListener('pointercancel', () => {
+      dragging = false;
+      card.classList.remove('dragging');
+      if (ghost) { ghost.remove(); ghost = null; }
+      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
+    });
+  }
+
+  // ── Inline rename ─────────────────────────────────────────────
+
+  _startRename(card, name) {
+    const labelEl = card.querySelector('.seq-card-label');
+    const current = labelEl.textContent;
+    const input = document.createElement('input');
+    input.className = 'input-text';
+    input.style.cssText = 'width:100%;font-size:10px;padding:2px 4px;text-align:center;';
+    input.value = current;
+    labelEl.replaceWith(input);
+    input.focus(); input.select();
+
+    const save = async () => {
+      const newLabel = input.value.trim();
+      await api('/choreo/set-label', 'POST', { name, label: newLabel });
+      await this.load();
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') this.load();
+    });
+    input.addEventListener('blur', save);
+  }
+
+  // ── Playback ──────────────────────────────────────────────────
+
+  play(event, name, loop = false) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    this._running.add(name);
+    if (loop) this._looping.add(name); else this._looping.delete(name);
+    const card = el(`seq-card-${name}`);
+    if (card) {
+      card.classList.add('running');
+      card.classList.toggle('looping', loop);
+      this._startProgress(card, name);
+    }
+    api('/choreo/play', 'POST', { name }).then(d => {
+      if (!d) {
+        this._running.delete(name);
+        this._looping.delete(name);
+        if (card) { card.classList.remove('running', 'looping'); }
+      } else {
+        toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
         poller.poll();
       }
     });
   }
 
-  stopName(name, type = 'seq') {
-    if (type === 'choreo') {
-      api('/choreo/stop', 'POST').then(() => {
-        this._running.delete(name);
-        const card = el(`script-card-${name}`);
-        if (card) card.classList.remove('running');
-        toast(`${name.toUpperCase()} stopped`, 'ok');
-      });
-      return;
-    }
-    const endpoint = type === 'light' ? '/light/stop_all' : '/scripts/stop_all';
-    api(endpoint, 'POST').then(d => {
-      if (d) {
-        this._running.clear();
-        document.querySelectorAll('.script-card').forEach(c => c.classList.remove('running'));
-        const count = el('running-count');
-        if (count) count.textContent = '0';
-        const list = el('running-scripts');
-        if (list) list.textContent = '—';
-        toast('Sequences stopped', 'ok');
-      }
+  stop(name) {
+    api('/choreo/stop', 'POST').then(() => {
+      this._running.delete(name);
+      this._looping.delete(name);
+      const card = el(`seq-card-${name}`);
+      if (card) { card.classList.remove('running', 'looping'); }
+      toast(`${name.toUpperCase()} stopped`, 'ok');
     });
   }
 
-  toggle(name, type) {
-    if (this._running.has(name)) this.stopName(name, type);
-    else this.run(name, false, type);
+  stopAll() {
+    api('/choreo/stop', 'POST').then(() => {
+      this._running.clear();
+      this._looping.clear();
+      document.querySelectorAll('.seq-card').forEach(c => c.classList.remove('running', 'looping'));
+      const list = el('running-scripts');
+      if (list) list.textContent = '—';
+      toast('Sequences stopped', 'ok');
+    });
   }
 
-  stopAll() {
-    api('/scripts/stop_all', 'POST').then(d => {
-      if (d) {
-        this._running.clear();
-        document.querySelectorAll('.seq-btn').forEach(c => c.classList.remove('running'));
-        const count = el('running-count');
-        if (count) count.textContent = '0';
-        const list = el('running-scripts');
-        if (list) list.textContent = '—';
-        toast('Sequences stopped', 'ok');
-      }
+  _startProgress(card, name) {
+    const fill = el(`seq-prog-${name}`);
+    if (!fill) return;
+    const dur = parseFloat(card.dataset.duration) || 5;
+    fill.style.transition = 'none';
+    fill.style.width = '0%';
+    requestAnimationFrame(() => {
+      fill.style.transition = `width ${dur}s linear`;
+      fill.style.width = '100%';
     });
   }
 
   updateRunning(running) {
     const names = new Set(running.map(s => s.name));
     this._running = names;
-
-    document.querySelectorAll('.seq-btn').forEach(btn => {
-      const name = btn.id.replace('script-card-', '');
-      btn.classList.toggle('running', names.has(name));
+    document.querySelectorAll('.seq-card').forEach(card => {
+      const name = card.dataset.name;
+      const isRunning = names.has(name);
+      card.classList.toggle('running', isRunning);
+      if (!isRunning) {
+        this._looping.delete(name);
+        card.classList.remove('looping');
+        const fill = el(`seq-prog-${name}`);
+        if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+      }
     });
-
-    const count = el('running-count');
-    if (count) count.textContent = names.size;
-
     const list = el('running-scripts');
-    if (list) {
-      list.textContent = running.length
-        ? running.map(s => `${s.name}#${s.id}`).join(', ')
-        : '—';
-    }
+    if (list) list.textContent = running.length ? running.map(s => s.name).join(', ') : '—';
+  }
+
+  _syncAdminMode() {
+    this._renderPills();
+    this._renderGrid();
   }
 }
 
