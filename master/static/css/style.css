@@ -2044,6 +2044,22 @@ body[data-lock-mode="2"] #js-left-ring::after {
   0%, 100% { box-shadow: 0 0 10px rgba(0,204,102,0.3); }
   50%       { box-shadow: 0 0 20px rgba(0,204,102,0.6); }
 }
+@keyframes seq-border-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,255,234,0.3), 0 0 8px rgba(0,255,234,0.15); border-color: var(--teal); }
+  50%       { box-shadow: 0 0 0 6px rgba(0,255,234,0), 0 0 22px rgba(0,255,234,0.45); border-color: rgba(0,255,234,0.85); }
+}
+@keyframes seq-wave {
+  0%, 100% { transform: scaleY(0.35); }
+  50%       { transform: scaleY(1.0); }
+}
+@keyframes seq-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+@keyframes seq-loop-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 .seq-btn-label {
   font-size: 10px;
   font-weight: 600;
@@ -2051,6 +2067,217 @@ body[data-lock-mode="2"] #js-left-ring::after {
   line-height: 1.2;
   word-break: break-word;
 }
+
+/* ── Sequences tab — pill row ── */
+.seq-pills-wrap {
+  margin-bottom: 14px;
+}
+.seq-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.seq-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: all .15s;
+  min-height: 34px;
+  position: relative;
+}
+.seq-pill:hover        { border-color: var(--blue); color: var(--blue); }
+.seq-pill.active       { background: rgba(0,170,255,0.12); border-color: var(--blue); color: var(--blue); }
+.seq-pill.drop-target  { background: rgba(0,255,234,0.15); border-color: var(--teal); color: var(--teal); transform: scale(1.07); box-shadow: 0 0 12px rgba(0,255,234,0.3); }
+.seq-pill.pill-add     { border-style: dashed; color: #444; }
+.seq-pill.pill-add:hover { color: var(--teal); border-color: var(--teal); }
+.seq-pill-emoji        { font-size: 15px; }
+.seq-pill.admin-mode .seq-pill-emoji { border-bottom: 1px dashed rgba(0,255,234,0.5); cursor: pointer; }
+.seq-pill-close        { display: none; margin-left: 4px; font-size: 10px; color: #444; cursor: pointer; }
+.seq-pill-close:hover  { color: #ff4444; }
+.seq-pill.admin-mode:hover .seq-pill-close { display: inline; }
+.seq-admin-hint {
+  margin-top: 7px;
+  font-size: 10px;
+  color: rgba(0,255,234,0.5);
+  font-style: italic;
+  letter-spacing: 0.3px;
+}
+
+/* ── Sequence card grid ── */
+.seq-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+}
+.seq-card {
+  position: relative;
+  background: rgba(10,20,40,0.7);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 8px 10px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .2s, background .2s;
+  overflow: hidden;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.seq-card:hover      { border-color: var(--blue); background: rgba(0,170,255,0.06); }
+.seq-card-emoji      { font-size: 26px; line-height: 1; display: block; }
+.seq-card-label      { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; color: var(--text-dim); line-height: 1.2; }
+
+/* Admin mode card extras */
+.seq-card-handle {
+  display: none;
+  position: absolute;
+  top: 5px; left: 5px;
+  font-size: 11px; color: #444;
+  cursor: grab;
+  width: 20px; height: 20px;
+  align-items: center; justify-content: center;
+}
+.seq-card-play {
+  display: none;
+  position: absolute;
+  top: 4px; right: 4px;
+  font-size: 10px; color: #555;
+  background: rgba(0,255,234,0.08);
+  border: 1px solid #333;
+  border-radius: 4px;
+  width: 22px; height: 22px;
+  align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.seq-card-play:hover { color: var(--teal); border-color: var(--teal); }
+.seq-card-loop {
+  display: none;
+  position: absolute;
+  top: 4px; right: 4px;
+  font-size: 11px;
+  animation: seq-loop-spin 2s linear infinite;
+}
+
+/* Admin mode card reveals */
+.admin-unlocked .seq-card .seq-card-handle { display: flex; }
+.admin-unlocked .seq-card .seq-card-play   { display: flex; }
+.admin-unlocked .seq-card .seq-card-emoji  { cursor: pointer; border-bottom: 2px dashed rgba(0,255,234,0.4); }
+.admin-unlocked .seq-card .seq-card-label  { cursor: pointer; border-bottom: 1px dashed rgba(0,255,234,0.3); }
+
+/* Dragging state */
+.seq-card.dragging { opacity: 0.4; }
+
+/* ── Playing state F ── */
+.seq-card.running {
+  border-color: var(--teal);
+  background: rgba(0,255,234,0.06);
+  animation: seq-border-pulse 1.8s ease-in-out infinite;
+}
+.seq-card.running .seq-card-loop { display: block; }
+.seq-card.running.looping .seq-card-loop { display: block; }
+.seq-card:not(.looping) .seq-card-loop { display: none; }
+
+/* Soundwave (replaces label while running) */
+.seq-card.running .seq-card-label { display: none; }
+.seq-card.running .seq-card-wave  { display: flex; }
+.seq-card-wave {
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 16px;
+}
+.seq-card-wave span {
+  display: block;
+  width: 3px;
+  background: var(--teal);
+  border-radius: 2px;
+  animation: seq-wave 0.6s ease-in-out infinite;
+}
+.seq-card-wave span:nth-child(1) { height: 6px;  animation-delay: 0s; }
+.seq-card-wave span:nth-child(2) { height: 14px; animation-delay: 0.1s; }
+.seq-card-wave span:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+.seq-card-wave span:nth-child(4) { height: 16px; animation-delay: 0.3s; }
+.seq-card-wave span:nth-child(5) { height: 8px;  animation-delay: 0.15s; }
+.seq-card-wave span:nth-child(6) { height: 12px; animation-delay: 0.25s; }
+
+/* Progress bar */
+.seq-card-progress {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 3px;
+  background: rgba(255,255,255,0.05);
+  display: none;
+}
+.seq-card-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), #00ff88);
+  border-radius: 0 2px 2px 0;
+  width: 0%;
+}
+.seq-card.running .seq-card-progress { display: block; }
+
+/* ── Emoji picker ── */
+.emoji-picker-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+}
+.emoji-picker-overlay.hidden { display: none; }
+.emoji-picker-popup {
+  background: #13131f;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  width: 320px;
+  max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.8);
+}
+.emoji-picker-header { padding: 12px 12px 8px; }
+.emoji-picker-search {
+  width: 100%;
+  background: #0a0a12; border: 1px solid #333; border-radius: 7px;
+  color: var(--text); font-size: 13px; padding: 7px 12px; outline: none;
+  box-sizing: border-box;
+}
+.emoji-picker-search:focus { border-color: rgba(0,255,234,0.5); }
+.emoji-picker-scroll { flex: 1; overflow-y: auto; padding: 4px 12px 8px; }
+.emoji-picker-scroll::-webkit-scrollbar { width: 4px; }
+.emoji-picker-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+.emoji-picker-section-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 1.5px;
+  color: #555; margin: 10px 0 5px;
+}
+.emoji-picker-grid { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px; }
+.emoji-picker-btn {
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; border-radius: 7px; cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .1s, transform .1s;
+}
+.emoji-picker-btn:hover { background: rgba(0,255,234,0.15); border-color: rgba(0,255,234,0.3); transform: scale(1.2); }
+.emoji-picker-btn.selected { background: rgba(0,255,234,0.2); border-color: var(--teal); }
+.emoji-picker-footer {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.emoji-picker-preview { font-size: 26px; }
+.emoji-picker-actions { display: flex; gap: 8px; }
 
 .anim-grid {
   display: flex;
@@ -3768,4 +3995,16 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 @keyframes abort-pulse {
   from { box-shadow: 0 0 30px rgba(255,34,68,.4), 0 0 60px rgba(255,34,68,.15); }
   to   { box-shadow: 0 0 60px rgba(255,34,68,.7), 0 0 120px rgba(255,34,68,.3); }
+}
+
+@media (max-width: 600px) {
+  .seq-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; }
+  .seq-pill  { min-height: 44px; padding: 6px 14px; font-size: 13px; }
+  .seq-card  { min-height: 88px; }
+  .seq-card-emoji { font-size: 30px; }
+  .seq-card-handle { width: 30px; height: 30px; }
+  .seq-card-play   { width: 28px; height: 28px; font-size: 12px; }
+  .emoji-picker-popup { width: 100%; max-width: 100%; border-radius: 14px 14px 0 0; position: fixed; bottom: 0; }
+  .emoji-picker-overlay { align-items: flex-end; }
+  .emoji-picker-btn { width: 44px; height: 44px; font-size: 22px; }
 }
