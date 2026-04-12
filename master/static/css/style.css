@@ -2105,6 +2105,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .seq-pill-close:hover  { color: #ff4444; }
 .seq-pill.admin-mode:hover .seq-pill-close { display: inline; }
 .seq-admin-hint {
+  display: none;
   margin-top: 7px;
   font-size: 10px;
   color: rgba(0,255,234,0.5);

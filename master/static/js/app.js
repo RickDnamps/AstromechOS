@@ -2862,7 +2862,7 @@ class ScriptEngine {
     }
 
     const hint = el('seq-admin-hint');
-    if (hint) hint.classList.toggle('hidden', !isAdmin);
+    if (hint) hint.style.display = isAdmin ? 'block' : 'none';
   }
 
   _savePillOrder() {
