@@ -3015,7 +3015,7 @@ class ScriptEngine {
     card.addEventListener('pointerdown', (e) => {
       pressed = true;
       startX = e.clientX; startY = e.clientY;
-      card.setPointerCapture(e.pointerId);
+      // Do NOT setPointerCapture here — it breaks child click events (emoji, label, play btn)
     });
 
     card.addEventListener('pointermove', (e) => {
@@ -3024,6 +3024,7 @@ class ScriptEngine {
       const dy = Math.abs(e.clientY - startY);
       if (!dragging && (dx > 8 || dy > 8)) {
         dragging = true;
+        card.setPointerCapture(e.pointerId);  // capture only once drag starts
         card.classList.add('dragging');
         document.querySelectorAll('.seq-pill[data-cat]:not([data-cat="all"])').forEach(p => {
           p.classList.add('drop-target');
@@ -5767,7 +5768,7 @@ const choreoEditor = (() => {
       const sel   = document.getElementById('chor-select');
       if (!sel || !names) return;
       sel.innerHTML = '<option value="">— select choreography —</option>' +
-        names.map(n => `<option value="${n}">${n}</option>`).join('');
+        names.map(n => { const v = n.name || n; return `<option value="${v}">${v}</option>`; }).join('');
       if (_chor && _chor.meta && _chor.meta.name) sel.value = _chor.meta.name;
       sel.onchange = () => this.load(sel.value);
     },
@@ -5846,7 +5847,7 @@ const choreoEditor = (() => {
       const sel = document.getElementById('chor-select');
       if (sel && names) {
         sel.innerHTML = '<option value="">— select choreography —</option>' +
-          names.map(n => `<option value="${n}">${n}</option>`).join('');
+          names.map(n => { const v = n.name || n; return `<option value="${v}">${v}</option>`; }).join('');
         sel.onchange = () => this.load(sel.value);
         if (names.length > 0) { sel.value = names[0]; await this.load(names[0]); }
       }
@@ -5943,7 +5944,7 @@ const choreoEditor = (() => {
         const sel   = document.getElementById('chor-select');
         if (sel && names) {
           sel.innerHTML = '<option value="">— select choreography —</option>' +
-            names.map(n => `<option value="${n}">${n}</option>`).join('');
+            names.map(n => { const v = n.name || n; return `<option value="${v}">${v}</option>`; }).join('');
           sel.onchange = () => this.load(sel.value);
           sel.value = chor.meta.name;
         }
