@@ -1273,10 +1273,11 @@ function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on })
 // Camera — last-connect-wins proxy via Flask /camera/*
 // ================================================================
 
-let _camToken     = null;
-let _camEnabled   = true;
-let _camPollTimer = null;
-let _camErrored   = false;   // true when img.onerror fires (mjpg_streamer down)
+let _camToken       = null;
+let _camEnabled     = true;
+let _camPollTimer   = null;
+let _camRefreshTimer = null;  // periodic stream refresh to prevent Chrome memory leak
+let _camErrored     = false;  // true when img.onerror fires (mjpg_streamer down)
 
 function _camBase() {
   return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
@@ -1305,6 +1306,7 @@ async function _takeCameraStream() {
   if (bg) bg.style.display = 'none';
 
   _startCamPoll();
+  _startCamRefresh();
 }
 
 function _startCamPoll() {
@@ -1357,6 +1359,7 @@ function _toggleCamera() {
     _takeCameraStream();
   } else {
     clearInterval(_camPollTimer);
+    clearInterval(_camRefreshTimer);
     _camToken = null;
     if (img)   { img.src = ''; img.style.display = 'none'; }
     if (taken) taken.style.display = 'none';
@@ -1364,7 +1367,30 @@ function _toggleCamera() {
   }
 }
 
-function _initCameraStream() { _takeCameraStream(); }
+function _startCamRefresh() {
+  clearInterval(_camRefreshTimer);
+  // Restart the MJPEG connection every 5 minutes to prevent Chrome renderer memory accumulation
+  _camRefreshTimer = setInterval(() => {
+    if (_camEnabled && _camToken && !document.hidden) _takeCameraStream();
+  }, 5 * 60 * 1000);
+}
+
+function _initCameraStream() {
+  _takeCameraStream();
+
+  // Stop stream when tab is hidden (saves memory + Pi CPU), restart on return
+  document.addEventListener('visibilitychange', () => {
+    if (!_camEnabled) return;
+    if (document.hidden) {
+      clearInterval(_camPollTimer);
+      clearInterval(_camRefreshTimer);
+      const img = el('cam-stream');
+      if (img) img.src = '';  // release the MJPEG connection
+    } else {
+      _takeCameraStream();
+    }
+  });
+}
 
 // ================================================================
 // Drive HUD — speed arc + direction arrow
