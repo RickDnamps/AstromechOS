@@ -395,6 +395,7 @@ def main() -> None:
         if reg.dome_servo: reg.dome_servo.shutdown()
         if reg.engine: reg.engine.stop_all()
         if reg.bt_ctrl: reg.bt_ctrl.stop()
+        if reg.behavior_engine: reg.behavior_engine.stop()
         log.info("Master shut down cleanly")
         sys.exit(0)
 

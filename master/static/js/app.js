@@ -1316,11 +1316,11 @@ const behaviorPanel = (() => {
         api('/choreo/list'),
         api('/audio/categories')
       ]).then(([choreoData, audioData]) => {
-        const chorFiles = (choreoData.files || []).map(f => f.name || f);
+        const chorFiles = (Array.isArray(choreoData) ? choreoData : []).map(f => f.name || f);
         _populateSel('beh-startup-choreo', chorFiles, d.startup_choreo);
         _populateSel('beh-choreo-add-sel', chorFiles, null);
 
-        const cats = Object.keys(audioData.categories || {});
+        const cats = (audioData.categories || []).map(c => c.name || c);
         _populateSel('beh-audio-category', cats, d.idle_audio_category);
 
         _setSelVal('beh-idle-mode', d.idle_mode);
