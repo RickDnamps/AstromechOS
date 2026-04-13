@@ -96,3 +96,9 @@ web_last_dome_t:  float = 0.0
 
 # Kids Mode speed limit (0.0..1.0) — synchronized from JS via /lock/set
 kids_speed_limit: float = 0.5
+
+# Behavior engine — timestamp of last user interaction (monotonic)
+last_activity: float = 0.0
+
+# BehaviorEngine instance — initialized in main.py
+behavior_engine = None

@@ -48,7 +48,9 @@ Usage in master/main.py:
 
 import logging
 import os
-from flask import Flask, render_template, jsonify
+import time
+from flask import Flask, render_template, jsonify, request
+import master.registry as reg
 
 log = logging.getLogger(__name__)
 
@@ -92,6 +94,14 @@ def create_app() -> Flask:
     app.register_blueprint(light_bp)
     app.register_blueprint(choreo_bp)
     app.register_blueprint(camera_bp)
+
+    # ------------------------------------------------------------------
+    # Activity tracking — update last_activity on every POST request
+    # ------------------------------------------------------------------
+    @app.before_request
+    def _update_last_activity():
+        if request.method == 'POST':
+            reg.last_activity = time.monotonic()
 
     # ------------------------------------------------------------------
     # Routes dashboard
