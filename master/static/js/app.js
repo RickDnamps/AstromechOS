@@ -475,6 +475,7 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'network') loadSettings();
   if (panelId === 'servos')  loadServoSettings();
   if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
+  if (panelId === 'behavior') behaviorPanel.load();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1268,6 +1269,149 @@ function setSpeed(val) {
 function driveStop()       { api('/motion/stop',      'POST'); }
 function domeStop()        { api('/motion/dome/stop', 'POST'); }
 function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on }); }
+
+// ================================================================
+// Behavior Engine — ALIVE toggle + Settings panel
+// ================================================================
+
+const behaviorPanel = (() => {
+  let _aliveOn    = false;
+  let _choreoList = [];
+
+  // ------------------------------------------------------------------
+  // ALIVE button (Drive tab)
+  // ------------------------------------------------------------------
+  function toggleAlive() {
+    _aliveOn = !_aliveOn;
+    _applyAliveBtn();
+    api('/behavior/alive', 'POST', { enabled: _aliveOn }).catch(() => {
+      _aliveOn = !_aliveOn;
+      _applyAliveBtn();
+    });
+  }
+
+  function _applyAliveBtn() {
+    const btn = el('alive-toggle-btn');
+    if (!btn) return;
+    btn.classList.toggle('alive-btn-on', _aliveOn);
+  }
+
+  // ------------------------------------------------------------------
+  // Settings panel
+  // ------------------------------------------------------------------
+  function load() {
+    api('/behavior/status').then(d => {
+      _aliveOn = d.alive_enabled;
+      _applyAliveBtn();
+
+      _setChk('beh-startup-enabled', d.startup_enabled);
+      _setVal('beh-startup-delay',   d.startup_delay);
+      _setChk('beh-alive-enabled',   d.alive_enabled);
+      _setVal('beh-idle-timeout',    d.idle_timeout_min);
+      _setChk('beh-dome-auto',       d.dome_auto_on_alive);
+
+      _choreoList = d.idle_choreo_list || [];
+
+      Promise.all([
+        api('/choreo/list'),
+        api('/audio/categories')
+      ]).then(([choreoData, audioData]) => {
+        const chorFiles = (choreoData.files || []).map(f => f.name || f);
+        _populateSel('beh-startup-choreo', chorFiles, d.startup_choreo);
+        _populateSel('beh-choreo-add-sel', chorFiles, null);
+
+        const cats = Object.keys(audioData.categories || {});
+        _populateSel('beh-audio-category', cats, d.idle_audio_category);
+
+        _setSelVal('beh-idle-mode', d.idle_mode);
+        onModeChange();
+        _renderChoreoPills();
+      });
+    }).catch(() => {});
+  }
+
+  function onModeChange() {
+    const mode = _getSelVal('beh-idle-mode');
+    const showAudio  = mode === 'sounds' || mode === 'sounds_lights';
+    const showChoreo = mode === 'choreo';
+    _show('beh-audio-cat-row', showAudio);
+    _show('beh-choreo-row',    showChoreo);
+  }
+
+  function addChoreo() {
+    const sel = el('beh-choreo-add-sel');
+    if (!sel || !sel.value) return;
+    const name = sel.value;
+    if (!_choreoList.includes(name)) {
+      _choreoList.push(name);
+      _renderChoreoPills();
+    }
+  }
+
+  function _renderChoreoPills() {
+    const container = el('beh-choreo-pills');
+    if (!container) return;
+    container.innerHTML = '';
+    _choreoList.forEach((name, idx) => {
+      const pill = document.createElement('span');
+      pill.className = 'beh-choreo-pill';
+      pill.innerHTML = `${name} <button class="beh-pill-remove" onclick="behaviorPanel._removeChoreo(${idx})">×</button>`;
+      container.appendChild(pill);
+    });
+  }
+
+  function _removeChoreo(idx) {
+    _choreoList.splice(idx, 1);
+    _renderChoreoPills();
+  }
+
+  function save() {
+    const payload = {
+      startup_enabled:     el('beh-startup-enabled')?.checked ?? false,
+      startup_delay:       parseInt(el('beh-startup-delay')?.value || '5', 10),
+      startup_choreo:      _getSelVal('beh-startup-choreo') || 'startup.chor',
+      alive_enabled:       el('beh-alive-enabled')?.checked ?? false,
+      idle_timeout_min:    parseInt(el('beh-idle-timeout')?.value || '10', 10),
+      idle_mode:           _getSelVal('beh-idle-mode') || 'choreo',
+      idle_audio_category: _getSelVal('beh-audio-category') || 'happy',
+      idle_choreo_list:    _choreoList,
+      dome_auto_on_alive:  el('beh-dome-auto')?.checked ?? true,
+    };
+    api('/behavior/config', 'POST', payload)
+      .then(() => _setStatus('beh-status', 'Saved', 'ok'))
+      .catch(() => _setStatus('beh-status', 'Error', 'err'));
+  }
+
+  // ------------------------------------------------------------------
+  // Private helpers
+  // ------------------------------------------------------------------
+  function _setChk(id, val)        { const e = el(id); if (e) e.checked = !!val; }
+  function _setVal(id, val)        { const e = el(id); if (e) e.value  = val; }
+  function _getSelVal(id)          { return el(id)?.value || ''; }
+  function _setSelVal(id, val)     { const e = el(id); if (e) e.value = val; }
+  function _show(id, visible)      { const e = el(id); if (e) e.style.display = visible ? '' : 'none'; }
+  function _setStatus(id, msg, cls) {
+    const e = el(id);
+    if (!e) return;
+    e.textContent = msg;
+    e.className = `settings-status settings-status-${cls}`;
+    setTimeout(() => { if (e) e.textContent = ''; }, 3000);
+  }
+  function _populateSel(id, items, selected) {
+    const sel = el(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item;
+      opt.textContent = item;
+      if (item === selected) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  return { toggleAlive, load, onModeChange, addChoreo, save, _removeChoreo, _applyAliveBtn };
+})();
 
 // ================================================================
 // Camera — last-connect-wins proxy via Flask /camera/*
@@ -4346,6 +4490,14 @@ async function init() {
 
   // Refresh scripts periodically
   setInterval(() => scriptEngine.load(), 15000);
+
+  // Sync ALIVE button state from server
+  api('/behavior/status').then(d => {
+    if (d && typeof d.alive_enabled === 'boolean' && d.alive_enabled) {
+      const btn = el('alive-toggle-btn');
+      if (btn) btn.classList.add('alive-btn-on');
+    }
+  }).catch(() => {});
 
 }
 
