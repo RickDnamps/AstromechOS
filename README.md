@@ -332,7 +332,7 @@ No single point of failure can leave the robot moving uncontrolled:
 
 All three trigger a **graceful decel ramp** — velocity proportional to current speed (max 400ms at full speed), never an abrupt stop that could tip the robot.
 
-**Emergency Stop** (red button, always visible — or press Space):
+**Emergency Stop** (red button, always visible):
 - Instantly puts both PCA9685 chips to SLEEP → hard-cuts all servo PWM
 - `RESET E-STOP` button re-arms the drivers in under a second — no service restart needed
 

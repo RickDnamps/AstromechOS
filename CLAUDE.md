@@ -270,7 +270,7 @@ SSH     artoo / deetoo
 | 5 | Caméra USB stream ✅ (temp webcam) · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
-**E-STOP :** toggle unique ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`).
+**E-STOP :** toggle unique ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI uniquement — le raccourci clavier Space a été retiré.
 **Joystick throttle :** 60 req/s max (visuel immédiat, seuls les POST HTTP sont throttlés).
 **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
 **Drive tab** : camera MJPEG proxy last-connect-wins · auto-reconnect après restart service · USB autodetect via sysfs · speed arc HUD · direction arrow HUD.
