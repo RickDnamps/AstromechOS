@@ -348,13 +348,9 @@
 
       <!-- Col 3: Dome auto + camera toggle -->
       <div class="drive-bottom-right">
-        <div class="dome-toggle-wrap">
-          <label class="toggle-label">
-            DOME AUTO
-            <input type="checkbox" id="dome-random-ctrl" onchange="domeRandom(this.checked)">
-            <span class="toggle-switch"></span>
-          </label>
-        </div>
+        <button id="alive-toggle-btn" class="alive-btn" onclick="behaviorPanel.toggleAlive()" title="ALIVE mode — idle reactions">
+          ALIVE
+        </button>
         <button id="cam-toggle-btn" class="cam-toggle-btn cam-on" onclick="_toggleCamera()" title="Toggle camera feed">
           <svg width="18" height="14" viewBox="0 0 24 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M23 3 L16 9 23 15V3Z"/>
@@ -810,6 +806,7 @@
       <button class="settings-nav-item active" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 Bluetooth</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
       <button class="settings-nav-item" data-panel="arms"      onclick="switchSettingsPanel('arms')">🦾 Arms</button>
+      <button class="settings-nav-item" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
       <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
       <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
@@ -1004,6 +1001,75 @@
           <button class="btn" onclick="armsConfig.save()">SAVE ARMS</button>
           <div class="settings-status" id="arms-status"></div>
         </section>
+      </div>
+
+      <!-- 🤖 Behavior -->
+      <div class="settings-panel" id="spanel-behavior">
+        <section class="card settings-card">
+          <h2 class="card-title">STARTUP SEQUENCE</h2>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-label">
+              <input type="checkbox" id="beh-startup-enabled">
+              <span class="toggle-switch"></span>
+              Enabled
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">DELAY (seconds)</label>
+            <input type="number" id="beh-startup-delay" class="input-text input-sm" min="0" max="60" value="5" style="width:70px">
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">CHOREO</label>
+            <select id="beh-startup-choreo" class="input-text"></select>
+          </div>
+        </section>
+
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">IDLE REACTIONS (ALIVE MODE)</h2>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-label">
+              <input type="checkbox" id="beh-alive-enabled">
+              <span class="toggle-switch"></span>
+              Enabled
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">TRIGGER AFTER (minutes of inactivity)</label>
+            <input type="number" id="beh-idle-timeout" class="input-text input-sm" min="1" max="120" value="10" style="width:70px">
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">MODE</label>
+            <select id="beh-idle-mode" class="input-text" onchange="behaviorPanel.onModeChange()">
+              <option value="sounds">Sounds only</option>
+              <option value="sounds_lights">Sounds + Lights</option>
+              <option value="lights">Lights only</option>
+              <option value="choreo">Choreo</option>
+            </select>
+          </div>
+          <div id="beh-audio-cat-row" class="form-group">
+            <label class="ctrl-label">AUDIO CATEGORY</label>
+            <select id="beh-audio-category" class="input-text"></select>
+          </div>
+          <div id="beh-choreo-row" class="form-group" style="display:none">
+            <label class="ctrl-label">CHOREO LIST</label>
+            <div id="beh-choreo-pills" class="beh-choreo-pills"></div>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <select id="beh-choreo-add-sel" class="input-text input-sm" style="flex:1"></select>
+              <button class="btn btn-sm" onclick="behaviorPanel.addChoreo()">+ ADD</button>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-label">
+              <input type="checkbox" id="beh-dome-auto">
+              <span class="toggle-switch"></span>
+              Dome auto-rotation when ALIVE is ON
+            </label>
+          </div>
+        </section>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+          <button class="btn btn-active" onclick="behaviorPanel.save()">SAVE</button>
+          <div class="settings-status" id="beh-status"></div>
+        </div>
       </div>
 
       <!-- 🔧 Servos -->
