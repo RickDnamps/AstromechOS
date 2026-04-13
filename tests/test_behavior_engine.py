@@ -3,6 +3,7 @@ import time
 import types
 import sys
 import os
+import pytest
 
 # Ensure project root is on path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -136,3 +137,75 @@ def test_set_alive_resets_last_activity():
     be.set_alive(True)
     after = time.monotonic()
     assert before <= be._reg.last_activity <= after + 0.1
+
+
+# ---------------------------------------------------------------------------
+# Flask blueprint API tests
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def flask_client(tmp_path):
+    """Flask test client with behavior_bp registered."""
+    import configparser
+    import master.registry as reg
+    from master.behavior_engine import BehaviorEngine
+
+    # Write a minimal local.cfg so _write_cfg works
+    cfg_path = tmp_path / 'local.cfg'
+    cfg_path.write_text('[behavior]\nalive_enabled = false\n')
+
+    cfg = _make_cfg()
+    be = BehaviorEngine(cfg, choreo_dir=str(tmp_path))
+    be._reg = reg
+    reg.behavior_engine = be
+    reg.choreo = MagicMock()
+    reg.choreo.is_playing.return_value = False
+    reg.last_activity = 0.0
+
+    # Patch config path
+    with patch.object(be, '_write_cfg', lambda k, v: None):
+        from flask import Flask
+        app = Flask(__name__)
+        from master.api.behavior_bp import behavior_bp
+        app.register_blueprint(behavior_bp)
+        app.config['TESTING'] = True
+        yield app.test_client()
+
+
+def test_get_behavior_status(flask_client):
+    resp = flask_client.get('/behavior/status')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert 'alive_enabled' in data
+    assert 'idle_mode' in data
+
+
+def test_post_behavior_alive_toggle(flask_client):
+    resp = flask_client.post(
+        '/behavior/alive',
+        json={'enabled': True},
+        content_type='application/json'
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['ok'] is True
+
+
+def test_post_behavior_config(flask_client):
+    resp = flask_client.post(
+        '/behavior/config',
+        json={
+            'startup_enabled': True,
+            'startup_delay': 3,
+            'startup_choreo': 'startup.chor',
+            'alive_enabled': False,
+            'idle_timeout_min': 5,
+            'idle_mode': 'sounds',
+            'idle_audio_category': 'happy',
+            'idle_choreo_list': ['patrol.chor'],
+            'dome_auto_on_alive': True,
+        },
+        content_type='application/json'
+    )
+    assert resp.status_code == 200
+    assert resp.get_json()['ok'] is True
