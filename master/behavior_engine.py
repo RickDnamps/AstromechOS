@@ -24,7 +24,6 @@ import os
 import random
 import threading
 import time
-from pathlib import Path
 
 import master.registry as _registry
 
@@ -105,7 +104,8 @@ class BehaviorEngine:
                 return
 
             if delay > 0:
-                time.sleep(delay)
+                if self._stop_event.wait(timeout=delay):
+                    return   # stopped before startup could run
 
             choreo_data = self._load_choreo(choreo_path)
             if choreo_data:
@@ -167,28 +167,26 @@ class BehaviorEngine:
     # ------------------------------------------------------------------
 
     def _trigger_sounds(self) -> None:
-        """POST /audio/random with idle_audio_category."""
+        """Send UART random audio command for idle reaction."""
         try:
             category = self._cfg.get('behavior', 'idle_audio_category', fallback='happy')
-            import requests
-            r = requests.post(
-                'http://localhost:5000/audio/random',
-                json={'category': category},
-                timeout=3
-            )
-            log.info("ALIVE sounds: category=%s status=%s", category, r.status_code)
+            if self._reg.uart:
+                self._reg.uart.send('S', f'RANDOM:{category}')
+                self._reg.audio_playing = True
+                log.info("ALIVE sounds: category=%s", category)
+            else:
+                log.warning("ALIVE sounds: UART not available")
         except Exception:
             log.exception("ALIVE sounds trigger failed")
 
     def _trigger_lights(self) -> None:
-        """POST random lights animation."""
+        """Trigger random lights animation via Teeces/AstroPixels controller."""
         try:
-            import requests
-            r = requests.post(
-                'http://localhost:5000/lights/random',
-                timeout=3
-            )
-            log.info("ALIVE lights: status=%s", r.status_code)
+            if self._reg.teeces:
+                self._reg.teeces.random_mode()
+                log.info("ALIVE lights: random_mode triggered")
+            else:
+                log.warning("ALIVE lights: teeces not available")
         except Exception:
             log.exception("ALIVE lights trigger failed")
 
