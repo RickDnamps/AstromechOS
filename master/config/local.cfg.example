@@ -43,3 +43,17 @@ host = r2-slave.local
 # Dashboard admin password (protects SERVO / VESC / CONFIG / CHOREO tabs)
 # Change it from the dashboard: Admin → Config → System → Change Admin Password
 password = deetoo
+
+[behavior]
+# Startup sequence — plays a choreo after boot
+startup_enabled  = true
+startup_delay    = 5
+startup_choreo   = startup.chor
+
+# ALIVE mode — idle reactions after inactivity
+alive_enabled       = false
+idle_timeout_min    = 10
+idle_mode           = choreo
+idle_audio_category = happy
+idle_choreo_list    = startup.chor
+dome_auto_on_alive  = true
