@@ -1273,11 +1273,12 @@ function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on })
 // Camera — last-connect-wins proxy via Flask /camera/*
 // ================================================================
 
-let _camToken       = null;
-let _camEnabled     = true;
-let _camPollTimer   = null;
+let _camToken        = null;
+let _camEnabled      = true;
+let _camPollTimer    = null;
 let _camRefreshTimer = null;  // periodic stream refresh to prevent Chrome memory leak
-let _camErrored     = false;  // true when img.onerror fires (mjpg_streamer down)
+let _camResumeRetry  = null;  // retry interval after screen wake / tab return
+let _camErrored      = false; // true when img.onerror fires (mjpg_streamer down)
 
 function _camBase() {
   return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
@@ -1360,6 +1361,7 @@ function _toggleCamera() {
   } else {
     clearInterval(_camPollTimer);
     clearInterval(_camRefreshTimer);
+    clearInterval(_camResumeRetry);
     _camToken = null;
     if (img)   { img.src = ''; img.style.display = 'none'; }
     if (taken) taken.style.display = 'none';
@@ -1377,6 +1379,37 @@ function _startCamRefresh() {
 
 function _initCameraStream() {
   _takeCameraStream();
+}
+
+// Registered once — stops MJPEG stream when Chrome hides the tab/window
+// (prevents STATUS_BREAKPOINT renderer crash from memory accumulation).
+// On return, retries every 5s until stream is confirmed running.
+let _camVisibilityListenerAdded = false;
+function _initCamVisibilityHandler() {
+  if (_camVisibilityListenerAdded) return;
+  _camVisibilityListenerAdded = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!_camEnabled) return;
+    if (document.hidden) {
+      clearInterval(_camPollTimer);
+      clearInterval(_camRefreshTimer);
+      clearInterval(_camResumeRetry);
+      const img = el('cam-stream');
+      if (img) img.src = '';  // release MJPEG connection → free Chrome renderer memory
+      _camToken = null;
+    } else {
+      // Retry every 5s until _takeCameraStream succeeds (network may not be ready immediately after wake)
+      clearInterval(_camResumeRetry);
+      let attempts = 0;
+      const tryResume = () => {
+        if (_camToken) { clearInterval(_camResumeRetry); return; }
+        _takeCameraStream();
+        if (++attempts >= 12) clearInterval(_camResumeRetry); // give up after 1 minute
+      };
+      tryResume();  // immediate attempt
+      _camResumeRetry = setInterval(tryResume, 5000);
+    }
+  });
 }
 
 // ================================================================
@@ -4322,6 +4355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     s.addEventListener('input', () => syncHoloSlider(s));
     syncHoloSlider(s);
   });
+  _initCamVisibilityHandler();
   init();
 });
 
