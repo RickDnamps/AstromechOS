@@ -1377,17 +1377,25 @@ function _startCamRefresh() {
 
 function _initCameraStream() {
   _takeCameraStream();
+}
 
-  // Stop stream when tab is hidden (saves memory + Pi CPU), restart on return
+// Registered once at module level — stops stream when Chrome tab/window is hidden,
+// restarts on return. Guard prevents duplicate registration if called again.
+let _camVisibilityListenerAdded = false;
+function _initCamVisibilityHandler() {
+  if (_camVisibilityListenerAdded) return;
+  _camVisibilityListenerAdded = true;
   document.addEventListener('visibilitychange', () => {
     if (!_camEnabled) return;
     if (document.hidden) {
       clearInterval(_camPollTimer);
       clearInterval(_camRefreshTimer);
       const img = el('cam-stream');
-      if (img) img.src = '';  // release the MJPEG connection
+      if (img) img.src = '';  // release MJPEG connection → free Chrome renderer memory
+      _camToken = null;
     } else {
-      _takeCameraStream();
+      // Small delay so the browser finishes becoming visible before we reconnect
+      setTimeout(_takeCameraStream, 300);
     }
   });
 }
@@ -4335,6 +4343,7 @@ document.addEventListener('DOMContentLoaded', () => {
     s.addEventListener('input', () => syncHoloSlider(s));
     syncHoloSlider(s);
   });
+  _initCamVisibilityHandler();  // once, before init()
   init();
 });
 
