@@ -984,8 +984,59 @@ body[data-lock-mode="2"] #js-left-ring::after {
   box-shadow: 0 0 8px var(--blue);
 }
 
-.dome-toggle-wrap {
+/* ALIVE mode toggle button — Drive tab */
+.alive-btn {
   flex-shrink: 0;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: #4a7a9b;
+  background: transparent;
+  border: 1px solid #1a3a4a;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, box-shadow .15s;
+}
+.alive-btn:hover {
+  color: #7eb8d4;
+  border-color: #2a5a6a;
+}
+.alive-btn.alive-btn-on {
+  color: #00e5cc;
+  border-color: #00e5cc;
+  box-shadow: 0 0 8px rgba(0, 229, 204, 0.4);
+}
+/* Behavior panel — choreo list pills */
+.beh-choreo-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.beh-choreo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(0, 229, 204, 0.08);
+  border: 1px solid rgba(0, 229, 204, 0.3);
+  border-radius: 12px;
+  font-size: 11px;
+  color: #7eb8d4;
+}
+.beh-pill-remove {
+  background: none;
+  border: none;
+  color: #4a7a9b;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.beh-pill-remove:hover {
+  color: #e05a5a;
 }
 
 /* Keyboard indicator */
