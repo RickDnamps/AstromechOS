@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from master.drivers.dome_motor_driver  import DomeMotorDriver
     from master.drivers.body_servo_driver  import BodyServoDriver
     from master.drivers.dome_servo_driver  import DomeServoDriver
+    from master.behavior_engine      import BehaviorEngine
 
 # These variables are assigned in main.py before app.run()
 uart:        'UARTController | None'    = None
@@ -101,4 +102,4 @@ kids_speed_limit: float = 0.5
 last_activity: float = 0.0
 
 # BehaviorEngine instance — initialized in main.py
-behavior_engine = None
+behavior_engine: 'BehaviorEngine | None' = None

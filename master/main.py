@@ -242,6 +242,7 @@ def main() -> None:
     reg.engine = engine
 
     from master.choreo_player import ChoreoPlayer
+    from master.behavior_engine import BehaviorEngine
     reg.choreo = ChoreoPlayer(
         cfg=cfg,
         audio=uart,
@@ -254,6 +255,9 @@ def main() -> None:
         engine=reg.engine,
     )
     reg.choreo.setup()
+
+    behavior_engine = BehaviorEngine(cfg)
+    reg.behavior_engine = behavior_engine
 
     from master.drivers.bt_controller_driver import BTControllerDriver
 
@@ -348,6 +352,9 @@ def main() -> None:
     )
     flask_thread.start()
     log.info(f"Flask started on port {flask_port}")
+
+    behavior_engine.start()
+    log.info("BehaviorEngine started")
 
     # Safety watchdogs — start after Flask
     motion_watchdog.start()   # stop motors if no drive command within 800ms
