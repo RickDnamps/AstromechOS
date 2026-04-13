@@ -1,3 +1,30 @@
+# ============================================================
+#  ██████╗ ██████╗       ██████╗ ██████╗
+#  ██╔══██╗╚════██╗      ██╔══██╗╚════██╗
+#  ██████╔╝ █████╔╝      ██║  ██║ █████╔╝
+#  ██╔══██╗██╔═══╝       ██║  ██║██╔═══╝
+#  ██║  ██║███████╗      ██████╔╝███████╗
+#  ╚═╝  ╚═╝╚══════╝      ╚═════╝ ╚══════╝
+#
+#  R2-D2 Control System — Distributed Robot Controller
+# ============================================================
+#  Copyright (C) 2025 RickDnamps
+#  https://github.com/RickDnamps/R2D2_Control
+#
+#  This file is part of R2D2_Control.
+#
+#  R2D2_Control is free software: you can redistribute it
+#  and/or modify it under the terms of the GNU General
+#  Public License as published by the Free Software
+#  Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  R2D2_Control is distributed in the hope that it will be
+#  useful, but WITHOUT ANY WARRANTY; without even the
+#  implied warranty of MERCHANTABILITY or FITNESS FOR A
+#  PARTICULAR PURPOSE. See the GNU General Public License
+#  for more details.
+# ============================================================
 """
 Blueprint API Behavior — BehaviorEngine REST endpoints.
 
@@ -89,12 +116,12 @@ def save_config():
 
     try:
         cfg_path = os.path.normpath(_CFG_PATH)
-        with open(cfg_path, 'w') as f:
+        with open(cfg_path, 'w', encoding='utf-8') as f:
             parser.write(f)
         # Update in-memory config on the engine if available
         be = reg.behavior_engine
         if be:
-            be._cfg.read_dict(dict(parser))
+            be._cfg.read(os.path.normpath(_CFG_PATH))
         log.info("Behavior config saved")
         return jsonify({'ok': True})
     except Exception as e:
