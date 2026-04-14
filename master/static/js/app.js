@@ -1336,6 +1336,12 @@ const behaviorPanel = (() => {
     const showChoreo = mode === 'choreo';
     _show('beh-audio-cat-row', showAudio);
     _show('beh-choreo-row',    showChoreo);
+    // Dome auto-rotation is handled by choreos — disable when mode is choreo
+    const domeChk = el('beh-dome-auto');
+    if (domeChk) {
+      domeChk.disabled = showChoreo;
+      if (domeChk.parentElement) domeChk.parentElement.style.opacity = showChoreo ? '0.4' : '';
+    }
   }
 
   function addChoreo() {
