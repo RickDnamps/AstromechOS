@@ -26,6 +26,7 @@ import threading
 import time
 
 import master.registry as _registry
+from master.config.config_loader import write_cfg_atomic
 
 log = logging.getLogger(__name__)
 
@@ -256,7 +257,6 @@ class BehaviorEngine:
             if not self._cfg.has_section('behavior'):
                 self._cfg.add_section('behavior')
             self._cfg.set('behavior', key, value)
-            with open(cfg_path, 'w') as f:
-                parser.write(f)
+            write_cfg_atomic(parser, cfg_path)
         except Exception:
             log.exception("Failed to persist behavior config key=%s", key)
