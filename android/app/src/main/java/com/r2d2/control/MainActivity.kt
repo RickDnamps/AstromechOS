@@ -11,6 +11,7 @@ import android.webkit.*
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.r2d2.control.databinding.ActivityMainBinding
 import java.net.HttpURLConnection
 import java.net.InetAddress
@@ -19,6 +20,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.*
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,7 +29,7 @@ class MainActivity : AppCompatActivity() {
     private var isServerOnline    = false
     private var pingFailureCount  = 0
     private var autoDiscovering   = false
-    private val pingHandler       = Handler(Looper.getMainLooper())
+    private var pingJob: Job?     = null
 
     companion object {
         const val PREF_FILE    = "r2d2_prefs"
@@ -86,8 +88,9 @@ class MainActivity : AppCompatActivity() {
             mediaPlaybackRequiresUserGesture = false
             cacheMode                        = WebSettings.LOAD_DEFAULT
             mixedContentMode                 = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            // Required: allows file:// origin to call http:// Pi API endpoints
+            // TODO: migrate to WebViewAssetLoader to eliminate this flag
             allowUniversalAccessFromFileURLs = true
-            allowFileAccessFromFileURLs      = true
         }
         webView.addJavascriptInterface(NativeBridge(this), "AndroidBridge")
         webView.webViewClient = object : WebViewClient() {
@@ -126,67 +129,60 @@ class MainActivity : AppCompatActivity() {
     // ================================================================
 
     private fun startPingLoop() {
-        pingHandler.removeCallbacksAndMessages(null)
+        pingJob?.cancel()
         val prefs = getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
         val host  = prefs.getString(PREF_HOST, DEFAULT_HOST) ?: DEFAULT_HOST
         val port  = prefs.getInt("port", DEFAULT_PORT)
         binding.statusHost.text = "$host:$port"
 
-        pingHandler.post(object : Runnable {
-            override fun run() {
-                Thread {
-                    val online = checkServer(host, port)
-                    runOnUiThread {
-                        if (online) {
-                            pingFailureCount = 0
-                            autoDiscovering  = false
-                            if (!isServerOnline) {
-                                isServerOnline = true
-                                updateStatusBanner(host, port, true)
-                                webView.evaluateJavascript(
-                                    "window.R2D2_API_BASE='http://$host:$port';" +
-                                    "if(typeof pollStatus==='function') pollStatus();", null
-                                )
-                            }
-                        } else {
-                            pingFailureCount++
-                            if (isServerOnline) {
-                                isServerOnline = false
-                                updateStatusBanner(host, port, false)
-                            }
-                            // Auto-discover after 3 consecutive failures (once per session)
-                            if (pingFailureCount == 3 && !autoDiscovering) {
-                                autoDiscovering = true
-                                startAutoDiscover()
-                            }
-                        }
+        pingJob = lifecycleScope.launch {
+            while (isActive) {
+                val online = withContext(Dispatchers.IO) { checkServer(host, port) }
+                if (online) {
+                    pingFailureCount = 0
+                    autoDiscovering  = false
+                    if (!isServerOnline) {
+                        isServerOnline = true
+                        updateStatusBanner(host, port, true)
+                        webView.evaluateJavascript(
+                            "window.R2D2_API_BASE='http://$host:$port';" +
+                            "if(typeof pollStatus==='function') pollStatus();", null
+                        )
                     }
-                    pingHandler.postDelayed(this, if (online) 15_000L else 5_000L)
-                }.start()
+                } else {
+                    pingFailureCount++
+                    if (isServerOnline) {
+                        isServerOnline = false
+                        updateStatusBanner(host, port, false)
+                    }
+                    if (pingFailureCount == 3 && !autoDiscovering) {
+                        autoDiscovering = true
+                        startAutoDiscover()
+                    }
+                }
+                delay(if (online) 15_000L else 5_000L)
             }
-        })
+        }
     }
 
     /** Lance l'auto-découverte en arrière-plan. Met à jour le banner pendant la recherche. */
     private fun startAutoDiscover() {
         binding.statusText.text = "RECHERCHE R2-D2..."
-        Thread {
-            val found = tryDiscover()
-            runOnUiThread {
-                if (found != null) {
-                    getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
-                        .edit().putString(PREF_HOST, found).apply()
-                    Toast.makeText(this, "R2-D2 trouvé : $found", Toast.LENGTH_SHORT).show()
-                    isServerOnline   = false
-                    autoDiscovering  = false
-                    pingFailureCount = 0
-                    startPingLoop()
-                } else {
-                    autoDiscovering = false
-                    binding.statusText.text = "HORS LIGNE"
-                }
+        lifecycleScope.launch {
+            val found = withContext(Dispatchers.IO) { tryDiscover() }
+            if (found != null) {
+                getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
+                    .edit().putString(PREF_HOST, found).apply()
+                Toast.makeText(this@MainActivity, "R2-D2 trouvé : $found", Toast.LENGTH_SHORT).show()
+                isServerOnline   = false
+                autoDiscovering  = false
+                pingFailureCount = 0
+                startPingLoop()
+            } else {
+                autoDiscovering = false
+                binding.statusText.text = "HORS LIGNE"
             }
-        }.start()
+        }
     }
 
     // ================================================================
@@ -364,27 +360,25 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         scanBtn.setOnClickListener {
-            scanBtn.isEnabled    = false
+            scanBtn.isEnabled      = false
             progressBar.visibility = View.VISIBLE
-            statusLabel.text     = "Recherche en cours…"
+            statusLabel.text       = "Recherche en cours…"
             statusLabel.setTextColor(android.graphics.Color.parseColor("#00aaff"))
 
-            Thread {
-                val found = tryDiscover()
-                runOnUiThread {
-                    progressBar.visibility = View.GONE
-                    scanBtn.isEnabled      = true
-                    if (found != null) {
-                        ipInput.setText(found)
-                        ipInput.setSelection(found.length)
-                        statusLabel.text = "✓ R2-D2 trouvé : $found"
-                        statusLabel.setTextColor(android.graphics.Color.parseColor("#00cc66"))
-                    } else {
-                        statusLabel.text = "Aucun R2-D2 trouvé sur le réseau."
-                        statusLabel.setTextColor(android.graphics.Color.parseColor("#ff2244"))
-                    }
+            lifecycleScope.launch {
+                val found = withContext(Dispatchers.IO) { tryDiscover() }
+                progressBar.visibility = View.GONE
+                scanBtn.isEnabled      = true
+                if (found != null) {
+                    ipInput.setText(found)
+                    ipInput.setSelection(found.length)
+                    statusLabel.text = "✓ R2-D2 trouvé : $found"
+                    statusLabel.setTextColor(android.graphics.Color.parseColor("#00cc66"))
+                } else {
+                    statusLabel.text = "Aucun R2-D2 trouvé sur le réseau."
+                    statusLabel.setTextColor(android.graphics.Color.parseColor("#ff2244"))
                 }
-            }.start()
+            }
         }
 
         dialog.show()
@@ -451,7 +445,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
     override fun onDestroy() {
-        pingHandler.removeCallbacksAndMessages(null)
+        pingJob?.cancel()
         webView.destroy()
         super.onDestroy()
     }
