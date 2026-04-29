@@ -275,6 +275,8 @@ SSH     artoo / deetoo
 **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
 **Drive tab** : camera MJPEG proxy last-connect-wins · auto-reconnect après restart service · USB autodetect via sysfs · speed arc HUD · direction arrow HUD.
 **Caméra permanente commandée :** 3.6mm lens OTG UVC 720/1080P 30FPS, drive-free, Linux plug-and-play. Assez petite pour loger dans le holo projector. Sort du MJPEG hardware-compressé nativement → zéro charge CPU Pi 4B, autodetectée par le scan sysfs existant sans aucun changement de code.
+**Caméra — watchdog zombie :** `r2d2-camera.service` utilise `Restart=always`. `scripts/camera-start.sh` lance mjpg_streamer en background + boucle watchdog toutes les 5s qui kill le process si `/dev/videoN` disparaît. Sans ça, le thread input meurt silencieusement (select() timeout) mais le process principal reste zombie → pas de restart. Le service est mis à jour à chaque `update.sh` via `sudo tee`.
+**Caméra — fake-hwclock :** Le Pi 4B n'a pas de RTC. Au boot, l'horloge repart du dernier temps sauvegardé par `fake-hwclock` (souvent des semaines en arrière). `systemctl status` peut afficher "2 weeks ago" pour un service démarré ce matin — c'est normal, NTP corrige après connexion réseau.
 **VESC tab** : barres temp/current/duty · Power(W) · symétrie L/R · session peaks · fault log.
 **Header** : `#temp-label` min-width fixe — pas de layout shift sur changement de valeur.
 
@@ -316,6 +318,7 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 - `setPointerCapture` dans `pointerdown` = casse tous les clicks enfants. Doit être appelé uniquement dans `pointermove` APRÈS le seuil de drag (8px).
 - `--teal` n'existait PAS dans `:root` (seulement `--cyan`). Ajouter une variable CSS custom nécessite de vérifier sa définition dans `:root`.
 - Quand git pull échoue sur le Pi (local changes non committées) → `git stash` puis pull.
+- `choreoEditor._pollTimer` (500ms `/choreo/status`) : stoppé via `choreoEditor._stopPolling()` dans `onTabSwitch()` quand `tabId !== 'choreo'`. Sans ça, le poll continue en background sur tous les autres onglets.
 
 **Backlog :** AstroPixels+ 17 séquences manquantes (bloqué hardware) · DiagnosticMonitor Teeces
 **Backlog futur :** AS5600 encoder I2C absolu magnétique pour position dôme (0–360° absolu, pas de dérive) · VESC safety lock si VESC absent/fault · IP Pi sur RP2040 LCD au boot
