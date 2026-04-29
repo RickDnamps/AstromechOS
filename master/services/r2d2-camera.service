@@ -1,0 +1,12 @@
+[Unit]
+Description=R2-D2 Camera Stream (mjpg-streamer)
+After=network.target
+
+[Service]
+User=artoo
+ExecStart=/usr/local/bin/r2d2-camera-start.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -5,6 +5,9 @@
 #
 # Resolution/FPS/quality are read from master/config/camera.env (written by the
 # web dashboard Config tab). Defaults: 640x480 / 30fps / quality 80.
+#
+# Watchdog: monitors the detected device every 5s. If it disappears, mjpg_streamer
+# is killed so systemd (Restart=always) restarts the service and re-runs autodetect.
 
 ENV_FILE="/home/artoo/r2d2/master/config/camera.env"
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
@@ -32,6 +35,21 @@ fi
 
 logger -t r2d2-camera "Starting on $CAM_DEV"
 logger -t r2d2-camera "Settings: ${CAMERA_RESOLUTION} @ ${CAMERA_FPS}fps q${CAMERA_QUALITY}"
-exec /usr/local/bin/mjpg_streamer \
+
+/usr/local/bin/mjpg_streamer \
     -i "/usr/local/lib/mjpg-streamer/input_uvc.so -d $CAM_DEV -r $CAMERA_RESOLUTION -f $CAMERA_FPS -q $CAMERA_QUALITY" \
-    -o "/usr/local/lib/mjpg-streamer/output_http.so -p 8080 -w /usr/local/share/mjpg-streamer/www"
+    -o "/usr/local/lib/mjpg-streamer/output_http.so -p 8080 -w /usr/local/share/mjpg-streamer/www" &
+MPID=$!
+
+# Watchdog: if the detected device disappears, kill the streamer.
+# mjpg_streamer's input thread may die silently without exiting the process.
+while kill -0 $MPID 2>/dev/null; do
+    if [ ! -e "$CAM_DEV" ]; then
+        logger -t r2d2-camera "Device $CAM_DEV disappeared — stopping streamer for restart"
+        kill $MPID
+        break
+    fi
+    sleep 5
+done
+
+wait $MPID
