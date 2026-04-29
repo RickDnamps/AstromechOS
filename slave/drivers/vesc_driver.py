@@ -319,7 +319,9 @@ class VescDriver(BaseDriver):
         """
         import serial as _serial
         _FAIL_THRESHOLD = 5   # consecutive Nones before declaring disconnected (~1s)
-        _fail_count = 0
+        _fail_left  = 0          # left VESC (USB) consecutive failures → triggers reconnect
+        _fail_right = 0          # right VESC (CAN) consecutive failures → warning only
+        _right_warned = False    # suppress repeated right-VESC log spam
 
         while self._running:
             # --- Reconnect if not ready ---
@@ -338,8 +340,10 @@ class VescDriver(BaseDriver):
                                     pass
                             self._serial = ser
                             self._port   = port
-                        self._ready  = True
-                        _fail_count  = 0
+                        self._ready   = True
+                        _fail_left    = 0
+                        _fail_right   = 0
+                        _right_warned = False
                         opened = True
                         log.info(f"VescDriver reconnected on {port}")
                         break
@@ -357,13 +361,13 @@ class VescDriver(BaseDriver):
             except Exception as e:
                 log.warning(f"VescDriver: serial exception — forcing reconnect: {e}")
                 vl = vr = None
-                _fail_count = _FAIL_THRESHOLD  # trigger reconnect immediately
+                _fail_left = _FAIL_THRESHOLD   # trigger reconnect immediately
 
             if vl is None:
-                _fail_count += 1
-                if _fail_count >= _FAIL_THRESHOLD:
+                _fail_left += 1
+                if _fail_left >= _FAIL_THRESHOLD:
                     log.warning(
-                        f"VescDriver: {_fail_count} consecutive read failures "
+                        f"VescDriver: {_fail_left} consecutive read failures "
                         f"on {self._port} — marking disconnected"
                     )
                     with self._lock:
@@ -374,14 +378,17 @@ class VescDriver(BaseDriver):
                             pass
                         self._serial = None
                     self._ready = False
-                    _fail_count = 0
+                    _fail_left = 0
             else:
+                _fail_left = 0
                 if vr is None:
-                    _fail_count += 1
-                    if _fail_count >= _FAIL_THRESHOLD:
-                        log.warning("VescDriver: right VESC (CAN ID %d) not responding for %d cycles", VESC_ID_CAN, _fail_count)
+                    _fail_right += 1
+                    if _fail_right >= _FAIL_THRESHOLD and not _right_warned:
+                        log.warning("VescDriver: right VESC (CAN ID %d) not responding", VESC_ID_CAN)
+                        _right_warned = True
                 else:
-                    _fail_count = 0
+                    _fail_right = 0
+                    _right_warned = False
                 if self._uart:
                     self._uart.send('TL',
                         f"{vl['v_in']}:{vl['temp']}:{vl['current']}"

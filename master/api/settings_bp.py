@@ -128,8 +128,11 @@ def _reload_lights_driver(backend: str) -> dict:
         reg.teeces = new_driver   # atomic swap — no None window
         new_driver.random_mode()
 
-    # Shut down old driver AFTER lock released (avoids deadlock if shutdown is slow)
+    # Shut down old driver AFTER lock released (avoids deadlock if shutdown is slow).
+    # Brief sleep lets any in-flight request that holds a local ref to old_driver finish.
     if old_driver:
+        import time as _time
+        _time.sleep(0.1)
         try:
             old_driver.shutdown()
         except Exception as e:

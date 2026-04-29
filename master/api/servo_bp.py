@@ -78,7 +78,7 @@ _MAIN_CFG          = '/home/artoo/r2d2/master/config/main.cfg'
 _LOCAL_CFG         = '/home/artoo/r2d2/master/config/local.cfg'
 _DOME_ANGLES_FILE  = '/home/artoo/r2d2/master/config/dome_angles.json'
 _SLAVE_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
-_SLAVE_HOST        = 'artoo@r2-slave.local'
+_SLAVE_HOST        = 'artoo@192.168.4.171'
 
 BODY_SERVOS = [f'Servo_S{i}' for i in range(16)]
 DOME_SERVOS = [f'Servo_M{i}' for i in range(16)]
