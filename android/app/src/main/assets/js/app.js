@@ -4145,7 +4145,7 @@ const soundProfiles = {
       const vol = profiles?.[name] ?? defaults[name];
       const slider = el(`profile-${name}-vol`);
       const label  = el(`profile-${name}-val`);
-      if (slider) { slider.value = vol; }
+      if (slider) { slider.value = vol; syncHoloSlider(slider); }
       if (label)  { label.textContent = vol + '%'; }
     }
   },
