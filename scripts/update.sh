@@ -178,7 +178,7 @@ fi
 # Install/update the camera service file (Restart=always + watchdog script)
 CAM_SVC="$REPO/master/services/r2d2-camera.service"
 if [ -f "$CAM_SVC" ]; then
-    sudo cp "$CAM_SVC" /etc/systemd/system/r2d2-camera.service \
+    sudo tee /etc/systemd/system/r2d2-camera.service > /dev/null < "$CAM_SVC" \
         && sudo systemctl daemon-reload \
         && ok "Camera service file updated" \
         || warn "Camera service file install failed"
