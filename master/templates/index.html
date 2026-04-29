@@ -1432,6 +1432,11 @@
           </div>
           <button class="btn" onclick="saveConfig()">SAVE CONFIG</button>
         </section>
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">DEPLOY</h2>
+          <p class="settings-note">Git pull on Master + rsync Slave + restart services.</p>
+          <button class="btn btn-primary" onclick="systemUpdate()">⬆ UPDATE — git pull + sync Slave</button>
+        </section>
       </div>
 
       <!-- 🖥️ System -->
@@ -1440,7 +1445,6 @@
           <h2 class="card-title">SYSTEM</h2>
           <div class="settings-status" id="system-version">Loading...</div>
           <div class="btn-group-v">
-            <button class="btn btn-primary" onclick="systemUpdate()">⬆ UPDATE — git pull + sync Slave</button>
             <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>
             <button class="btn btn-warn" onclick="confirmAction('Reboot Slave?', '/system/reboot_slave')">REBOOT SLAVE</button>
             <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master?', '/system/shutdown')">SHUTDOWN MASTER</button>
