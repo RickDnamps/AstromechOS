@@ -78,7 +78,13 @@ _MAIN_CFG          = '/home/artoo/r2d2/master/config/main.cfg'
 _LOCAL_CFG         = '/home/artoo/r2d2/master/config/local.cfg'
 _DOME_ANGLES_FILE  = '/home/artoo/r2d2/master/config/dome_angles.json'
 _SLAVE_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
-_SLAVE_HOST        = 'artoo@192.168.4.171'
+
+
+def _slave_host() -> str:
+    """Read Slave host from local.cfg [slave] host — configurable per installation."""
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return 'artoo@' + cfg.get('slave', 'host', fallback='r2-slave.local')
 
 BODY_SERVOS = [f'Servo_S{i}' for i in range(16)]
 DOME_SERVOS = [f'Servo_M{i}' for i in range(16)]
@@ -183,7 +189,7 @@ def _sync_angles_json(panels: dict) -> None:
     try:
         _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
         scp_result = subprocess.run(
-            ['scp', _SLAVE_ANGLES_FILE, f'{_SLAVE_HOST}:{_SLAVE_ANGLES_FILE}'],
+            ['scp', _SLAVE_ANGLES_FILE, f'{_slave_host()}:{_SLAVE_ANGLES_FILE}'],
             timeout=5, check=False, capture_output=True,
         )
         if scp_result.returncode == 0:
