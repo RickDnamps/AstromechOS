@@ -1,6 +1,7 @@
 # R2-D2 Project — Claude Code Context
 
 > Hardware, câblage, alimentation, I2C/GPIO → **[ELECTRONICS.md](ELECTRONICS.md)**
+> Gotchas d'implémentation détaillés → `bd memories <keyword>` (camera, choreo, js, rp2040, admin, settings…)
 
 ---
 
@@ -266,62 +267,15 @@ SSH     artoo / deetoo
 | 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
 | 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
 | 4+++ | Choreo admin guard · Arms body-panel auto-dispatch · Settings sidebar refonte · Choreo toolbar/footer | ✅ |
-| 4++++ | Sequences tab redesign : catégories + emoji + pills/grid + drag-to-pill + loop + playing state · Choreo body servo inspector filtre les arm servos | ✅ |
-| 5 | Caméra USB stream ✅ (temp webcam) · caméra permanente commandée · suivi personne AI | 📋 |
+| 4++++ | Sequences tab redesign : catégories + emoji + pills/grid · Behavior engine ALIVE | ✅ |
+| 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
-**E-STOP :** toggle unique ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI uniquement — le raccourci clavier Space a été retiré.
-**Joystick throttle :** 60 req/s max (visuel immédiat, seuls les POST HTTP sont throttlés).
-**WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
-**Drive tab** : camera MJPEG proxy last-connect-wins · auto-reconnect après restart service · USB autodetect via sysfs · speed arc HUD · direction arrow HUD.
-**Caméra permanente commandée :** 3.6mm lens OTG UVC 720/1080P 30FPS, drive-free, Linux plug-and-play. Assez petite pour loger dans le holo projector. Sort du MJPEG hardware-compressé nativement → zéro charge CPU Pi 4B, autodetectée par le scan sysfs existant sans aucun changement de code.
-**Caméra — watchdog zombie :** `r2d2-camera.service` utilise `Restart=always`. `scripts/camera-start.sh` lance mjpg_streamer en background + boucle watchdog toutes les 5s qui kill le process si `/dev/videoN` disparaît. Sans ça, le thread input meurt silencieusement (select() timeout) mais le process principal reste zombie → pas de restart. Le service est mis à jour à chaque `update.sh` via `sudo tee`.
-**Caméra — fake-hwclock :** Le Pi 4B n'a pas de RTC. Au boot, l'horloge repart du dernier temps sauvegardé par `fake-hwclock` (souvent des semaines en arrière). `systemctl status` peut afficher "2 weeks ago" pour un service démarré ce matin — c'est normal, NTP corrige après connexion réseau.
-**VESC tab** : barres temp/current/duty · Power(W) · symétrie L/R · session peaks · fault log.
-**Header** : `#temp-label` min-width fixe — pas de layout shift sur changement de valeur.
+**E-STOP :** toggle ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI uniquement.
+**Joystick :** throttle 60 req/s · **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
+**Caméra :** MJPEG proxy last-connect-wins · `r2d2-camera.service` Restart=always + watchdog `/dev/videoN` dans `scripts/camera-start.sh`. (`bd memories camera` pour détails)
 
-**RP2040 flash (manuel) :**
-```bash
-python3 -m mpremote connect /dev/ttyACM1 rm :display.py
-python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/display.py :display.py
-```
-> ⚠️ Toujours `rm` avant `cp` — mpremote compare timestamps, pas contenu.
-> VERSION file : `update.sh` écrit toujours le hash git — si périmé → RP2040 affiche `SYNC FAILED`.
-
-**Admin inactivity :** tous les onglets trackés via `_activeTabId` (set dans `onTabSwitch()`) · `pointerdown` au lieu de `click` (Choreo editor bloque `click` via `preventDefault()`).
-
-**Choreo Admin Guard :**
-- Save / Delete / Export / Import → protégés par mot de pass admin
-- New / Play / Stop / Load → libres (pas de auth)
-- `_choreoUnlocked` flag de session : mis à `true` après première auth dans CHOREO tab, reset à `false` en quittant l'onglet
-- `adminGuard._pendingCallback` : callback stocké dans `showModal()`, exécuté dans `_unlock()` après auth réussie
-- `choreoEditor.save({ requireAuth: false })` — contourne la garde pour les auto-saves internes (ex: play sur fichier modifié)
-
-**Settings menu (iPad-style sidebar) :**
-12 panneaux : Bluetooth · Lock Mode · Arms · Calibration (ex-Servos) · VESC · Lights · Battery · Audio · Camera · Network · Deploy · System
-`switchSettingsPanel(panelId)` → lazy-load par panneau · `if (panelId === 'arms') armsConfig.load()`
-
-**Choreo toolbar layout :**
-- Dropdown + NEW + DELETE → groupe gauche
-- `chor-cmd-gap` (margin: 0 20px = 41px) entre DELETE et PLAY
-- Timecode + durée déplacés dans `chor-footer` (barre 26px en bas de la timeline)
-
-**Sequences tab (pills + grid layout) :**
-- `master/config/choreo_categories.json` — 6 catégories persistantes : `performance/emotion/behavior/dome/test/newchoreo`. Écriture atomique via `.tmp` + `os.replace()`.
-- `/choreo/list` retourne **objets** `{name, label, category, emoji, duration}` (plus des strings) — backward-compat dans le dropdown choreo editor via `n.name || n`.
-- `ScriptEngine` JS : `_renderPills()` (catégories) + `_renderGrid()` (cartes) + `_attachCardEvents()` + `_attachDrag()` + `_startRename()`.
-- **Loop mode :** `choreo_player.py` — `self._loop` flag, `play(loop=)` param, restart de `t_start`/`ev_idx` quand `t_now >= duration` dans `_run()`.
-- **Body servo inspector filtering :** `choreoEditor` — quand `armsConfig._count > 0`, les servo IDs de bras sont exclus du dropdown `body_servos`. Si count=0, tous les servos apparaissent.
-
-**Gotchas JS critiques :**
-- `.hidden` n'est PAS une classe utilitaire globale — seulement définie pour sélecteurs spécifiques. Utiliser `style.display` ou ajouter une règle CSS dédiée.
-- `setPointerCapture` dans `pointerdown` = casse tous les clicks enfants. Doit être appelé uniquement dans `pointermove` APRÈS le seuil de drag (8px).
-- `--teal` n'existait PAS dans `:root` (seulement `--cyan`). Ajouter une variable CSS custom nécessite de vérifier sa définition dans `:root`.
-- Quand git pull échoue sur le Pi (local changes non committées) → `git stash` puis pull.
-- `choreoEditor._pollTimer` (500ms `/choreo/status`) : stoppé via `choreoEditor._stopPolling()` dans `onTabSwitch()` quand `tabId !== 'choreo'`. Sans ça, le poll continue en background sur tous les autres onglets.
-
-**Backlog :** AstroPixels+ 17 séquences manquantes (bloqué hardware) · DiagnosticMonitor Teeces
-**Backlog futur :** AS5600 encoder I2C absolu magnétique pour position dôme (0–360° absolu, pas de dérive) · VESC safety lock si VESC absent/fault · IP Pi sur RP2040 LCD au boot
+**Backlog :** `bd list --status=open`
 
 ---
 
@@ -332,18 +286,8 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 **Drive blocks :** `vesc.drive(left,right)` discret aux timestamps. Pas de software ramping — VESC firmware gère accélération. `0,0` = stop explicite.
 **Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat`=25ms.
 **Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails → `GET /choreo/status` retourne `abort_reason`.
-**Loop :** `play(chor, loop=True)` → `self._loop=True` → en fin de sequence dans `_run()`, reset `t_start = time.monotonic()` et `ev_idx = 0` sans sortir du loop si `not self._stop_flag.is_set()`.
-
-**Arms — auto-dispatch panel body :**
-- `_ARM_PANEL_DELAY = 0.5` secondes entre panel open et arm extension (et entre arm close et panel close)
-- `_read_arm_panel_map()` lit `local.cfg [arms]` au début de chaque `_run()` → retourne `{arm_servo_id: panel_servo_id}`
-- Si bras a un panel associé : open arm → ouvre panel → attend 0.5s → ouvre bras. Close arm → ferme bras → attend 0.5s → ferme panel.
-- `threading.Timer` non-bloquant, daemon=True
-
-**Durée playback vs durée visuelle :**
-- `_calcTotalDuration()` = max(last_event_end + 2.0, 5.0) → canvas/ruler (padding visuel)
-- `_calcPlaybackDuration()` = max(last_event_end + 0.1, 1.0) → `meta.duration` envoyé au Pi
-- Pi s'arrête 100ms après le dernier event (plus les 2s de silence d'avant)
+**Loop :** `play(chor, loop=True)` → reset `t_start` + `ev_idx` en fin de séquence dans `_run()`.
+**Arms + durée :** `bd memories choreoplayer` pour les détails (panel delay, duration calc).
 
 ---
 
