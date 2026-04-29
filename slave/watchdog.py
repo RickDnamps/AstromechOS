@@ -88,15 +88,15 @@ class WatchdogController:
             time.sleep(CHECK_INTERVAL_S)
             with self._lock:
                 elapsed = time.monotonic() - self._last_heartbeat
-                already_triggered = self._triggered
+                should_trigger = elapsed > self._timeout and not self._triggered
+                if should_trigger:
+                    self._triggered = True
 
-            if elapsed > self._timeout and not already_triggered:
+            if should_trigger:
                 log.error(
                     f"WATCHDOG TRIGGERED: no heartbeat for {elapsed*1000:.0f}ms "
                     f"(threshold {self._timeout*1000:.0f}ms) — VESC CUTOFF"
                 )
-                with self._lock:
-                    self._triggered = True
                 for cb in self._stop_callbacks:
                     try:
                         cb()

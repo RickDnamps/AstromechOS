@@ -376,7 +376,12 @@ class VescDriver(BaseDriver):
                     self._ready = False
                     _fail_count = 0
             else:
-                _fail_count = 0   # reset on any successful read
+                if vr is None:
+                    _fail_count += 1
+                    if _fail_count >= _FAIL_THRESHOLD:
+                        log.warning("VescDriver: right VESC (CAN ID %d) not responding for %d cycles", VESC_ID_CAN, _fail_count)
+                else:
+                    _fail_count = 0
                 if self._uart:
                     self._uart.send('TL',
                         f"{vl['v_in']}:{vl['temp']}:{vl['current']}"

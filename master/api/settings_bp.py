@@ -104,19 +104,15 @@ def _read_fresh_cfg() -> configparser.ConfigParser:
 
 def _reload_lights_driver(backend: str) -> dict:
     """
-    Shuts down the current driver, loads the new one, updates reg.teeces.
+    Loads the new driver and, only on success, swaps it into reg.teeces.
+    The old driver is shut down after the swap to avoid a None window.
     Thread-safe via _lights_reload_lock (Flask runs with threaded=True).
     """
     import master.registry as reg
     from master.lights import load_driver
 
     with _lights_reload_lock:
-        if reg.teeces:
-            try:
-                reg.teeces.shutdown()
-            except Exception as e:
-                log.warning(f"Shutdown of previous lights driver: {e}")
-            reg.teeces = None   # guard during swap
+        old_driver = reg.teeces
 
         cfg = _read_fresh_cfg()
         try:
@@ -129,8 +125,15 @@ def _reload_lights_driver(backend: str) -> dict:
             log.error(f"Lights driver setup failed ({backend})")
             return {'ok': False, 'error': f"Setup {backend} failed (port unavailable?)"}
 
-        reg.teeces = new_driver
+        reg.teeces = new_driver   # atomic swap — no None window
         new_driver.random_mode()
+
+    # Shut down old driver AFTER lock released (avoids deadlock if shutdown is slow)
+    if old_driver:
+        try:
+            old_driver.shutdown()
+        except Exception as e:
+            log.warning(f"Shutdown of previous lights driver: {e}")
 
     log.info(f"Lights driver reloaded: {backend}")
     return {'ok': True}

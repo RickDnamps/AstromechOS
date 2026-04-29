@@ -68,6 +68,7 @@ import time
 log = logging.getLogger(__name__)
 
 SCRIPTS_DIR = os.path.join(os.path.dirname(__file__), 'sequences')
+_MAX_SCRIPT_DEPTH = 10
 LIGHT_DIR   = os.path.join(os.path.dirname(__file__), 'light_sequences')
 
 
@@ -459,13 +460,14 @@ class _ScriptRunner(threading.Thread):
             pass
         return count
 
-    def _run_file(self, path, stop_event: threading.Event) -> None:
+    def _run_file(self, path, stop_event: threading.Event, *, _depth: int = 0) -> None:
         """Execute all commands in a .scr file. Respects stop_event.
 
-        # WARNING: script,name commands are recursive. A→B→A causes infinite
-        # recursion until stop_event is set or Python stack limit is hit.
-        # Use the STOP button to break circular sub-sequences.
+        _depth tracks include nesting to guard against circular sub-sequences.
         """
+        if _depth > _MAX_SCRIPT_DEPTH:
+            log.error("Script '%s': max include depth %d exceeded — circular include?", path, _MAX_SCRIPT_DEPTH)
+            return
         self.step_total = self._count_steps(path)
         self.step_index = 0
         try:
@@ -485,7 +487,7 @@ class _ScriptRunner(threading.Thread):
                         sub_path = os.path.join(self._engine.sequences_dir,
                                                 f"{sub_name}.scr")
                         if os.path.isfile(sub_path):
-                            self._run_file(sub_path, stop_event)
+                            self._run_file(sub_path, stop_event, _depth=_depth + 1)
                         else:
                             log.warning(f"script: sub-sequence '{sub_name}' not found, skipping")
                         continue

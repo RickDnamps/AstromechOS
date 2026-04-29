@@ -196,6 +196,8 @@ def main() -> None:
     _rp2040_port = display.used_port
     _vesc_ports  = [p for p in ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
                     if p != _rp2040_port]
+    vesc = None
+    servo = None
     vesc = VescDriver(ports=_vesc_ports)
     if vesc.setup(uart=uart):
         uart.register_callback('M',       vesc.handle_uart)
@@ -302,8 +304,8 @@ def main() -> None:
         watchdog.stop()
         uart.stop()
         audio.shutdown()
-        if vesc.is_ready():  vesc.shutdown()
-        if servo.is_ready(): servo.shutdown()
+        if vesc  and vesc.is_ready():  vesc.shutdown()
+        if servo and servo.is_ready(): servo.shutdown()
         display.shutdown()
         log.info("Slave stopped cleanly")
         sys.exit(0)

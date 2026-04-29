@@ -182,12 +182,15 @@ def _sync_angles_json(panels: dict) -> None:
         log.warning("Failed to write dome_angles.json: %s", e)
     try:
         _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
-        subprocess.run(
+        scp_result = subprocess.run(
             ['scp', _SLAVE_ANGLES_FILE, f'{_SLAVE_HOST}:{_SLAVE_ANGLES_FILE}'],
             timeout=5, check=False, capture_output=True,
         )
-        if reg.uart:
-            reg.uart.send('SRV', 'RELOAD')
+        if scp_result.returncode == 0:
+            if reg.uart:
+                reg.uart.send('SRV', 'RELOAD')
+        else:
+            log.warning("SCP servo_angles.json to Slave failed (rc=%d) — Slave not reloaded", scp_result.returncode)
     except Exception as e:
         log.warning("Sync servo_angles.json to Slave failed: %s", e)
 

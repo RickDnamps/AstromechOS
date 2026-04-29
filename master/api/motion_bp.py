@@ -104,6 +104,8 @@ def arcade():
 
     if reg.vesc:
         reg.vesc.arcade_drive(throttle, steering)
+    elif reg.uart:
+        reg.uart.send('M', f'{left:.3f},{right:.3f}')
     return jsonify({'status': 'ok', 'throttle': throttle, 'steering': steering})
 
 
