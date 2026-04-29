@@ -171,6 +171,17 @@ class BehaviorEngine:
         """Send UART random audio command for idle reaction."""
         try:
             category = self._cfg.get('behavior', 'idle_audio_category', fallback='happy')
+            # Re-read excluded categories from disk so live config changes take effect
+            import configparser as _cp
+            _fresh = _cp.ConfigParser()
+            _local = os.path.join(os.path.dirname(__file__), 'config', 'local.cfg')
+            if os.path.exists(_local):
+                _fresh.read(_local)
+            _excluded_raw = _fresh.get('audio', 'excluded_categories', fallback='')
+            _excluded = {c.strip().lower() for c in _excluded_raw.split(',') if c.strip()}
+            if category in _excluded:
+                log.debug("ALIVE sounds: category %r excluded — skipping", category)
+                return
             if self._reg.uart:
                 self._reg.uart.send('S', f'RANDOM:{category}')
                 self._reg.audio_playing = True

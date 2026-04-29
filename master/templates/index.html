@@ -1292,6 +1292,51 @@
           <button class="btn btn-warn" onclick="saveAudioChannels()">APPLY + RESTART SERVICES</button>
           <div class="settings-status" id="audio-channels-status"></div>
         </section>
+
+        <!-- Volume Profiles -->
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">VOLUME PROFILES</h2>
+          <p class="settings-note">Save a volume level per environment. APPLY switches the volume instantly.</p>
+          <div class="profile-row">
+            <span class="profile-name">🏛 CONVENTION</span>
+            <input type="range" id="profile-convention-vol" min="0" max="100" value="70"
+                   class="volume-slider profile-vol-slider"
+                   oninput="el('profile-convention-val').textContent=this.value+'%'">
+            <span id="profile-convention-val" class="volume-label">70%</span>
+            <button class="btn btn-sm" onclick="soundProfiles.save('convention')">SAVE</button>
+            <button class="btn btn-sm" onclick="soundProfiles.apply('convention')">▶ APPLY</button>
+          </div>
+          <div class="profile-row">
+            <span class="profile-name">🏠 MAISON</span>
+            <input type="range" id="profile-maison-vol" min="0" max="100" value="85"
+                   class="volume-slider profile-vol-slider"
+                   oninput="el('profile-maison-val').textContent=this.value+'%'">
+            <span id="profile-maison-val" class="volume-label">85%</span>
+            <button class="btn btn-sm" onclick="soundProfiles.save('maison')">SAVE</button>
+            <button class="btn btn-sm" onclick="soundProfiles.apply('maison')">▶ APPLY</button>
+          </div>
+          <div class="profile-row">
+            <span class="profile-name">🌳 EXTÉRIEUR</span>
+            <input type="range" id="profile-exterieur-vol" min="0" max="100" value="95"
+                   class="volume-slider profile-vol-slider"
+                   oninput="el('profile-exterieur-val').textContent=this.value+'%'">
+            <span id="profile-exterieur-val" class="volume-label">95%</span>
+            <button class="btn btn-sm" onclick="soundProfiles.save('exterieur')">SAVE</button>
+            <button class="btn btn-sm" onclick="soundProfiles.apply('exterieur')">▶ APPLY</button>
+          </div>
+          <div class="settings-status" id="audio-profiles-status"></div>
+        </section>
+
+        <!-- Excluded Categories -->
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">EXCLUDED CATEGORIES</h2>
+          <p class="settings-note">Unchecked categories are skipped during random playback (ALIVE mode, behavior reactions).</p>
+          <div id="audio-excluded-cats" class="excluded-cats-grid">
+            <span style="color:var(--text-dim);font-size:11px">Loading…</span>
+          </div>
+          <button class="btn" onclick="saveExcludedCategories()" style="margin-top:10px">SAVE EXCLUSIONS</button>
+          <div class="settings-status" id="audio-excluded-status"></div>
+        </section>
       </div>
 
       <!-- 📷 Camera -->

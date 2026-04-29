@@ -454,7 +454,7 @@ function switchTab(tabId) {
   if (tabId !== 'settings') _stopVescTabPoll();
 
   // Reset choreo session unlock when leaving the choreo tab
-  if (tabId !== 'choreo') _choreoUnlocked = false;
+  if (tabId !== 'choreo') { _choreoUnlocked = false; choreoEditor._stopPolling(); }
 
   if (tabId === 'choreo') choreoEditor.init();
 }
@@ -475,6 +475,8 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'network') loadSettings();
   if (panelId === 'servos')  loadServoSettings();
   if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
+  if (panelId === 'behavior') behaviorPanel.load();
+  if (panelId === 'audio')   loadExcludedCategories();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -1270,13 +1272,164 @@ function domeStop()        { api('/motion/dome/stop', 'POST'); }
 function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on }); }
 
 // ================================================================
+// Behavior Engine — ALIVE toggle + Settings panel
+// ================================================================
+
+const behaviorPanel = (() => {
+  let _aliveOn    = false;
+  let _choreoList = [];
+
+  // ------------------------------------------------------------------
+  // ALIVE button (Drive tab)
+  // ------------------------------------------------------------------
+  function toggleAlive() {
+    _aliveOn = !_aliveOn;
+    _applyAliveBtn();
+    api('/behavior/alive', 'POST', { enabled: _aliveOn }).catch(() => {
+      _aliveOn = !_aliveOn;
+      _applyAliveBtn();
+    });
+  }
+
+  function _applyAliveBtn() {
+    const btn = el('alive-toggle-btn');
+    if (!btn) return;
+    btn.classList.toggle('alive-btn-on', _aliveOn);
+  }
+
+  // ------------------------------------------------------------------
+  // Settings panel
+  // ------------------------------------------------------------------
+  function load() {
+    api('/behavior/status').then(d => {
+      _aliveOn = d.alive_enabled;
+      _applyAliveBtn();
+
+      _setChk('beh-startup-enabled', d.startup_enabled);
+      _setVal('beh-startup-delay',   d.startup_delay);
+      _setChk('beh-alive-enabled',   d.alive_enabled);
+      _setVal('beh-idle-timeout',    d.idle_timeout_min);
+      _setChk('beh-dome-auto',       d.dome_auto_on_alive);
+
+      _choreoList = d.idle_choreo_list || [];
+
+      Promise.all([
+        api('/choreo/list'),
+        api('/audio/categories')
+      ]).then(([choreoData, audioData]) => {
+        const chorFiles = (Array.isArray(choreoData) ? choreoData : []).map(f => f.name || f);
+        _populateSel('beh-startup-choreo', chorFiles, d.startup_choreo);
+        _populateSel('beh-choreo-add-sel', chorFiles, null);
+
+        const cats = (audioData.categories || []).map(c => c.name || c);
+        _populateSel('beh-audio-category', cats, d.idle_audio_category);
+
+        _setSelVal('beh-idle-mode', d.idle_mode);
+        onModeChange();
+        _renderChoreoPills();
+      });
+    }).catch(() => {});
+  }
+
+  function onModeChange() {
+    const mode = _getSelVal('beh-idle-mode');
+    const showAudio  = mode === 'sounds' || mode === 'sounds_lights';
+    const showChoreo = mode === 'choreo';
+    _show('beh-audio-cat-row', showAudio);
+    _show('beh-choreo-row',    showChoreo);
+    // Dome auto-rotation is handled by choreos — disable when mode is choreo
+    const domeChk = el('beh-dome-auto');
+    if (domeChk) {
+      domeChk.disabled = showChoreo;
+      if (domeChk.parentElement) domeChk.parentElement.style.opacity = showChoreo ? '0.4' : '';
+    }
+  }
+
+  function addChoreo() {
+    const sel = el('beh-choreo-add-sel');
+    if (!sel || !sel.value) return;
+    const name = sel.value;
+    if (!_choreoList.includes(name)) {
+      _choreoList.push(name);
+      _renderChoreoPills();
+    }
+  }
+
+  function _renderChoreoPills() {
+    const container = el('beh-choreo-pills');
+    if (!container) return;
+    container.innerHTML = '';
+    _choreoList.forEach((name, idx) => {
+      const pill = document.createElement('span');
+      pill.className = 'beh-choreo-pill';
+      pill.innerHTML = `${name} <button class="beh-pill-remove" onclick="behaviorPanel._removeChoreo(${idx})">×</button>`;
+      container.appendChild(pill);
+    });
+  }
+
+  function _removeChoreo(idx) {
+    _choreoList.splice(idx, 1);
+    _renderChoreoPills();
+  }
+
+  function save() {
+    const payload = {
+      startup_enabled:     el('beh-startup-enabled')?.checked ?? false,
+      startup_delay:       parseInt(el('beh-startup-delay')?.value || '5', 10),
+      startup_choreo:      _getSelVal('beh-startup-choreo') || 'startup.chor',
+      alive_enabled:       el('beh-alive-enabled')?.checked ?? false,
+      idle_timeout_min:    parseInt(el('beh-idle-timeout')?.value || '10', 10),
+      idle_mode:           _getSelVal('beh-idle-mode') || 'choreo',
+      idle_audio_category: _getSelVal('beh-audio-category') || 'happy',
+      idle_choreo_list:    _choreoList,
+      dome_auto_on_alive:  el('beh-dome-auto')?.checked ?? true,
+    };
+    api('/behavior/config', 'POST', payload)
+      .then(() => _setStatus('beh-status', 'Saved', 'ok'))
+      .catch(() => _setStatus('beh-status', 'Error', 'err'));
+  }
+
+  // ------------------------------------------------------------------
+  // Private helpers
+  // ------------------------------------------------------------------
+  function _setChk(id, val)        { const e = el(id); if (e) e.checked = !!val; }
+  function _setVal(id, val)        { const e = el(id); if (e) e.value  = val; }
+  function _getSelVal(id)          { return el(id)?.value || ''; }
+  function _setSelVal(id, val)     { const e = el(id); if (e) e.value = val; }
+  function _show(id, visible)      { const e = el(id); if (e) e.style.display = visible ? '' : 'none'; }
+  function _setStatus(id, msg, cls) {
+    const e = el(id);
+    if (!e) return;
+    e.textContent = msg;
+    e.className = `settings-status settings-status-${cls}`;
+    setTimeout(() => { if (e) e.textContent = ''; }, 3000);
+  }
+  function _populateSel(id, items, selected) {
+    const sel = el(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item;
+      opt.textContent = item;
+      if (item === selected) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  }
+
+  return { toggleAlive, load, onModeChange, addChoreo, save, _removeChoreo, _applyAliveBtn };
+})();
+
+// ================================================================
 // Camera — last-connect-wins proxy via Flask /camera/*
 // ================================================================
 
-let _camToken     = null;
-let _camEnabled   = true;
-let _camPollTimer = null;
-let _camErrored   = false;   // true when img.onerror fires (mjpg_streamer down)
+let _camToken        = null;
+let _camEnabled      = true;
+let _camPollTimer    = null;
+let _camRefreshTimer = null;  // periodic stream refresh to prevent Chrome memory leak
+let _camResumeRetry  = null;  // retry interval after screen wake / tab return
+let _camErrored      = false; // true when img.onerror fires (mjpg_streamer down)
 
 function _camBase() {
   return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
@@ -1305,6 +1458,7 @@ async function _takeCameraStream() {
   if (bg) bg.style.display = 'none';
 
   _startCamPoll();
+  _startCamRefresh();
 }
 
 function _startCamPoll() {
@@ -1357,6 +1511,8 @@ function _toggleCamera() {
     _takeCameraStream();
   } else {
     clearInterval(_camPollTimer);
+    clearInterval(_camRefreshTimer);
+    clearInterval(_camResumeRetry);
     _camToken = null;
     if (img)   { img.src = ''; img.style.display = 'none'; }
     if (taken) taken.style.display = 'none';
@@ -1364,7 +1520,48 @@ function _toggleCamera() {
   }
 }
 
-function _initCameraStream() { _takeCameraStream(); }
+function _startCamRefresh() {
+  clearInterval(_camRefreshTimer);
+  // Restart the MJPEG connection every 5 minutes to prevent Chrome renderer memory accumulation
+  _camRefreshTimer = setInterval(() => {
+    if (_camEnabled && _camToken && !document.hidden) _takeCameraStream();
+  }, 5 * 60 * 1000);
+}
+
+function _initCameraStream() {
+  _takeCameraStream();
+}
+
+// Registered once — stops MJPEG stream when Chrome hides the tab/window
+// (prevents STATUS_BREAKPOINT renderer crash from memory accumulation).
+// On return, retries every 5s until stream is confirmed running.
+let _camVisibilityListenerAdded = false;
+function _initCamVisibilityHandler() {
+  if (_camVisibilityListenerAdded) return;
+  _camVisibilityListenerAdded = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!_camEnabled) return;
+    if (document.hidden) {
+      clearInterval(_camPollTimer);
+      clearInterval(_camRefreshTimer);
+      clearInterval(_camResumeRetry);
+      const img = el('cam-stream');
+      if (img) img.src = '';  // release MJPEG connection → free Chrome renderer memory
+      _camToken = null;
+    } else {
+      // Retry every 5s until _takeCameraStream succeeds (network may not be ready immediately after wake)
+      clearInterval(_camResumeRetry);
+      let attempts = 0;
+      const tryResume = () => {
+        if (_camToken) { clearInterval(_camResumeRetry); return; }
+        _takeCameraStream();
+        if (++attempts >= 12) clearInterval(_camResumeRetry); // give up after 1 minute
+      };
+      tryResume();  // immediate attempt
+      _camResumeRetry = setInterval(tryResume, 5000);
+    }
+  });
+}
 
 // ================================================================
 // Drive HUD — speed arc + direction arrow
@@ -3893,6 +4090,7 @@ async function loadSettings() {
     const inp = el('audio-channels');
     if (inp) inp.value = data.audio.channels ?? 6;
     _audioChannelsConfig = data.audio.channels ?? 6;
+    soundProfiles.populate(data.audio.profiles);
   }
 
   if (data.battery) {
@@ -3933,6 +4131,92 @@ async function saveAudioChannels() {
     }
   } else {
     toast('Failed to update audio channels', 'error');
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  }
+}
+
+// ─── Sound Profiles ───────────────────────────────────────────────────────────
+const soundProfiles = {
+  _NAMES: ['convention', 'maison', 'exterieur'],
+
+  populate(profiles) {
+    const defaults = { convention: 70, maison: 85, exterieur: 95 };
+    for (const name of this._NAMES) {
+      const vol = profiles?.[name] ?? defaults[name];
+      const slider = el(`profile-${name}-vol`);
+      const label  = el(`profile-${name}-val`);
+      if (slider) { slider.value = vol; }
+      if (label)  { label.textContent = vol + '%'; }
+    }
+  },
+
+  async save(name) {
+    const vol = parseInt(el(`profile-${name}-vol`)?.value) || 80;
+    const status = el('audio-profiles-status');
+    if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+    const d = await api('/settings/config', 'POST', { [`audio.profile_${name}`]: vol });
+    if (d?.status === 'ok') {
+      toast(`Profile ${name}: ${vol}% saved`, 'ok');
+      if (status) { status.textContent = `${name}: ${vol}% saved`; status.className = 'settings-status ok'; }
+    } else {
+      toast('Failed to save profile', 'error');
+      if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+    }
+  },
+
+  async apply(name) {
+    await this.save(name);
+    const d = await api('/settings/audio/profile/apply', 'POST', { profile: name });
+    if (d?.status === 'ok') {
+      const vol = d.volume;
+      const mainSlider = el('volume-slider');
+      const mainLabel  = el('volume-label');
+      if (mainSlider) { mainSlider.value = vol; }
+      if (mainLabel)  { mainLabel.textContent = vol + '%'; }
+      toast(`${name.charAt(0).toUpperCase() + name.slice(1)}: ${vol}% applied`, 'ok');
+    }
+  },
+};
+
+async function loadExcludedCategories() {
+  const container = el('audio-excluded-cats');
+  if (!container) return;
+  try {
+    const [catsData, settingsData] = await Promise.all([
+      api('/audio/categories'),
+      api('/settings'),
+    ]);
+    const cats     = catsData?.categories || [];
+    const excluded = new Set((settingsData?.audio?.excluded_categories || []).map(c => c.toLowerCase()));
+    soundProfiles.populate(settingsData?.audio?.profiles);
+    container.innerHTML = cats.map(c =>
+      `<label class="excluded-cat-item">` +
+      `<input type="checkbox" data-cat="${c.name}" ${excluded.has(c.name) ? '' : 'checked'}>` +
+      `<span>${c.name} (${c.count})</span>` +
+      `</label>`
+    ).join('');
+  } catch(e) {
+    const container2 = el('audio-excluded-cats');
+    if (container2) container2.innerHTML = '<span style="color:var(--red);font-size:11px">Failed to load categories</span>';
+  }
+}
+
+async function saveExcludedCategories() {
+  const container = el('audio-excluded-cats');
+  const status    = el('audio-excluded-status');
+  if (!container) return;
+  const checkboxes = container.querySelectorAll('input[type=checkbox]');
+  const excluded   = Array.from(checkboxes).filter(cb => !cb.checked).map(cb => cb.dataset.cat);
+  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+  const d = await api('/settings/config', 'POST', { 'audio.excluded_categories': excluded.join(',') });
+  if (d?.status === 'ok') {
+    toast(`Excluded categories saved (${excluded.length})`, 'ok');
+    if (status) {
+      status.textContent = excluded.length ? `Excluded: ${excluded.join(', ')}` : 'All categories active';
+      status.className = 'settings-status ok';
+    }
+  } else {
+    toast('Failed to save exclusions', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
 }
@@ -4301,6 +4585,14 @@ async function init() {
   // Refresh scripts periodically
   setInterval(() => scriptEngine.load(), 15000);
 
+  // Sync ALIVE button state from server
+  api('/behavior/status').then(d => {
+    if (d && typeof d.alive_enabled === 'boolean' && d.alive_enabled) {
+      const btn = el('alive-toggle-btn');
+      if (btn) btn.classList.add('alive-btn-on');
+    }
+  }).catch(() => {});
+
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -4309,6 +4601,7 @@ document.addEventListener('DOMContentLoaded', () => {
     s.addEventListener('input', () => syncHoloSlider(s));
     syncHoloSlider(s);
   });
+  _initCamVisibilityHandler();
   init();
 });
 
@@ -5386,7 +5679,12 @@ const choreoEditor = (() => {
         pool = configured.length ? configured : _servoList.filter(s => s.startsWith('Servo_S'));
       } else {
         const prefix   = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
-        const filtered = _servoList.filter(s => s.startsWith(prefix));
+        let filtered = _servoList.filter(s => s.startsWith(prefix));
+        if (track === 'body_servos' && armsConfig._count > 0) {
+          // Exclude servos configured as arms — only when at least 1 arm is configured
+          const armSet = new Set(armsConfig._servos.slice(0, armsConfig._count).filter(s => s));
+          if (armSet.size > 0) filtered = filtered.filter(s => !armSet.has(s));
+        }
         pool = filtered.length ? filtered : _servoList;
       }
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
@@ -6033,5 +6331,8 @@ const choreoEditor = (() => {
 
     // Returns true while a choreography is actively playing
     isPlaying: () => _pollTimer !== null,
+
+    // Stop the status poll — called by onTabSwitch when leaving the choreo tab
+    _stopPolling,
   };
 })();

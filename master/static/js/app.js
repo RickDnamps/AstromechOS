@@ -476,6 +476,7 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'servos')  loadServoSettings();
   if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
   if (panelId === 'behavior') behaviorPanel.load();
+  if (panelId === 'audio')   loadExcludedCategories();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -4089,6 +4090,7 @@ async function loadSettings() {
     const inp = el('audio-channels');
     if (inp) inp.value = data.audio.channels ?? 6;
     _audioChannelsConfig = data.audio.channels ?? 6;
+    soundProfiles.populate(data.audio.profiles);
   }
 
   if (data.battery) {
@@ -4129,6 +4131,92 @@ async function saveAudioChannels() {
     }
   } else {
     toast('Failed to update audio channels', 'error');
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  }
+}
+
+// ─── Sound Profiles ───────────────────────────────────────────────────────────
+const soundProfiles = {
+  _NAMES: ['convention', 'maison', 'exterieur'],
+
+  populate(profiles) {
+    const defaults = { convention: 70, maison: 85, exterieur: 95 };
+    for (const name of this._NAMES) {
+      const vol = profiles?.[name] ?? defaults[name];
+      const slider = el(`profile-${name}-vol`);
+      const label  = el(`profile-${name}-val`);
+      if (slider) { slider.value = vol; }
+      if (label)  { label.textContent = vol + '%'; }
+    }
+  },
+
+  async save(name) {
+    const vol = parseInt(el(`profile-${name}-vol`)?.value) || 80;
+    const status = el('audio-profiles-status');
+    if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+    const d = await api('/settings/config', 'POST', { [`audio.profile_${name}`]: vol });
+    if (d?.status === 'ok') {
+      toast(`Profile ${name}: ${vol}% saved`, 'ok');
+      if (status) { status.textContent = `${name}: ${vol}% saved`; status.className = 'settings-status ok'; }
+    } else {
+      toast('Failed to save profile', 'error');
+      if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+    }
+  },
+
+  async apply(name) {
+    await this.save(name);
+    const d = await api('/settings/audio/profile/apply', 'POST', { profile: name });
+    if (d?.status === 'ok') {
+      const vol = d.volume;
+      const mainSlider = el('volume-slider');
+      const mainLabel  = el('volume-label');
+      if (mainSlider) { mainSlider.value = vol; }
+      if (mainLabel)  { mainLabel.textContent = vol + '%'; }
+      toast(`${name.charAt(0).toUpperCase() + name.slice(1)}: ${vol}% applied`, 'ok');
+    }
+  },
+};
+
+async function loadExcludedCategories() {
+  const container = el('audio-excluded-cats');
+  if (!container) return;
+  try {
+    const [catsData, settingsData] = await Promise.all([
+      api('/audio/categories'),
+      api('/settings'),
+    ]);
+    const cats     = catsData?.categories || [];
+    const excluded = new Set((settingsData?.audio?.excluded_categories || []).map(c => c.toLowerCase()));
+    soundProfiles.populate(settingsData?.audio?.profiles);
+    container.innerHTML = cats.map(c =>
+      `<label class="excluded-cat-item">` +
+      `<input type="checkbox" data-cat="${c.name}" ${excluded.has(c.name) ? '' : 'checked'}>` +
+      `<span>${c.name} (${c.count})</span>` +
+      `</label>`
+    ).join('');
+  } catch(e) {
+    const container2 = el('audio-excluded-cats');
+    if (container2) container2.innerHTML = '<span style="color:var(--red);font-size:11px">Failed to load categories</span>';
+  }
+}
+
+async function saveExcludedCategories() {
+  const container = el('audio-excluded-cats');
+  const status    = el('audio-excluded-status');
+  if (!container) return;
+  const checkboxes = container.querySelectorAll('input[type=checkbox]');
+  const excluded   = Array.from(checkboxes).filter(cb => !cb.checked).map(cb => cb.dataset.cat);
+  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+  const d = await api('/settings/config', 'POST', { 'audio.excluded_categories': excluded.join(',') });
+  if (d?.status === 'ok') {
+    toast(`Excluded categories saved (${excluded.length})`, 'ok');
+    if (status) {
+      status.textContent = excluded.length ? `Excluded: ${excluded.join(', ')}` : 'All categories active';
+      status.className = 'settings-status ok';
+    }
+  } else {
+    toast('Failed to save exclusions', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
 }

@@ -80,6 +80,9 @@ def _schedule_audio_reset(duration_ms: int) -> None:
 _SOUNDS_DIR = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '..', '..', 'slave', 'sounds')
 )
+_LOCAL_CFG = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'config', 'local.cfg')
+)
 
 audio_bp = Blueprint('audio', __name__, url_prefix='/audio')
 
@@ -109,6 +112,16 @@ def _valid_sound(sound: str) -> bool:
 
 def _valid_category(cat: str) -> bool:
     return cat in _get_index().get('categories', {})
+
+
+def _get_excluded_categories() -> set[str]:
+    """Returns excluded audio categories from local.cfg (re-read each call for live config)."""
+    import configparser as _cp
+    cfg = _cp.ConfigParser()
+    if os.path.exists(_LOCAL_CFG):
+        cfg.read(_LOCAL_CFG)
+    raw = cfg.get('audio', 'excluded_categories', fallback='')
+    return {c.strip().lower() for c in raw.split(',') if c.strip()}
 
 
 @audio_bp.get('/categories')
@@ -166,6 +179,9 @@ def play_random():
     category = body.get('category', 'happy').strip().lower()
     if not _valid_category(category):
         return jsonify({'error': f'Unknown category: {category}'}), 404
+    if category in _get_excluded_categories():
+        log.debug("audio/random: category %r excluded — skipped", category)
+        return jsonify({'status': 'skipped', 'reason': 'excluded', 'category': category})
     if reg.uart:
         reg.uart.send('S', f'RANDOM:{category}')
     reg.audio_playing = True

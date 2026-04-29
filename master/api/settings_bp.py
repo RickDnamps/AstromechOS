@@ -57,6 +57,13 @@ HOTSPOT_CON  = 'r2d2-hotspot'
 # Helpers
 # =============================================================================
 
+def _safe_int(val: str, fallback: int) -> int:
+    try:
+        return max(0, min(100, int(val)))
+    except (ValueError, TypeError):
+        return fallback
+
+
 def _read_cfg() -> configparser.ConfigParser:
     cfg = configparser.ConfigParser()
     if os.path.exists(LOCAL_CFG):
@@ -236,6 +243,15 @@ def get_settings():
         },
         'audio': {
             'channels': cfg.getint('audio', 'audio_channels', fallback=6),
+            'profiles': {
+                'convention': _safe_int(cfg.get('audio', 'profile_convention', fallback='70'), 70),
+                'maison':     _safe_int(cfg.get('audio', 'profile_maison',     fallback='85'), 85),
+                'exterieur':  _safe_int(cfg.get('audio', 'profile_exterieur',  fallback='95'), 95),
+            },
+            'excluded_categories': [
+                c.strip() for c in cfg.get('audio', 'excluded_categories', fallback='').split(',')
+                if c.strip()
+            ],
         },
         'battery': {
             'cells': cfg.getint('battery', 'cells', fallback=4),
@@ -362,6 +378,8 @@ def set_config():
         'slave.host', 'deploy.button_pin',
         'lights.backend',
         'audio.channels',
+        'audio.profile_convention', 'audio.profile_maison', 'audio.profile_exterieur',
+        'audio.excluded_categories',
         'battery.cells',
     }
 
@@ -380,6 +398,24 @@ def set_config():
             log.warning("Invalid audio.channels value: %s", e)
 
     return jsonify({'status': 'ok', 'updated': updated})
+
+
+@settings_bp.post('/settings/audio/profile/apply')
+def apply_audio_profile():
+    """Applies a saved volume profile immediately. Body: {"profile": "convention"}"""
+    import master.registry as reg
+    data = request.get_json() or {}
+    name = data.get('profile', '').strip().lower()
+    _defaults = {'convention': 70, 'maison': 85, 'exterieur': 95}
+    if name not in _defaults:
+        return jsonify({'error': 'Unknown profile — use convention, maison, or exterieur'}), 400
+    cfg = _read_cfg()
+    vol = _safe_int(cfg.get('audio', f'profile_{name}', fallback=str(_defaults[name])), _defaults[name])
+    reg.audio_volume = vol
+    if reg.uart:
+        reg.uart.send('VOL', str(vol))
+    log.info("Audio profile applied: %s → %d%%", name, vol)
+    return jsonify({'status': 'ok', 'profile': name, 'volume': vol})
 
 
 def _get_admin_password() -> str:
