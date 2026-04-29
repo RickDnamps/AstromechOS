@@ -92,3 +92,50 @@ class TestAudioQueueWorker:
         assert '/fake/a.mp3' not in launched
         assert '/fake/b.mp3' not in launched
         d.shutdown()
+
+
+import json as _json
+
+
+class TestServoReload:
+    def test_dome_servo_reload(self, tmp_path):
+        import master.drivers.dome_servo_driver as mod
+        angles_file = tmp_path / 'dome_angles.json'
+        angles_file.write_text(_json.dumps({'Servo_M0': {'open': 90, 'close': 10, 'speed': 5}}))
+        mod.DOME_ANGLES_FILE = str(angles_file)
+
+        d = mod.DomeServoDriver()
+        d._angles = mod._load_dome_angles()
+        assert d._angles['Servo_M0']['open'] == 90
+
+        # Update file on disk
+        angles_file.write_text(_json.dumps({'Servo_M0': {'open': 130, 'close': 10, 'speed': 5}}))
+        d.reload()
+        assert d._angles['Servo_M0']['open'] == 130
+
+    def test_body_servo_reload(self, tmp_path):
+        import slave.drivers.body_servo_driver as mod
+        angles_file = tmp_path / 'servo_angles.json'
+        angles_file.write_text(_json.dumps({'Servo_S0': {'open': 80, 'close': 15, 'speed': 7}}))
+        mod.SERVO_ANGLES_FILE = str(angles_file)
+
+        d = mod.BodyServoDriver()
+        d._angles = mod._load_servo_angles()
+        assert d._angles['Servo_S0']['open'] == 80
+
+        angles_file.write_text(_json.dumps({'Servo_S0': {'open': 120, 'close': 15, 'speed': 7}}))
+        d.reload()
+        assert d._angles['Servo_S0']['open'] == 120
+
+    def test_body_servo_uart_reload_command(self, tmp_path):
+        import slave.drivers.body_servo_driver as mod
+        angles_file = tmp_path / 'servo_angles.json'
+        angles_file.write_text(_json.dumps({'Servo_S0': {'open': 60, 'close': 10, 'speed': 5}}))
+        mod.SERVO_ANGLES_FILE = str(angles_file)
+
+        d = mod.BodyServoDriver()
+        d._angles = {'Servo_S0': {'open': 60, 'close': 10, 'speed': 5}}
+
+        angles_file.write_text(_json.dumps({'Servo_S0': {'open': 150, 'close': 10, 'speed': 5}}))
+        d.handle_uart('RELOAD')
+        assert d._angles['Servo_S0']['open'] == 150

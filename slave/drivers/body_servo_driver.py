@@ -154,6 +154,11 @@ class BodyServoDriver(BaseDriver):
     def is_ready(self) -> bool:
         return self._ready
 
+    def reload(self) -> None:
+        """Reloads calibrated angles from servo_angles.json without restarting the driver."""
+        self._angles = _load_servo_angles()
+        log.info("BodyServoDriver: angles reloaded from disk (%d entries)", len(self._angles))
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -198,7 +203,10 @@ class BodyServoDriver(BaseDriver):
         for t in threads: t.join()
 
     def handle_uart(self, value: str) -> None:
-        """Callback UART — SRV:NAME,ANGLE_DEG[,SPEED]"""
+        """Callback UART — SRV:NAME,ANGLE_DEG[,SPEED] or SRV:RELOAD"""
+        if value == 'RELOAD':
+            self.reload()
+            return
         try:
             parts = value.split(',')
             speed = int(parts[2]) if len(parts) >= 3 else 10

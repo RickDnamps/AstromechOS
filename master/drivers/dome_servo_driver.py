@@ -155,6 +155,11 @@ class DomeServoDriver(BaseDriver):
     def is_ready(self) -> bool:
         return self._ready
 
+    def reload(self) -> None:
+        """Reloads calibrated angles from dome_angles.json without restarting the driver."""
+        self._angles = _load_dome_angles()
+        log.info("DomeServoDriver: angles reloaded from disk (%d entries)", len(self._angles))
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

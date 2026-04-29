@@ -169,11 +169,15 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
 
 
 def _sync_angles_json(panels: dict) -> None:
-    """Writes dome_angles.json (Master) and servo_angles.json (Slave via scp)."""
+    """Writes dome_angles.json (Master) and servo_angles.json (Slave via scp).
+    Notifies both drivers to reload angles immediately — no service restart needed.
+    """
     import logging
     log = logging.getLogger(__name__)
     try:
         _update_angles_file(_DOME_ANGLES_FILE, panels, DOME_SERVOS)
+        if reg.dome_servo and reg.dome_servo.is_ready():
+            reg.dome_servo.reload()
     except Exception as e:
         log.warning("Failed to write dome_angles.json: %s", e)
     try:
@@ -182,6 +186,8 @@ def _sync_angles_json(panels: dict) -> None:
             ['scp', _SLAVE_ANGLES_FILE, f'{_SLAVE_HOST}:{_SLAVE_ANGLES_FILE}'],
             timeout=5, check=False, capture_output=True,
         )
+        if reg.uart:
+            reg.uart.send('SRV', 'RELOAD')
     except Exception as e:
         log.warning("Sync servo_angles.json to Slave failed: %s", e)
 
