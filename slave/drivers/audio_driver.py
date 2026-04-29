@@ -48,6 +48,7 @@ Prerequisite: sudo apt install -y mpg123
 import json
 import logging
 import os
+import queue
 import random
 import subprocess
 import sys
@@ -69,6 +70,7 @@ class AudioDriver(BaseDriver):
         self._channels = channels
         self._procs: list[subprocess.Popen | None] = [None] * channels
         self._lock = threading.Lock()
+        self._launch_q: queue.Queue = queue.Queue()
         self._ready = False
 
     # ------------------------------------------------------------------
@@ -86,14 +88,21 @@ class AudioDriver(BaseDriver):
             total = sum(len(v) for v in self._index.values())
             log.info(f"AudioDriver ready — {total} sounds in {len(self._index)} categories")
             self._ready = True
+            threading.Thread(target=self._launch_worker, name="audio-launch", daemon=True).start()
             return True
         except Exception as e:
             log.error(f"Error loading sounds_index.json: {e}")
             return False
 
     def shutdown(self) -> None:
-        self.stop()   # stops all channels
         self._ready = False
+        # Drain queue so the worker exits on its next timeout
+        while not self._launch_q.empty():
+            try:
+                self._launch_q.get_nowait()
+            except queue.Empty:
+                break
+        self.stop()
 
     def is_ready(self) -> bool:
         return self._ready
@@ -127,15 +136,28 @@ class AudioDriver(BaseDriver):
         return self.play(filename, channel, volume)
 
     def stop(self, channel: int | None = None) -> None:
-        """Stops channel N, or all channels (channel=None)."""
-        channels = list(range(self._channels)) if channel is None else [channel]
+        """Stops channel N, or all channels (channel=None).
+        Also drains any pending launches for the stopped channels from the queue.
+        """
+        channels = set(range(self._channels)) if channel is None else {channel}
+        # Drain queued-but-unstarted launches for these channels
+        kept = []
+        while True:
+            try:
+                kept.append(self._launch_q.get_nowait())
+            except queue.Empty:
+                break
+        for item in kept:
+            if item[0] not in channels:
+                self._launch_q.put(item)
+        # Terminate running processes
         with self._lock:
             for ch in channels:
                 if 0 <= ch < len(self._procs):
                     proc = self._procs[ch]
                     if proc and proc.poll() is None:
                         proc.terminate()
-                        log.debug(f"Sound stopped (ch{ch})")
+                        log.debug("Sound stopped (ch%d)", ch)
                     self._procs[ch] = None
 
     def set_volume(self, volume: int) -> None:
@@ -206,21 +228,33 @@ class AudioDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def _launch(self, path: str, channel: int = 0, volume: int = 100) -> None:
-        """Launches mpg123 on the given channel at the given volume (0-100), independent of ALSA."""
+        """Enqueues a play request. Returns immediately — Popen happens in worker thread."""
         scale = int(max(0, min(100, volume)) / 100 * 32768)
-        with self._lock:
-            proc = self._procs[channel] if 0 <= channel < len(self._procs) else None
-            if proc and proc.poll() is None:
-                proc.terminate()
+        self._launch_q.put((channel, path, scale))
+        log.info("Audio ch%d vol%d%% queued: %s", channel, volume, os.path.basename(path))
+
+    def _launch_worker(self) -> None:
+        """Worker thread: consumes the launch queue and calls subprocess.Popen.
+        Runs as a daemon thread — never blocks the UART reader thread.
+        """
+        while self._ready or not self._launch_q.empty():
             try:
-                new_proc = subprocess.Popen(
-                    ['mpg123', '-q', '-f', str(scale), path],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                self._procs[channel] = new_proc
-                log.info(f"Audio ch{channel} vol{volume}%: {os.path.basename(path)}")
-            except FileNotFoundError:
-                log.error("mpg123 not found — sudo apt install -y mpg123")
-            except Exception as e:
-                log.error(f"Audio launch error (ch{channel}): {e}")
+                channel, path, scale = self._launch_q.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            with self._lock:
+                proc = self._procs[channel] if 0 <= channel < len(self._procs) else None
+                if proc and proc.poll() is None:
+                    proc.terminate()
+                try:
+                    new_proc = subprocess.Popen(
+                        ['mpg123', '-q', '-f', str(scale), path],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    self._procs[channel] = new_proc
+                    log.info("Audio ch%d: %s", channel, os.path.basename(path))
+                except FileNotFoundError:
+                    log.error("mpg123 not found — sudo apt install -y mpg123")
+                except Exception as e:
+                    log.error("Audio launch error (ch%d): %s", channel, e)
