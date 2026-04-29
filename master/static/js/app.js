@@ -454,7 +454,7 @@ function switchTab(tabId) {
   if (tabId !== 'settings') _stopVescTabPoll();
 
   // Reset choreo session unlock when leaving the choreo tab
-  if (tabId !== 'choreo') _choreoUnlocked = false;
+  if (tabId !== 'choreo') { _choreoUnlocked = false; choreoEditor._stopPolling(); }
 
   if (tabId === 'choreo') choreoEditor.init();
 }
@@ -6243,5 +6243,8 @@ const choreoEditor = (() => {
 
     // Returns true while a choreography is actively playing
     isPlaying: () => _pollTimer !== null,
+
+    // Stop the status poll — called by onTabSwitch when leaving the choreo tab
+    _stopPolling,
   };
 })();
