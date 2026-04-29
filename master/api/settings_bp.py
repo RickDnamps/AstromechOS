@@ -43,6 +43,7 @@ import logging
 import os
 import subprocess
 from flask import Blueprint, request, jsonify
+from master.config.config_loader import write_cfg_atomic
 
 settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
@@ -69,8 +70,7 @@ def _write_key(section: str, key: str, value: str) -> None:
     if not cfg.has_section(section):
         cfg.add_section(section)
     cfg.set(section, key, value)
-    with open(LOCAL_CFG, 'w', encoding='utf-8') as f:
-        cfg.write(f)
+    write_cfg_atomic(cfg, LOCAL_CFG)
 
 
 def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:

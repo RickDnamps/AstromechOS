@@ -42,6 +42,7 @@ import configparser
 import os
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+from master.config.config_loader import write_cfg_atomic
 
 _LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
 
@@ -55,8 +56,7 @@ def _save_vesc_cfg(**kwargs) -> None:
         cfg.add_section('vesc')
     for k, v in kwargs.items():
         cfg.set('vesc', k, str(v))
-    with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
-        cfg.write(f)
+    write_cfg_atomic(cfg, _LOCAL_CFG)
 
 vesc_bp = Blueprint('vesc', __name__, url_prefix='/vesc')
 

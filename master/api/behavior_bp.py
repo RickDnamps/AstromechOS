@@ -40,6 +40,7 @@ import time
 import configparser
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+from master.config.config_loader import write_cfg_atomic
 
 log = logging.getLogger(__name__)
 
@@ -116,8 +117,7 @@ def save_config():
 
     try:
         cfg_path = os.path.normpath(_CFG_PATH)
-        with open(cfg_path, 'w', encoding='utf-8') as f:
-            parser.write(f)
+        write_cfg_atomic(parser, cfg_path)
         # Update in-memory config on the engine if available
         be = reg.behavior_engine
         if be:

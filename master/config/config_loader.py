@@ -88,3 +88,15 @@ def get_github_branch(cfg: configparser.ConfigParser) -> str:
 
 def is_auto_pull_enabled(cfg: configparser.ConfigParser) -> bool:
     return cfg.getboolean('github', 'auto_pull_on_boot', fallback=True)
+
+
+def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
+    """Writes cfg to path atomically using a .tmp file + os.replace().
+    If the process crashes between write and replace, the original file
+    is untouched. os.replace() is atomic on POSIX (rename syscall).
+    """
+    tmp = path + '.tmp'
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(tmp, 'w', encoding='utf-8') as f:
+        cfg.write(f)
+    os.replace(tmp, path)

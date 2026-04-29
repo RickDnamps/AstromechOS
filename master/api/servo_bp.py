@@ -70,6 +70,7 @@ import subprocess
 
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+from master.config.config_loader import write_cfg_atomic
 
 servo_bp = Blueprint('servo', __name__, url_prefix='/servo')
 
@@ -407,8 +408,7 @@ def arms_config_save():
         cfg.set('arms', f'arm_{i}',   raw_servo if raw_servo in BODY_SERVOS else '')
         cfg.set('arms', f'panel_{i}', raw_panel if raw_panel in BODY_SERVOS else '')
     os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
-    with open(_LOCAL_CFG, 'w') as f:
-        cfg.write(f)
+    write_cfg_atomic(cfg, _LOCAL_CFG)
     import logging; logging.getLogger(__name__).info("Arms config saved: count=%d servos=%s panels=%s", count, servos, panels)
     return jsonify({'status': 'ok', **_read_arms_cfg()})
 
