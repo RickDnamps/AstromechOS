@@ -349,6 +349,17 @@ python3 -m mpremote connect /dev/ttyACM1 cp /home/artoo/r2d2/rp2040/firmware/dis
 All new code → **English** comments/docstrings/logs. Existing French acceptable in untouched files.
 Commits : `Feat:` · `Fix:` · `Config:` · `Docs:` · `Refactor:` · `ci:`
 
+**⚠️ NEVER hardcode installation-specific values** (IPs, hostnames, ports) in Python source.
+Always read from `local.cfg` via `configparser`. Pattern used everywhere:
+```python
+cfg = configparser.ConfigParser()
+cfg.read([MAIN_CFG, LOCAL_CFG])
+host = cfg.get('slave', 'host', fallback='r2-slave.local')
+```
+> The mDNS `.local` caveat in the network section applies to the **dev Windows PC → Pi** path.
+> Pi-to-Pi (Master → Slave) uses `.local` OR the configured IP — never a hardcoded literal.
+> Incident: `servo_bp` had `artoo@192.168.4.171` hardcoded → broke all other installations.
+
 ---
 
 ## 🐙 GitHub & Déploiement
