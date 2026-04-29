@@ -6,8 +6,9 @@
 # Resolution/FPS/quality are read from master/config/camera.env (written by the
 # web dashboard Config tab). Defaults: 640x480 / 30fps / quality 80.
 #
-# Watchdog: monitors the detected device every 5s. If it disappears, mjpg_streamer
-# is killed so systemd (Restart=always) restarts the service and re-runs autodetect.
+# Watchdog monitors two failure modes every 5s:
+#   1. Device file disappears (USB unplug) → kill & let systemd restart
+#   2. Stream stale (select() timeout zombie) → HTTP snapshot check, kill after 15s
 
 ENV_FILE="/home/artoo/r2d2/master/config/camera.env"
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
@@ -41,13 +42,28 @@ logger -t r2d2-camera "Settings: ${CAMERA_RESOLUTION} @ ${CAMERA_FPS}fps q${CAME
     -o "/usr/local/lib/mjpg-streamer/output_http.so -p 8080 -w /usr/local/share/mjpg-streamer/www" &
 MPID=$!
 
-# Watchdog: if the detected device disappears, kill the streamer.
-# mjpg_streamer's input thread may die silently without exiting the process.
+# Watchdog: two checks every 5s.
+# 1) Device file gone → immediate kill (USB disconnect).
+# 2) HTTP snapshot failing → stream is zombie. Kill after MAX_STALE seconds.
+LAST_OK=$(date +%s)
+MAX_STALE=15
+
 while kill -0 $MPID 2>/dev/null; do
     if [ ! -e "$CAM_DEV" ]; then
         logger -t r2d2-camera "Device $CAM_DEV disappeared — stopping streamer for restart"
         kill $MPID
         break
+    fi
+    if curl -sf --max-time 2 "http://localhost:8080/?action=snapshot" > /dev/null 2>&1; then
+        LAST_OK=$(date +%s)
+    else
+        NOW=$(date +%s)
+        STALE=$((NOW - LAST_OK))
+        if [ "$STALE" -ge "$MAX_STALE" ]; then
+            logger -t r2d2-camera "Stream stale for ${STALE}s — stopping streamer for restart"
+            kill $MPID
+            break
+        fi
     fi
     sleep 5
 done
