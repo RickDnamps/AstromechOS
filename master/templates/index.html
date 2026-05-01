@@ -803,18 +803,18 @@
 
     <!-- Sidebar -->
     <nav class="settings-sidebar">
-      <button class="settings-nav-item active" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 Bluetooth</button>
-      <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
-      <button class="settings-nav-item" data-panel="arms"      onclick="switchSettingsPanel('arms')">🦾 Arms</button>
-      <button class="settings-nav-item" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
-      <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
+      <button class="settings-nav-item active" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
+      <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
+      <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 Bluetooth</button>
+      <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
+      <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
+      <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
+      <button class="settings-nav-item" data-panel="arms"      onclick="switchSettingsPanel('arms')">🦾 Arms</button>
+      <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
       <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
-      <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
-      <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
-      <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
-      <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
+      <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
       <button class="settings-nav-item" data-panel="system"    onclick="switchSettingsPanel('system')">🖥️ System</button>
     </nav>
 
@@ -822,7 +822,7 @@
     <div class="settings-content">
 
       <!-- 🎮 Bluetooth -->
-      <div class="settings-panel active" id="spanel-bluetooth">
+      <div class="settings-panel" id="spanel-bluetooth">
         <section class="card settings-card">
           <h2 class="card-title">BLUETOOTH CONTROLLER</h2>
           <div class="bt-status-row">
@@ -1004,7 +1004,7 @@
       </div>
 
       <!-- 🤖 Behavior -->
-      <div class="settings-panel" id="spanel-behavior">
+      <div class="settings-panel active" id="spanel-behavior">
         <section class="card settings-card">
           <h2 class="card-title">STARTUP SEQUENCE</h2>
           <div class="form-group" style="display:flex;align-items:center;gap:12px">

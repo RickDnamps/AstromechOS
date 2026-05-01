@@ -441,9 +441,10 @@ function switchTab(tabId) {
     loadSettings();
     loadServoSettings();
     armsConfig.load();
+    behaviorPanel.load();
     // Activate first sidebar item if none selected yet
     if (!document.querySelector('.settings-nav-item.active')) {
-      switchSettingsPanel('bluetooth');
+      switchSettingsPanel('behavior');
     }
   }
   if (tabId === 'sequences') loadScripts();
