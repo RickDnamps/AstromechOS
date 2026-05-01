@@ -248,10 +248,6 @@ def get_settings():
                 'maison':     _safe_int(cfg.get('audio', 'profile_maison',     fallback='85'), 85),
                 'exterieur':  _safe_int(cfg.get('audio', 'profile_exterieur',  fallback='95'), 95),
             },
-            'excluded_categories': [
-                c.strip() for c in cfg.get('audio', 'excluded_categories', fallback='').split(',')
-                if c.strip()
-            ],
         },
         'battery': {
             'cells': cfg.getint('battery', 'cells', fallback=4),
@@ -379,7 +375,6 @@ def set_config():
         'lights.backend',
         'audio.channels',
         'audio.profile_convention', 'audio.profile_maison', 'audio.profile_exterieur',
-        'audio.excluded_categories',
         'battery.cells',
     }
 

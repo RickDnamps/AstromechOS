@@ -3180,24 +3180,6 @@ select.input-text option { background: #0a1525; }
 }
 .profile-vol-slider { flex: 1; }
 
-/* Audio Settings — excluded categories grid */
-.excluded-cats-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  margin: 8px 0;
-}
-.excluded-cat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-.excluded-cat-item input[type=checkbox] { cursor: pointer; }
 
 /* Arms config — two dropdowns side by side per arm */
 .arms-row {
