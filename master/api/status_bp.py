@@ -42,6 +42,7 @@ import datetime
 import os
 import subprocess
 import threading
+import time as _time
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.app_watchdog import app_watchdog
@@ -74,6 +75,17 @@ def _cpu_temp() -> float | None:
             return round(int(f.read().strip()) / 1000, 1)
     except Exception:
         return None
+
+
+def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
+    """True = drive allowed for this VESC side.
+    None = no hardware (testing mode) → allow.
+    Stale (>max_age s) or fault ≠ 0 → block."""
+    if telem is None:
+        return True
+    if _time.time() - telem.get('ts', 0) > max_age:
+        return False
+    return telem.get('fault', 0) == 0
 
 
 @status_bp.get('/status')
@@ -121,6 +133,9 @@ def get_status():
         'lock_mode':         reg.lock_mode,
         'estop_active':      reg.estop_active,
         'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
+        'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
+        'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
+        'vesc_drive_safe':   _vesc_side_ok(reg.vesc_telem.get('L')) and _vesc_side_ok(reg.vesc_telem.get('R')),
         **bt_status,
     })
 

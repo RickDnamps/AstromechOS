@@ -1644,11 +1644,28 @@ function estopReset() {
 }
 
 // Left joystick — Propulsion (arcade drive)
+let _vescDriveSafe = true;
+
+function _applyVescSafetyLock(safe, lOk, rOk) {
+  _vescDriveSafe = safe;
+  const banner = el('vesc-safety-banner');
+  const msg    = el('vesc-safety-msg');
+  if (!banner) return;
+  if (safe) {
+    banner.style.display = 'none';
+  } else {
+    const who = (!lOk && !rOk) ? 'L+R OFFLINE' : (!lOk ? 'L OFFLINE' : 'R OFFLINE');
+    if (msg) msg.textContent = `DRIVE BLOCKED — VESC ${who}`;
+    banner.style.display = '';
+  }
+}
+
 let _leftActive = false;
 const jsLeft = new VirtualJoystick(
   'js-left-ring', 'js-left-knob',
   (x, y) => {
     if (lockMgr.isDriveLocked()) return;   // Child Lock : joystick gauche bloqué
+    if (!_vescDriveSafe) return;           // VESC offline/fault
     _leftActive = true;
     const throttle = -y * _speedLimit;
     const steering =  x * _speedLimit * 0.55;
@@ -2772,6 +2789,11 @@ const vescTest = {
   },
 
   _tick() {
+    if (!_vescDriveSafe) {
+      this._updateBars(0, 0);
+      this._setStatus('BLOCKED', 'err');
+      return;
+    }
     const fwd   = this._keys['w'];
     const back  = this._keys['s'];
     const left  = this._keys['a'];
@@ -3915,6 +3937,13 @@ class StatusPoller {
     if (data.lock_mode !== undefined) {
       lockMgr.syncFromStatus(data.lock_mode);
     }
+
+    // VESC safety lock
+    _applyVescSafetyLock(
+      data.vesc_drive_safe !== false,
+      data.vesc_l_ok !== false,
+      data.vesc_r_ok !== false,
+    );
 
     // Teeces / lights state
     if (data.teeces_mode) {

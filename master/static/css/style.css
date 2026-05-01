@@ -393,6 +393,19 @@ body[data-lock-mode="1"] .drive-lock-btn:hover { box-shadow: 0 0 10px rgba(255,1
 body[data-lock-mode="2"] .drive-lock-btn { color: var(--red); border-color: var(--red); }
 body[data-lock-mode="2"] .drive-lock-btn:hover { box-shadow: 0 0 12px rgba(220,50,50,0.5); }
 
+.vesc-safety-banner {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(220,50,50,0.15); border: 1px solid var(--red);
+  border-radius: 6px; padding: 8px 14px; margin: 0 0 10px 0;
+  color: var(--red); font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  animation: vesc-banner-pulse 2s ease-in-out infinite;
+}
+.vesc-safety-icon { font-size: 16px; }
+@keyframes vesc-banner-pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.6; }
+}
+
 .drive-lock-label {
   font-family: var(--font);
   font-size: 9px;

@@ -369,6 +369,8 @@ class BTControllerDriver:
                     continue
                 if getattr(reg, 'lock_mode', 0) == 2:
                     continue
+                if self._is_vesc_unsafe(reg):
+                    continue
                 # Keep-alive for propulsion
                 if self._drive_active:
                     left, right = self._last_drive
@@ -438,6 +440,13 @@ class BTControllerDriver:
         """Compute and send drive command from current axes."""
         # Child Lock — block propulsion
         if getattr(reg, 'lock_mode', 0) == 2:
+            if self._drive_active:
+                self._do_stop(reg)
+                self._drive_active = False
+            return
+
+        # VESC safety — block if any VESC is stale or faulted
+        if self._is_vesc_unsafe(reg):
             if self._drive_active:
                 self._do_stop(reg)
                 self._drive_active = False
@@ -586,6 +595,20 @@ class BTControllerDriver:
     # ------------------------------------------------------------------
     # Motion helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_vesc_unsafe(reg) -> bool:
+        """True = at least one VESC side has stale (>2s) or faulted telemetry.
+        None telem = no VESC hardware (testing mode) → safe."""
+        for side in ('L', 'R'):
+            t = getattr(reg, 'vesc_telem', {}).get(side)
+            if t is None:
+                continue
+            if time.time() - t.get('ts', 0) > 2.0:
+                return True
+            if t.get('fault', 0) != 0:
+                return True
+        return False
 
     def _do_drive(self, left: float, right: float, reg) -> None:
         from master.motion_watchdog import motion_watchdog

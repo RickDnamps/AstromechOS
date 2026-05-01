@@ -219,6 +219,12 @@
 ================================================================ -->
 <div class="tab-content active" id="tab-drive">
 
+  <!-- VESC safety banner — shown when drive is blocked -->
+  <div id="vesc-safety-banner" class="vesc-safety-banner" style="display:none">
+    <span class="vesc-safety-icon">⚠</span>
+    <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
+  </div>
+
   <!-- Lock button — top-left of Drive tab -->
   <button id="drive-lock-btn" class="drive-lock-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
     <svg class="lock-svg lock-open" width="21" height="24" viewBox="0 0 14 16">
