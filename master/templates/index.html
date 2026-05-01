@@ -76,6 +76,7 @@
       <span id="pill-bt-label">BT</span>
     </div>
     <div class="status-pill" id="pill-version">v?</div>
+    <button id="cockpit-btn" class="cockpit-btn" onclick="cockpitPanel.toggle()" title="System status overview">&#x2B21; STATUS &#x25BC;</button>
   </div>
 
   <div class="topbar-right">
@@ -94,6 +95,59 @@
     <span id="uptime-label" class="uptime-label">up --:--</span>
   </div>
 </header>
+
+<!-- Cockpit Status Panel — fixed overlay below header -->
+<div id="cockpit-panel" class="cockpit-panel">
+  <div class="cockpit-inner">
+
+    <div>
+      <div class="cockpit-section-title">VITAUX</div>
+      <div class="cockpit-vitals">
+        <div class="cockpit-card" id="ck-battery">
+          <div class="cockpit-card-lbl">BATTERIE</div>
+          <div class="cockpit-card-val" id="ck-battery-v">--V</div>
+          <div class="cockpit-card-sub" id="ck-battery-pct">--%</div>
+        </div>
+        <div class="cockpit-card" id="ck-vesc">
+          <div class="cockpit-card-lbl">VESC L / R</div>
+          <div class="cockpit-card-val" id="ck-vesc-l">--&deg;C</div>
+          <div class="cockpit-card-sub" id="ck-vesc-r">--&deg;C</div>
+        </div>
+        <div class="cockpit-card" id="ck-pi">
+          <div class="cockpit-card-lbl">PI TEMP</div>
+          <div class="cockpit-card-val" id="ck-pi-temp">--&deg;C</div>
+          <div class="cockpit-card-sub" id="ck-pi-hint"></div>
+        </div>
+        <div class="cockpit-card">
+          <div class="cockpit-card-lbl">UPTIME</div>
+          <div class="cockpit-card-val" id="ck-uptime" style="font-size:13px">--</div>
+          <div class="cockpit-card-sub" id="ck-version">v?</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cockpit-cols">
+      <div>
+        <div class="cockpit-section-title">SERVICES</div>
+        <div id="ck-services"></div>
+      </div>
+      <div>
+        <div class="cockpit-section-title">ACTIVIT&Eacute;</div>
+        <div id="ck-activity"></div>
+        <div class="cockpit-section-title" style="margin-top:8px">R&Eacute;SEAU</div>
+        <div id="ck-network"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="cockpit-section-title">ALERTES</div>
+      <div class="cockpit-alerts" id="ck-alerts">
+        <span class="cockpit-alert ok">&#x2713; En attente de donn&eacute;es...</span>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <div class="lock-mode-bar"></div>
 

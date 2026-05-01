@@ -3865,6 +3865,189 @@ function setSpeedMode(mode) {
 }
 
 // ================================================================
+// Cockpit Status Panel
+// ================================================================
+
+const cockpitPanel = {
+  isOpen: false,
+
+  toggle() {
+    this.isOpen = !this.isOpen;
+    const panel = el('cockpit-panel');
+    const btn   = el('cockpit-btn');
+    if (panel) panel.classList.toggle('open', this.isOpen);
+    if (btn)   btn.innerHTML = `&#x2B21; STATUS ${this.isOpen ? '&#x25B2;' : '&#x25BC;'}`;
+    if (this.isOpen) this._refreshNow();
+  },
+
+  close() {
+    if (!this.isOpen) return;
+    this.isOpen = false;
+    const panel = el('cockpit-panel');
+    const btn   = el('cockpit-btn');
+    if (panel) panel.classList.remove('open');
+    if (btn)   btn.innerHTML = '&#x2B21; STATUS &#x25BC;';
+  },
+
+  _refreshNow() {
+    api('/status').then(data => { if (data) this.update(data); });
+  },
+
+  update(data) {
+    this._updateVitals(data);
+    this._updateServices(data);
+    this._updateActivity(data);
+    this._updateNetwork(data);
+    this._updateAlerts(data);
+  },
+
+  _updateVitals(data) {
+    const v = data.battery_voltage;
+    if (v != null) {
+      const col = batteryGauge.voltToColor(v);
+      const pct = Math.round(batteryGauge.voltToPct(v));
+      const bv  = el('ck-battery-v');
+      const bp  = el('ck-battery-pct');
+      if (bv) { bv.textContent = v.toFixed(1) + 'V'; bv.style.color = col; }
+      if (bp) { bp.textContent = pct + '%'; bp.style.color = col; }
+      const bc = el('ck-battery');
+      if (bc) bc.style.borderColor = col + '44';
+    }
+    const lt = data.vesc_l_temp;
+    const rt = data.vesc_r_temp;
+    const ckL = el('ck-vesc-l');
+    const ckR = el('ck-vesc-r');
+    if (ckL) {
+      ckL.textContent = lt != null ? lt.toFixed(0) + '°C' : '--°C';
+      ckL.style.color = lt == null ? '' : lt >= 70 ? 'var(--red)' : lt >= 50 ? 'var(--orange)' : 'var(--green)';
+    }
+    if (ckR) {
+      ckR.textContent = rt != null ? rt.toFixed(0) + '°C' : '--°C';
+      ckR.style.color = rt == null ? '' : rt >= 70 ? 'var(--red)' : rt >= 50 ? 'var(--orange)' : 'var(--green)';
+    }
+    const t  = data.temperature;
+    const pt = el('ck-pi-temp');
+    const ph = el('ck-pi-hint');
+    if (pt) {
+      pt.textContent = t != null ? t + '°C' : '--°C';
+      pt.style.color = t == null ? '' : t >= 75 ? 'var(--red)' : t >= 60 ? 'var(--orange)' : 'var(--green)';
+    }
+    if (ph) ph.textContent = t == null ? '' : t >= 75 ? '⚠ critique' : t >= 60 ? '⚠ chaud' : 'OK';
+    const up = el('ck-uptime');
+    if (up) up.textContent = data.uptime || '--';
+    const ver = el('ck-version');
+    if (ver) ver.textContent = 'v' + (data.version || '?');
+  },
+
+  _svcRow(label, cls, val) {
+    return `<div class="cockpit-row"><span class="cockpit-row-lbl">${label}</span><span class="cockpit-row-val cockpit-${cls}">${val}</span></div>`;
+  },
+
+  _updateServices(data) {
+    const svc = el('ck-services');
+    if (!svc) return;
+    const uartCls = !data.uart_ready ? 'err' : data.uart_health == null ? 'warn' : 'ok';
+    const uartVal = !data.uart_ready ? '✗ DOWN' : data.uart_health == null ? '⚠ NO SLAVE' : '✓ OK';
+    const vescLCls = data.vesc_l_ok ? 'ok' : 'err';
+    const vescRCls = data.vesc_r_ok ? 'ok' : 'err';
+    const btCls    = !data.bt_connected ? 'dim' : (data.bt_rssi != null && data.bt_rssi <= -70) ? 'warn' : 'ok';
+    const btVal    = !data.bt_connected ? '— disconnected'
+                   : data.bt_rssi != null ? `✓ ${data.bt_rssi} dBm` : '✓ OK';
+    svc.innerHTML =
+      this._svcRow('UART',       uartCls,  uartVal) +
+      this._svcRow('VESC L',     vescLCls, data.vesc_l_ok ? '✓ OK' : '✗ OFFLINE') +
+      this._svcRow('VESC R',     vescRCls, data.vesc_r_ok ? '✓ OK' : '✗ OFFLINE') +
+      this._svcRow('Teeces',     data.teeces_ready     ? 'ok' : 'dim', data.teeces_ready     ? '✓ OK' : '— N/A') +
+      this._svcRow('Camera',     data.camera_active    ? 'ok' : 'dim', data.camera_active    ? '✓ streaming' : '— idle') +
+      this._svcRow('BT Gamepad', btCls, btVal) +
+      this._svcRow('Servo Dome', data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A') +
+      this._svcRow('Servo Body', data.servo_ready      ? 'ok' : 'dim', data.servo_ready      ? '✓ OK' : '— N/A');
+  },
+
+  _updateActivity(data) {
+    const act = el('ck-activity');
+    if (!act) return;
+    const choreoVal = data.choreo_playing
+      ? `<span class="cockpit-ok">▶ ${escapeHtml(data.choreo_name || '?')}</span>`
+      : '<span class="cockpit-dim">— idle</span>';
+    const audioVal = data.audio_playing
+      ? `<span class="cockpit-ok">♪ ${escapeHtml(data.audio_current || '?')}</span>`
+      : '<span class="cockpit-dim">— idle</span>';
+    const aliveVal = data.alive_enabled
+      ? '<span class="cockpit-ok">ON</span>'
+      : '<span class="cockpit-dim">OFF</span>';
+    act.innerHTML =
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">Choreo</span><span class="cockpit-row-val">${choreoVal}</span></div>` +
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">Audio</span><span class="cockpit-row-val">${audioVal}</span></div>` +
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">ALIVE</span><span class="cockpit-row-val">${aliveVal}</span></div>`;
+  },
+
+  _updateNetwork(data) {
+    const net = el('ck-network');
+    if (!net) return;
+    net.innerHTML =
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">IP</span><span class="cockpit-row-val cockpit-ok">${window.location.hostname}</span></div>` +
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">Version</span><span class="cockpit-row-val cockpit-dim">v${escapeHtml(String(data.version || '?'))}</span></div>`;
+  },
+
+  _updateAlerts(data) {
+    const box = el('ck-alerts');
+    if (!box) return;
+    const alerts  = this._buildAlerts(data);
+    const hasAlert = alerts.some(a => a.cls !== 'ok');
+    const panel   = el('cockpit-panel');
+    const btn     = el('cockpit-btn');
+    if (panel) panel.classList.toggle('has-alert', hasAlert);
+    if (btn)   btn.classList.toggle('alert', hasAlert);
+    box.innerHTML = alerts.map(a =>
+      `<span class="cockpit-alert ${a.cls}">${escapeHtml(a.msg)}</span>`
+    ).join('');
+  },
+
+  _buildAlerts(data) {
+    const alerts = [];
+    const t = data.temperature;
+    if (t != null) {
+      if (t >= 75) alerts.push({ cls: 'err',  msg: `Pi ${t}°C — surchauffe` });
+      else if (t >= 60) alerts.push({ cls: 'warn', msg: `Pi ${t}°C — surveiller` });
+    }
+    const lt = data.vesc_l_temp;
+    const rt = data.vesc_r_temp;
+    if (lt != null && lt >= 70) alerts.push({ cls: 'err',  msg: `VESC L ${lt.toFixed(0)}°C — surchauffe` });
+    else if (lt != null && lt >= 50) alerts.push({ cls: 'warn', msg: `VESC L ${lt.toFixed(0)}°C — chaud` });
+    if (rt != null && rt >= 70) alerts.push({ cls: 'err',  msg: `VESC R ${rt.toFixed(0)}°C — surchauffe` });
+    else if (rt != null && rt >= 50) alerts.push({ cls: 'warn', msg: `VESC R ${rt.toFixed(0)}°C — chaud` });
+    const v = data.battery_voltage;
+    if (v != null && batteryGauge.voltToColor(v) === '#ff2244')
+      alerts.push({ cls: 'err',  msg: `Batterie critique ${v.toFixed(1)}V` });
+    else if (v != null && batteryGauge.voltToColor(v) === '#ff8800')
+      alerts.push({ cls: 'warn', msg: `Batterie faible ${v.toFixed(1)}V` });
+    if (!data.vesc_l_ok) alerts.push({ cls: 'err', msg: 'VESC L offline / fault' });
+    if (!data.vesc_r_ok) alerts.push({ cls: 'err', msg: 'VESC R offline / fault' });
+    const rssi = data.bt_rssi;
+    if (data.bt_connected && rssi != null && rssi <= -80)
+      alerts.push({ cls: 'warn', msg: `BT signal faible ${rssi} dBm` });
+    if ((data.uart_crc_errors ?? 0) > 0)
+      alerts.push({ cls: 'warn', msg: `UART ${data.uart_crc_errors} CRC errors` });
+    if (alerts.length === 0)
+      alerts.push({ cls: 'ok', msg: '✓ Aucun problème détecté' });
+    return alerts;
+  },
+};
+
+document.addEventListener('click', (e) => {
+  if (!cockpitPanel.isOpen) return;
+  const panel = el('cockpit-panel');
+  const btn   = el('cockpit-btn');
+  if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target))
+    cockpitPanel.close();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && cockpitPanel.isOpen) cockpitPanel.close();
+});
+
+// ================================================================
 // Status Poller
 // ================================================================
 
@@ -3974,6 +4157,9 @@ class StatusPoller {
         _updateRawPaletteItem();
       }
     }
+
+    // Update cockpit panel on every status poll if open
+    if (cockpitPanel.isOpen) cockpitPanel.update(data);
 
     // VESC tab has its own 500ms poll via _startVescTabPoll() — no refresh needed here
   }

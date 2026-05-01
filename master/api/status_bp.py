@@ -47,6 +47,11 @@ from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.app_watchdog import app_watchdog
 
+try:
+    from master.api import camera_bp as _cam_bp
+except Exception:
+    _cam_bp = None
+
 status_bp = Blueprint('status', __name__)
 
 VERSION_FILE = '/home/artoo/r2d2/VERSION'
@@ -138,6 +143,10 @@ def get_status():
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_drive_safe':   _vesc_side_ok(reg.vesc_telem.get('L')) and _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_bench_mode':   bool(reg.vesc_bench_mode),
+        'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
+        'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
+        'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
+        'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
         **bt_status,
     })
 
