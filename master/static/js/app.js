@@ -2513,6 +2513,8 @@ class VescPanel {
     if (hint) hint.textContent = _vescDutyMode
       ? 'Direct duty — duty reacts immediately (bench testing without motor)'
       : 'Closed-loop speed — switch to DUTY for bench testing without motor';
+    // Sync bench mode button
+    _applyBenchModeUI(!!d.bench_mode);
   }
 
   _updateStatus(d) {
@@ -2713,6 +2715,22 @@ class VescPanel {
 }
 
 const vescPanel = new VescPanel();
+
+function _applyBenchModeUI(enabled) {
+  const btn = el('vesc-bench-btn');
+  if (!btn) return;
+  btn.textContent = enabled ? 'ON' : 'OFF';
+  btn.classList.toggle('active', enabled);
+}
+
+function vescToggleBenchMode() {
+  const btn = el('vesc-bench-btn');
+  const enabled = btn && btn.textContent === 'OFF';
+  _applyBenchModeUI(enabled);
+  api('/vesc/bench_mode', 'POST', { enabled }).then(d => {
+    if (d) toast(`Bench mode: ${enabled ? 'ON — safety lock bypassed' : 'OFF — full VESC check'}`, enabled ? 'warn' : 'ok');
+  });
+}
 
 function vescToggleInvert(side) {
   const newState = side === 'L' ? !vescPanel._invertL : !vescPanel._invertR;

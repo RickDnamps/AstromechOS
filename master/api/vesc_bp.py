@@ -126,13 +126,24 @@ def set_config():
 
 @vesc_bp.get('/config')
 def get_config():
-    """Returns current VESC configuration (power_scale + invert states + drive mode)."""
+    """Returns current VESC configuration (power_scale + invert states + drive mode + bench_mode)."""
     return jsonify({
         'power_scale': getattr(reg, 'vesc_power_scale', 1.0),
         'invert_L':    getattr(reg, 'vesc_invert_L', False),
         'invert_R':    getattr(reg, 'vesc_invert_R', False),
         'duty_mode':   getattr(reg, 'vesc_duty_mode', False),
+        'bench_mode':  getattr(reg, 'vesc_bench_mode', False),
     })
+
+
+@vesc_bp.post('/bench_mode')
+def set_bench_mode():
+    """Enables/disables bench mode (bypasses VESC safety lock when no telem). Persisted to local.cfg."""
+    body = request.get_json(silent=True) or {}
+    enabled = bool(body.get('enabled', False))
+    reg.vesc_bench_mode = enabled
+    _save_vesc_cfg(bench_mode='1' if enabled else '0')
+    return jsonify({'status': 'ok', 'bench_mode': enabled})
 
 
 @vesc_bp.post('/mode')

@@ -79,10 +79,11 @@ def _cpu_temp() -> float | None:
 
 def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
     """True = drive allowed for this VESC side.
-    None = no hardware (testing mode) → allow.
-    Stale (>max_age s) or fault ≠ 0 → block."""
+    bench_mode ON  → None telem = allow (no VESC hardware).
+    bench_mode OFF → None telem = block (full safety check).
+    Stale (>max_age s) or fault ≠ 0 always blocks."""
     if telem is None:
-        return True
+        return bool(getattr(reg, 'vesc_bench_mode', False))
     if _time.time() - telem.get('ts', 0) > max_age:
         return False
     return telem.get('fault', 0) == 0
@@ -136,6 +137,7 @@ def get_status():
         'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_drive_safe':   _vesc_side_ok(reg.vesc_telem.get('L')) and _vesc_side_ok(reg.vesc_telem.get('R')),
+        'vesc_bench_mode':   bool(reg.vesc_bench_mode),
         **bt_status,
     })
 

@@ -65,6 +65,7 @@ vesc_power_scale: float = 1.0
 vesc_invert_L: bool = False
 vesc_invert_R: bool = False
 vesc_duty_mode: bool = False   # True = COMM_SET_DUTY (bench testing), False = COMM_SET_RPM (default)
+vesc_bench_mode: bool = False  # True = bypass VESC safety lock (no telem required)
 
 # CAN bus scan result — updated by CANFOUND callback in main.py
 # None = no result yet, [] = no VESC found, [...] = found IDs
