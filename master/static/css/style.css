@@ -394,10 +394,11 @@ body[data-lock-mode="2"] .drive-lock-btn { color: var(--red); border-color: var(
 body[data-lock-mode="2"] .drive-lock-btn:hover { box-shadow: 0 0 12px rgba(220,50,50,0.5); }
 
 .vesc-safety-banner {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   background: rgba(220,50,50,0.15); border: 1px solid var(--red);
-  border-radius: 6px; padding: 8px 14px; margin: 0 0 10px 0;
+  border-radius: 6px; padding: 8px 14px; margin: 0 0 6px 0;
   color: var(--red); font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  text-align: center;
   animation: vesc-banner-pulse 2s ease-in-out infinite;
 }
 .vesc-safety-icon { font-size: 16px; }
