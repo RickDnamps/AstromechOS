@@ -247,12 +247,35 @@ To create a new category, use the **Create Category** panel below the upload zon
 
 ### Managing choreographies
 
-In admin mode, each choreo card shows inline controls:
+**Choreo cards (Sequences tab) — admin mode only:**
 - Click the **label** to rename it (displayed in the file selector and on the card)
 - Click the **emoji** to open the emoji picker
 - Use the **category dropdown** on the card to reassign it to a different category
 
 Choreo categories (create / rename / reorder / delete) are managed from the category panel in the CHOREO tab — no file editing required.
+
+**Choreo editor toolbar — admin mode only:**
+
+The toolbar buttons **RENAME · SAVE · DELETE · EXPORT · IMPORT** are only visible when admin is unlocked. Non-admins can still open, edit, and play choreographies — they just cannot persist changes to disk.
+
+- **RENAME** — renames the `.chor` file on disk (the internal filename shown in the file selector). Use this to give a file a clean permanent name after experimenting.
+- **SAVE** — the only way to write a choreo to disk. Always required to keep your work.
+- **DELETE** — permanently removes the `.chor` file.
+- **EXPORT / IMPORT** — download or upload `.chor` files for backup or sharing.
+
+**Play without saving — preview mode:**
+
+Anyone (admin or not) can press **Play** at any time without saving first. The current choreo is written to an invisible temp file (`__preview__.chor`) and played from there — it never appears in the choreo list and is overwritten on every preview play.
+
+Rules for what Play does:
+| Situation | Admin | Result |
+|-----------|-------|--------|
+| Existing file, no changes | any | Plays the saved file directly |
+| Existing file, modified | ✅ | Auto-saves changes, then plays |
+| Existing file, modified | ❌ | Plays via preview — file on disk unchanged |
+| New choreo (never saved) | any | Plays via preview — nothing written to disk |
+
+When admin plays an unsaved choreo, a reminder toast appears: **"Preview playing — press Save to keep this choreography"**.
 
 ### Cockpit Status Panel
 
