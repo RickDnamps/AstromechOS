@@ -6592,11 +6592,14 @@ const choreoEditor = (() => {
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       let playName = _chor.meta.name;
-      if (_existsOnDisk) {
-        // File already saved by admin — auto-sync to disk before playing
-        if (_dirty) await this.save({ requireAuth: false });
+      const isAdmin = document.body.classList.contains('admin-unlocked');
+      if (_existsOnDisk && !_dirty) {
+        // No changes — play the saved file as-is
+      } else if (_existsOnDisk && _dirty && isAdmin) {
+        // Admin modified an existing file — auto-sync to disk before playing
+        await this.save({ requireAuth: false });
       } else {
-        // Unsaved new choreo — write to invisible temp file, never appears in the list
+        // Non-admin with unsaved edits, OR new choreo never saved — use invisible temp file
         const preview = { ..._chor, meta: { ..._chor.meta, name: '__preview__' } };
         await api('/choreo/save', 'POST', { chor: preview });
         playName = '__preview__';
