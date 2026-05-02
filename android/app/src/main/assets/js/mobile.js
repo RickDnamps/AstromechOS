@@ -551,8 +551,8 @@ let _choreoItems = [];   // [{name, label, emoji, category, duration}]
 
 function loadChoreos() {
   api('GET', '/choreo/list').then(r => r && r.json()).then(data => {
-    if (!data?.choreos) return;
-    _choreoItems = data.choreos;
+    if (!data) return;
+    _choreoItems = Array.isArray(data) ? data : (data.choreos || []);
     _renderChoreoList();
   }).catch(() => {});
 }
