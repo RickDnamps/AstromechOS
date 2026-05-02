@@ -3904,19 +3904,31 @@ const cockpitPanel = {
   _updateVitals(data) {
     const v = data.battery_voltage;
     if (v != null) {
-      const col = batteryGauge.voltToColor(v);
-      const pct = Math.round(batteryGauge.voltToPct(v));
-      const bv  = el('ck-battery-v');
-      const bp  = el('ck-battery-pct');
+      const col   = batteryGauge.voltToColor(v);
+      const pct   = Math.round(batteryGauge.voltToPct(v));
+      const cells = data.battery_cells || 4;
+      const bv    = el('ck-battery-v');
+      const bp    = el('ck-battery-pct');
       if (bv) { bv.textContent = v.toFixed(1) + 'V'; bv.style.color = col; }
       if (bp) { bp.textContent = pct + '%'; bp.style.color = col; }
       const bc = el('ck-battery');
       if (bc) bc.style.borderColor = col + '44';
+      const vcellEl = el('ck-battery-vcell');
+      if (vcellEl) vcellEl.textContent = (v / cells).toFixed(2) + ' V/cell';
+      const lc = data.vesc_l_curr, rc = data.vesc_r_curr;
+      const powerEl = el('ck-battery-power');
+      if (powerEl) {
+        const totalA = (lc != null && rc != null) ? (Math.abs(lc) + Math.abs(rc)) : null;
+        const watt   = totalA != null ? (totalA * v) : null;
+        powerEl.innerHTML = totalA != null
+          ? `${totalA.toFixed(1)} A &nbsp;·&nbsp; ${Math.round(watt)} W`
+          : '-- A &nbsp;·&nbsp; -- W';
+      }
     }
-    const lt = data.vesc_l_temp;
-    const rt = data.vesc_r_temp;
-    const ckL = el('ck-vesc-l');
-    const ckR = el('ck-vesc-r');
+    const lt = data.vesc_l_temp, rt = data.vesc_r_temp;
+    const lc = data.vesc_l_curr, rc = data.vesc_r_curr;
+    const ld = data.vesc_l_duty, rd = data.vesc_r_duty;
+    const ckL = el('ck-vesc-l'), ckR = el('ck-vesc-r');
     if (ckL) {
       ckL.textContent = lt != null ? lt.toFixed(0) + '°C' : '--°C';
       ckL.style.color = lt == null ? '' : lt >= 70 ? 'var(--red)' : lt >= 50 ? 'var(--orange)' : 'var(--green)';
@@ -3925,6 +3937,12 @@ const cockpitPanel = {
       ckR.textContent = rt != null ? rt.toFixed(0) + '°C' : '--°C';
       ckR.style.color = rt == null ? '' : rt >= 70 ? 'var(--red)' : rt >= 50 ? 'var(--orange)' : 'var(--green)';
     }
+    const lcEl = el('ck-vesc-l-curr'), rcEl = el('ck-vesc-r-curr');
+    if (lcEl) lcEl.textContent = lc != null ? Math.abs(lc).toFixed(1) + ' A' : '-- A';
+    if (rcEl) rcEl.textContent = rc != null ? Math.abs(rc).toFixed(1) + ' A' : '-- A';
+    const ldEl = el('ck-vesc-l-duty'), rdEl = el('ck-vesc-r-duty');
+    if (ldEl) ldEl.textContent = ld != null ? Math.abs(ld * 100).toFixed(0) + '%' : '--%';
+    if (rdEl) rdEl.textContent = rd != null ? Math.abs(rd * 100).toFixed(0) + '%' : '--%';
     const t  = data.temperature;
     const pt = el('ck-pi-temp');
     if (pt) {

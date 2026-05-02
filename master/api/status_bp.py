@@ -68,6 +68,12 @@ def _slave_host() -> str:
     return cfg.get('slave', 'host', fallback='r2-slave.local')
 
 
+def _battery_cells() -> int:
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return cfg.getint('battery', 'cells', fallback=4)
+
+
 def _mem_info() -> dict | None:
     try:
         info = {}
@@ -223,6 +229,13 @@ def get_status():
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
         'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
+        'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('curr'),
+        'vesc_r_curr':       (reg.vesc_telem.get('R') or {}).get('curr'),
+        'vesc_l_duty':       (reg.vesc_telem.get('L') or {}).get('duty'),
+        'vesc_r_duty':       (reg.vesc_telem.get('R') or {}).get('duty'),
+        'vesc_l_rpm':        (reg.vesc_telem.get('L') or {}).get('rpm'),
+        'vesc_r_rpm':        (reg.vesc_telem.get('R') or {}).get('rpm'),
+        'battery_cells':     _battery_cells(),
         'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
         'slave_host':        _slave_host(),
         'master_wlan0':      _iface_ip('wlan0'),
