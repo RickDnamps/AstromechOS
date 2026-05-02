@@ -397,10 +397,7 @@ class AdminGuard {
 
   _onActivity() {
     if (!this._unlocked) return;
-    // Reset timer only when on a protected tab — use tracked ID, not DOM query
-    if (this._PROTECTED.has(this._activeTabId)) {
-      this._startTimer();
-    }
+    this._startTimer();  // any activity resets the inactivity timer, regardless of tab
   }
 
   _startTimer() {
