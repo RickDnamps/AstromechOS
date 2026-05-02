@@ -37,8 +37,7 @@ Boot sequence:
 3. git pull if wlan1 is available
 4. Start UARTController + TeecesController + DeployController
 5. Phase 2: VescDriver + DomeMotorDriver + BodyServoDriver (uncomment to enable)
-6. Phase 3: ScriptEngine (uncomment to enable)
-7. Phase 4: Flask API on port 5000 (uncomment to enable)
+6. Flask API on port 5000, ChoreoPlayer, BehaviorEngine
 """
 
 import logging
@@ -62,9 +61,6 @@ import master.registry as reg
 # from master.drivers.dome_motor_driver  import DomeMotorDriver
 from master.drivers.body_servo_driver  import BodyServoDriver
 from master.drivers.dome_servo_driver  import DomeServoDriver
-
-# ---- Phase 3 ----
-from master.script_engine import ScriptEngine
 
 # ---- Phase 4 — Uncomment to enable ----
 from master.flask_app import create_app
@@ -232,16 +228,6 @@ def main() -> None:
     if servo.setup():      reg.servo      = servo
     if dome_servo.setup(): reg.dome_servo = dome_servo
 
-    # ------------------------------------------------------------------
-    # Phase 3 — Script engine
-    # ------------------------------------------------------------------
-    engine = ScriptEngine(
-        uart=uart, teeces=teeces,
-        vesc=reg.vesc, dome=reg.dome,
-        servo=reg.servo, dome_servo=reg.dome_servo,
-    )
-    reg.engine = engine
-
     from master.choreo_player import ChoreoPlayer
     from master.behavior_engine import BehaviorEngine
     reg.choreo = ChoreoPlayer(
@@ -253,7 +239,6 @@ def main() -> None:
         body_servo=reg.servo,
         vesc=reg.vesc,
         telem_getter=lambda: reg.vesc_telem,
-        engine=reg.engine,
     )
     reg.choreo.setup()
 
@@ -394,7 +379,6 @@ def main() -> None:
         # Phase 2: if reg.dome:  reg.dome.shutdown()
         if reg.servo:      reg.servo.shutdown()
         if reg.dome_servo: reg.dome_servo.shutdown()
-        if reg.engine: reg.engine.stop_all()
         if reg.bt_ctrl: reg.bt_ctrl.stop()
         if reg.behavior_engine: reg.behavior_engine.stop()
         log.info("Master shut down cleanly")

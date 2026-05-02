@@ -220,7 +220,6 @@ def get_status():
         'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),
         'servo_ready':      bool(reg.servo      and reg.servo.is_ready()),
         'dome_servo_ready': bool(reg.dome_servo and reg.dome_servo.is_ready()),
-        'scripts_running': reg.engine.list_running() if reg.engine else [],
         'choreo_playing':  bool(reg.choreo and reg.choreo.is_playing()),
         'choreo_name':     (reg.choreo.get_status().get('name') if reg.choreo and reg.choreo.is_playing() else None),
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable

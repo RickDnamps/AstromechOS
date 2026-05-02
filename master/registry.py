@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from master.uart_controller      import UARTController
     from master.lights.base_controller import BaseLightsController
     from master.deploy_controller    import DeployController
-    from master.script_engine        import ScriptEngine
     from master.drivers.vesc_driver  import VescDriver
     from master.drivers.dome_motor_driver  import DomeMotorDriver
     from master.drivers.body_servo_driver  import BodyServoDriver
@@ -51,7 +50,6 @@ if TYPE_CHECKING:
 uart:        'UARTController | None'    = None
 teeces:      'BaseLightsController | None' = None
 deploy:      'DeployController | None'  = None
-engine:      'ScriptEngine | None'      = None
 choreo:      'ChoreoPlayer | None'      = None
 vesc:        'VescDriver | None'        = None
 dome:        'DomeMotorDriver | None'   = None

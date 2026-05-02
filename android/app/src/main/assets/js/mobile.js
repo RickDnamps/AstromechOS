@@ -157,7 +157,6 @@ function _applyVescSafetyUI(safe, s) {
 let _activeDrawer  = null;
 let _drawerExpanded = false;
 let _audioInit     = false;
-let _seqInit       = false;
 let _choreoInit    = false;
 
 function openDrawer(tab) {
@@ -169,7 +168,7 @@ function openDrawer(tab) {
   document.getElementById('drawer-' + tab)?.classList.add('active');
 
   // Update title
-  const titles = { audio: '🔊 AUDIO', choreo: '🎭 CHOREO', seq: '🎬 SEQUENCES', lights: '💡 LIGHTS' };
+  const titles = { audio: '🔊 AUDIO', choreo: '🎭 CHOREO', lights: '💡 LIGHTS' };
   document.getElementById('drawer-title').textContent = titles[tab] || tab;
 
   // Active pill highlight
@@ -191,7 +190,6 @@ function openDrawer(tab) {
 
   // Lazy load on first open
   if (tab === 'audio'  && !_audioInit)  { _audioInit  = true; loadCategories(); }
-  if (tab === 'seq'    && !_seqInit)    { _seqInit    = true; loadSequences();  }
   if (tab === 'choreo' && !_choreoInit) { _choreoInit = true; loadChoreos();    }
 
   _haptic(20);
@@ -640,30 +638,6 @@ function stopChoreo() {
   }).catch(() => {});
   _haptic(50);
 }
-
-// ── Sequences ─────────────────────────────────────────────────
-function loadSequences() {
-  api('GET', '/scripts/list').then(r => r && r.json()).then(data => {
-    if (!data?.scripts) return;
-    const list = document.getElementById('seq-list');
-    list.innerHTML = '';
-    data.scripts.forEach(name => {
-      const row = document.createElement('div');
-      row.className = 'seq-row';
-      const label = name.replace(/_/g, ' ');
-      row.innerHTML = `
-        <span class="seq-name">${label}</span>
-        <button class="seq-run"  onclick="runSeq('${name}',false)">▶ RUN</button>
-        <button class="seq-loop" onclick="runSeq('${name}',true)">🔁</button>
-        <button class="seq-stop" onclick="stopAllSeq()">⏹</button>
-      `;
-      list.appendChild(row);
-    });
-  }).catch(() => {});
-}
-
-function runSeq(name, loop) { api('POST', '/scripts/run', { name, loop }); _haptic(30); }
-function stopAllSeq()       { api('POST', '/scripts/stop_all'); _haptic(50); }
 
 // ── Lights ────────────────────────────────────────────────────
 function teecesMode(mode) { api('POST', '/teeces/' + mode); }

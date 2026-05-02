@@ -4228,14 +4228,11 @@ class StatusPoller {
       audioBoard.setPlaying(data.audio_playing, data.audio_current || '');
     }
 
-    // Scripts running — merge choreo playing state into scripts_running list
-    if (data.scripts_running !== undefined) {
-      const running = [...(data.scripts_running || [])];
-      if (data.choreo_playing && data.choreo_name) {
-        if (!running.find(s => s.name === data.choreo_name)) {
-          running.push({ name: data.choreo_name, id: 'choreo' });
-        }
-      }
+    // Update sequences running state from choreo status
+    if (data.choreo_playing !== undefined) {
+      const running = (data.choreo_playing && data.choreo_name)
+        ? [{ name: data.choreo_name, id: 'choreo' }]
+        : [];
       scriptEngine.updateRunning(running);
     }
 

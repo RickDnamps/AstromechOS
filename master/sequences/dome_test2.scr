@@ -1,9 +1,0 @@
-# Dome Test 2 — Ouvre P2-P4 lentement (500ms), pause 2s, ferme lentement
-# Source: dome_test2.scr (dpoulson/r2_control) — dome,PX,1,50 (speed=50 → durée 500ms)
-servo,Servo_M1,1.0,500
-servo,Servo_M2,1.0,500
-servo,Servo_M3,1.0,500
-sleep,2
-servo,Servo_M1,0.0,500
-servo,Servo_M2,0.0,500
-servo,Servo_M3,0.0,500

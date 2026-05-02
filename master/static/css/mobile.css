@@ -1,6 +1,6 @@
 /* ============================================================
-   R2-D2 Mobile HUD — mobile.css  v3
-   Drone-inspired dark HUD theme — full rewrite
+   AstromechOS Mobile HUD — mobile.css  v4
+   Drone-inspired dark HUD theme
    ============================================================ */
 
 :root {
@@ -144,6 +144,19 @@ body { display: flex; flex-direction: column; }
 }
 #status-host:active { background: rgba(0,170,255,.1); }
 
+/* Battery voltage display */
+.batt-display {
+  font-size: 8px;
+  letter-spacing: .06em;
+  padding: 2px 5px;
+  margin-right: 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+}
+.batt-display.ok   { color: var(--ok);     }
+.batt-display.warn { color: var(--warn);   }
+.batt-display.err  { color: var(--danger); animation: pulse-warn 1.5s ease-in-out infinite; }
+
 /* ── HUD drive — full-screen container  z-10 ─────────────── */
 
 #hud-drive {
@@ -202,6 +215,31 @@ body { display: flex; flex-direction: column; }
     rgba(0,0,0,.07) 4px
   );
   pointer-events: none;
+}
+
+/* ── VESC safety banner  z-12 ────────────────────────────── */
+
+#vesc-safety-banner {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  background: rgba(180,10,30,.90);
+  border: 1px solid rgba(255,60,70,.8);
+  border-radius: 8px;
+  padding: 5px 18px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: pulse-danger 1.8s ease-in-out infinite;
+}
+#vesc-safety-banner.hidden { display: none; }
+
+#vesc-safety-msg {
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: .14em;
+  color: #fff;
 }
 
 /* ── HUD corner brackets  z-10 ───────────────────────────── */
@@ -324,10 +362,12 @@ body { display: flex; flex-direction: column; }
   cursor: pointer;
   transition: background .15s, border-color .15s, box-shadow .15s;
 }
-.pill-btn:active {
-  background: rgba(0,170,255,.15);
-  border-color: rgba(0,170,255,.6);
-  box-shadow: 0 0 10px rgba(0,170,255,.3);
+.pill-btn:active,
+.pill-btn.active {
+  background: rgba(0,170,255,.18);
+  border-color: rgba(0,170,255,.7);
+  box-shadow: 0 0 10px rgba(0,170,255,.35);
+  color: #fff;
 }
 
 /* ── Joystick touch zones  z-10 ──────────────────────────── */
@@ -636,13 +676,51 @@ body { display: flex; flex-direction: column; }
 }
 .rnd-btn:active { background: rgba(0,170,255,.18); }
 
-/* ── Drawer — Sequences pane ─────────────────────────────── */
+/* ── Drawer — Choreo pane ────────────────────────────────── */
 
-#drawer-seq {
+#drawer-choreo {
   gap: 8px;
 }
 
-#seq-list {
+.choreo-playing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 8px;
+  background: rgba(0,170,255,.08);
+  border: 1px solid rgba(0,170,255,.35);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.choreo-playing-bar.hidden { display: none; }
+
+#choreo-playing-name {
+  font-size: 9px;
+  color: var(--primary);
+  letter-spacing: .08em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.choreo-playing-bar button {
+  background: rgba(255,51,68,.15);
+  border: 1px solid rgba(255,51,68,.5);
+  color: var(--danger);
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  border-radius: 5px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter .1s;
+  flex-shrink: 0;
+}
+.choreo-playing-bar button:active { filter: brightness(.75); }
+
+#choreo-list {
   flex: 1;
   overflow-y: auto;
   display: flex;
@@ -651,7 +729,16 @@ body { display: flex; flex-direction: column; }
   min-height: 0;
 }
 
-.seq-row {
+.choreo-category-label {
+  font-size: 8px;
+  color: var(--text-dim);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  padding: 6px 4px 2px;
+  flex-shrink: 0;
+}
+
+.choreo-row {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -660,52 +747,28 @@ body { display: flex; flex-direction: column; }
   border: 1px solid var(--border);
   border-radius: 6px;
   transition: border-color .2s;
+  cursor: pointer;
 }
-.seq-row:active { border-color: rgba(0,170,255,.3); }
+.choreo-row:active { border-color: rgba(0,170,255,.4); }
+.choreo-row.playing {
+  border-color: rgba(0,170,255,.55);
+  background: rgba(0,170,255,.06);
+}
 
-.seq-name {
+.choreo-emoji { font-size: 16px; flex-shrink: 0; }
+
+.choreo-name {
   flex: 1;
   font-size: 10px;
-  text-transform: capitalize;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.seq-run, .seq-loop, .seq-stop {
-  border-radius: 5px;
-  padding: 5px 8px;
-  font-family: 'Courier New', monospace;
-  font-size: 9px;
-  cursor: pointer;
-  white-space: nowrap;
-  border-width: 1px;
-  border-style: solid;
-  transition: filter .1s;
-}
-.seq-run  { background: rgba(0,80,200,.25);  border-color: rgba(0,170,255,.5); color: var(--primary); }
-.seq-loop { background: rgba(30,50,120,.25); border-color: #334488;            color: #4488dd; }
-.seq-stop { background: rgba(140,10,30,.25); border-color: rgba(255,51,68,.5); color: var(--danger); }
-.seq-run:active, .seq-loop:active, .seq-stop:active { filter: brightness(.75); }
-
-#stop-all-btn {
-  width: 100%;
+.choreo-dur {
+  font-size: 8px;
+  color: var(--text-dim);
   flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--danger);
-  color: var(--danger);
-  border-radius: 6px;
-  padding: 7px;
-  font-family: 'Courier New', monospace;
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: .1em;
-  cursor: pointer;
-  transition: background .15s, filter .1s;
-}
-#stop-all-btn:active {
-  background: rgba(255,51,68,.15);
-  filter: brightness(.85);
 }
 
 /* ── Drawer — Lights pane ────────────────────────────────── */

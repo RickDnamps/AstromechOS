@@ -92,8 +92,7 @@ class ChoreoPlayer:
     """
 
     def __init__(self, cfg, audio, teeces, dome_motor, dome_servo,
-                 body_servo, vesc=None, telem_getter=None, audio_latency=None,
-                 engine=None):
+                 body_servo, vesc=None, telem_getter=None, audio_latency=None):
         # Resolve audio latency: explicit arg > cfg > default
         if audio_latency is not None:
             self._latency = float(audio_latency)
@@ -123,7 +122,6 @@ class ChoreoPlayer:
         self._body_servo = body_servo
         self._vesc       = vesc
         self._telem_getter = telem_getter
-        self._engine     = engine
         self._label_map: dict = _build_label_map()
         self._resolved_logged: set = set()
 
@@ -516,17 +514,7 @@ class ChoreoPlayer:
                     elif mode in _NAMED_CODES:
                         self._teeces.animation(_NAMED_CODES[mode])
                     else:
-                        log.debug(f"Choreo lights: unknown mode '{mode}' — trying as .lseq")
-                        if self._engine:
-                            try:
-                                self._engine.run_light(mode, loop=False)
-                            except Exception as e:
-                                log.warning(f"Choreo lights .lseq '{mode}': {e}")
-                elif self._engine:
-                    try:
-                        self._engine.run_light(mode, loop=False)
-                    except Exception as e:
-                        log.warning(f"Choreo lights .lseq '{mode}': {e}")
+                        log.warning(f"Choreo lights: unknown mode '{mode}' — ignored")
 
             elif track == 'servos':
                 action  = ev.get('action', 'open')
