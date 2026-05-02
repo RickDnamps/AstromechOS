@@ -216,7 +216,7 @@ r2d2/
 ├── rp2040/firmware/               — MicroPython: 6-screen GC9A01 display
 ├── android/
 │   ├── app/src/main/assets/       — Bundled web assets (offline-capable)
-│   └── compiled/R2-D2_Control.apk — Ready to install
+│   └── compiled/AstroMech_Control.apk — Ready to install
 └── scripts/
     ├── setup_master.sh            — Full Master install (one curl command)
     ├── setup_slave.sh             — Full Slave install (one curl command)

@@ -330,7 +330,7 @@ Lock mode applies to **both web and Bluetooth** inputs simultaneously. Servos, a
 
 ### Android app
 
-Download [`android/compiled/R2-D2_Control.apk`](android/compiled/R2-D2_Control.apk) — enable *Install from unknown sources*, install, launch.
+Download [`android/compiled/AstroMech_Control.apk`](android/compiled/AstroMech_Control.apk) — enable *Install from unknown sources*, install, launch.
 
 - **Full-screen immersive mode** — hides navigation bars, swipe to reveal
 - **Offline banner** — immediate visual feedback when connection drops

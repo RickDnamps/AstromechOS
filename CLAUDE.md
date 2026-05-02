@@ -319,8 +319,8 @@ Repo : https://github.com/RickDnamps/AstromechOS.git   Branch : main
 
 ```bash
 powershell.exe -Command "& { \$env:JAVA_HOME='C:/Program Files/Android/Android Studio/jbr'; Set-Location 'J:/R2-D2_Build/software/android'; ./gradlew.bat assembleDebug }"
-cp android/app/build/outputs/apk/debug/app-debug.apk android/compiled/R2-D2_Control.apk
-"C:/Users/erict/AppData/Local/Android/Sdk/platform-tools/adb.exe" install -r android/compiled/R2-D2_Control.apk
+cp android/app/build/outputs/apk/debug/app-debug.apk android/compiled/AstroMech_Control.apk
+"C:/Users/erict/AppData/Local/Android/Sdk/platform-tools/adb.exe" install -r android/compiled/AstroMech_Control.apk
 ```
 
 > ⚠️ Sync assets si `master/static/` change :
