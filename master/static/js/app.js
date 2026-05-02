@@ -3050,6 +3050,7 @@ class ScriptEngine {
     this._pillSortable   = null;
     this._longPressTimer = null;
     this._dragCard       = null;
+    this._dragActive     = false;  // true while a card is being dragged — suppresses periodic reload
   }
 
   // ── Data loading ─────────────────────────────────────────────
@@ -3257,6 +3258,31 @@ class ScriptEngine {
     let startX = 0, startY = 0;
     let ghost = null;
 
+    const cleanup = () => {
+      pressed  = false;
+      dragging = false;
+      scriptEngine._dragActive = false;
+      card.classList.remove('dragging');
+      if (ghost) { ghost.remove(); ghost = null; }
+      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
+      window.removeEventListener('pointerup',     _winUp);
+      window.removeEventListener('pointercancel', cleanup);
+    };
+
+    // Window-level fallback: fires even if the card element is removed from the DOM
+    // (e.g. the 15s periodic reload destroys the card mid-drag)
+    const _winUp = (e) => {
+      if (!dragging) { cleanup(); return; }
+      const dropX = e.clientX, dropY = e.clientY;
+      cleanup();
+      const target = document.elementFromPoint(dropX, dropY);
+      const pill = target?.closest('.seq-pill[data-cat]');
+      if (pill && pill.dataset.cat !== 'all') {
+        api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
+          .then(() => { toast(`Moved to ${pill.dataset.cat}`, 'ok'); this.load(); });
+      }
+    };
+
     card.addEventListener('pointerdown', (e) => {
       pressed = true;
       startX = e.clientX; startY = e.clientY;
@@ -3269,7 +3295,8 @@ class ScriptEngine {
       const dy = Math.abs(e.clientY - startY);
       if (!dragging && (dx > 8 || dy > 8)) {
         dragging = true;
-        card.setPointerCapture(e.pointerId);  // capture only once drag starts
+        scriptEngine._dragActive = true;
+        card.setPointerCapture(e.pointerId);
         card.classList.add('dragging');
         document.querySelectorAll('.seq-pill[data-cat]:not([data-cat="all"])').forEach(p => {
           p.classList.add('drop-target');
@@ -3278,6 +3305,9 @@ class ScriptEngine {
         ghost.style.cssText = 'position:fixed;pointer-events:none;z-index:9999;opacity:0.8;font-size:28px;';
         ghost.textContent = card.querySelector('.seq-card-emoji').textContent;
         document.body.appendChild(ghost);
+        // Register window fallback in case card element is destroyed mid-drag
+        window.addEventListener('pointerup',     _winUp,   { once: true });
+        window.addEventListener('pointercancel', cleanup,  { once: true });
       }
       if (dragging && ghost) {
         ghost.style.left = (e.clientX - 16) + 'px';
@@ -3285,31 +3315,22 @@ class ScriptEngine {
       }
     });
 
-    card.addEventListener('pointerup', async (e) => {
-      pressed = false;
-      if (!dragging) return;
-      dragging = false;
-      card.classList.remove('dragging');
-      if (ghost) { ghost.remove(); ghost = null; }
-      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
-
-      const target = document.elementFromPoint(e.clientX, e.clientY);
+    card.addEventListener('pointerup', (e) => {
+      // If card is still in DOM, remove the window fallback and handle drop directly
+      window.removeEventListener('pointerup',     _winUp);
+      window.removeEventListener('pointercancel', cleanup);
+      if (!dragging) { pressed = false; return; }
+      const dropX = e.clientX, dropY = e.clientY;
+      cleanup();
+      const target = document.elementFromPoint(dropX, dropY);
       const pill = target?.closest('.seq-pill[data-cat]');
       if (pill && pill.dataset.cat !== 'all') {
-        const newCat = pill.dataset.cat;
-        await api('/choreo/set-category', 'POST', { name, category: newCat });
-        toast(`Moved to ${newCat}`, 'ok');
-        await this.load();
+        api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
+          .then(() => { toast(`Moved to ${pill.dataset.cat}`, 'ok'); this.load(); });
       }
     });
 
-    card.addEventListener('pointercancel', () => {
-      pressed = false;
-      dragging = false;
-      card.classList.remove('dragging');
-      if (ghost) { ghost.remove(); ghost = null; }
-      document.querySelectorAll('.seq-pill').forEach(p => p.classList.remove('drop-target'));
-    });
+    card.addEventListener('pointercancel', cleanup);
   }
 
   // ── Inline rename ─────────────────────────────────────────────
@@ -4944,8 +4965,8 @@ async function init() {
   // Start polling
   poller.start(2000);
 
-  // Refresh scripts periodically
-  setInterval(() => scriptEngine.load(), 15000);
+  // Refresh scripts periodically — skip if a card drag is in progress
+  setInterval(() => { if (!scriptEngine._dragActive) scriptEngine.load(); }, 15000);
 
   // Sync ALIVE button state from server
   api('/behavior/status').then(d => {
