@@ -3957,7 +3957,8 @@ const cockpitPanel = {
       this._svcRow('UART',       uartCls,  uartVal) +
       this._svcRow('VESC L',     vescLCls, data.vesc_l_ok ? '✓ OK' : '✗ OFFLINE') +
       this._svcRow('VESC R',     vescRCls, data.vesc_r_ok ? '✓ OK' : '✗ OFFLINE') +
-      this._svcRow('Teeces',     data.teeces_ready     ? 'ok' : 'dim', data.teeces_ready     ? '✓ OK' : '— N/A') +
+      this._svcRow(data.lights_backend === 'astropixels' ? 'AstroPixels' : 'Teeces',
+                   data.teeces_ready ? 'ok' : 'dim', data.teeces_ready ? '✓ OK' : '— N/A') +
       this._svcRow('Camera',     data.camera_active    ? 'ok' : 'dim', data.camera_active    ? '✓ streaming' : '— idle') +
       this._svcRow('BT Gamepad', btCls, btVal) +
       this._svcRow('Servo Dome', data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A') +
