@@ -175,7 +175,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | | |
 |---|---|
 | 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — pill categories · emoji picker · loop mode · playing state animations · drag-to-reorder (admin) |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer · body servo dropdown filters out configured arm servos · file selector shows label + emoji · admin cards show filename tag |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer · body servo dropdown filters out configured arm servos · **rename label · assign category · set emoji** from choreo cards (admin) · file selector shows label + emoji · admin cards show filename tag |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag · battery % · RSSI · keep-alive (no VESC cut on hold) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -184,7 +184,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🚨 **E-Stop** | Space bar shortcut · hard-cuts all PWM instantly |
 | 🚀 **One-button deploy** | Dome button → git pull + rsync Slave + reboot |
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
-| 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category · MP3 upload + category creation (admin) |
+| 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category · **drag-and-drop MP3 upload** + category creation (admin) · sounds added to index instantly, synced to Slave via SFTP |
 | 🔵 **Bluetooth speaker** | Pair a BT speaker to the Slave for wireless audio — scan/pair/connect/volume from the Audio settings panel *(bench testing — audio quality limited by mini-UART BT + Wi-Fi 2.4GHz coexistence)* |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration · arm body-panel auto-open/close |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count · **safety lock** (blocks drive when VESC offline or faulted — red banner in Drive tab) · **bench mode** toggle (persisted bypass for testing without motors) |
@@ -205,6 +205,8 @@ The **CHOREO tab** is the main authoring tool. Build multi-track timelines that 
 **VESC mismatch banner** — if the choreography was saved with different motor invert settings than the current config, a warning banner appears before playback to prevent the robot moving backwards.
 
 **Admin guard** — Save, Delete, Export, and Import require admin password. New, Play, Stop, and Load are always free. Once authenticated in the Choreo tab, the session stays unlocked until you switch tabs — no repeated prompts during editing.
+
+**Choreography management** (admin) — each choreo card exposes inline editing: click the label to rename it, pick an emoji from the emoji picker, and assign the choreo to a category. Categories themselves can be created, renamed, reordered, and deleted from the category management panel — without touching any files directly. All changes are persisted to `choreo_categories.json`.
 
 **Smart arm dispatch** — each arm servo can have an associated body panel servo configured in Settings → Arms. When ChoreoPlayer fires an arm-open event, it opens the body panel first, waits 500ms, then extends the arm. On close, it retracts the arm first, then closes the panel after 500ms. Fully automatic — no extra events needed in the choreography.
 
@@ -291,6 +293,21 @@ The lights system uses a **driver plugin architecture** — swap hardware withou
 | **AstroPixels+** | @ commands (USB serial) | `@0T{n}\r`, `@3M{text}\r` |
 
 Switch drivers **hot**, from the Config tab — no reboot, no SSH. The old driver shuts down cleanly, the new one initializes and starts in random mode.
+
+---
+
+## 🔊 Audio — Upload & Manage Sounds
+
+The **AUDIO tab** plays any of the 317 built-in sounds or picks one randomly from a mood category. In admin mode, two extra panels unlock:
+
+**Upload new sounds** — drag an MP3 file anywhere onto the upload zone (or click to browse), select a category, and hit Upload. The file is:
+1. Saved to `slave/sounds/` with a sanitized uppercase filename
+2. Added to `sounds_index.json` immediately (in-memory cache refreshed)
+3. Synced to the Slave Pi via SFTP automatically — no manual copy or restart needed
+
+**Manage categories** — create a new category (name must be lowercase alphanumeric/underscore). Empty categories are valid and appear in the Audio tab immediately. The same panel lets you add a custom MP3 to a new category in one step.
+
+> The 317 built-in sounds are gitignored (large binary files). They live in `slave/sounds/` on the Slave Pi only. If you reinstall the Slave, restore them via SFTP from any backup.
 
 ---
 

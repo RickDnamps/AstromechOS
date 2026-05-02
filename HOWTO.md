@@ -235,6 +235,21 @@ Connect your device to Wi-Fi **R2D2_Control**, then open: **http://192.168.4.1:5
 
 ## Daily use
 
+### Adding sounds
+
+In admin mode, the **Audio tab** shows an upload zone. Drag an MP3 onto it (or click to browse), choose a category, and upload. The sound is saved and synced to the Slave Pi automatically — no SSH, no restart, available immediately.
+
+To create a new category, use the **Create Category** panel below the upload zone.
+
+### Managing choreographies
+
+In admin mode, each choreo card shows inline controls:
+- Click the **label** to rename it (displayed in the file selector and on the card)
+- Click the **emoji** to open the emoji picker
+- Use the **category dropdown** on the card to reassign it to a different category
+
+Choreo categories (create / rename / reorder / delete) are managed from the category panel in the CHOREO tab — no file editing required.
+
 ### Cockpit Status Panel
 
 The **STATUS** button in the top-right corner of the dashboard opens a collapsible overlay showing a live snapshot of the robot from any tab: audio · lights · VESC voltage/amps/watts · Pi CPU/RAM/temperature · Master and Slave IPs · E-Stop and Bench mode state.
