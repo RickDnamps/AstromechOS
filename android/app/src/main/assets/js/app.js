@@ -3944,8 +3944,8 @@ const cockpitPanel = {
       const usedG  = (mm.used_mb  / 1024).toFixed(1);
       const totalG = (mm.total_mb / 1024).toFixed(1);
       const freeG  = (mm.free_mb  / 1024).toFixed(1);
-      if (ramEl)  ramEl.textContent  = `${usedG}/${totalG} GB`;
-      if (freeEl) freeEl.textContent = `Free ${freeG} GB`;
+      if (ramEl)  ramEl.textContent  = `RAM ${usedG}/${totalG} GB`;
+      if (freeEl) freeEl.textContent = `RAM Free ${freeG} GB`;
     }
     const st = data.slave_temp;
     const ps = el('ck-slave-temp');
@@ -3956,7 +3956,7 @@ const cockpitPanel = {
     const sm = data.slave_mem;
     const sfreeEl = el('ck-slave-free');
     if (sm && sfreeEl) {
-      sfreeEl.textContent = `Free ${(sm.free_mb / 1024).toFixed(1)} GB`;
+      sfreeEl.textContent = `RAM Free ${(sm.free_mb / 1024).toFixed(1)} GB`;
     }
     const up = el('ck-uptime');
     if (up) up.textContent = data.uptime || '--';
