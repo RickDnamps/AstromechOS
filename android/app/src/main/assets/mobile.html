@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0,
                maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>R2-D2</title>
+  <title>AstromechOS</title>
   <link rel="stylesheet" href="css/mobile.css">
 </head>
 <body>
@@ -23,6 +23,7 @@
       <button id="estop-reset-btn" onclick="resetEstop()" class="hidden">▶ RESET</button>
     </div>
     <div id="status-right">
+      <span id="batt-display" class="batt-display"></span>
       <div id="status-host" onclick="showHostDialog()">192.168.4.1</div>
     </div>
   </div>
@@ -43,6 +44,11 @@
       <button onclick="_takeCameraStream()" style="background:none;border:1px solid #00aaff;color:#00aaff;font-family:monospace;font-size:11px;letter-spacing:2px;padding:8px 18px;border-radius:6px;cursor:pointer">TAKE STREAM</button>
     </div>
 
+    <!-- VESC safety banner -->
+    <div id="vesc-safety-banner" class="hidden">
+      <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
+    </div>
+
     <!-- HUD corner brackets -->
     <div class="hud-corner tl"></div>
     <div class="hud-corner tr"></div>
@@ -55,13 +61,14 @@
     <!-- Bottom bar: quick pills -->
     <div id="quick-pills">
       <button class="pill-btn" id="pill-audio"  onclick="openDrawer('audio')">🔊 AUDIO</button>
+      <button class="pill-btn" id="pill-choreo" onclick="openDrawer('choreo')">🎭 CHOREO</button>
       <button class="pill-btn" id="pill-seq"    onclick="openDrawer('seq')">🎬 SEQ</button>
       <button class="pill-btn" id="pill-lights" onclick="openDrawer('lights')">💡 LIGHTS</button>
     </div>
 
     <!-- Touch zones — left half (propulsion) / right half (dome) -->
     <div id="js-zone-left"  class="js-zone"><span class="js-hint">PROPULSION</span></div>
-    <div id="js-zone-right" class="js-zone"><span class="js-hint">DÔME</span></div>
+    <div id="js-zone-right" class="js-zone"><span class="js-hint">DOME</span></div>
 
     <!-- Floating joystick rings — hidden until finger touches zone -->
     <div id="js-left-wrap"  class="js-float"><div class="js-ring"><div class="js-knob"></div></div></div>
@@ -75,12 +82,12 @@
   <!-- ── Password modal (Child Lock) ───────────── -->
   <div id="lock-modal" class="hidden" onclick="if(event.target===this)closeLockModal()">
     <div id="lock-modal-box">
-      <div id="lock-modal-title">CHILD LOCK ACTIF</div>
-      <input type="password" id="lock-pwd" placeholder="Mot de passe"
+      <div id="lock-modal-title">CHILD LOCK ACTIVE</div>
+      <input type="password" id="lock-pwd" placeholder="Password"
              onkeydown="if(event.key==='Enter')submitLockPwd()">
-      <div id="lock-pwd-err" class="hidden">Mot de passe incorrect</div>
+      <div id="lock-pwd-err" class="hidden">Incorrect password</div>
       <div id="lock-modal-btns">
-        <button onclick="closeLockModal()">ANNULER</button>
+        <button onclick="closeLockModal()">CANCEL</button>
         <button onclick="submitLockPwd()">UNLOCK</button>
       </div>
     </div>
@@ -111,6 +118,15 @@
         <div id="sound-grid"></div>
       </div>
 
+      <!-- CHOREO content -->
+      <div id="drawer-choreo" class="drawer-pane">
+        <div id="choreo-playing-bar" class="choreo-playing-bar hidden">
+          <span id="choreo-playing-name"></span>
+          <button onclick="stopChoreo()">⏹ STOP</button>
+        </div>
+        <div id="choreo-list"></div>
+      </div>
+
       <!-- SEQ content -->
       <div id="drawer-seq" class="drawer-pane">
         <div id="seq-list"></div>
@@ -127,7 +143,7 @@
             <button class="btn-light btn-off" onclick="teecesMode('off')">OFF</button>
           </div>
           <div class="text-row">
-            <input type="text" id="teeces-text" placeholder="Texte FLD…" maxlength="20"
+            <input type="text" id="teeces-text" placeholder="FLD text…" maxlength="20"
                    autocomplete="off" autocorrect="off" spellcheck="false">
             <button onclick="teecesText()">OK</button>
           </div>

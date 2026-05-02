@@ -1,7 +1,7 @@
 // ============================================================
-//  R2-D2 Mobile Control — mobile.js  v3
+//  AstromechOS Mobile HUD — mobile.js  v4
 //  Self-contained, no dependency on app.js
-//  v3: drawer system replaces tab system, back-button support
+//  v4: VESC safety lock, battery display, choreo drawer
 // ============================================================
 'use strict';
 
@@ -9,7 +9,8 @@
 let API_BASE    = window.R2D2_API_BASE || 'http://192.168.4.1:5000';
 let speedLimit  = 1.0;
 let lockMode    = 0;   // 0=Normal  1=Kids  2=ChildLock
-let estopActive = false;
+let estopActive     = false;
+let vescDriveSafe   = true;
 let driveActive = false;
 let domeActive  = false;
 
@@ -39,9 +40,23 @@ function showToast(msg, ms = 3000) {
   _toastTimer = setTimeout(() => el.classList.add('hidden'), ms);
 }
 
+// ── Battery voltage → color class ────────────────────────────
+// Thresholds per cell: ≥3.8V green · ≥3.6V orange · <3.6V red
+function _battClass(v, cells) {
+  if (!v || !cells) return '';
+  const vpc = v / cells;
+  if (vpc >= 3.8) return 'ok';
+  if (vpc >= 3.6) return 'warn';
+  return 'err';
+}
+
 // ── Status polling (1 s) ──────────────────────────────────────
-let _lastUartPct = 100;
-let _lastEstop   = false;
+let _lastUartPct    = 100;
+let _lastEstop      = false;
+let _lastVescSafe   = true;
+let _batteryCells   = 4;
+let _choreoRunning  = false;
+let _choreoName     = '';
 
 setInterval(() => {
   api('GET', '/status').then(r => r && r.json()).then(s => {
@@ -57,8 +72,8 @@ setInterval(() => {
       uEl.textContent = pct < 100 ? `${Math.round(pct)}%` : '';
       uEl.style.color = pct < 80 ? 'var(--warn)' : 'var(--text-dim)';
     }
-    if (pct < 80 && _lastUartPct >= 80) showToast(`⚠️ UART dégradé — ${Math.round(pct)}%`);
-    if (!s.uart_ready && _lastUartPct > 0) showToast('🔴 UART déconnecté !', 5000);
+    if (pct < 80 && _lastUartPct >= 80) showToast(`⚠ UART degraded — ${Math.round(pct)}%`);
+    if (!s.uart_ready && _lastUartPct > 0) showToast('🔴 UART disconnected!', 5000);
     _lastUartPct = pct;
 
     if (s.temperature != null) {
@@ -76,6 +91,36 @@ setInterval(() => {
       lockMode = s.lock_mode;
       _applyLockMode(false);
     }
+
+    // Battery voltage
+    if (s.battery_cells) _batteryCells = s.battery_cells;
+    const battEl = document.getElementById('batt-display');
+    if (battEl) {
+      if (s.battery_voltage) {
+        battEl.textContent = `${s.battery_voltage.toFixed(1)}V`;
+        battEl.className = 'batt-display ' + _battClass(s.battery_voltage, _batteryCells);
+      } else {
+        battEl.textContent = '';
+        battEl.className = 'batt-display';
+      }
+    }
+
+    // VESC safety lock — block drive if either VESC is offline or faulted
+    const safe = s.vesc_drive_safe !== false;
+    if (safe !== _lastVescSafe) {
+      _lastVescSafe = safe;
+      vescDriveSafe = safe;
+      _applyVescSafetyUI(safe, s);
+    } else {
+      vescDriveSafe = safe;
+    }
+
+    // Choreo status — update playing bar if open
+    if (s.choreo_playing !== undefined) {
+      _choreoRunning = s.choreo_playing;
+      _choreoName    = s.choreo_name || '';
+      _updateChoreoBar();
+    }
   }).catch(() => {});
 }, 1000);
 
@@ -92,11 +137,28 @@ function _applyEstopUI(active) {
   if (active) { jsLeft.reset(); jsRight.reset(); }
 }
 
+function _applyVescSafetyUI(safe, s) {
+  const banner = document.getElementById('vesc-safety-banner');
+  const msg    = document.getElementById('vesc-safety-msg');
+  if (!banner) return;
+
+  if (!safe) {
+    const who = (!s.vesc_l_ok && !s.vesc_r_ok) ? 'L+R'
+              : (!s.vesc_l_ok) ? 'L' : 'R';
+    if (msg) msg.textContent = `DRIVE BLOCKED — VESC ${who} OFFLINE`;
+    banner.classList.remove('hidden');
+    jsLeft.reset();
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
 // ── Drawer system ─────────────────────────────────────────────
 let _activeDrawer  = null;
 let _drawerExpanded = false;
 let _audioInit     = false;
 let _seqInit       = false;
+let _choreoInit    = false;
 
 function openDrawer(tab) {
   if (_activeDrawer === tab) { closeDrawer(); return; }
@@ -107,7 +169,7 @@ function openDrawer(tab) {
   document.getElementById('drawer-' + tab)?.classList.add('active');
 
   // Update title
-  const titles = { audio: '🔊 AUDIO', seq: '🎬 SÉQUENCES', lights: '💡 LIGHTS' };
+  const titles = { audio: '🔊 AUDIO', choreo: '🎭 CHOREO', seq: '🎬 SEQUENCES', lights: '💡 LIGHTS' };
   document.getElementById('drawer-title').textContent = titles[tab] || tab;
 
   // Active pill highlight
@@ -128,8 +190,9 @@ function openDrawer(tab) {
   history.pushState({ drawer: tab }, '');
 
   // Lazy load on first open
-  if (tab === 'audio' && !_audioInit) { _audioInit = true; loadCategories(); }
-  if (tab === 'seq'   && !_seqInit)   { _seqInit   = true; loadSequences();  }
+  if (tab === 'audio'  && !_audioInit)  { _audioInit  = true; loadCategories(); }
+  if (tab === 'seq'    && !_seqInit)    { _seqInit    = true; loadSequences();  }
+  if (tab === 'choreo' && !_choreoInit) { _choreoInit = true; loadChoreos();    }
 
   _haptic(20);
 }
@@ -275,7 +338,7 @@ class MobileJoystick {
       this.x = 0; this.y = 0;
       this._setKnob(0, 0);
       this.ring.classList.remove('touching');
-      this.wrap.style.display = 'none';   // ← disappears on release
+      this.wrap.style.display = 'none';   // disappears on release
       this.onStop();
       break;
     }
@@ -305,7 +368,7 @@ class MobileJoystick {
   }
 }
 
-// Propulsion — bloqué si ChildLock ou E-STOP
+// Propulsion — blocked if ChildLock, E-STOP, or VESC unsafe
 const jsLeft = new MobileJoystick(
   'js-zone-left',
   'js-left-wrap',
@@ -321,10 +384,10 @@ const jsLeft = new MobileJoystick(
     driveActive = true;
   },
   () => { if (driveActive) { api('POST', '/motion/stop'); driveActive = false; } },
-  () => !estopActive && lockMode !== 2
+  () => !estopActive && lockMode !== 2 && vescDriveSafe
 );
 
-// Dôme — bloqué uniquement si E-STOP (Kids mode : dôme libre)
+// Dome — blocked only by E-STOP (Kids mode: dome free)
 const jsRight = new MobileJoystick(
   'js-zone-right',
   'js-right-wrap',
@@ -346,7 +409,7 @@ function triggerEstop() {
   estopActive = true;
   jsLeft.reset(); jsRight.reset();
   _applyEstopUI(true);
-  showToast('🔴 E-STOP activé', 5000);
+  showToast('🔴 E-STOP activated', 5000);
   if (window.AndroidBridge) AndroidBridge.vibrate(400);
 }
 
@@ -358,7 +421,7 @@ function resetEstop() {
 }
 
 // ── Lock — cycle Normal(0) → Kids(1) → ChildLock(2) ──────────
-// Sortie de ChildLock : modal mot de passe
+// Exit ChildLock: password modal
 function cycleLockMode() {
   if (lockMode === 2) { _showLockModal(); return; }
   lockMode = lockMode === 0 ? 1 : 2;
@@ -373,10 +436,8 @@ function _applyLockMode(sendApi) {
   const CLS    = ['', 'kids', 'locked'];
   const BADGE  = ['', 'KIDS MODE', 'CHILD LOCK'];
 
-  // Lock button
   if (btn) btn.className = 'lock-btn ' + CLS[lockMode];
 
-  // Status bar badge (visible tous onglets)
   if (badge) {
     if (lockMode === 0) {
       badge.className = 'hidden';
@@ -387,10 +448,8 @@ function _applyLockMode(sendApi) {
     }
   }
 
-  // data-lock attribute → CSS driven visuals
   if (hud) hud.dataset.lock = lockMode;
 
-  // Speed & stop
   if (lockMode === 0) {
     speedLimit = 1.0;
   } else if (lockMode === 1) {
@@ -489,7 +548,100 @@ function setVolume(val) {
   api('POST', '/audio/volume', { volume: parseInt(val, 10) });
 }
 
-// ── Séquences ─────────────────────────────────────────────────
+// ── Choreographies ────────────────────────────────────────────
+let _choreoItems = [];   // [{name, label, emoji, category, duration}]
+
+function loadChoreos() {
+  api('GET', '/choreo/list').then(r => r && r.json()).then(data => {
+    if (!data?.choreos) return;
+    _choreoItems = data.choreos;
+    _renderChoreoList();
+  }).catch(() => {});
+}
+
+function _renderChoreoList() {
+  const list = document.getElementById('choreo-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  // Group by category
+  const byCategory = {};
+  const catOrder = [];
+  _choreoItems.forEach(c => {
+    const cat = c.category || 'uncategorized';
+    if (!byCategory[cat]) { byCategory[cat] = []; catOrder.push(cat); }
+    byCategory[cat].push(c);
+  });
+
+  catOrder.forEach(cat => {
+    const items = byCategory[cat];
+
+    // Category label (skip if only one unnamed group)
+    if (catOrder.length > 1 || cat !== 'uncategorized') {
+      const lbl = document.createElement('div');
+      lbl.className = 'choreo-category-label';
+      lbl.textContent = cat;
+      list.appendChild(lbl);
+    }
+
+    items.forEach(c => {
+      const row = document.createElement('div');
+      row.className = 'choreo-row' + (_choreoName === c.name && _choreoRunning ? ' playing' : '');
+      row.dataset.name = c.name;
+
+      const dur = c.duration ? `${Math.round(c.duration)}s` : '';
+      row.innerHTML =
+        `<span class="choreo-emoji">${c.emoji || '🎭'}</span>` +
+        `<span class="choreo-name">${c.label || c.name}</span>` +
+        `<span class="choreo-dur">${dur}</span>`;
+
+      row.onclick = () => { playChoreo(c.name, c.label || c.name); _haptic(30); };
+      list.appendChild(row);
+    });
+  });
+
+  _updateChoreoBar();
+}
+
+function _updateChoreoBar() {
+  const bar  = document.getElementById('choreo-playing-bar');
+  const name = document.getElementById('choreo-playing-name');
+  if (!bar) return;
+
+  if (_choreoRunning && _choreoName) {
+    const item = _choreoItems.find(c => c.name === _choreoName);
+    if (name) name.textContent = `▶ ${item?.label || _choreoName}`;
+    bar.classList.remove('hidden');
+  } else {
+    bar.classList.add('hidden');
+  }
+
+  // Update playing highlight on rows
+  document.querySelectorAll('.choreo-row').forEach(row => {
+    row.classList.toggle('playing', _choreoRunning && row.dataset.name === _choreoName);
+  });
+}
+
+function playChoreo(name, label) {
+  api('POST', '/choreo/play', { name }).then(r => r && r.json()).then(d => {
+    if (d) {
+      _choreoRunning = true;
+      _choreoName    = name;
+      _updateChoreoBar();
+    }
+  }).catch(() => {});
+}
+
+function stopChoreo() {
+  api('POST', '/choreo/stop').then(() => {
+    _choreoRunning = false;
+    _choreoName    = '';
+    _updateChoreoBar();
+  }).catch(() => {});
+  _haptic(50);
+}
+
+// ── Sequences ─────────────────────────────────────────────────
 function loadSequences() {
   api('GET', '/scripts/list').then(r => r && r.json()).then(data => {
     if (!data?.scripts) return;
@@ -524,7 +676,7 @@ function teecesPS(mode) { api('POST', '/teeces/psi', { mode }); }
 // ── Host dialog ───────────────────────────────────────────────
 function showHostDialog() {
   if (window.AndroidBridge) {
-    const h = prompt('IP du Master R2-D2:', AndroidBridge.getHost());
+    const h = prompt('AstromechOS Master IP:', AndroidBridge.getHost());
     if (h?.trim()) {
       AndroidBridge.setHost(h.trim());
       API_BASE = 'http://' + h.trim() + ':5000';
