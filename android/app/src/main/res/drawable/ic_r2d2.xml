@@ -1,163 +1,77 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  AstromechOS — R2-D2 launcher icon (108×108 dp)
-  Redesigned 2026 to match the r2d2_blue.svg header icon style.
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- ── Background ─────────────────────────────────────── -->
+    <!-- Background -->
     <path
         android:fillColor="#080c14"
-        android:pathData="M0,0 L108,0 L108,108 L0,108 Z"/>
+        android:pathData="M0,0 H108 V108 H0 Z"/>
 
-    <!-- ── Dome (semi-circle) ──────────────────────────────── -->
+    <!-- Dome (semicircle, base at y=54) -->
     <path
-        android:fillColor="#0d2a4a"
+        android:fillColor="#1a3a5c"
         android:strokeColor="#00aaff"
-        android:strokeWidth="2.2"
-        android:pathData="M18,52 A36,36 0 0 1 90,52 Z"/>
+        android:strokeWidth="4"
+        android:pathData="M18,54 A36,36 0 0 1 90,54 Z"/>
 
-    <!-- Dome inner glow arc -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#00ffea"
-        android:strokeWidth="1.2"
-        android:alpha="0.45"
-        android:pathData="M26,48 Q54,20 82,48"/>
-
-    <!-- Blue dome panel stripe -->
+    <!-- Dome side sensors -->
     <path
         android:fillColor="#00aaff"
-        android:alpha="0.38"
-        android:pathData="M36,23 L72,23 L72,31 L36,31 Z"/>
-
-    <!-- ── Central eye ─────────────────────────────────────── -->
-    <!-- Outer ring -->
-    <path
-        android:fillColor="#001a33"
-        android:strokeColor="#00ffea"
-        android:strokeWidth="2.4"
-        android:pathData="M54,37 m-11,0 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0"/>
-    <!-- Inner filled dot -->
-    <path
-        android:fillColor="#00ffea"
-        android:pathData="M54,37 m-5.5,0 a5.5,5.5 0 1,0 11,0 a5.5,5.5 0 1,0 -11,0"/>
-    <!-- Specular highlight -->
-    <path
-        android:fillColor="#ffffff"
-        android:alpha="0.55"
-        android:pathData="M50,33 m-1.8,0 a1.8,1.8 0 1,0 3.6,0 a1.8,1.8 0 1,0 -3.6,0"/>
-
-    <!-- ── Side sensors ────────────────────────────────────── -->
+        android:alpha="0.75"
+        android:pathData="M26,50 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
     <path
         android:fillColor="#00aaff"
-        android:alpha="0.65"
-        android:pathData="M30,45 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
-    <path
-        android:fillColor="#00aaff"
-        android:alpha="0.65"
-        android:pathData="M78,45 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
-    <!-- Sensor inner dots -->
-    <path
-        android:fillColor="#00ffea"
-        android:alpha="0.5"
-        android:pathData="M30,45 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0"/>
-    <path
-        android:fillColor="#00ffea"
-        android:alpha="0.5"
-        android:pathData="M78,45 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0"/>
+        android:alpha="0.75"
+        android:pathData="M82,50 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
 
-    <!-- ── Body ────────────────────────────────────────────── -->
+    <!-- Central eye — outer ring -->
     <path
-        android:fillColor="#0d2a4a"
+        android:fillColor="#080c14"
         android:strokeColor="#00aaff"
-        android:strokeWidth="2.2"
-        android:pathData="M18,52 L18,90 Q18,94 22,94 L86,94 Q90,94 90,90 L90,52 Z"/>
+        android:strokeWidth="4.5"
+        android:pathData="M54,38 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0"/>
 
-    <!-- Blue side panels on body -->
-    <path
-        android:fillColor="#00aaff"
-        android:alpha="0.38"
-        android:pathData="M18,60 L30,60 L30,82 L18,82 Z"/>
-    <path
-        android:fillColor="#00aaff"
-        android:alpha="0.38"
-        android:pathData="M78,60 L90,60 L90,82 L78,82 Z"/>
-
-    <!-- Center panel outline -->
-    <path
-        android:fillColor="#001a33"
-        android:strokeColor="#00aaff"
-        android:strokeWidth="1.6"
-        android:pathData="M34,60 L74,60 L74,86 L34,86 Z"/>
-
-    <!-- Center panel vertical divider -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#00aaff"
-        android:strokeWidth="1"
-        android:alpha="0.55"
-        android:pathData="M54,60 L54,86"/>
-
-    <!-- Left panel detail block -->
-    <path
-        android:fillColor="#00aaff"
-        android:alpha="0.48"
-        android:pathData="M37,64 L51,64 L51,74 L37,74 Z"/>
-    <!-- Right panel detail block -->
+    <!-- Central eye — inner glow dot -->
     <path
         android:fillColor="#00ffea"
-        android:alpha="0.38"
-        android:pathData="M57,64 L71,64 L71,74 L57,74 Z"/>
+        android:pathData="M54,38 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
 
-    <!-- Small indicator lights bottom-left of panel -->
+    <!-- Body -->
     <path
-        android:fillColor="#00ffea"
-        android:pathData="M38,78 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0"/>
+        android:fillColor="#1a3a5c"
+        android:strokeColor="#00aaff"
+        android:strokeWidth="4"
+        android:pathData="M18,54 L18,90 Q18,94 22,94 L86,94 Q90,94 90,90 L90,54 Z"/>
+
+    <!-- Body center panel accent -->
     <path
         android:fillColor="#00aaff"
-        android:pathData="M46,78 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0"/>
+        android:alpha="0.28"
+        android:pathData="M34,60 L74,60 L74,88 L34,88 Z"/>
 
-    <!-- ── Legs ────────────────────────────────────────────── -->
+    <!-- Indicator lights (cyan + blue) -->
+    <path
+        android:fillColor="#00ffea"
+        android:pathData="M40,82 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0"/>
+    <path
+        android:fillColor="#00aaff"
+        android:pathData="M52,82 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0"/>
+
     <!-- Left leg -->
     <path
-        android:fillColor="#0d2a4a"
+        android:fillColor="#1a3a5c"
         android:strokeColor="#00aaff"
-        android:strokeWidth="2"
-        android:pathData="M18,92 L18,106 Q18,108 22,108 L38,108 Q42,108 42,106 L42,92 Z"/>
+        android:strokeWidth="3.5"
+        android:pathData="M18,90 L18,108 L40,108 L40,90 Z"/>
+
     <!-- Right leg -->
     <path
-        android:fillColor="#0d2a4a"
+        android:fillColor="#1a3a5c"
         android:strokeColor="#00aaff"
-        android:strokeWidth="2"
-        android:pathData="M66,92 L66,106 Q66,108 70,108 L86,108 Q90,108 90,106 L90,92 Z"/>
-
-    <!-- Leg detail lines -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#00aaff"
-        android:strokeWidth="1.2"
-        android:alpha="0.5"
-        android:pathData="M21,100 L39,100"/>
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#00aaff"
-        android:strokeWidth="1.2"
-        android:alpha="0.5"
-        android:pathData="M69,100 L87,100"/>
-
-    <!-- Leg inner detail -->
-    <path
-        android:fillColor="#00aaff"
-        android:alpha="0.3"
-        android:pathData="M22,94 L38,94 L38,98 L22,98 Z"/>
-    <path
-        android:fillColor="#00aaff"
-        android:alpha="0.3"
-        android:pathData="M70,94 L86,94 L86,98 L70,98 Z"/>
+        android:strokeWidth="3.5"
+        android:pathData="M68,90 L68,108 L90,108 L90,90 Z"/>
 
 </vector>
