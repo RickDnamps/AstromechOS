@@ -3919,8 +3919,9 @@ const cockpitPanel = {
       const lc = data.vesc_l_curr, rc = data.vesc_r_curr;
       const powerEl = el('ck-battery-power');
       if (powerEl) {
-        const totalA = (lc != null && rc != null) ? (Math.abs(lc) + Math.abs(rc)) : null;
-        const watt   = totalA != null ? (totalA * v) : null;
+        const totalA = (lc != null || rc != null)
+          ? (Math.abs(lc ?? 0) + Math.abs(rc ?? 0)) : null;
+        const watt = totalA != null ? (totalA * v) : null;
         powerEl.innerHTML = totalA != null
           ? `${totalA.toFixed(1)} A &nbsp;·&nbsp; ${Math.round(watt)} W`
           : '-- A &nbsp;·&nbsp; -- W';
