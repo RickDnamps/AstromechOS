@@ -4878,6 +4878,18 @@ document.addEventListener('DOMContentLoaded', () => {
 // ─── REMOVED: LightEditor + SequenceEditor (replaced by Choreo tab) ──────────
 // ─── Choreo editor follows ───────────────────────────────────────────────────
 // ================================================================
+
+function _chorSelectOptions(names) {
+  return names.map(n => {
+    const v    = n.name || n;
+    const raw  = v.replace(/\.chor$/, '');
+    const lbl  = (typeof n === 'object' && n.label) ? n.label : raw;
+    const emj  = (typeof n === 'object' && n.emoji) ? n.emoji + ' ' : '';
+    const display = lbl !== raw ? `${emj}${lbl} (${raw})` : raw;
+    return `<option value="${v}">${escapeHtml(display)}</option>`;
+  }).join('');
+}
+
 const choreoEditor = (() => {
   // ── State ────────────────────────────────────────────────────────
   let _chor        = null;
@@ -6336,7 +6348,7 @@ const choreoEditor = (() => {
       const sel   = document.getElementById('chor-select');
       if (!sel || !names) return;
       sel.innerHTML = '<option value="">— select choreography —</option>' +
-        names.map(n => { const v = n.name || n; return `<option value="${v}">${v}</option>`; }).join('');
+        _chorSelectOptions(names);
       if (_chor && _chor.meta && _chor.meta.name) sel.value = _chor.meta.name;
       sel.onchange = () => this.load(sel.value);
     },
@@ -6415,9 +6427,9 @@ const choreoEditor = (() => {
       const sel = document.getElementById('chor-select');
       if (sel && names) {
         sel.innerHTML = '<option value="">— select choreography —</option>' +
-          names.map(n => { const v = n.name || n; return `<option value="${v}">${v}</option>`; }).join('');
+          _chorSelectOptions(names);
         sel.onchange = () => this.load(sel.value);
-        if (names.length > 0) { sel.value = names[0]; await this.load(names[0]); }
+        if (names.length > 0) { sel.value = names[0].name || names[0]; await this.load(names[0].name || names[0]); }
       }
       toast(`Deleted: ${name}`, 'ok');
     },
@@ -6512,7 +6524,7 @@ const choreoEditor = (() => {
         const sel   = document.getElementById('chor-select');
         if (sel && names) {
           sel.innerHTML = '<option value="">— select choreography —</option>' +
-            names.map(n => { const v = n.name || n; return `<option value="${v}">${v}</option>`; }).join('');
+            _chorSelectOptions(names);
           sel.onchange = () => this.load(sel.value);
           sel.value = chor.meta.name;
         }
