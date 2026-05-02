@@ -3180,7 +3180,6 @@ class ScriptEngine {
           <span class="seq-card-emoji">${s.emoji}</span>
           <div class="seq-card-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
           <span class="seq-card-label">${escapeHtml(label)}</span>
-          ${isAdmin ? `<span class="seq-card-filename">${escapeHtml(s.name.replace(/\.chor$/, ''))}</span>` : ''}
           <div class="seq-card-progress"><div class="seq-card-progress-fill" id="seq-prog-${s.name}"></div></div>
           ${isAdmin ? `<div class="seq-card-play" onclick="scriptEngine.play(event,'${s.name}')">▶</div>` : ''}
         </div>`;

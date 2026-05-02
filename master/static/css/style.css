@@ -2217,7 +2217,6 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .seq-card:hover      { border-color: var(--blue); background: rgba(0,170,255,0.06); }
 .seq-card-emoji      { font-size: 26px; line-height: 1; display: block; }
 .seq-card-label      { font-size: 10px; font-weight: 600; letter-spacing: 0.4px; color: var(--text-dim); line-height: 1.2; }
-.seq-card-filename   { font-size: 8px; color: rgba(255,255,255,0.2); font-family: monospace; letter-spacing: 0.3px; margin-top: 1px; }
 
 /* Admin mode card extras */
 .seq-card-handle {
