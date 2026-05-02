@@ -4881,11 +4881,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function _chorSelectOptions(names) {
   return names.map(n => {
-    const v    = n.name || n;
-    const raw  = v.replace(/\.chor$/, '');
-    const lbl  = (typeof n === 'object' && n.label) ? n.label : raw;
-    const emj  = (typeof n === 'object' && n.emoji) ? n.emoji + ' ' : '';
-    const display = lbl !== raw ? `${emj}${lbl} (${raw})` : raw;
+    const v   = n.name || n;
+    const raw = v.replace(/\.chor$/, '');
+    const lbl = (typeof n === 'object' && n.label) ? n.label : raw;
+    const emj = (typeof n === 'object' && n.emoji) ? n.emoji + ' ' : '';
+    const diff = lbl.toLowerCase().replace(/\s+/g,'_') !== raw.toLowerCase();
+    const display = `${emj}${lbl}${diff ? ' (' + raw + ')' : ''}`;
     return `<option value="${v}">${escapeHtml(display)}</option>`;
   }).join('');
 }
