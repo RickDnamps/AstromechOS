@@ -167,12 +167,13 @@ curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/script
 ```
 
 This script handles everything automatically:
-- System update + packages (mpg123, alsa-utils, i2c-tools, python3-smbus)
-- UART fix (`disable-bt`)
+- System update + packages (`mpg123`, `alsa-utils`, `i2c-tools`, `python3-smbus`, `pulseaudio`, `pulseaudio-module-bluetooth`, `bluez`, `libasound2-plugins`)
+- UART fix (`miniuart-bt` — BT chip stays active via mini-UART, freeing the PL011 hardware UART `/dev/ttyAMA0` for the Master↔Slave link)
 - Enable hardware UART + I2C
 - Python dependencies (pyserial, smbus2, adafruit-pca9685)
 - Wi-Fi: connect wlan0 to the `R2D2_Control` hotspot
-- ALSA audio: force 3.5mm jack output, volume 100%
+- ALSA → PulseAudio routing (`~/.asoundrc`) — `mpg123` audio routes through PulseAudio, enabling 3.5mm jack or BT speaker output
+- BT speaker support: `artoo` user added to `bluetooth` group, PulseAudio BT modules configured (`default.pa`), linger enabled for headless session
 
 **At the end it asks to reboot — answer Y.**
 
@@ -323,7 +324,7 @@ bash /home/artoo/r2d2/scripts/deploy_rp2040.sh
 
 ## Bluetooth gamepad pairing
 
-Pair from the dashboard: **Config tab → Bluetooth** → Scan → pair your controller.
+Pair from the dashboard: **Config tab → BT Gamepad** → Scan → pair your controller.
 
 Or manually on the Master:
 
@@ -342,6 +343,36 @@ The gamepad auto-reconnects on next boot.
 
 > **Battery level:** supported for PS4, PS5, and Xbox controllers.
 > The NVIDIA Shield controller does not expose battery via any standard Linux interface.
+
+---
+
+## Bluetooth speaker pairing (bench testing)
+
+> ⚠️ Audio quality is limited due to mini-UART BT + Wi-Fi 2.4GHz coexistence on the Slave Pi. This is for bench testing only — the assembled robot will use the 3.5mm jack with a wired amplifier.
+
+Pair a Bluetooth speaker to the **Slave Pi** from the dashboard: **Settings → Audio → Bluetooth Speaker** → Scan → pair and connect your speaker.
+
+**What happens automatically:**
+- Sound output switches to the BT speaker (A2DP sink set as PulseAudio default)
+- The volume slider in the BT Speaker panel controls PA sink volume independently from the main ALSA volume slider
+- Disconnecting restores the 3.5mm jack automatically
+
+Or manually on the Slave:
+
+```bash
+ssh artoo@192.168.4.171
+bluetoothctl
+> power on
+> pairable on
+> scan on
+# wait for your speaker to appear
+> pair XX:XX:XX:XX:XX:XX
+> trust XX:XX:XX:XX:XX:XX
+> connect XX:XX:XX:XX:XX:XX
+> quit
+# Set as default PulseAudio sink:
+XDG_RUNTIME_DIR=/run/user/$(id -u) pactl set-default-sink bluez_sink.XX_XX_XX_XX_XX_XX.a2dp_sink
+```
 
 ---
 

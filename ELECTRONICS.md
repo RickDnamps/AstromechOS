@@ -27,7 +27,7 @@ Complete wiring diagrams, power distribution, and communication architecture for
 | Waveshare Servo Driver HAT | I2C 0x40 | PCA9685 16ch — 11 dome panel servos (MG90S 180°) |
 | Teeces32 (FLD/RLD/PSI LED logics) | USB `/dev/ttyUSB0` | JawaLite protocol 9600 baud |
 | Camera | USB | Vision / person tracking — Phase 5 |
-| UART to Slave Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V |
+| UART to Slave Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V — `dtoverlay=miniuart-bt` frees PL011 UART (BT moves to mini-UART) |
 
 ### Slave — Raspberry Pi 4B 2GB (Body — fixed)
 
@@ -37,8 +37,8 @@ Complete wiring diagrams, power distribution, and communication architecture for
 | PCA9685 Breakout | I2C 0x41 | 16ch PWM — 11 body panel servos (MG90S 180°) |
 | FSESC Mini 6.7 PRO × 2 | USB `/dev/ttyACM0` `/dev/ttyACM1` | PyVESC — 250W hub motors 24V |
 | RP2040-Waveshare 1.28" LCD | USB `/dev/ttyACM2` | Round 240×240 diagnostic display (GC9A01) |
-| 3.5mm audio jack (native Pi) | Native Pi 4B | mpg123 → Amplifier → Speakers |
-| UART to Master Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V |
+| 3.5mm audio jack (native Pi) | Native Pi 4B | mpg123 → PulseAudio → 3.5mm jack → Amplifier → Speakers (or BT speaker for bench testing) |
+| UART to Master Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V — `dtoverlay=miniuart-bt` (same as Master, BT chip active for BT speaker bench testing) |
 
 ### Servos — MG90S 180° (metal gears)
 

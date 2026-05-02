@@ -185,6 +185,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🚀 **One-button deploy** | Dome button → git pull + rsync Slave + reboot |
 | 🌐 **60+ REST endpoints** | Full API for every subsystem |
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category · MP3 upload + category creation (admin) |
+| 🔵 **Bluetooth speaker** | Pair a BT speaker to the Slave for wireless audio — scan/pair/connect/volume from the Audio settings panel *(bench testing — audio quality limited by mini-UART BT + Wi-Fi 2.4GHz coexistence)* |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration · arm body-panel auto-open/close |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
 | 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart · temporary cam active, permanent cam on order |
@@ -563,11 +564,12 @@ curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/script
 ```
 
 **What it does automatically:**
-- System update + `mpg123` for MP3 playback
-- UART fix (`dtoverlay=disable-bt`)
+- System update + `mpg123` for MP3 playback + `pulseaudio`, `pulseaudio-module-bluetooth`, `bluez` for BT speaker
+- UART fix (`dtoverlay=miniuart-bt` — BT chip stays active via mini-UART, freeing PL011 for the UART link)
 - Hardware UART + I2C activation
+- Python dependencies
 - Network setup (connects to `R2D2_Control` hotspot)
-- ALSA audio config — 3.5mm jack, volume 100%
+- ALSA → PulseAudio audio routing (`~/.asoundrc`) — enables both 3.5mm jack and BT speaker output
 - Reboot
 
 #### Step 3 — First Deploy (from Master, once)
@@ -686,7 +688,7 @@ Sequences are **created visually in the in-browser Sequence Editor** — no file
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ Active |
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
 | **4+** | Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Battery gauge (configurable cell count) · Servo hardware IDs + labels | ✅ Active |
-| **4++** | Camera USB autodetect + stream auto-reconnect · BT battery/RSSI · BT keep-alive (VESC fix) · BT panels config-aware · admin inactivity all tabs | ✅ Active |
+| **4++** | Camera USB autodetect + stream auto-reconnect · BT battery/RSSI · BT keep-alive (VESC fix) · BT panels config-aware · admin inactivity all tabs · BT speaker on Slave (scan/pair/volume/jack fallback) | ✅ Active |
 | **5** | Vision — USB camera stream ✅ · person tracking 📋 | 🔄 In progress |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.
