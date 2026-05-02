@@ -1,4 +1,4 @@
-# R2-D2 Project — Claude Code Context
+# AstromechOS — Claude Code Context
 
 > Hardware, câblage, alimentation, I2C/GPIO → **[ELECTRONICS.md](ELECTRONICS.md)**
 > Gotchas d'implémentation détaillés → `bd memories <keyword>` (camera, choreo, js, rp2040, admin, settings…)
@@ -35,7 +35,7 @@
 
 ## 🎯 Architecture
 
-**Master Pi 4B 4GB** (dôme, tourne avec slipring) — Flask API, séquences, servos dôme, Teeces32, déploiement. Future AI : face/voice recognition en local (Vosk/Whisper.cpp + OpenCV) — toujours sur le Master.
+**Master Pi 4B 4GB** (dôme, tourne avec slipring) — Flask API, chorégraphies, servos dôme, lights controller, déploiement. Future AI : face/voice recognition en local (Vosk/Whisper.cpp + OpenCV) — toujours sur le Master.
 **Slave Pi 4B 2GB** (corps, fixe) — VESCs propulsion, servos body, audio mpg123, moteur dôme, RP2040 LCD. Délibérément léger (pas d'IA, pas de Flask) — réactivité temps-réel prioritaire.
 UART physique 115200 baud à travers le slipring. Inspiré de [r2_control by dpoulson](https://github.com/dpoulson/r2_control).
 
@@ -44,12 +44,13 @@ master/
   main.py            boot + init services
   uart_controller.py heartbeat 200ms + CRC
   choreo_player.py   TICK=50ms, multichannel audio, VESC drive, servo interp
-  script_engine.py   exécuteur séquences .scr
+  behavior_engine.py idle alive behaviors
   registry.py        injection dépendances Flask
   flask_app.py       app factory + blueprints
   drivers/           dome_servo(PCA9685@0x40)  dome_motor  body_servo(UART)
-  api/               blueprints audio/motion/servo/script/teeces/status/vesc/camera/choreo
+  api/               blueprints audio/motion/servo/teeces/status/vesc/camera/choreo/behavior
   config/            main.cfg  local.cfg(gitignored)  dome_angles.json(gitignored)  choreo_categories.json
+  choreographies/    48 fichiers .chor (timeline JSON)
 slave/
   uart_listener.py   parse CRC + callbacks
   watchdog.py        coupe VESC si heartbeat >500ms
@@ -116,10 +117,6 @@ GET  /servo/arms                {count, servos:["Servo_S0",...], panels:["Servo_
 POST /servo/arms                {count:2, servos:["Servo_S0","Servo_S1"], panels:["Servo_S5","Servo_S6"]}
   → local.cfg [arms] count/arm_1..arm_N/panel_1..panel_N
 
-POST /scripts/run               {"name":"patrol","loop":false}
-POST /scripts/stop_all
-GET  /scripts/list
-
 POST /teeces/random|leia|off
 POST /teeces/text               {"text":"HELLO"}
 POST /teeces/psi                {"mode":1}
@@ -177,7 +174,7 @@ Tous les indicateurs : `BatteryGauge.voltToColor(v)` / `voltToPct(v)`.
 
 ---
 
-## 🎵 Audio & Teeces — Gotchas
+## 🎵 Audio & Lights — Gotchas
 
 **ALSA :** `amixer -c 0 cset numid=1 <vol>%` — seule commande qui marche sur Pi 4B.
 Volume UI → courbe racine cubique : slider 50% → ALSA 79%. Lecture MP3 : `mpg123 -q`.
@@ -220,8 +217,7 @@ Les panels body (S0–S11 seulement, pas S12–S15) sont optionnels — si non d
 ```
 
 `pulse_us = 500 + (angle/180)*2000` · ramp : step 2°, delay=(10-speed)×3ms/step
-Override séquence : `servo,Servo_M0,open,40,8`
-script_engine route : `Servo_M*` → dome driver · `Servo_S*` → body driver.
+Override choreo : `servo,Servo_M0,open,40,8` — `Servo_M*` → dome driver · `Servo_S*` → body driver.
 
 ---
 
@@ -262,7 +258,7 @@ SSH     artoo / deetoo
 |-------|-------------|------|
 | 1 | UART + watchdog + audio + Teeces + RP2040 + déploiement | ✅ |
 | 2 | VESCs + moteur dôme + servos MG90S | ✅ |
-| 3 | 40 séquences comportementales .scr | ✅ |
+| 3 | 40 séquences comportementales → migrées .chor | ✅ |
 | 4 | API REST + dashboard web + Android | ✅ |
 | 4+ | BT gamepad + CHOREO timeline + VESC diagnostic | ✅ |
 | 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
@@ -330,6 +326,8 @@ cp android/app/build/outputs/apk/debug/app-debug.apk android/compiled/R2-D2_Cont
 > ⚠️ Sync assets si `master/static/` change :
 > `cp master/static/js/app.js android/app/src/main/assets/js/app.js`
 > `cp master/static/css/style.css android/app/src/main/assets/css/style.css`
+>
+> ⚠️ `index.html` doit utiliser des chemins **relatifs** (pas `/static/`). Le fichier `android/app/src/main/assets/index.html` est déjà patché — ne PAS écraser avec `master/templates/index.html` directement (les paths `/static/` cassent en contexte `file://`).
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
