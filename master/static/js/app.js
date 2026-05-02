@@ -6605,7 +6605,14 @@ const choreoEditor = (() => {
         playName = '__preview__';
       }
       const result = await api('/choreo/play', 'POST', { name: playName });
-      if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
+      if (result) {
+        if (playName === '__preview__' && isAdmin) {
+          toast(`Preview playing — press Save to keep this choreography`, 'warn');
+        } else {
+          toast(`Playing: ${_chor.meta.name}`, 'ok');
+        }
+        _startPolling();
+      }
     },
 
     async stop() {
