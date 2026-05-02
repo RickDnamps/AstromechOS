@@ -98,6 +98,15 @@ def create_app() -> Flask:
     def mobile():
         return render_template('mobile.html')
 
+    # Serve user-uploaded robot icons from the project-level icons/ folder
+    icons_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icons')
+    os.makedirs(icons_dir, exist_ok=True)
+
+    @app.get('/icons/<path:filename>')
+    def serve_icon(filename):
+        from flask import send_from_directory
+        return send_from_directory(icons_dir, filename)
+
     # ------------------------------------------------------------------
     # JSON error handling
     # ------------------------------------------------------------------

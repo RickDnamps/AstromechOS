@@ -42,13 +42,15 @@ import configparser
 import logging
 import os
 import subprocess
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 from master.config.config_loader import write_cfg_atomic
 
 settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
 
 LOCAL_CFG    = '/home/artoo/r2d2/master/config/local.cfg'
+_ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
+_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
 INTERNET_CON = 'r2d2-internet'
 HOTSPOT_CON  = 'r2d2-hotspot'
 
@@ -445,9 +447,56 @@ def admin_change_password():
     return jsonify({'ok': True})
 
 
+@settings_bp.get('/settings/icons')
+def list_icons():
+    """Returns list of image files available in the icons/ folder."""
+    os.makedirs(_ICONS_DIR, exist_ok=True)
+    files = sorted(
+        f for f in os.listdir(_ICONS_DIR)
+        if os.path.splitext(f)[1].lower() in _ALLOWED_EXT
+    )
+    return jsonify({'icons': files})
+
+
+@settings_bp.post('/settings/icons/upload')
+def upload_icon():
+    """Uploads a new image to the icons/ folder. Multipart form: file=<image>."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'no file'}), 400
+    f = request.files['file']
+    fname = f.filename or ''
+    ext = os.path.splitext(fname)[1].lower()
+    if ext not in _ALLOWED_EXT:
+        return jsonify({'error': f'unsupported format (allowed: {", ".join(_ALLOWED_EXT)})'}), 400
+    # Sanitize filename — keep only safe chars
+    safe = ''.join(c for c in os.path.basename(fname) if c.isalnum() or c in '._- ')
+    if not safe:
+        return jsonify({'error': 'invalid filename'}), 400
+    os.makedirs(_ICONS_DIR, exist_ok=True)
+    dest = os.path.join(_ICONS_DIR, safe)
+    f.save(dest)
+    log.info("Icon uploaded: %s", safe)
+    return jsonify({'status': 'ok', 'filename': safe})
+
+
+@settings_bp.post('/settings/icons/delete')
+def delete_icon():
+    """Deletes an icon file. Body: {\"filename\": \"foo.png\"}"""
+    data = request.get_json() or {}
+    fname = os.path.basename(data.get('filename', ''))
+    if not fname:
+        return jsonify({'error': 'filename required'}), 400
+    path = os.path.join(_ICONS_DIR, fname)
+    if not os.path.exists(path):
+        return jsonify({'error': 'not found'}), 404
+    os.remove(path)
+    log.info("Icon deleted: %s", fname)
+    return jsonify({'status': 'ok'})
+
+
 @settings_bp.post('/settings/robot_icon')
 def set_robot_icon():
-    """Saves robot header icon to local.cfg. Body: {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset to default SVG."""
+    """Saves robot header icon to local.cfg. Body: {\"icon\": \"img:foo.png\"} or {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset."""
     data = request.get_json() or {}
     icon = data.get('icon', '').strip()
     _write_key('robot', 'icon', icon)

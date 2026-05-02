@@ -1579,32 +1579,14 @@
           <div class="settings-row admin-only" style="flex-direction:column;align-items:flex-start;gap:10px">
             <label class="settings-label">Robot icon</label>
             <div class="icon-picker-grid" id="icon-picker-grid">
-              <button class="icon-picker-btn" data-icon="" title="Default (R2-D2 logo)">
-                <svg width="22" height="22" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="currentColor" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="currentColor" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="currentColor" opacity="0.3"/></svg>
-              </button>
-              <button class="icon-picker-btn" data-icon="🤖">🤖</button>
-              <button class="icon-picker-btn" data-icon="⚡">⚡</button>
-              <button class="icon-picker-btn" data-icon="🚀">🚀</button>
-              <button class="icon-picker-btn" data-icon="🛸">🛸</button>
-              <button class="icon-picker-btn" data-icon="⭐">⭐</button>
-              <button class="icon-picker-btn" data-icon="🌟">🌟</button>
-              <button class="icon-picker-btn" data-icon="💫">💫</button>
-              <button class="icon-picker-btn" data-icon="🎯">🎯</button>
-              <button class="icon-picker-btn" data-icon="👾">👾</button>
-              <button class="icon-picker-btn" data-icon="🎭">🎭</button>
-              <button class="icon-picker-btn" data-icon="⚙️">⚙️</button>
-              <button class="icon-picker-btn" data-icon="🔧">🔧</button>
-              <button class="icon-picker-btn" data-icon="🦾">🦾</button>
-              <button class="icon-picker-btn" data-icon="🛡️">🛡️</button>
-              <button class="icon-picker-btn" data-icon="🔮">🔮</button>
-              <button class="icon-picker-btn" data-icon="💎">💎</button>
-              <button class="icon-picker-btn" data-icon="🏆">🏆</button>
-              <button class="icon-picker-btn" data-icon="🌐">🌐</button>
-              <button class="icon-picker-btn" data-icon="🔵">🔵</button>
-              <button class="icon-picker-btn" data-icon="🟢">🟢</button>
-              <button class="icon-picker-btn" data-icon="🟡">🟡</button>
-              <button class="icon-picker-btn" data-icon="🔴">🔴</button>
-              <button class="icon-picker-btn" data-icon="🟣">🟣</button>
+              <!-- Populated by JS from /settings/icons -->
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <label class="btn btn-secondary" style="cursor:pointer;font-size:10px;padding:4px 12px">
+                + UPLOAD IMAGE
+                <input type="file" id="icon-upload-input" accept="image/*" style="display:none" onchange="uploadIcon(this)">
+              </label>
+              <span id="icon-upload-status" style="font-size:10px;color:var(--text-dim)"></span>
             </div>
           </div>
           <div class="settings-divider"></div>

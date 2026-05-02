@@ -4833,12 +4833,24 @@ async function systemUpdate() {
 
 const _R2_LOGO_SVG = `<svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/></svg>`;
 
+let _currentRobotIcon = '';
+
 function _applyRobotIcon(icon) {
+  _currentRobotIcon = icon || '';
   const wrap = el('header-robot-icon');
-  if (wrap) wrap.innerHTML = icon ? `<span class="brand-icon-emoji">${icon}</span>` : _R2_LOGO_SVG;
+  if (wrap) {
+    if (!icon) {
+      wrap.innerHTML = _R2_LOGO_SVG;
+    } else if (icon.startsWith('img:')) {
+      const fname = icon.slice(4);
+      wrap.innerHTML = `<img class="brand-icon-img" src="/icons/${encodeURIComponent(fname)}" alt="icon">`;
+    } else {
+      wrap.innerHTML = `<span class="brand-icon-emoji">${icon}</span>`;
+    }
+  }
   // Highlight selected button in picker
   document.querySelectorAll('.icon-picker-btn').forEach(b => {
-    b.classList.toggle('selected', b.dataset.icon === (icon || ''));
+    b.classList.toggle('selected', b.dataset.icon === _currentRobotIcon);
   });
 }
 
@@ -4846,15 +4858,86 @@ async function saveRobotIcon(icon) {
   const d = await api('/settings/robot_icon', 'POST', { icon });
   if (d?.status === 'ok') {
     _applyRobotIcon(icon);
-    toast(icon ? `Icon set to ${icon}` : 'Icon reset to default', 'ok');
+    toast(icon ? 'Icon updated' : 'Icon reset to default', 'ok');
   }
 }
 
-// Wire up icon picker buttons (called once DOM is ready)
-function _initIconPicker() {
-  document.querySelectorAll('.icon-picker-btn').forEach(btn => {
-    btn.addEventListener('click', () => saveRobotIcon(btn.dataset.icon));
+async function loadIconPicker() {
+  const grid = el('icon-picker-grid');
+  if (!grid) return;
+  const d = await api('/settings/icons', 'GET');
+  if (!d?.icons) return;
+
+  // Default SVG button first
+  const defaultBtn = document.createElement('button');
+  defaultBtn.className = 'icon-picker-btn' + (_currentRobotIcon === '' ? ' selected' : '');
+  defaultBtn.dataset.icon = '';
+  defaultBtn.title = 'Default (AstromechOS logo)';
+  defaultBtn.innerHTML = `<svg width="22" height="22" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="currentColor" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="currentColor" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="currentColor" opacity="0.3"/></svg>`;
+  defaultBtn.addEventListener('click', () => saveRobotIcon(''));
+  grid.appendChild(defaultBtn);
+
+  // One thumbnail per image file
+  d.icons.forEach(fname => {
+    const iconVal = 'img:' + fname;
+    const btn = document.createElement('button');
+    btn.className = 'icon-picker-btn' + (_currentRobotIcon === iconVal ? ' selected' : '');
+    btn.dataset.icon = iconVal;
+    btn.title = fname;
+
+    const img = document.createElement('img');
+    img.src = '/icons/' + encodeURIComponent(fname);
+    img.alt = fname;
+    img.style.cssText = 'width:30px;height:30px;object-fit:contain;border-radius:4px';
+    btn.appendChild(img);
+
+    // Right-click → delete
+    btn.addEventListener('contextmenu', async e => {
+      e.preventDefault();
+      if (!confirm(`Delete icon "${fname}"?`)) return;
+      const r = await api('/settings/icons/delete', 'POST', { filename: fname });
+      if (r?.status === 'ok') {
+        btn.remove();
+        if (_currentRobotIcon === iconVal) saveRobotIcon('');
+        toast(`Deleted ${fname}`, 'ok');
+      }
+    });
+
+    btn.addEventListener('click', () => saveRobotIcon(iconVal));
+    grid.appendChild(btn);
   });
+}
+
+async function uploadIcon(input) {
+  const status = el('icon-upload-status');
+  const file = input.files[0];
+  if (!file) return;
+  if (status) status.textContent = 'Uploading…';
+
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const r = await fetch('/settings/icons/upload', { method: 'POST', body: form });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      if (status) { status.textContent = '✓ Uploaded'; status.style.color = 'var(--ok)'; }
+      // Reload picker and select new icon
+      const grid = el('icon-picker-grid');
+      if (grid) { grid.innerHTML = ''; await loadIconPicker(); }
+      await saveRobotIcon('img:' + d.filename);
+    } else {
+      if (status) { status.textContent = d.error || 'Upload failed'; status.style.color = 'var(--warn)'; }
+    }
+  } catch {
+    if (status) { status.textContent = 'Upload failed'; status.style.color = 'var(--warn)'; }
+  }
+  input.value = '';
+  setTimeout(() => { if (status) status.textContent = ''; }, 4000);
+}
+
+// Wire up icon picker (called once DOM is ready)
+function _initIconPicker() {
+  loadIconPicker();
 }
 
 async function saveRobotName() {
