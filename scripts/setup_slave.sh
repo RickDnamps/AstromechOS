@@ -98,19 +98,24 @@ apt-get update -qq
 apt-get upgrade -y -qq
 apt-get install -y -qq \
     python3-pip python3-serial python3-smbus \
-    git alsa-utils mpg123 avahi-daemon i2c-tools
-ok "Packages installed (mpg123 + i2c-tools + python3-smbus included)"
+    git alsa-utils mpg123 avahi-daemon i2c-tools \
+    pulseaudio pulseaudio-module-bluetooth bluez libasound2-plugins
+ok "Packages installed (mpg123 + i2c-tools + pulseaudio BT included)"
 
 # =============================================================================
-# STEP 2 — UART fix: free ttyAMA0 from Bluetooth
+# STEP 2 — UART fix: free ttyAMA0 — keep BT functional for speaker
 # =============================================================================
-info "Step 2/5 — UART fix (disable-bt)..."
+info "Step 2/5 — UART fix (miniuart-bt — BT remains functional for speaker)..."
 CONFIG="/boot/firmware/config.txt"
-if grep -q "dtoverlay=disable-bt" "$CONFIG"; then
-    ok "dtoverlay=disable-bt already present"
+if grep -q "dtoverlay=miniuart-bt" "$CONFIG"; then
+    ok "dtoverlay=miniuart-bt already present"
+elif grep -q "dtoverlay=disable-bt" "$CONFIG"; then
+    # disable-bt cuts BT entirely — replace so the BT speaker still works
+    sed -i 's/dtoverlay=disable-bt/dtoverlay=miniuart-bt/' "$CONFIG"
+    ok "dtoverlay=disable-bt replaced by miniuart-bt (BT speaker preserved)"
 else
-    echo "dtoverlay=disable-bt" >> "$CONFIG"
-    ok "dtoverlay=disable-bt added to $CONFIG"
+    echo "dtoverlay=miniuart-bt" >> "$CONFIG"
+    ok "dtoverlay=miniuart-bt added to $CONFIG"
 fi
 
 # =============================================================================
@@ -191,26 +196,54 @@ iw dev wlan0 set power_save off 2>/dev/null || true
 ok "WiFi power saving disabled (permanent udev rule)"
 
 # =============================================================================
-# STEP 6 — ALSA audio configuration (3.5mm jack, not HDMI)
+# STEP 6 — ALSA → PulseAudio routing (3.5mm jack default, BT speaker optional)
 # =============================================================================
-info "Step 6 — Audio configuration (3.5mm jack)..."
+info "Step 6 — Audio configuration (pulseaudio + 3.5mm jack)..."
 
-# Force audio output to the 3.5mm jack (card 0 = bcm2835 Headphones)
-# By default the Pi outputs to HDMI — without this, sounds won't come out of the jack
+# Route ALSA through pulseaudio so mpg123 can reach a BT speaker when one is
+# connected, while falling back to the 3.5mm jack when it isn't.
 cat > /home/"$USER"/.asoundrc << 'ASOUNDRC'
-defaults.pcm.card 0
-defaults.ctl.card 0
+pcm.!default {
+  type pulse
+}
+ctl.!default {
+  type pulse
+}
 ASOUNDRC
 chown "$USER:$USER" /home/"$USER"/.asoundrc
 
-# Volume at 100% + unmute (numid controls on card 0)
-amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true  # PCM Playback Volume
-amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true  # PCM Playback Switch
-
-# Save ALSA state so it survives reboots
+# Volume at 100% + unmute
+amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true
+amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true
 alsactl store 2>/dev/null || true
 
-ok "Audio configured — 3.5mm jack active, volume 100%"
+ok "ALSA → pulseaudio routing configured, volume 100%"
+
+# =============================================================================
+# STEP 6b — PulseAudio Bluetooth configuration
+# =============================================================================
+info "Step 6b — PulseAudio Bluetooth configuration..."
+
+# Add artoo to the bluetooth group (required for bluetoothctl without sudo)
+usermod -aG bluetooth "$USER"
+
+# Load BT modules in pulseaudio (survives reboots via user config)
+PULSE_CFG_DIR="/home/$USER/.config/pulse"
+mkdir -p "$PULSE_CFG_DIR"
+cat > "$PULSE_CFG_DIR/default.pa" << 'PULSECONF'
+.include /etc/pulse/default.pa
+load-module module-bluetooth-policy
+load-module module-bluetooth-discover
+PULSECONF
+chown -R "$USER:$USER" "/home/$USER/.config"
+
+# Allow pulseaudio user service to run without an active login session
+loginctl enable-linger "$USER"
+ARTOO_UID=$(id -u "$USER")
+sudo -u "$USER" XDG_RUNTIME_DIR="/run/user/$ARTOO_UID" \
+    systemctl --user enable pulseaudio.service pulseaudio.socket 2>/dev/null || true
+
+ok "PulseAudio BT configured (auto-start, BT modules loaded)"
 
 # =============================================================================
 # Summary

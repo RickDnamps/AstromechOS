@@ -157,7 +157,7 @@ fi
 # Premier install : services systemd + audio sur le Slave
 # ------------------------------------------------------------------
 if [ "$FIRST_INSTALL" = true ]; then
-    echo "[4/5] Installation services systemd + config audio sur le Slave..."
+    echo "[4/5] Installation services systemd + audio + BT sur le Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" bash << 'REMOTE'
         # Services systemd
         sudo cp /home/artoo/r2d2/slave/services/r2d2-slave.service   /etc/systemd/system/
@@ -166,7 +166,7 @@ if [ "$FIRST_INSTALL" = true ]; then
         sudo systemctl enable r2d2-version r2d2-slave
         echo "  → systemd services installed"
 
-        # Installer mpg123 si absent (lecteur MP3)
+        # mpg123 (MP3 player)
         if ! which mpg123 > /dev/null 2>&1; then
             sudo apt-get install -y -qq mpg123
             echo "  → mpg123 installed"
@@ -174,17 +174,47 @@ if [ "$FIRST_INSTALL" = true ]; then
             echo "  → mpg123 already present"
         fi
 
-        # ALSA config: force 3.5mm jack (card 0) — Pi defaults to HDMI output
+        # pulseaudio + BT packages (BT speaker support)
+        if ! which pulseaudio > /dev/null 2>&1; then
+            sudo apt-get install -y -qq \
+                pulseaudio pulseaudio-module-bluetooth bluez libasound2-plugins
+            echo "  → pulseaudio + BT installed"
+        else
+            echo "  → pulseaudio already present"
+        fi
+
+        # Route ALSA through pulseaudio (fallback to 3.5mm jack when no BT)
         cat > /home/artoo/.asoundrc << 'ASOUNDRC'
-defaults.pcm.card 0
-defaults.ctl.card 0
+pcm.!default {
+  type pulse
+}
+ctl.!default {
+  type pulse
+}
 ASOUNDRC
         amixer -c 0 cset numid=1 100% > /dev/null 2>&1 || true
         amixer -c 0 cset numid=2 on   > /dev/null 2>&1 || true
         sudo alsactl store 2>/dev/null || true
-        echo "  → Audio configured (3.5mm jack, volume 100%)"
+        echo "  → ALSA → pulseaudio routing configured, volume 100%"
+
+        # PulseAudio BT modules + bluetooth group
+        sudo usermod -aG bluetooth artoo
+        mkdir -p /home/artoo/.config/pulse
+        cat > /home/artoo/.config/pulse/default.pa << 'PULSECONF'
+.include /etc/pulse/default.pa
+load-module module-bluetooth-policy
+load-module module-bluetooth-discover
+PULSECONF
+        chown -R artoo:artoo /home/artoo/.config
+
+        # Allow pulseaudio to run without active login session
+        sudo loginctl enable-linger artoo
+        ARTOO_UID=$(id -u artoo)
+        sudo -u artoo XDG_RUNTIME_DIR="/run/user/$ARTOO_UID" \
+            systemctl --user enable pulseaudio.service pulseaudio.socket 2>/dev/null || true
+        echo "  → PulseAudio BT configured"
 REMOTE
-    echo "      Services + audio OK"
+    echo "      Services + audio + BT OK"
 else
     echo "[4/5] systemd services skipped (--first-install not specified)"
 fi
