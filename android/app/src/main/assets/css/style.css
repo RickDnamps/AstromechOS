@@ -9,7 +9,7 @@
  *
  *  AstromechOS — Distributed Robot Controller
  * ============================================================
- *  Copyright (C) 2025 RickDnamps
+ *  Copyright (C) 2026 RickDnamps
  *  https://github.com/RickDnamps/AstromechOS
  *
  *  This file is part of AstromechOS.
