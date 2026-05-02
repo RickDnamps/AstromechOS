@@ -235,6 +235,16 @@ Connect your device to Wi-Fi **R2D2_Control**, then open: **http://192.168.4.1:5
 
 ## Daily use
 
+### Cockpit Status Panel
+
+The **STATUS** button in the top-right corner of the dashboard opens a collapsible overlay showing a live snapshot of the robot from any tab: audio · lights · VESC voltage/amps/watts · Pi CPU/RAM/temperature · Master and Slave IPs · E-Stop and Bench mode state.
+
+### VESC safety lock
+
+When a VESC is offline or reporting a fault, a red banner appears in the Drive tab and all drive commands are blocked (web, Android, BT gamepad). This prevents accidentally driving on a half-connected bench setup.
+
+To test software without motors physically connected, enable **Bench mode** in **Config → VESC**. The setting is persisted in `local.cfg` and survives reboots. Disable it before field use.
+
 ### SSH access
 
 ```bash

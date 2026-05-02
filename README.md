@@ -12,7 +12,7 @@
 [![Sequences](https://img.shields.io/badge/Sequences-40%20behavioral-blue)](master/sequences/)
 [![API](https://img.shields.io/badge/API-60%2B%20endpoints-orange)](master/api/)
 
-*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Choreography timeline editor · Kids Lock · Child Lock*
+*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Choreography timeline editor · Cockpit Status Panel · VESC safety lock · Kids Lock · Child Lock*
 
 </div>
 
@@ -130,7 +130,7 @@ Hardware IDs (Servo_M0/Servo_S0) · Editable labels · Per-panel open/close/spee
 <tr>
 <td align="center" width="50%">
 
-### 🔧 Config — Bluetooth & Gamepad
+### 🔧 Config — BT Gamepad
 BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout (up to 60 min) · Battery % · Signal RSSI
 
 ![Config Bluetooth](Screenshots/Config_Menu_Bluetooth.png)
@@ -175,7 +175,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | | |
 |---|---|
 | 🎭 **40 behavioral sequences** | Coordinated sound + panels + dome + lights — pill categories · emoji picker · loop mode · playing state animations · drag-to-reorder (admin) |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer · body servo dropdown filters out configured arm servos |
+| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC motion · audio · servos · lights in sync · servo validation badges · VESC mismatch banner · admin-guarded Save/Delete/Export/Import · timecode footer · body servo dropdown filters out configured arm servos · file selector shows label + emoji · admin cards show filename tag |
 | 🔌 **Plug-in lights** | Swap Teeces32 ↔ AstroPixels+ hot, no reboot |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo — direct to Pi, zero lag · battery % · RSSI · keep-alive (no VESC cut on hold) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen |
@@ -187,7 +187,8 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🔊 **317 sounds · 14 moods** | Perceptual volume curve · random by category · MP3 upload + category creation (admin) |
 | 🔵 **Bluetooth speaker** | Pair a BT speaker to the Slave for wireless audio — scan/pair/connect/volume from the Audio settings panel *(bench testing — audio quality limited by mini-UART BT + Wi-Fi 2.4GHz coexistence)* |
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration · arm body-panel auto-open/close |
-| 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count |
+| 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count · **safety lock** (blocks drive when VESC offline or faulted — red banner in Drive tab) · **bench mode** toggle (persisted bypass for testing without motors) |
+| 📺 **Cockpit Status Panel** | Collapsible STATUS overlay in the header — always available from any tab. Shows: audio (current sound / "via Choreo") · lights (driver + animation) · VESC (voltage · amps · watts) · PI INFO (Master CPU%/RAM/SD · Slave CPU%/temp/RAM) · Network (Master wlan0+wlan1 IPs · Slave IP) · E-Stop and Bench mode state indicators |
 | 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart · temporary cam active, permanent cam on order |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
@@ -212,6 +213,23 @@ The **CHOREO tab** is the main authoring tool. Build multi-track timelines that 
 **Timecode footer** — the current playback position and total duration are shown in a fixed bar below the timeline (not in the toolbar), keeping the toolbar clean.
 
 Telemetry abort safeguards: ChoreoPlayer monitors VESC voltage (min = cells × 3.5V), temperature (max 80°C), current (max 30A), and UART reliability (3 consecutive failures). Any threshold breach stops the sequence and logs the reason, readable via `GET /choreo/status`.
+
+---
+
+## 📺 Cockpit Status Panel
+
+The **STATUS button** in the top-right corner of every tab opens a collapsible overlay that gives a full real-time snapshot of the robot — without leaving your current tab.
+
+| Card | What it shows |
+|------|--------------|
+| **Audio** | Current sound playing, or "via Choreo" when a choreography is running |
+| **Lights** | Active driver (Teeces32 / AstroPixels+) + current animation name |
+| **Battery / VESC** | Voltage · Amps · Watts — both ESCs combined, `--` when only one connected |
+| **PI INFO** | Master: CPU% · RAM used/total/free · SD card used/total · Slave: CPU% · temp · RAM free |
+| **Network** | Master wlan0 (hotspot) + wlan1 (home Wi-Fi) IPs · Slave IP |
+| **Indicators** | E-Stop armed/tripped state · Bench mode active badge |
+
+The panel auto-refreshes from `/status` every time it's opened. It stays on top of any tab (z-index 195) and is positioned below the tab bar so it never obscures navigation.
 
 ---
 
@@ -336,6 +354,10 @@ All three trigger a **graceful decel ramp** — velocity proportional to current
 **Emergency Stop** (red button, always visible):
 - Instantly puts both PCA9685 chips to SLEEP → hard-cuts all servo PWM
 - `RESET E-STOP` button re-arms the drivers in under a second — no service restart needed
+
+**VESC safety lock** — if either VESC is offline or reporting a fault, the Drive tab shows a red banner and all propulsion is blocked (web, BT gamepad, and Android). This prevents driving on a half-connected robot.
+
+**Bench mode** — a toggle in Config → VESC bypasses the safety lock. Persisted in `local.cfg` across reboots. Intended for software testing without motors connected — the Cockpit status bar shows a badge when active.
 
 ---
 
@@ -689,6 +711,7 @@ Sequences are **created visually in the in-browser Sequence Editor** — no file
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
 | **4+** | Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Battery gauge (configurable cell count) · Servo hardware IDs + labels | ✅ Active |
 | **4++** | Camera USB autodetect + stream auto-reconnect · BT battery/RSSI · BT keep-alive (VESC fix) · BT panels config-aware · admin inactivity all tabs · BT speaker on Slave (scan/pair/volume/jack fallback) | ✅ Active |
+| **4+++** | VESC safety lock (blocks drive when offline/faulted) · bench mode bypass toggle · Cockpit Status Panel (collapsible header overlay — audio/lights/VESC/Pi info/Network) · Choreo file selector with label+emoji · admin filename tags on choreo cards | ✅ Active |
 | **5** | Vision — USB camera stream ✅ · person tracking 📋 | 🔄 In progress |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.
