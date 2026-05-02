@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Head -->
+  <ellipse cx="16" cy="8" rx="6" ry="7" fill="#c8960c" stroke="#a07000" stroke-width="1.2"/>
+  <!-- Eyes -->
+  <circle cx="12.5" cy="7" r="2.2" fill="#111" stroke="#a07000" stroke-width="0.5"/>
+  <circle cx="19.5" cy="7" r="2.2" fill="#111" stroke="#a07000" stroke-width="0.5"/>
+  <!-- Eye glow -->
+  <circle cx="12.5" cy="7" r="1" fill="#ff6600" opacity="0.85"/>
+  <circle cx="19.5" cy="7" r="1" fill="#ff6600" opacity="0.85"/>
+  <circle cx="12" cy="6.5" r="0.35" fill="white" opacity="0.5"/>
+  <circle cx="19" cy="6.5" r="0.35" fill="white" opacity="0.5"/>
+  <!-- Mouth -->
+  <path d="M13 11 Q16 12.5 19 11" stroke="#a07000" stroke-width="0.9" fill="none"/>
+  <!-- Neck -->
+  <rect x="14" y="14" width="4" height="3" rx="1" fill="#b88008" stroke="#a07000" stroke-width="0.8"/>
+  <!-- Torso -->
+  <path d="M10 17 L9 30 L23 30 L22 17 Z" fill="#c8960c" stroke="#a07000" stroke-width="1.1"/>
+  <!-- Chest oval -->
+  <ellipse cx="16" cy="23" rx="4.5" ry="5" fill="none" stroke="#a07000" stroke-width="0.9"/>
+  <!-- Chest panel details -->
+  <line x1="16" y1="18" x2="16" y2="28" stroke="#a07000" stroke-width="0.5" opacity="0.5"/>
+  <rect x="14" y="20" width="4" height="2" rx="0.5" fill="#a07000" opacity="0.4"/>
+  <!-- Shoulder joints -->
+  <circle cx="10" cy="18" r="1.5" fill="#b88008" stroke="#a07000" stroke-width="0.8"/>
+  <circle cx="22" cy="18" r="1.5" fill="#b88008" stroke="#a07000" stroke-width="0.8"/>
+</svg>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dome -->
+  <path d="M8 16 Q8 4 16 4 Q24 4 24 16 Z" fill="#0d2a4a" stroke="#00aaff" stroke-width="1.3"/>
+  <!-- Dome top arc highlight -->
+  <path d="M10 14 Q16 6 22 14" fill="none" stroke="#00ffea" stroke-width="0.7" opacity="0.5"/>
+  <!-- Central eye -->
+  <circle cx="16" cy="11" r="3" fill="#001a33" stroke="#00ffea" stroke-width="1.1"/>
+  <circle cx="16" cy="11" r="1.3" fill="#00ffea"/>
+  <circle cx="15.2" cy="10.2" r="0.4" fill="white" opacity="0.7"/>
+  <!-- Side sensors -->
+  <circle cx="10" cy="12" r="1.4" fill="#00aaff" opacity="0.6"/>
+  <circle cx="22" cy="12" r="1.4" fill="#00aaff" opacity="0.6"/>
+  <!-- Blue dome stripe -->
+  <rect x="11" y="7" width="10" height="2.5" rx="1" fill="#00aaff" opacity="0.35"/>
+  <!-- Body -->
+  <rect x="8" y="16" width="16" height="11" rx="2" fill="#0d2a4a" stroke="#00aaff" stroke-width="1.3"/>
+  <!-- Body center panel -->
+  <rect x="12" y="18" width="8" height="5" rx="1" fill="#001a33" stroke="#00aaff" stroke-width="0.8"/>
+  <line x1="16" y1="18" x2="16" y2="23" stroke="#00aaff" stroke-width="0.6" opacity="0.6"/>
+  <rect x="13.5" y="19.5" width="2" height="2" rx="0.5" fill="#00aaff" opacity="0.5"/>
+  <rect x="16.5" y="19.5" width="2" height="2" rx="0.5" fill="#00ffea" opacity="0.4"/>
+  <!-- Side blue panels -->
+  <rect x="8.5" y="18" width="2.5" height="4" rx="0.5" fill="#00aaff" opacity="0.4"/>
+  <rect x="21" y="18" width="2.5" height="4" rx="0.5" fill="#00aaff" opacity="0.4"/>
+  <!-- Legs -->
+  <rect x="8" y="25" width="5" height="5" rx="1.5" fill="#0d2a4a" stroke="#00aaff" stroke-width="1"/>
+  <rect x="19" y="25" width="5" height="5" rx="1.5" fill="#0d2a4a" stroke="#00aaff" stroke-width="1"/>
+  <!-- Leg detail -->
+  <line x1="9" y1="27" x2="12" y2="27" stroke="#00aaff" stroke-width="0.6" opacity="0.5"/>
+  <line x1="20" y1="27" x2="23" y2="27" stroke="#00aaff" stroke-width="0.6" opacity="0.5"/>
+</svg>
