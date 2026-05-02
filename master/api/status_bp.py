@@ -74,6 +74,12 @@ def _battery_cells() -> int:
     return cfg.getint('battery', 'cells', fallback=4)
 
 
+def _robot_name() -> str:
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return cfg.get('robot', 'name', fallback='R2-D2')
+
+
 def _mem_info() -> dict | None:
     try:
         info = {}
@@ -190,6 +196,7 @@ def get_status():
     # BT controller status
     bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
     return jsonify({
+        'robot_name':   _robot_name(),
         'version':      _read_version(),
         'uptime':       _uptime(),
         'temperature':  _cpu_temp(),

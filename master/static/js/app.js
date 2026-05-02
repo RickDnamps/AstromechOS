@@ -4179,6 +4179,14 @@ class StatusPoller {
     if (sysver) sysver.textContent =
       `Master: v${data.version || '?'}  |  Uptime: ${data.uptime || '--'}`;
 
+    // Robot name — update header and pre-fill settings input
+    if (data.robot_name) {
+      const headerName = el('header-robot-name');
+      if (headerName) headerName.textContent = data.robot_name;
+      const nameInput = el('robot-name-input');
+      if (nameInput && !nameInput.matches(':focus')) nameInput.value = data.robot_name;
+    }
+
     // Battery gauge
     if (data.battery_voltage) batteryGauge.update(data.battery_voltage);
 
@@ -4821,6 +4829,22 @@ async function systemUpdate() {
   toast('Update started…', 'info');
   const d = await api('/system/update', 'POST');
   if (d) toast('Update in progress — Slave will reboot', 'ok');
+}
+
+async function saveRobotName() {
+  const input  = el('robot-name-input');
+  const status = el('robot-name-status');
+  const name   = input?.value.trim();
+  if (!name) { if (status) { status.textContent = 'Name cannot be empty.'; status.style.color = 'var(--warn)'; } return; }
+  const d = await api('/settings/robot_name', 'POST', { name });
+  if (d && d.status === 'ok') {
+    const headerName = el('header-robot-name');
+    if (headerName) headerName.textContent = name;
+    if (status) { status.textContent = 'Saved ✓'; status.style.color = 'var(--ok)'; }
+    toast(`Robot name set to "${name}"`, 'ok');
+  } else {
+    if (status) { status.textContent = d?.error || 'Error saving name.'; status.style.color = 'var(--warn)'; }
+  }
 }
 
 async function adminChangePassword() {

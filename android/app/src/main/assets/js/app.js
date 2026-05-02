@@ -4179,6 +4179,14 @@ class StatusPoller {
     if (sysver) sysver.textContent =
       `Master: v${data.version || '?'}  |  Uptime: ${data.uptime || '--'}`;
 
+    // Robot name — update header and pre-fill settings input
+    if (data.robot_name) {
+      const headerName = el('header-robot-name');
+      if (headerName) headerName.textContent = data.robot_name;
+      const nameInput = el('robot-name-input');
+      if (nameInput && !nameInput.matches(':focus')) nameInput.value = data.robot_name;
+    }
+
     // Battery gauge
     if (data.battery_voltage) batteryGauge.update(data.battery_voltage);
 
@@ -4823,6 +4831,22 @@ async function systemUpdate() {
   if (d) toast('Update in progress — Slave will reboot', 'ok');
 }
 
+async function saveRobotName() {
+  const input  = el('robot-name-input');
+  const status = el('robot-name-status');
+  const name   = input?.value.trim();
+  if (!name) { if (status) { status.textContent = 'Name cannot be empty.'; status.style.color = 'var(--warn)'; } return; }
+  const d = await api('/settings/robot_name', 'POST', { name });
+  if (d && d.status === 'ok') {
+    const headerName = el('header-robot-name');
+    if (headerName) headerName.textContent = name;
+    if (status) { status.textContent = 'Saved ✓'; status.style.color = 'var(--ok)'; }
+    toast(`Robot name set to "${name}"`, 'ok');
+  } else {
+    if (status) { status.textContent = d?.error || 'Error saving name.'; status.style.color = 'var(--warn)'; }
+  }
+}
+
 async function adminChangePassword() {
   const current  = el('admin-pwd-current')?.value  || '';
   const newPwd   = el('admin-pwd-new')?.value      || '';
@@ -5012,6 +5036,7 @@ const choreoEditor = (() => {
   let _selected    = null;
   let _pollTimer   = null;
   let _dirty       = false;
+  let _existsOnDisk = false;  // true only after an explicit admin Save or loading an existing file
   let _lanesWired  = false;
   let _lastTelem   = null;
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
@@ -6499,7 +6524,7 @@ const choreoEditor = (() => {
         if (!ev.duration || ev.duration <= 0) ev.duration = 1.0;
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
-      _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
+      _dirty = false; _existsOnDisk = true; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
       // Ensure servo settings are loaded before migration/validation (race guard)
       if (Object.keys(_servoSettings).length === 0) {
         const r = await api('/servo/settings');
@@ -6582,7 +6607,7 @@ const choreoEditor = (() => {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'AstromechOS' },
         tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
-      _dirty = true; _renderAllTracks();
+      _dirty = true; _existsOnDisk = false; _renderAllTracks();
       const sel = document.getElementById('chor-select');
       if (sel) { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; opt.selected = true; sel.appendChild(opt); }
       toast(`New choreography: ${name}`, 'ok');
@@ -6590,10 +6615,28 @@ const choreoEditor = (() => {
 
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
-      // Auto-save before playing (no auth required — this is an internal save for playback only)
-      if (_dirty) await this.save({ requireAuth: false });
-      const result = await api('/choreo/play', 'POST', { name: _chor.meta.name });
-      if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
+      let playName = _chor.meta.name;
+      const isAdmin = document.body.classList.contains('admin-unlocked');
+      if (_existsOnDisk && !_dirty) {
+        // No changes — play the saved file as-is
+      } else if (_existsOnDisk && _dirty && isAdmin) {
+        // Admin modified an existing file — auto-sync to disk before playing
+        await this.save({ requireAuth: false });
+      } else {
+        // Non-admin with unsaved edits, OR new choreo never saved — use invisible temp file
+        const preview = { ..._chor, meta: { ..._chor.meta, name: '__preview__' } };
+        await api('/choreo/save', 'POST', { chor: preview });
+        playName = '__preview__';
+      }
+      const result = await api('/choreo/play', 'POST', { name: playName });
+      if (result) {
+        if (playName === '__preview__' && isAdmin) {
+          toast(`Preview playing — press Save to keep this choreography`, 'warn');
+        } else {
+          toast(`Playing: ${_chor.meta.name}`, 'ok');
+        }
+        _startPolling();
+      }
     },
 
     async stop() {
@@ -6624,8 +6667,8 @@ const choreoEditor = (() => {
       }
       const result = await api('/choreo/save', 'POST', { chor: _chor });
       if (result) {
-        _dirty = false;
-        _validateServoRefs(); _validateAudioRefs();   // refresh badges after label refresh
+        _dirty = false; _existsOnDisk = true;
+        _validateServoRefs(); _validateAudioRefs();
         toast(`Saved: ${_chor.meta.name}`, 'ok');
       }
     },

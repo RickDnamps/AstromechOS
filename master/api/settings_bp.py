@@ -445,6 +445,19 @@ def admin_change_password():
     return jsonify({'ok': True})
 
 
+@settings_bp.post('/settings/robot_name')
+def set_robot_name():
+    """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""
+    data = request.get_json() or {}
+    name = data.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    if len(name) > 32:
+        return jsonify({'error': 'name too long (max 32 chars)'}), 400
+    _write_key('robot', 'name', name)
+    return jsonify({'status': 'ok', 'name': name})
+
+
 @settings_bp.post('/settings/lights')
 def set_lights_backend():
     """Changes the lights driver at runtime (no reboot). Body: {\"backend\": \"astropixels\"}"""

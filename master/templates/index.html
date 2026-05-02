@@ -59,7 +59,7 @@
       <rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/>
     </svg>
     <div class="brand-text">
-      <span class="brand-r2">R2-D2</span>
+      <span class="brand-r2" id="header-robot-name">R2-D2</span>
       <span class="brand-sub">ASTROMECH OS</span>
     </div>
   </div>
@@ -1567,6 +1567,13 @@
         <section class="card settings-card">
           <h2 class="card-title">SYSTEM</h2>
           <div class="settings-status" id="system-version">Loading...</div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Robot name</label>
+            <input type="text" id="robot-name-input" class="settings-input" maxlength="32" placeholder="R2-D2">
+          </div>
+          <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
+          <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-divider"></div>
           <div class="btn-group-v">
             <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>
             <button class="btn btn-warn" onclick="confirmAction('Reboot Slave?', '/system/reboot_slave')">REBOOT SLAVE</button>

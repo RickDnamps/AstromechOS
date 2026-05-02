@@ -170,6 +170,17 @@ else
     ok "local.cfg created from example (all values pre-filled)"
 fi
 
+# Ask for robot name and write to local.cfg
+echo ""
+read -p "  Robot name (shown in the dashboard header) [R2-D2]: " ROBOT_NAME
+ROBOT_NAME="${ROBOT_NAME:-R2-D2}"
+if ! grep -q '^\[robot\]' "$LOCAL_CFG" 2>/dev/null; then
+    echo -e "\n[robot]\nname = $ROBOT_NAME" | sudo -u "$USER" tee -a "$LOCAL_CFG" > /dev/null
+else
+    sudo -u "$USER" sed -i "/^\[robot\]/,/^\[/ s/^name\s*=.*/name = $ROBOT_NAME/" "$LOCAL_CFG"
+fi
+ok "Robot name set to: $ROBOT_NAME"
+
 # =============================================================================
 # STEP 7 — Network configuration (hotspot + wlan1)
 # =============================================================================
