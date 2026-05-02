@@ -381,6 +381,14 @@ class AdminGuard {
     scriptEngine._syncAdminMode();
   }
 
+  toggleFromHeader() {
+    if (this._unlocked) {
+      this.lock();
+    } else {
+      this.showModal();  // no pendingTab — stay on current tab
+    }
+  }
+
   onTabSwitch(tabId) {
     this._activeTabId = tabId;   // always track, even when locked
     if (!this._unlocked) return;

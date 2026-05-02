@@ -214,6 +214,19 @@
     CHOREO
   </button>
   <div class="tab-spacer"></div>
+  <button id="admin-toggle-btn" class="admin-gear-btn admin-toggle-btn" onclick="adminGuard.toggleFromHeader()" title="Admin mode">
+    <svg class="lock-svg lock-closed" width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      <rect x="1" y="8" width="12" height="8" rx="2"/>
+      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8"/>
+      <circle cx="7" cy="12.5" r="1.3" fill="currentColor" stroke="none"/>
+    </svg>
+    <svg class="lock-svg lock-open" width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+      <rect x="1" y="8" width="12" height="8" rx="2"/>
+      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5"/>
+      <circle cx="7" cy="12.5" r="1.3" fill="currentColor" stroke="none"/>
+    </svg>
+    <span class="admin-toggle-label">ADMIN</span>
+  </button>
   <button id="admin-gear-btn" class="admin-gear-btn" onclick="switchTab('settings')" title="Settings">
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
       <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
