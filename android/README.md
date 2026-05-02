@@ -23,7 +23,7 @@ immersive WebView with haptic feedback on the virtual joystick.
 
 1. Launch Android Studio
 2. Click **File → Open**
-3. Navigate to `R2D2_Control/android/` and click **OK**
+3. Navigate to `AstromechOS/android/` and click **OK**
 4. Wait for Gradle sync to complete (first sync downloads ~500 MB of dependencies)
 5. If prompted to install missing SDK components, click **Install**
 
@@ -98,7 +98,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### Step 1 — Join the R2-D2 WiFi hotspot
 
 On your Android phone:
-- Settings → WiFi → Connect to **R2D2_Control**
+- Settings → WiFi → Connect to **AstromechOS**
 - Default password: `r2d2droid`
 - (Password configured during Master setup)
 
@@ -159,7 +159,7 @@ Rebuild the APK.
 
 ```bash
 # On your PC
-cd R2D2_Control/
+cd AstromechOS/
 python preview.py
 # Server running at http://0.0.0.0:5000
 
@@ -183,7 +183,7 @@ Make sure your phone is on the same WiFi network as your PC.
 The dashboard also works as a Progressive Web App (PWA) installable directly
 from Chrome on Android:
 
-1. Join the **R2D2_Control** WiFi
+1. Join the **AstromechOS** WiFi
 2. Open Chrome and navigate to `http://192.168.4.1:5000`
 3. Tap the browser menu (three dots) → **Add to Home Screen**
 4. Tap **Add**
@@ -277,7 +277,7 @@ if (window.AndroidBridge) {
 - File → Invalidate Caches / Restart → Invalidate and Restart
 
 **App shows blank white screen**
-- Verify phone is connected to **R2D2_Control** WiFi
+- Verify phone is connected to **AstromechOS** WiFi
 - Verify R2-D2 Master is powered and Flask is running
 - Check `usesCleartextTraffic="true"` in AndroidManifest.xml (already set)
 

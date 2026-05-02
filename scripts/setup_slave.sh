@@ -10,23 +10,23 @@
 #  R2-D2 Control System — Distributed Robot Controller
 # ============================================================
 #  Copyright (C) 2025 RickDnamps
-#  https://github.com/RickDnamps/R2D2_Control
+#  https://github.com/RickDnamps/AstromechOS
 #
-#  This file is part of R2D2_Control.
+#  This file is part of AstromechOS.
 #
-#  R2D2_Control is free software: you can redistribute it
+#  AstromechOS is free software: you can redistribute it
 #  and/or modify it under the terms of the GNU General
 #  Public License as published by the Free Software
 #  Foundation, either version 2 of the License, or
 #  (at your option) any later version.
 #
-#  R2D2_Control is distributed in the hope that it will be
+#  AstromechOS is distributed in the hope that it will be
 #  useful, but WITHOUT ANY WARRANTY; without even the implied
 #  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE. See the GNU General Public License for details.
 #
 #  You should have received a copy of the GNU GPL along with
-#  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # =============================================================================
 # setup_slave.sh — Full R2-Slave installation (single command)
@@ -44,7 +44,7 @@
 #   bash /home/artoo/r2d2/scripts/deploy.sh --first-install
 #
 # Usage (on the R2-Slave, connected to home WiFi):
-#   curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_slave.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
 #
 # Or if the script was copied from the Master:
 #   sudo bash /home/artoo/setup_slave.sh
@@ -58,7 +58,7 @@ set -e
 
 REPO_PATH="/home/artoo/r2d2"
 USER="artoo"
-GITHUB_RAW="https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main"
+GITHUB_RAW="https://raw.githubusercontent.com/RickDnamps/AstromechOS/main"
 
 # Colors
 RED='\033[0;31m'
@@ -254,7 +254,7 @@ echo "  Slave installation complete ✓"
 echo "============================================================"
 echo ""
 echo "  After reboot:"
-echo "    The Slave connects to the R2D2_Control hotspot on the Master."
+echo "    The Slave connects to the AstromechOS hotspot on the Master."
 echo ""
 echo "  On the Master, run the first deployment:"
 echo "    bash /home/artoo/r2d2/scripts/deploy.sh --first-install"

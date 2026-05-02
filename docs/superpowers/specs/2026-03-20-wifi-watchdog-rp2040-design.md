@@ -8,7 +8,7 @@
 
 ## Contexte
 
-Le Slave R2-D2 ne dispose que d'un seul adaptateur WiFi (wlan0). Il se connecte normalement au hotspot Master (`R2D2_Control`, prio 100). Un second profil NetworkManager existe déjà sur le Slave (`netplan-wlan0-mywifi2`, prio -10, autoconnect OFF) — c'est le WiFi domestique. Le RP2040 actuel affiche un diagnostic de boot à 7 items sujet à des faux FAIL (race conditions de timing). Il est peu utilisé en pratique.
+Le Slave R2-D2 ne dispose que d'un seul adaptateur WiFi (wlan0). Il se connecte normalement au hotspot Master (`AstromechOS`, prio 100). Un second profil NetworkManager existe déjà sur le Slave (`netplan-wlan0-mywifi2`, prio -10, autoconnect OFF) — c'est le WiFi domestique. Le RP2040 actuel affiche un diagnostic de boot à 7 items sujet à des faux FAIL (race conditions de timing). Il est peu utilisé en pratique.
 
 ---
 

@@ -1,4 +1,4 @@
-# R2D2_Control — Electronics & Wiring Reference
+# AstromechOS — Electronics & Wiring Reference
 
 Complete wiring diagrams, power distribution, and communication architecture for the R2-D2 Master/Slave control system.
 
@@ -265,7 +265,7 @@ flowchart LR
     end
 
     subgraph MASTER_NET["R2-Master Pi 4B (Dome)"]
-        WLAN0["wlan0\n📡 Wi-Fi Hotspot AP\n192.168.4.1  (fixed)\nSSID: R2D2_Control"]
+        WLAN0["wlan0\n📡 Wi-Fi Hotspot AP\n192.168.4.1  (fixed)\nSSID: AstromechOS"]
         WLAN1["wlan1\n🌐 Home Wi-Fi client\nDHCP — internet access"]
     end
 

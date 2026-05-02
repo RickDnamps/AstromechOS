@@ -312,7 +312,7 @@ host = cfg.get('slave', 'host', fallback='r2-slave.local')
 ## 🐙 GitHub & Déploiement
 
 ```
-Repo : https://github.com/RickDnamps/R2D2_Control.git   Branch : main
+Repo : https://github.com/RickDnamps/AstromechOS.git   Branch : main
 ```
 
 **Bouton dôme :** court = git pull + rsync + reboot Slave · long = rollback HEAD^

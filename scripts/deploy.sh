@@ -10,23 +10,23 @@
 #  R2-D2 Control System — Distributed Robot Controller
 # ============================================================
 #  Copyright (C) 2025 RickDnamps
-#  https://github.com/RickDnamps/R2D2_Control
+#  https://github.com/RickDnamps/AstromechOS
 #
-#  This file is part of R2D2_Control.
+#  This file is part of AstromechOS.
 #
-#  R2D2_Control is free software: you can redistribute it
+#  AstromechOS is free software: you can redistribute it
 #  and/or modify it under the terms of the GNU General
 #  Public License as published by the Free Software
 #  Foundation, either version 2 of the License, or
 #  (at your option) any later version.
 #
-#  R2D2_Control is distributed in the hope that it will be
+#  AstromechOS is distributed in the hope that it will be
 #  useful, but WITHOUT ANY WARRANTY; without even the implied
 #  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE. See the GNU General Public License for details.
 #
 #  You should have received a copy of the GNU GPL along with
-#  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # deploy.sh — Deploys Slave code to the R2-Slave (Pi 4B 2G) and restarts the service
 # Usage: bash scripts/deploy.sh [--no-reboot] [--git-pull]
@@ -82,7 +82,7 @@ fi
 echo "[2/4] Checking Slave connection (${SLAVE_HOST})..."
 if ! ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" echo "ping" > /dev/null 2>&1; then
     echo "ERROR: Cannot reach the Slave ${SLAVE_HOST}"
-    echo "       Check that the R2-Slave is connected to the R2D2_Control hotspot"
+    echo "       Check that the R2-Slave is connected to the AstromechOS hotspot"
     exit 1
 fi
 echo "      Slave reachable OK"

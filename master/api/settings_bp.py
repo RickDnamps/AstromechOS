@@ -9,23 +9,23 @@
 #  R2-D2 Control System — Distributed Robot Controller
 # ============================================================
 #  Copyright (C) 2025 RickDnamps
-#  https://github.com/RickDnamps/R2D2_Control
+#  https://github.com/RickDnamps/AstromechOS
 #
-#  This file is part of R2D2_Control.
+#  This file is part of AstromechOS.
 #
-#  R2D2_Control is free software: you can redistribute it
+#  AstromechOS is free software: you can redistribute it
 #  and/or modify it under the terms of the GNU General
 #  Public License as published by the Free Software
 #  Foundation, either version 2 of the License, or
 #  (at your option) any later version.
 #
-#  R2D2_Control is distributed in the hope that it will be
+#  AstromechOS is distributed in the hope that it will be
 #  useful, but WITHOUT ANY WARRANTY; without even the implied
 #  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE. See the GNU General Public License for details.
 #
 #  You should have received a copy of the GNU GPL along with
-#  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
 Blueprint API Settings — Network configuration and R2-D2 parameters.
@@ -221,7 +221,7 @@ def get_settings():
             'ip':         wlan1_ip.split('/')[0] if wlan1_ip else '',
         },
         'hotspot': {
-            'ssid':         cfg.get('hotspot', 'ssid', fallback='R2D2_Control'),
+            'ssid':         cfg.get('hotspot', 'ssid', fallback='AstromechOS'),
             'password_set': bool(cfg.get('hotspot', 'password', fallback='')),
             'ip':           '192.168.4.1',
             'active':       '100' in wlan0_state,

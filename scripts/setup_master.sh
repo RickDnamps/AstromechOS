@@ -10,23 +10,23 @@
 #  R2-D2 Control System — Distributed Robot Controller
 # ============================================================
 #  Copyright (C) 2025 RickDnamps
-#  https://github.com/RickDnamps/R2D2_Control
+#  https://github.com/RickDnamps/AstromechOS
 #
-#  This file is part of R2D2_Control.
+#  This file is part of AstromechOS.
 #
-#  R2D2_Control is free software: you can redistribute it
+#  AstromechOS is free software: you can redistribute it
 #  and/or modify it under the terms of the GNU General
 #  Public License as published by the Free Software
 #  Foundation, either version 2 of the License, or
 #  (at your option) any later version.
 #
-#  R2D2_Control is distributed in the hope that it will be
+#  AstromechOS is distributed in the hope that it will be
 #  useful, but WITHOUT ANY WARRANTY; without even the implied
 #  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 #  PURPOSE. See the GNU General Public License for details.
 #
 #  You should have received a copy of the GNU GPL along with
-#  R2D2_Control. If not, see <https://www.gnu.org/licenses/>.
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # =============================================================================
 # setup_master.sh — Full R2-Master installation (single command)
@@ -44,7 +44,7 @@
 #   → final reboot
 #
 # Usage (on the R2-Master, connected to home WiFi):
-#   curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_master.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_master.sh | sudo bash
 #
 # Or if the repo is already cloned:
 #   sudo bash /home/artoo/r2d2/scripts/setup_master.sh
@@ -53,7 +53,7 @@
 
 set -e
 
-REPO_URL="https://github.com/RickDnamps/R2D2_Control.git"
+REPO_URL="https://github.com/RickDnamps/AstromechOS.git"
 REPO_PATH="/home/artoo/r2d2"
 USER="artoo"
 
@@ -215,7 +215,7 @@ echo "  Repo    : $REPO_PATH"
 echo "  Version : $(cat $REPO_PATH/VERSION)"
 echo ""
 echo "  After reboot:"
-echo "    → Connect to the R2D2_Control hotspot"
+echo "    → Connect to the AstromechOS hotspot"
 echo "    → SSH: ssh artoo@192.168.4.1"
 echo "    → Check: sudo systemctl status r2d2-master"
 echo ""

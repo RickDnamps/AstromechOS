@@ -1,8 +1,8 @@
 <div align="center">
 
-# 🤖 R2D2_Control
+# 🤖 AstromechOS
 
-**The R2-D2 control system you've been waiting for.**
+**The open control platform for astromech builders.**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
@@ -273,17 +273,17 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 
 ```bash
 # Step 1 — Master Pi (SSH into it, then run:)
-curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_master.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_master.sh | sudo bash
 
 # Step 2 — Slave Pi (SSH into it, then run:)
-curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_slave.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
 
 # Step 3 — First deploy (from Master, once:)
 ssh-copy-id artoo@192.168.4.171
 bash /home/artoo/r2d2/scripts/deploy.sh --first-install
 ```
 
-**Done.** Open **`http://192.168.4.1:5000`** on any device connected to the `R2D2_Control` hotspot.
+**Done.** Open **`http://192.168.4.1:5000`** on any device connected to the `AstromechOS` hotspot.
 
 📖 **[Full installation guide →](HOWTO.md)** (recommended — covers reconnecting after reboot, network options, and daily use)
 
@@ -332,6 +332,6 @@ Free to use, modify and share — keep it open source.
 
 *May the Force be with you.* 🌟
 
-[⭐ Star this repo](https://github.com/RickDnamps/R2D2_Control) · [🐛 Report an issue](https://github.com/RickDnamps/R2D2_Control/issues) · [📖 Full guide →](HOWTO.md) · [🔧 Technical reference →](TECHNICAL.md)
+[⭐ Star this repo](https://github.com/RickDnamps/AstromechOS) · [🐛 Report an issue](https://github.com/RickDnamps/AstromechOS/issues) · [📖 Full guide →](HOWTO.md) · [🔧 Technical reference →](TECHNICAL.md)
 
 </div>

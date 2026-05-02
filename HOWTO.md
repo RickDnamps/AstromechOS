@@ -99,7 +99,7 @@ hostname -I
 Run the one-line installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_master.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_master.sh | sudo bash
 ```
 
 This script handles everything automatically:
@@ -109,7 +109,7 @@ This script handles everything automatically:
 - Enable hardware UART + I2C
 - Python dependencies
 - `local.cfg` from the example template
-- Wi-Fi reconfiguration: wlan0 → hotspot `R2D2_Control` (192.168.4.1), wlan1 → home internet
+- Wi-Fi reconfiguration: wlan0 → hotspot `AstromechOS` (192.168.4.1), wlan1 → home internet
 - Ed25519 SSH key generation (for Master → Slave rsync)
 - systemd services installed and enabled
 
@@ -123,15 +123,15 @@ After reboot, the Master's Wi-Fi changes:
 
 ```
 Before:  wlan0 → your home Wi-Fi  (accessible from your PC)
-After:   wlan0 → hotspot R2D2_Control  192.168.4.1  (only from hotspot)
+After:   wlan0 → hotspot AstromechOS  192.168.4.1  (only from hotspot)
          wlan1 → your home Wi-Fi  (new IP assigned by your router)
 ```
 
 Your PC is still on the home network, so you have **two options** to reconnect:
 
-**Option A — Connect your PC to the R2D2_Control hotspot (recommended)**
+**Option A — Connect your PC to the AstromechOS hotspot (recommended)**
 
-1. On your PC, connect to Wi-Fi network: **R2D2_Control**
+1. On your PC, connect to Wi-Fi network: **AstromechOS**
 2. SSH using the fixed hotspot IP:
    ```bash
    ssh artoo@192.168.4.1
@@ -163,7 +163,7 @@ ssh artoo@r2-slave.local
 Run the one-line installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RickDnamps/R2D2_Control/main/scripts/setup_slave.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
 ```
 
 This script handles everything automatically:
@@ -171,7 +171,7 @@ This script handles everything automatically:
 - UART fix (`miniuart-bt` — BT chip stays active via mini-UART, freeing the PL011 hardware UART `/dev/ttyAMA0` for the Master↔Slave link)
 - Enable hardware UART + I2C
 - Python dependencies (pyserial, smbus2, adafruit-pca9685)
-- Wi-Fi: connect wlan0 to the `R2D2_Control` hotspot
+- Wi-Fi: connect wlan0 to the `AstromechOS` hotspot
 - ALSA → PulseAudio routing (`~/.asoundrc`) — `mpg123` audio routes through PulseAudio, enabling 3.5mm jack or BT speaker output
 - BT speaker support: `artoo` user added to `bluetooth` group, PulseAudio BT modules configured (`default.pa`), linger enabled for headless session
 
@@ -185,7 +185,7 @@ The Slave is now connected to the Master hotspot at `192.168.4.171`.
 
 SSH into the Master using whichever method you used in Step 1:
 
-- **Option A (hotspot):** your PC is on `R2D2_Control` → `ssh artoo@192.168.4.1`
+- **Option A (hotspot):** your PC is on `AstromechOS` → `ssh artoo@192.168.4.1`
 - **Option B (home network):** `ssh artoo@r2-master.local` or the IP you found in your router
 
 Run the first deployment:
@@ -225,9 +225,9 @@ Then open: `http://<wlan1-IP>:5000`
 
 > This IP can change if your router reassigns it. To keep it stable, assign a static DHCP lease in your router settings for the Master's MAC address.
 
-**From the R2D2_Control hotspot (fixed IP, always works — best for events):**
+**From the AstromechOS hotspot (fixed IP, always works — best for events):**
 
-Connect your device to Wi-Fi **R2D2_Control**, then open: **http://192.168.4.1:5000**
+Connect your device to Wi-Fi **AstromechOS**, then open: **http://192.168.4.1:5000**
 
 **The Android app** auto-discovers the Master on whichever network it's connected to.
 
@@ -343,7 +343,7 @@ Download [`android/compiled/R2-D2_Control.apk`](android/compiled/R2-D2_Control.a
 ### SSH access
 
 ```bash
-# From any device on the R2D2_Control hotspot:
+# From any device on the AstromechOS hotspot:
 ssh artoo@192.168.4.1    # Master (dome)
 ssh artoo@192.168.4.171  # Slave (body)
 
