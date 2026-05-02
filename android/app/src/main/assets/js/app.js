@@ -1518,6 +1518,7 @@ function _toggleCamera() {
     if (img)   { img.src = ''; img.style.display = 'none'; }
     if (taken) taken.style.display = 'none';
     if (bg)    bg.style.display = 'block';
+    fetch(_camBase() + '/camera/release', { method: 'POST' }).catch(() => {});
   }
 }
 

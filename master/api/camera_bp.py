@@ -116,6 +116,15 @@ def camera_status():
     return jsonify({'active_token': _active_token})
 
 
+@camera_bp.post('/camera/release')
+def camera_release():
+    """Release the stream — resets active token to 0 so /status reports camera_active=false."""
+    global _active_token
+    with _lock:
+        _active_token = 0
+    return '', 204
+
+
 @camera_bp.get('/camera/config')
 def camera_config_get():
     """Returns current camera resolution/fps/quality settings."""
