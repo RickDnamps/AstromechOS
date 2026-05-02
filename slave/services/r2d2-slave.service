@@ -8,6 +8,8 @@ Type=simple
 User=artoo
 WorkingDirectory=/home/artoo/r2d2
 Environment=PYTHONPATH=/home/artoo/r2d2
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
 ExecStart=/usr/bin/python3 /home/artoo/r2d2/slave/main.py
 Restart=always
 RestartSec=3
