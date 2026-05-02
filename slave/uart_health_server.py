@@ -59,41 +59,69 @@ _bt_cache: list = []   # devices discovered during last scan
 
 # ── BT helpers ────────────────────────────────────────────────────────────────
 
-def _bt_run(cmd: list, timeout: float = 10.0) -> tuple[bool, str]:
+import os as _os
+import pwd as _pwd
+
+
+def _artoo_env() -> dict:
+    """Environment for commands that need the artoo user's pulseaudio session."""
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        uid = _pwd.getpwnam('artoo').pw_uid
+    except Exception:
+        uid = _os.getuid()
+    env = dict(_os.environ)
+    env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'
+    env['PULSE_RUNTIME_PATH'] = f'/run/user/{uid}/pulse'
+    return env
+
+
+def _bt_run(cmd: list, timeout: float = 10.0, pa_env: bool = False) -> tuple[bool, str]:
+    try:
+        env = _artoo_env() if pa_env else None
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
         return r.returncode == 0, (r.stdout + r.stderr).strip()
     except Exception as e:
         return False, str(e)
 
 
-def _bt_scan_worker(duration: float = 8.0) -> None:
+def _bt_scan_worker(duration: float = 10.0) -> None:
     global _scan_active, _bt_cache
     _scan_active = True
     try:
-        p = subprocess.Popen(
-            ['bluetoothctl'],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True,
+        # Enable pairing mode so the adapter accepts incoming pair requests
+        subprocess.run(['bluetoothctl', 'pairable', 'on'], capture_output=True, timeout=3)
+        # --timeout N makes bluetoothctl scan non-interactively and exit cleanly
+        subprocess.run(
+            ['bluetoothctl', '--timeout', str(int(duration)), 'scan', 'on'],
+            capture_output=True, timeout=duration + 5,
         )
-        p.stdin.write('scan on\n'); p.stdin.flush()
-        time.sleep(duration)
-        p.stdin.write('devices\nscan off\nquit\n'); p.stdin.flush()
-        out, _ = p.communicate(timeout=5)
+        # Collect all devices discovered (both classic BT and BLE)
+        ok, out = _bt_run(['bluetoothctl', 'devices'])
         seen: set = set()
         devs: list = []
         for line in out.splitlines():
             m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
             if m:
                 mac = m.group(1).upper()
-                if mac not in seen:
+                name = m.group(2).strip()
+                # Skip unnamed random-address BLE devices (MAC starts with random bits)
+                if mac not in seen and not _is_random_unnamed(mac, name):
                     seen.add(mac)
-                    devs.append({'mac': mac, 'name': m.group(2).strip()})
+                    devs.append({'mac': mac, 'name': name})
         _bt_cache = devs
     except Exception as e:
         log.warning('BT scan error: %s', e)
     finally:
         _scan_active = False
+
+
+def _is_random_unnamed(mac: str, name: str) -> bool:
+    """Filter out unnamed BLE random-address devices (clutter in the list)."""
+    if name and not re.match(r'^[0-9A-Fa-f]{2}[-:]', name):
+        return False   # has a real name — keep it
+    # Random private addresses: first octet high 2 bits = 11 (0xCx / 0xEx / etc.)
+    first = int(mac.split(':')[0], 16)
+    return (first & 0xC0) == 0xC0
 
 
 def _bt_status() -> dict:
@@ -117,7 +145,7 @@ def _bt_status() -> dict:
     discovered = [d for d in _bt_cache if d['mac'] not in paired_macs]
 
     # Default pulseaudio sink
-    ok, sink = _bt_run(['pactl', 'get-default-sink'], timeout=3)
+    ok, sink = _bt_run(['pactl', 'get-default-sink'], timeout=3, pa_env=True)
     default_sink = sink.strip() if ok else None
 
     return {
@@ -166,11 +194,22 @@ class _HealthHandler(BaseHTTPRequestHandler):
             if not mac:
                 self._json({'ok': False, 'error': 'mac required'}, 400)
                 return
-            ok, out = _bt_run(['bluetoothctl', 'connect', mac])
+            ok, out = _bt_run(['bluetoothctl', 'connect', mac], timeout=20)
             if ok:
-                # Set as default pulseaudio A2DP sink
-                pa_sink = 'bluez_sink.' + mac.replace(':', '_') + '.a2dp_sink'
-                _bt_run(['pactl', 'set-default-sink', pa_sink], timeout=3)
+                # Give A2DP profile time to negotiate before setting default sink
+                time.sleep(3)
+                mac_u = mac.replace(':', '_')
+                # Try to find the actual bluez sink (profile suffix varies)
+                _, sinks = _bt_run(['pactl', 'list', 'short', 'sinks'], pa_env=True)
+                sink_name = None
+                for line in sinks.splitlines():
+                    if mac_u in line:
+                        sink_name = line.split()[1] if len(line.split()) >= 2 else None
+                        break
+                if not sink_name:
+                    sink_name = f'bluez_sink.{mac_u}.a2dp_sink'  # fallback
+                _bt_run(['pactl', 'set-default-sink', sink_name], pa_env=True, timeout=5)
+                out += f' | PA sink: {sink_name}'
             self._json({'ok': ok, 'output': out})
 
         elif self.path == '/audio/bt/disconnect':
