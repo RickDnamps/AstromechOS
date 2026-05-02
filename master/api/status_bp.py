@@ -77,6 +77,21 @@ def _mem_info() -> dict | None:
         return None
 
 
+def _disk_info() -> dict | None:
+    try:
+        st = os.statvfs('/')
+        total = st.f_blocks * st.f_frsize
+        free  = st.f_bavail * st.f_frsize
+        used  = total - free
+        return {
+            'used_gb':  round(used  / 1024**3, 1),
+            'total_gb': round(total / 1024**3, 1),
+            'free_gb':  round(free  / 1024**3, 1),
+        }
+    except Exception:
+        return None
+
+
 _cpu_prev: tuple[int, int] | None = None  # (idle, total) from last call
 
 
@@ -202,8 +217,10 @@ def get_status():
         'slave_host':        _slave_host(),
         'master_mem':        _mem_info(),
         'master_cpu':        _cpu_pct(),
+        'master_disk':       _disk_info(),
         'slave_temp':        (reg.slave_uart_health or {}).get('cpu_temp'),
         'slave_mem':         (reg.slave_uart_health or {}).get('mem'),
+        'slave_disk':        (reg.slave_uart_health or {}).get('disk'),
         **bt_status,
     })
 

@@ -3939,25 +3939,23 @@ const cockpitPanel = {
     }
     const mm = data.master_mem;
     const ramEl  = el('ck-pi-ram');
-    const freeEl = el('ck-pi-free');
+    const diskEl = el('ck-pi-disk');
     if (mm) {
       const usedG  = (mm.used_mb  / 1024).toFixed(1);
       const totalG = (mm.total_mb / 1024).toFixed(1);
-      const freeG  = (mm.free_mb  / 1024).toFixed(1);
-      if (ramEl)  ramEl.textContent  = `RAM ${usedG}/${totalG} GB`;
-      if (freeEl) freeEl.textContent = `RAM Free ${freeG} GB`;
+      if (ramEl) ramEl.textContent = `RAM ${usedG}/${totalG} GB`;
     }
+    const md = data.master_disk;
+    if (md && diskEl) diskEl.textContent = `SD ${md.used_gb}/${md.total_gb} GB`;
     const st = data.slave_temp;
     const ps = el('ck-slave-temp');
     if (ps) {
       ps.textContent = st != null ? st + '°C' : '--°C';
       ps.style.color = st == null ? 'rgba(255,255,255,0.3)' : st >= 75 ? 'var(--red)' : st >= 60 ? 'var(--orange)' : 'var(--green)';
     }
-    const sm = data.slave_mem;
-    const sfreeEl = el('ck-slave-free');
-    if (sm && sfreeEl) {
-      sfreeEl.textContent = `RAM Free ${(sm.free_mb / 1024).toFixed(1)} GB`;
-    }
+    const sd = data.slave_disk;
+    const sdiskEl = el('ck-slave-disk');
+    if (sd && sdiskEl) sdiskEl.textContent = `SD ${sd.used_gb}/${sd.total_gb} GB`;
     const up = el('ck-uptime');
     if (up) up.textContent = data.uptime || '--';
     const ver = el('ck-version');

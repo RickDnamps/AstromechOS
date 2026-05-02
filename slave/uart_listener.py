@@ -68,6 +68,22 @@ def _cpu_temp() -> float | None:
         return None
 
 
+def _disk_info() -> dict | None:
+    try:
+        import os as _os
+        st = _os.statvfs('/')
+        total = st.f_blocks * st.f_frsize
+        free  = st.f_bavail * st.f_frsize
+        used  = total - free
+        return {
+            'used_gb':  round(used  / 1024**3, 1),
+            'total_gb': round(total / 1024**3, 1),
+            'free_gb':  round(free  / 1024**3, 1),
+        }
+    except Exception:
+        return None
+
+
 def _mem_info() -> dict | None:
     try:
         info = {}
@@ -188,6 +204,7 @@ class UARTListener:
             'window_s':   _HEALTH_WINDOW_S,
             'cpu_temp':   _cpu_temp(),
             'mem':        _mem_info(),
+            'disk':       _disk_info(),
         }
 
 
