@@ -3973,7 +3973,9 @@ const cockpitPanel = {
       : '<span class="cockpit-dim">— idle</span>';
     const audioVal = data.audio_playing
       ? `<span class="cockpit-ok">♪ ${escapeHtml(data.audio_current || '?')}</span>`
-      : '<span class="cockpit-dim">— idle</span>';
+      : data.choreo_playing
+        ? '<span class="cockpit-dim">via Choreo</span>'
+        : '<span class="cockpit-dim">— idle</span>';
     const aliveVal = data.alive_enabled
       ? '<span class="cockpit-ok">ON</span>'
       : '<span class="cockpit-dim">OFF</span>';
