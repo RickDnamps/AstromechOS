@@ -52,6 +52,16 @@ _MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
 _LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
 
 
+def _iface_ip(iface: str) -> str | None:
+    try:
+        import socket, struct, fcntl
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        raw = fcntl.ioctl(s.fileno(), 0x8915, struct.pack('256s', iface[:15].encode()))
+        return socket.inet_ntoa(raw[20:24])
+    except Exception:
+        return None
+
+
 def _slave_host() -> str:
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
@@ -215,6 +225,8 @@ def get_status():
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
         'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
         'slave_host':        _slave_host(),
+        'master_wlan0':      _iface_ip('wlan0'),
+        'master_wlan1':      _iface_ip('wlan1'),
         'master_mem':        _mem_info(),
         'master_cpu':        _cpu_pct(),
         'master_disk':       _disk_info(),
