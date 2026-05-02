@@ -9,7 +9,7 @@
     "source": "message.scr",
     "audio_channels_required": 1,
     "category": "behavior",
-    "emoji": "",
+    "emoji": "📨",
     "label": ""
   },
   "tracks": {

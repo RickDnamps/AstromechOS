@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "name": "my_show12",
+    "version": "1.0",
+    "duration": 5.6,
+    "created": "2026-04-12",
+    "author": "R2-D2 Control",
+    "audio_channels_required": 1,
+    "config_snapshot": {
+      "vesc_invert_L": false,
+      "vesc_invert_R": false,
+      "vesc_power_scale": 0.29
+    }
+  },
+  "tracks": {
+    "audio": [
+      {
+        "action": "play",
+        "file": "",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "t": 0.5
+      }
+    ],
+    "lights": [],
+    "dome": [],
+    "servos": [],
+    "propulsion": [],
+    "markers": [],
+    "arm_servos": [
+      {
+        "servo": "Servo_S12",
+        "action": "open",
+        "duration": 2.1,
+        "group": "arms",
+        "t": 0,
+        "servo_label": "ARMS1_Deploy"
+      },
+      {
+        "servo": "Servo_S12",
+        "action": "close",
+        "duration": 1,
+        "group": "arms",
+        "t": 3.3000000000000003,
+        "servo_label": "ARMS1_Deploy"
+      }
+    ],
+    "body_servos": [
+      {
+        "servo": "",
+        "action": "open",
+        "duration": 1,
+        "group": "body",
+        "t": 0.7000000000000001
+      }
+    ]
+  }
+}

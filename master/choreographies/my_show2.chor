@@ -2,79 +2,101 @@
   "meta": {
     "audio_channels_required": 6,
     "author": "R2-D2 Control",
+    "category": "yup",
     "created": "2026-03-30",
-    "duration": 16.2,
+    "duration": 19.300000000000004,
+    "emoji": "🤖",
+    "label": "Yeah Show2",
     "name": "my_show2",
     "version": "1.0",
-    "category": "newchoreo",
-    "emoji": "",
-    "label": ""
+    "config_snapshot": {
+      "vesc_invert_L": false,
+      "vesc_invert_R": false,
+      "vesc_power_scale": 0.49
+    }
   },
   "tracks": {
-    "arm_servos": [],
+    "arm_servos": [
+      {
+        "servo": "Servo_S12",
+        "action": "open",
+        "duration": 3,
+        "group": "arms",
+        "t": 0.6000000000000001,
+        "servo_label": "ARMS1_Deploy"
+      },
+      {
+        "servo": "Servo_S12",
+        "action": "close",
+        "duration": 3,
+        "group": "arms",
+        "t": 7.5,
+        "servo_label": "ARMS1_Deploy"
+      }
+    ],
     "audio": [
       {
         "action": "play",
         "ch": 0,
         "duration": 16.1,
         "file": "CANTINA",
+        "priority": "normal",
         "t": 0,
-        "volume": 10,
-        "priority": "normal"
+        "volume": 10
       },
       {
         "action": "play",
         "ch": 0,
         "duration": 3.7,
         "file": "Happy003",
+        "priority": "normal",
         "t": 0.7000000000000001,
-        "volume": 85,
-        "priority": "normal"
+        "volume": 85
       },
       {
         "action": "play",
         "ch": 0,
         "duration": 2.5,
         "file": "MISC_022",
+        "priority": "normal",
         "t": 0.7000000000000001,
-        "volume": 85,
-        "priority": "normal"
+        "volume": 85
       },
       {
         "action": "play",
         "ch": 1,
         "duration": 2.2,
         "file": "SCREA002",
+        "priority": "normal",
         "t": 1.2000000000000002,
-        "volume": 85,
-        "priority": "normal"
+        "volume": 85
       },
       {
         "action": "play",
         "ch": 0,
         "duration": 1.3,
         "file": "PROC_013",
+        "priority": "normal",
         "t": 1.7000000000000002,
-        "volume": 85,
-        "priority": "normal"
+        "volume": 85
       },
       {
         "action": "play",
         "ch": 0,
         "duration": 3.4,
         "file": "ANNOYED",
+        "priority": "normal",
         "t": 1.8,
-        "volume": 85,
-        "priority": "normal"
+        "volume": 85
       },
       {
         "action": "play",
         "ch": 0,
         "duration": 5.2,
         "file": "DOODOO",
+        "priority": "normal",
         "t": 6.1000000000000005,
-        "volume": 85,
-        "priority": "normal"
+        "volume": 85
       }
     ],
     "body_servos": [
@@ -84,35 +106,35 @@
         "easing": "",
         "group": "body",
         "servo": "Servo_S0",
-        "t": 0.30000000000000004,
-        "servo_label": "Bras_Gauche"
+        "servo_label": "Body_Panel_1",
+        "t": 0.30000000000000004
       },
       {
         "action": "open",
         "duration": 1,
         "easing": "ease-in-out",
         "group": "body",
-        "servo": "Servo_S1",
+        "servo": "Servo_S2",
+        "servo_label": "Body_Panel_3",
         "t": 0.30000000000000004,
-        "target": 50,
-        "servo_label": "Bras_Droit"
+        "target": 50
       },
       {
         "action": "degree",
         "duration": 1,
         "easing": "ease-in-out",
         "group": "body",
-        "servo": "Servo_S0",
-        "t": 2.1,
-        "servo_label": "Bras_Gauche"
+        "servo": "Servo_S4",
+        "servo_label": "Body_Panel_5",
+        "t": 2.1
       },
       {
         "action": "close",
         "duration": 1,
         "group": "body",
-        "servo": "Servo_S1",
-        "t": 4.6000000000000005,
-        "servo_label": "Bras_Droit"
+        "servo": "Servo_S4",
+        "servo_label": "Body_Panel_5",
+        "t": 4.6000000000000005
       }
     ],
     "dome": [
@@ -140,8 +162,8 @@
         "easing": "",
         "group": "dome",
         "servo": "Servo_M0",
-        "t": 0.30000000000000004,
-        "servo_label": "Panneau_Avant_Dome"
+        "servo_label": "Dome_Panel_1",
+        "t": 0.4
       },
       {
         "action": "close",
@@ -149,8 +171,8 @@
         "easing": "ease-in-out",
         "group": "dome",
         "servo": "Servo_M0",
-        "t": 2.1,
-        "servo_label": "Panneau_Avant_Dome"
+        "servo_label": "Dome_Panel_1",
+        "t": 2.1
       }
     ],
     "lights": [
@@ -174,11 +196,11 @@
         "t": 4.9
       },
       {
-        "duration": 4,
-        "mode": "psi",
-        "sequence": "march",
-        "t": 9.700000000000001,
-        "target": "both"
+        "mode": "text",
+        "duration": 10,
+        "t": 9.200000000000001,
+        "display": "all",
+        "text": "Starwars for ever"
       }
     ],
     "markers": [],
