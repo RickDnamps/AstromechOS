@@ -103,6 +103,29 @@ def _mem_info() -> dict | None:
         return None
 
 
+_cpu_prev: tuple[int, int] | None = None
+
+
+def _cpu_pct() -> float | None:
+    global _cpu_prev
+    try:
+        with open('/proc/stat') as f:
+            parts = f.readline().split()
+        vals  = [int(x) for x in parts[1:]]
+        idle  = vals[3] + (vals[4] if len(vals) > 4 else 0)
+        total = sum(vals)
+        if _cpu_prev is None:
+            _cpu_prev = (idle, total)
+            return None
+        d_idle, d_total = idle - _cpu_prev[0], total - _cpu_prev[1]
+        _cpu_prev = (idle, total)
+        if d_total == 0:
+            return 0.0
+        return round((1 - d_idle / d_total) * 100, 1)
+    except Exception:
+        return None
+
+
 class UARTListener:
     def __init__(self, port: str, baud: int):
         self._port = port
@@ -203,6 +226,7 @@ class UARTListener:
             'health_pct': health_pct,
             'window_s':   _HEALTH_WINDOW_S,
             'cpu_temp':   _cpu_temp(),
+            'cpu_pct':    _cpu_pct(),
             'mem':        _mem_info(),
             'disk':       _disk_info(),
         }

@@ -244,6 +244,7 @@ def get_status():
         'master_cpu':        _cpu_pct(),
         'master_disk':       _disk_info(),
         'slave_temp':        (reg.slave_uart_health or {}).get('cpu_temp'),
+        'slave_cpu':         (reg.slave_uart_health or {}).get('cpu_pct'),
         'slave_mem':         (reg.slave_uart_health or {}).get('mem'),
         'slave_disk':        (reg.slave_uart_health or {}).get('disk'),
         **bt_status,

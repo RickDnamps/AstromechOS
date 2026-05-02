@@ -3972,6 +3972,15 @@ const cockpitPanel = {
       ps.textContent = st != null ? st + '°C' : '--°C';
       ps.style.color = st == null ? 'rgba(255,255,255,0.3)' : st >= 75 ? 'var(--red)' : st >= 60 ? 'var(--orange)' : 'var(--green)';
     }
+    const scpuEl = el('ck-slave-cpu');
+    if (scpuEl) {
+      const sc = data.slave_cpu;
+      scpuEl.textContent = sc != null ? `CPU ${sc.toFixed(0)}%` : 'CPU --%';
+      scpuEl.style.color = sc == null ? '' : sc >= 90 ? 'var(--red)' : sc >= 70 ? 'var(--orange)' : 'rgba(255,255,255,0.35)';
+    }
+    const sm = data.slave_mem;
+    const sramEl = el('ck-slave-ram');
+    if (sm && sramEl) sramEl.textContent = `RAM ${(sm.used_mb/1024).toFixed(1)}/${(sm.total_mb/1024).toFixed(1)} GB`;
     const sd = data.slave_disk;
     const sdiskEl = el('ck-slave-disk');
     if (sd && sdiskEl) sdiskEl.textContent = `SD ${sd.used_gb}/${sd.total_gb} GB`;
@@ -3995,7 +4004,13 @@ const cockpitPanel = {
     const btCls    = !data.bt_connected ? 'dim' : (data.bt_rssi != null && data.bt_rssi <= -70) ? 'warn' : 'ok';
     const btVal    = !data.bt_connected ? '— disconnected'
                    : data.bt_rssi != null ? `✓ ${data.bt_rssi} dBm` : '✓ OK';
+    const estopCls = data.estop_active ? 'err'  : 'ok';
+    const estopVal = data.estop_active ? '⚠ TRIPPED' : '✓ ARMED';
+    const benchCls = data.vesc_bench_mode ? 'warn' : 'dim';
+    const benchVal = data.vesc_bench_mode ? '⚠ ON' : '— off';
     svc.innerHTML =
+      this._svcRow('E-STOP',     estopCls, estopVal) +
+      this._svcRow('Bench Mode', benchCls, benchVal) +
       this._svcRow('UART',       uartCls,  uartVal) +
       this._svcRow('VESC L',     vescLCls, data.vesc_l_ok ? '✓ OK' : '✗ OFFLINE') +
       this._svcRow('VESC R',     vescRCls, data.vesc_r_ok ? '✓ OK' : '✗ OFFLINE') +
@@ -4080,6 +4095,10 @@ const cockpitPanel = {
       alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });
     if ((data.uart_crc_errors ?? 0) > 0)
       alerts.push({ cls: 'warn', msg: `UART ${data.uart_crc_errors} CRC errors` });
+    if (data.estop_active)
+      alerts.push({ cls: 'err', msg: '⚠ E-STOP TRIPPED — servos cut' });
+    if (data.vesc_bench_mode)
+      alerts.push({ cls: 'warn', msg: 'Bench mode ON — VESC safety bypassed' });
     if (alerts.length === 0)
       alerts.push({ cls: 'ok', msg: '✓ No issues detected' });
     return alerts;
