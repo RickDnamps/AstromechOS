@@ -60,6 +60,33 @@ _MAX_BUFFER = 4096
 _HEALTH_WINDOW_S = 60   # sliding window for UART health calculation
 
 
+def _cpu_temp() -> float | None:
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+            return round(int(f.read().strip()) / 1000, 1)
+    except Exception:
+        return None
+
+
+def _mem_info() -> dict | None:
+    try:
+        info = {}
+        with open('/proc/meminfo') as f:
+            for line in f:
+                k, v = line.split(':', 1)
+                info[k.strip()] = int(v.strip().split()[0])
+        total     = info.get('MemTotal', 0)
+        available = info.get('MemAvailable', 0)
+        used      = total - available
+        return {
+            'used_mb':  round(used / 1024),
+            'total_mb': round(total / 1024),
+            'free_mb':  round(available / 1024),
+        }
+    except Exception:
+        return None
+
+
 class UARTListener:
     def __init__(self, port: str, baud: int):
         self._port = port
@@ -163,32 +190,6 @@ class UARTListener:
             'mem':        _mem_info(),
         }
 
-
-def _cpu_temp() -> float | None:
-    try:
-        with open('/sys/class/thermal/thermal_zone0/temp') as f:
-            return round(int(f.read().strip()) / 1000, 1)
-    except Exception:
-        return None
-
-
-def _mem_info() -> dict | None:
-    try:
-        info = {}
-        with open('/proc/meminfo') as f:
-            for line in f:
-                k, v = line.split(':', 1)
-                info[k.strip()] = int(v.strip().split()[0])
-        total     = info.get('MemTotal', 0)
-        available = info.get('MemAvailable', 0)
-        used      = total - available
-        return {
-            'used_mb':  round(used / 1024),
-            'total_mb': round(total / 1024),
-            'free_mb':  round(available / 1024),
-        }
-    except Exception:
-        return None
 
     def _process_line(self, line: str) -> None:
         if not line:
