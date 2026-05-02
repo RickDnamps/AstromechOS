@@ -3931,6 +3931,12 @@ const cockpitPanel = {
       pt.textContent = t != null ? t + '°C' : '--°C';
       pt.style.color = t == null ? '' : t >= 75 ? 'var(--red)' : t >= 60 ? 'var(--orange)' : 'var(--green)';
     }
+    const cpu = el('ck-pi-cpu');
+    if (cpu) {
+      const c = data.master_cpu;
+      cpu.textContent = c != null ? `CPU ${c.toFixed(0)}%` : 'CPU --%';
+      cpu.style.color = c == null ? '' : c >= 90 ? 'var(--red)' : c >= 70 ? 'var(--orange)' : 'rgba(255,255,255,0.35)';
+    }
     const st = data.slave_temp;
     const ps = el('ck-slave-temp');
     if (ps) {
@@ -3943,7 +3949,7 @@ const cockpitPanel = {
       if (mm) {
         const usedG  = (mm.used_mb  / 1024).toFixed(1);
         const totalG = (mm.total_mb / 1024).toFixed(1);
-        ram.textContent = `M RAM ${usedG}/${totalG} GB`;
+        ram.textContent = `${usedG}/${totalG} GB`;
       }
     }
     const up = el('ck-uptime');
