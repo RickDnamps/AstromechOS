@@ -9,7 +9,7 @@
     "source": "dance.scr",
     "category": "performance",
     "emoji": "💃",
-    "label": ""
+    "label": "Dance"
   },
   "tracks": {
     "body_servos": [

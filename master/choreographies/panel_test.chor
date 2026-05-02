@@ -9,7 +9,7 @@
     "source": "panel_test.scr",
     "category": "test",
     "emoji": "🔧",
-    "label": ""
+    "label": "Panel Test"
   },
   "tracks": {
     "dome_servos": [

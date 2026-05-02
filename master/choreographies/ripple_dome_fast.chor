@@ -9,7 +9,7 @@
     "source": "ripple_dome_fast.scr",
     "category": "dome",
     "emoji": "🌊",
-    "label": ""
+    "label": "Ripple Dome Fast"
   },
   "tracks": {
     "dome_servos": [

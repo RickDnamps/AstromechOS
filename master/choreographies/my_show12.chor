@@ -10,7 +10,8 @@
       "vesc_invert_L": false,
       "vesc_invert_R": false,
       "vesc_power_scale": 0.29
-    }
+    },
+    "label": "My Show 12"
   },
   "tracks": {
     "audio": [

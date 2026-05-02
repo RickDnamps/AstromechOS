@@ -9,7 +9,7 @@
     "source": "dome_test1.scr",
     "category": "test",
     "emoji": "🔧",
-    "label": ""
+    "label": "Dome Test 1"
   },
   "tracks": {
     "dome_servos": [

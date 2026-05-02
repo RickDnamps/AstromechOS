@@ -9,7 +9,7 @@
     "source": "flap_dome_side.scr",
     "category": "dome",
     "emoji": "🚪",
-    "label": ""
+    "label": "Flap Dome Side"
   },
   "tracks": {
     "dome_servos": [

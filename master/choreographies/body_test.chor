@@ -9,7 +9,7 @@
     "source": "body_test.scr",
     "category": "test",
     "emoji": "🔧",
-    "label": ""
+    "label": "Body Test"
   },
   "tracks": {
     "body_servos": [

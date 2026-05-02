@@ -9,7 +9,7 @@
     "source": "hp_twitch.scr",
     "category": "dome",
     "emoji": "💡",
-    "label": ""
+    "label": "HP Twitch"
   },
   "tracks": {
     "dome_servos": [

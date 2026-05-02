@@ -9,7 +9,7 @@
     "source": "flap_dome_fast.scr",
     "category": "dome",
     "emoji": "🚪",
-    "label": ""
+    "label": "Flap Dome Fast"
   },
   "tracks": {
     "dome_servos": [

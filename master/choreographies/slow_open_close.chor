@@ -9,7 +9,7 @@
     "source": "slow_open_close.scr",
     "category": "dome",
     "emoji": "🚪",
-    "label": ""
+    "label": "Slow Open Close"
   },
   "tracks": {
     "dome_servos": [

@@ -9,7 +9,7 @@
     "source": "ripple_dome_side.scr",
     "category": "dome",
     "emoji": "🌊",
-    "label": ""
+    "label": "Ripple Dome Side"
   },
   "tracks": {
     "dome_servos": [
