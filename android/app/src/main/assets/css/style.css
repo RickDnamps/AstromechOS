@@ -3382,12 +3382,14 @@ body.admin-unlocked .tab.tab-protected { display: flex; }
 .admin-gear-btn.active { color: var(--accent); background: rgba(0,170,255,0.1); }
 body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--orange); }
 
-/* Admin toggle button — lock emoji + ADMIN label beside the gear */
+/* Admin toggle button — SVG lock icon + ADMIN label beside the gear */
 .admin-toggle-btn { gap: 5px; }
 .admin-toggle-label { font-size: 9px; letter-spacing: .07em; font-weight: 600; }
-.admin-lock-icon { font-size: 13px; line-height: 1; }
-.admin-lock-icon::before { content: '🔐'; }
-body.admin-unlocked .admin-lock-icon::before { content: '🔓'; }
+/* ID selectors (1,0,0) beat body[data-lock-mode] attribute selectors (0,2,1) */
+#admin-lock-open  { display: none; }
+#admin-lock-closed { display: block; }
+body.admin-unlocked #admin-lock-open  { display: block; }
+body.admin-unlocked #admin-lock-closed { display: none; }
 body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba(255,160,64,.4); background: rgba(255,160,64,.06); }
 
 /* Overlay modal */
