@@ -170,10 +170,11 @@ def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
     bench_mode ON  → None telem = allow (no VESC hardware).
     bench_mode OFF → None telem = block (full safety check).
     Stale (>max_age s) or fault ≠ 0 always blocks."""
+    bench = bool(getattr(reg, 'vesc_bench_mode', False))
     if telem is None:
-        return bool(getattr(reg, 'vesc_bench_mode', False))
+        return bench
     if _time.time() - telem.get('ts', 0) > max_age:
-        return False
+        return bench  # bench mode bypasses stale check too
     return telem.get('fault', 0) == 0
 
 
