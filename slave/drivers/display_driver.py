@@ -44,9 +44,38 @@ from shared.base_driver import BaseDriver
 log = logging.getLogger(__name__)
 
 DISPLAY_BAUD  = 115200
-# Ports to try in order — the RP2040 takes the first available ACM
-# If VESCs are not connected, the RP2040 is on ttyACM0
 DISPLAY_PORTS = ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
+
+# RP2040 USB identifiers (MicroPython default)
+_RP2040_VENDOR  = "2e8a"
+_VESC_VENDOR    = "0483"
+
+
+def _usb_vendor(tty_name: str) -> str | None:
+    """Read the USB vendor ID for a ttyACMx device from sysfs. Returns lowercase hex or None."""
+    try:
+        # /sys/class/tty/ttyACM0/device -> ../../<interface> -> ../../../<device>
+        dev_path = os.path.realpath(f"/sys/class/tty/{tty_name}/device")
+        # walk up to find idVendor (usually 2-3 levels up)
+        for _ in range(4):
+            dev_path = os.path.dirname(dev_path)
+            vendor_file = os.path.join(dev_path, "idVendor")
+            if os.path.exists(vendor_file):
+                with open(vendor_file) as f:
+                    return f.read().strip().lower()
+    except Exception:
+        pass
+    return None
+
+
+def _find_rp2040_port() -> str | None:
+    """Return the first ttyACMx port whose USB vendor ID matches the RP2040."""
+    for port in DISPLAY_PORTS:
+        tty = os.path.basename(port)
+        vendor = _usb_vendor(tty)
+        if vendor == _RP2040_VENDOR:
+            return port
+    return None
 
 
 class DisplayDriver(BaseDriver):
@@ -59,18 +88,25 @@ class DisplayDriver(BaseDriver):
         self._last_cmd: str = ""
 
     def setup(self) -> bool:
-        ports = DISPLAY_PORTS if self._port == "auto" else [self._port]
+        if self._port == "auto":
+            # Prefer the port whose USB vendor ID matches the RP2040 (2e8a)
+            rp_port = _find_rp2040_port()
+            ports = [rp_port] if rp_port else DISPLAY_PORTS
+            if rp_port:
+                log.info(f"DisplayDriver: RP2040 identified by USB vendor ID on {rp_port}")
+        else:
+            ports = [self._port]
         for port in ports:
             try:
                 self._serial = serial.Serial(port, self._baud, timeout=1)
                 self._port  = port
                 self._ready = True
-                time.sleep(0.5)  # allow USB/RP2040 to stabilize before first send
+                time.sleep(0.5)
                 log.info(f"DisplayDriver opened: {port}")
                 return True
             except serial.SerialException:
                 continue
-        log.error(f"DisplayDriver: no port available among {ports}")
+        log.error(f"DisplayDriver: no RP2040 found among {ports}")
         return False
 
     def reconnect(self) -> bool:
