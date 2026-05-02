@@ -3932,7 +3932,7 @@ const cockpitPanel = {
       pt.textContent = t != null ? t + '°C' : '--°C';
       pt.style.color = t == null ? '' : t >= 75 ? 'var(--red)' : t >= 60 ? 'var(--orange)' : 'var(--green)';
     }
-    if (ph) ph.textContent = t == null ? '' : t >= 75 ? '⚠ critique' : t >= 60 ? '⚠ chaud' : 'OK';
+    if (ph) ph.textContent = t == null ? '' : t >= 75 ? '⚠ critical' : t >= 60 ? '⚠ hot' : 'OK';
     const up = el('ck-uptime');
     if (up) up.textContent = data.uptime || '--';
     const ver = el('ck-version');
@@ -4011,29 +4011,29 @@ const cockpitPanel = {
     const alerts = [];
     const t = data.temperature;
     if (t != null) {
-      if (t >= 75) alerts.push({ cls: 'err',  msg: `Pi ${t}°C — surchauffe` });
-      else if (t >= 60) alerts.push({ cls: 'warn', msg: `Pi ${t}°C — surveiller` });
+      if (t >= 75) alerts.push({ cls: 'err',  msg: `Pi ${t}°C — overheating` });
+      else if (t >= 60) alerts.push({ cls: 'warn', msg: `Pi ${t}°C — watch temp` });
     }
     const lt = data.vesc_l_temp;
     const rt = data.vesc_r_temp;
-    if (lt != null && lt >= 70) alerts.push({ cls: 'err',  msg: `VESC L ${lt.toFixed(0)}°C — surchauffe` });
-    else if (lt != null && lt >= 50) alerts.push({ cls: 'warn', msg: `VESC L ${lt.toFixed(0)}°C — chaud` });
-    if (rt != null && rt >= 70) alerts.push({ cls: 'err',  msg: `VESC R ${rt.toFixed(0)}°C — surchauffe` });
-    else if (rt != null && rt >= 50) alerts.push({ cls: 'warn', msg: `VESC R ${rt.toFixed(0)}°C — chaud` });
+    if (lt != null && lt >= 70) alerts.push({ cls: 'err',  msg: `VESC L ${lt.toFixed(0)}°C — overheating` });
+    else if (lt != null && lt >= 50) alerts.push({ cls: 'warn', msg: `VESC L ${lt.toFixed(0)}°C — hot` });
+    if (rt != null && rt >= 70) alerts.push({ cls: 'err',  msg: `VESC R ${rt.toFixed(0)}°C — overheating` });
+    else if (rt != null && rt >= 50) alerts.push({ cls: 'warn', msg: `VESC R ${rt.toFixed(0)}°C — hot` });
     const v = data.battery_voltage;
     if (v != null && batteryGauge.voltToColor(v) === '#ff2244')
-      alerts.push({ cls: 'err',  msg: `Batterie critique ${v.toFixed(1)}V` });
+      alerts.push({ cls: 'err',  msg: `Battery critical ${v.toFixed(1)}V` });
     else if (v != null && batteryGauge.voltToColor(v) === '#ff8800')
-      alerts.push({ cls: 'warn', msg: `Batterie faible ${v.toFixed(1)}V` });
+      alerts.push({ cls: 'warn', msg: `Battery low ${v.toFixed(1)}V` });
     if (!data.vesc_l_ok) alerts.push({ cls: 'err', msg: 'VESC L offline / fault' });
     if (!data.vesc_r_ok) alerts.push({ cls: 'err', msg: 'VESC R offline / fault' });
     const rssi = data.bt_rssi;
     if (data.bt_connected && rssi != null && rssi <= -80)
-      alerts.push({ cls: 'warn', msg: `BT signal faible ${rssi} dBm` });
+      alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });
     if ((data.uart_crc_errors ?? 0) > 0)
       alerts.push({ cls: 'warn', msg: `UART ${data.uart_crc_errors} CRC errors` });
     if (alerts.length === 0)
-      alerts.push({ cls: 'ok', msg: '✓ Aucun problème détecté' });
+      alerts.push({ cls: 'ok', msg: '✓ No issues detected' });
     return alerts;
   },
 };
