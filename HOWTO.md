@@ -287,6 +287,59 @@ When a VESC is offline or reporting a fault, a red banner appears in the Drive t
 
 To test software without motors physically connected, enable **Bench mode** in **Config → VESC**. The setting is persisted in `local.cfg` and survives reboots. Disable it before field use.
 
+### Bluetooth gamepad
+
+The gamepad connects **directly to the Master Pi via Bluetooth** (Linux evdev — no phone relay, no extra hardware, zero lag). Compatible with Xbox Series, PS4/PS5, Nintendo Switch Pro, 8BitDo, and any standard HID gamepad.
+
+**Default button mapping:**
+
+| Input | Action |
+|-------|--------|
+| Left stick Y | Forward / reverse propulsion |
+| Left stick X | Left / right steering |
+| Right stick X | Dome rotation |
+| Hold Y (□) | Open dome panels → release to close |
+| Hold X (△) | Open body panels → release to close |
+| B (○) | Random R2-D2 sound |
+| Home / Options | Emergency stop |
+| R1 (turbo) | Speed boost multiplier |
+
+**Configuration** — remap any button, adjust deadzone, and set inactivity timeout (slider up to 600s, manual entry up to 3600s) from **Config → BT Gamepad** — no SSH needed.
+
+**Battery & signal** — the Config panel shows battery percentage and Bluetooth RSSI with live color coding (green/orange/red), updated every 30 seconds. Supported by PS4, PS5, and Xbox controllers. The NVIDIA Shield controller uses a proprietary protocol and does not expose battery level — it will show 0%.
+
+**Keep-alive** — a background thread re-sends the last drive command every 300ms while the joystick is held. This prevents the MotionWatchdog from cutting propulsion when the stick is held steady (evdev only fires on axis *change*, not continuously).
+
+Pair from the dashboard: **Config → BT Gamepad → Scan**, or manually via `bluetoothctl` on the Master.
+
+---
+
+### Kids Lock & Child Lock
+
+Three operating modes, switchable from the dashboard header (password-protected):
+
+| Mode | Icon | Effect |
+|------|------|--------|
+| **Normal** | 🟢 | Full speed, all controls active |
+| **Kids** | 🟡 | Speed capped at configurable % — great for shows with young pilots |
+| **Child Lock** | 🔴 | All motion completely blocked — lights & sounds still work |
+
+Lock mode applies to **both web and Bluetooth** inputs simultaneously. Servos, audio, and lights remain fully operational in all modes.
+
+---
+
+### Android app
+
+Download [`android/compiled/R2-D2_Control.apk`](android/compiled/R2-D2_Control.apk) — enable *Install from unknown sources*, install, launch.
+
+- **Full-screen immersive mode** — hides navigation bars, swipe to reveal
+- **Offline banner** — immediate visual feedback when connection drops
+- **Auto-discovery** — tries mDNS → saved IP → 192.168.4.1 → subnet scan
+- **Configurable host** — long-press to change Master IP
+- **Works offline** — all assets bundled locally, no internet required on the phone
+
+---
+
 ### SSH access
 
 ```bash
