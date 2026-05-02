@@ -3931,11 +3931,21 @@ const cockpitPanel = {
       pt.textContent = t != null ? t + '°C' : '--°C';
       pt.style.color = t == null ? '' : t >= 75 ? 'var(--red)' : t >= 60 ? 'var(--orange)' : 'var(--green)';
     }
-    const cpu = el('ck-pi-cpu');
-    if (cpu) {
+    const cpuEl = el('ck-pi-cpu');
+    if (cpuEl) {
       const c = data.master_cpu;
-      cpu.textContent = c != null ? `CPU ${c.toFixed(0)}%` : 'CPU --%';
-      cpu.style.color = c == null ? '' : c >= 90 ? 'var(--red)' : c >= 70 ? 'var(--orange)' : 'rgba(255,255,255,0.35)';
+      cpuEl.textContent = c != null ? `CPU ${c.toFixed(0)}%` : 'CPU --%';
+      cpuEl.style.color = c == null ? '' : c >= 90 ? 'var(--red)' : c >= 70 ? 'var(--orange)' : 'rgba(255,255,255,0.35)';
+    }
+    const mm = data.master_mem;
+    const ramEl  = el('ck-pi-ram');
+    const freeEl = el('ck-pi-free');
+    if (mm) {
+      const usedG  = (mm.used_mb  / 1024).toFixed(1);
+      const totalG = (mm.total_mb / 1024).toFixed(1);
+      const freeG  = (mm.free_mb  / 1024).toFixed(1);
+      if (ramEl)  ramEl.textContent  = `${usedG}/${totalG} GB`;
+      if (freeEl) freeEl.textContent = `Free ${freeG} GB`;
     }
     const st = data.slave_temp;
     const ps = el('ck-slave-temp');
@@ -3943,14 +3953,10 @@ const cockpitPanel = {
       ps.textContent = st != null ? st + '°C' : '--°C';
       ps.style.color = st == null ? 'rgba(255,255,255,0.3)' : st >= 75 ? 'var(--red)' : st >= 60 ? 'var(--orange)' : 'var(--green)';
     }
-    const ram = el('ck-pi-ram');
-    if (ram) {
-      const mm = data.master_mem;
-      if (mm) {
-        const usedG  = (mm.used_mb  / 1024).toFixed(1);
-        const totalG = (mm.total_mb / 1024).toFixed(1);
-        ram.textContent = `${usedG}/${totalG} GB`;
-      }
+    const sm = data.slave_mem;
+    const sfreeEl = el('ck-slave-free');
+    if (sm && sfreeEl) {
+      sfreeEl.textContent = `Free ${(sm.free_mb / 1024).toFixed(1)} GB`;
     }
     const up = el('ck-uptime');
     if (up) up.textContent = data.uptime || '--';

@@ -65,9 +65,14 @@ def _mem_info() -> dict | None:
             for line in f:
                 k, v = line.split(':', 1)
                 info[k.strip()] = int(v.strip().split()[0])
-        total = info.get('MemTotal', 0)
-        used  = total - info.get('MemAvailable', 0)
-        return {'used_mb': round(used / 1024), 'total_mb': round(total / 1024)}
+        total     = info.get('MemTotal', 0)
+        available = info.get('MemAvailable', 0)
+        used      = total - available
+        return {
+            'used_mb':  round(used / 1024),
+            'total_mb': round(total / 1024),
+            'free_mb':  round(available / 1024),
+        }
     except Exception:
         return None
 
