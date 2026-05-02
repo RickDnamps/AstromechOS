@@ -38,6 +38,7 @@ Endpoints:
   POST /system/reboot_slave → reboot Slave (via UART)
 """
 
+import configparser
 import datetime
 import os
 import subprocess
@@ -46,6 +47,15 @@ import time as _time
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.app_watchdog import app_watchdog
+
+_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
+_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+
+
+def _slave_host() -> str:
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return cfg.get('slave', 'host', fallback='r2-slave.local')
 
 try:
     from master.api import camera_bp as _cam_bp
@@ -147,6 +157,7 @@ def get_status():
         'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
         'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
+        'slave_host':        _slave_host(),
         **bt_status,
     })
 

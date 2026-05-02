@@ -3989,7 +3989,8 @@ const cockpitPanel = {
     const net = el('ck-network');
     if (!net) return;
     net.innerHTML =
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">IP</span><span class="cockpit-row-val cockpit-ok">${window.location.hostname}</span></div>` +
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">Master</span><span class="cockpit-row-val cockpit-ok">${window.location.hostname}</span></div>` +
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">Slave</span><span class="cockpit-row-val cockpit-ok">${escapeHtml(data.slave_host || '—')}</span></div>` +
       `<div class="cockpit-row"><span class="cockpit-row-lbl">Version</span><span class="cockpit-row-val cockpit-dim">v${escapeHtml(String(data.version || '?'))}</span></div>`;
   },
 
