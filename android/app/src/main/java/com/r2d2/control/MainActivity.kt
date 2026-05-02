@@ -167,13 +167,13 @@ class MainActivity : AppCompatActivity() {
 
     /** Lance l'auto-découverte en arrière-plan. Met à jour le banner pendant la recherche. */
     private fun startAutoDiscover() {
-        binding.statusText.text = "RECHERCHE R2-D2..."
+        binding.statusText.text = "RECHERCHE ASTROMECH..."
         lifecycleScope.launch {
             val found = withContext(Dispatchers.IO) { tryDiscover() }
             if (found != null) {
                 getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE)
                     .edit().putString(PREF_HOST, found).apply()
-                Toast.makeText(this@MainActivity, "R2-D2 trouvé : $found", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Astromech trouvé : $found", Toast.LENGTH_SHORT).show()
                 isServerOnline   = false
                 autoDiscovering  = false
                 pingFailureCount = 0
@@ -351,7 +351,7 @@ class MainActivity : AppCompatActivity() {
         container.addView(ipRow)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Adresse IP du Master R2-D2")
+            .setTitle("Adresse IP du Master Astromech")
             .setView(container)
             .setPositiveButton("CONNECTER") { _, _ ->
                 applyNewHost(ipInput.text.toString().trim())
@@ -372,10 +372,10 @@ class MainActivity : AppCompatActivity() {
                 if (found != null) {
                     ipInput.setText(found)
                     ipInput.setSelection(found.length)
-                    statusLabel.text = "✓ R2-D2 trouvé : $found"
+                    statusLabel.text = "✓ Astromech trouvé : $found"
                     statusLabel.setTextColor(android.graphics.Color.parseColor("#00cc66"))
                 } else {
-                    statusLabel.text = "Aucun R2-D2 trouvé sur le réseau."
+                    statusLabel.text = "Aucun Astromech trouvé sur le réseau."
                     statusLabel.setTextColor(android.graphics.Color.parseColor("#ff2244"))
                 }
             }

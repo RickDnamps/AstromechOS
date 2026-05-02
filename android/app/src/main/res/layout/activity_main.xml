@@ -100,7 +100,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="R2-D2"
+            android:text="ASTROMECH"
             android:textColor="#00aaff"
             android:textSize="48sp"
             android:fontFamily="monospace"

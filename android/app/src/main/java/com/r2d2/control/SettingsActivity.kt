@@ -30,14 +30,14 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
         // ── Connection category ───────────────────────────────────
         val catConn = PreferenceCategory(requireContext()).apply {
-            title = "R2-D2 Connection"
+            title = "Astromech Connection"
         }
         screen.addPreference(catConn)
 
         EditTextPreference(requireContext()).apply {
             key = MainActivity.PREF_HOST
             title = "Master IP Address"
-            summary = "Default: 192.168.4.1 (R2-D2 hotspot)"
+            summary = "Default: 192.168.4.1 (Astromech hotspot)"
             setDefaultValue(MainActivity.DEFAULT_HOST)
             setOnBindEditTextListener { editText ->
                 editText.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -57,7 +57,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
         Preference(requireContext()).apply {
             title = "WiFi Network"
-            summary = "Join R2D2_Control WiFi before connecting"
+            summary = "Join the Astromech hotspot WiFi before connecting"
             isEnabled = false
             catConn.addPreference(this)
         }
@@ -91,8 +91,8 @@ class SettingsFragment : PreferenceFragmentCompat() {
         screen.addPreference(catAbout)
 
         Preference(requireContext()).apply {
-            title = "R2-D2 Control"
-            summary = "Version 1.0.0 — WebView wrapper for R2-D2 dashboard"
+            title = "Astromech Control"
+            summary = "Version 2.0 — AstromechOS mobile interface"
             isEnabled = false
             catAbout.addPreference(this)
         }
