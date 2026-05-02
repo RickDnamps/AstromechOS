@@ -134,9 +134,59 @@ body::after {
   flex-shrink: 0;
 }
 
+.brand-icon-wrap {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-icon-emoji {
+  font-size: 26px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(0,170,255,0.7));
+  animation: logo-pulse 3s ease-in-out infinite;
+}
+
 .r2-logo {
   filter: drop-shadow(0 0 6px rgba(0,170,255,0.7));
   animation: logo-pulse 3s ease-in-out infinite;
+}
+
+/* Icon picker — Settings → System */
+.icon-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-picker-btn {
+  width: 38px;
+  height: 38px;
+  font-size: 20px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.6);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.icon-picker-btn:hover {
+  border-color: var(--blue);
+  background: rgba(0,170,255,0.1);
+}
+
+.icon-picker-btn.selected {
+  border-color: var(--cyan);
+  background: rgba(0,255,234,0.12);
+  box-shadow: 0 0 8px rgba(0,255,234,0.3);
+  color: var(--cyan);
 }
 
 @keyframes logo-pulse {

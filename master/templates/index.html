@@ -51,13 +51,15 @@
 ================================================================ -->
 <header class="topbar">
   <div class="topbar-brand">
-    <svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32">
-      <circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/>
-      <rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/>
-      <circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
-      <circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
-      <rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/>
-    </svg>
+    <div id="header-robot-icon" class="brand-icon-wrap" title="Change icon in Settings → System">
+      <svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/>
+        <rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/>
+        <circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
+        <circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
+        <rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/>
+      </svg>
+    </div>
     <div class="brand-text">
       <span class="brand-r2" id="header-robot-name">R2-D2</span>
       <span class="brand-sub">ASTROMECH OS</span>
@@ -1573,6 +1575,38 @@
           </div>
           <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
           <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-divider admin-only"></div>
+          <div class="settings-row admin-only" style="flex-direction:column;align-items:flex-start;gap:10px">
+            <label class="settings-label">Robot icon</label>
+            <div class="icon-picker-grid" id="icon-picker-grid">
+              <button class="icon-picker-btn" data-icon="" title="Default (R2-D2 logo)">
+                <svg width="22" height="22" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="currentColor" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="currentColor" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="currentColor" opacity="0.3"/></svg>
+              </button>
+              <button class="icon-picker-btn" data-icon="🤖">🤖</button>
+              <button class="icon-picker-btn" data-icon="⚡">⚡</button>
+              <button class="icon-picker-btn" data-icon="🚀">🚀</button>
+              <button class="icon-picker-btn" data-icon="🛸">🛸</button>
+              <button class="icon-picker-btn" data-icon="⭐">⭐</button>
+              <button class="icon-picker-btn" data-icon="🌟">🌟</button>
+              <button class="icon-picker-btn" data-icon="💫">💫</button>
+              <button class="icon-picker-btn" data-icon="🎯">🎯</button>
+              <button class="icon-picker-btn" data-icon="👾">👾</button>
+              <button class="icon-picker-btn" data-icon="🎭">🎭</button>
+              <button class="icon-picker-btn" data-icon="⚙️">⚙️</button>
+              <button class="icon-picker-btn" data-icon="🔧">🔧</button>
+              <button class="icon-picker-btn" data-icon="🦾">🦾</button>
+              <button class="icon-picker-btn" data-icon="🛡️">🛡️</button>
+              <button class="icon-picker-btn" data-icon="🔮">🔮</button>
+              <button class="icon-picker-btn" data-icon="💎">💎</button>
+              <button class="icon-picker-btn" data-icon="🏆">🏆</button>
+              <button class="icon-picker-btn" data-icon="🌐">🌐</button>
+              <button class="icon-picker-btn" data-icon="🔵">🔵</button>
+              <button class="icon-picker-btn" data-icon="🟢">🟢</button>
+              <button class="icon-picker-btn" data-icon="🟡">🟡</button>
+              <button class="icon-picker-btn" data-icon="🔴">🔴</button>
+              <button class="icon-picker-btn" data-icon="🟣">🟣</button>
+            </div>
+          </div>
           <div class="settings-divider"></div>
           <div class="btn-group-v">
             <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>

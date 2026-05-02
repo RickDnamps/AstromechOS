@@ -445,6 +445,15 @@ def admin_change_password():
     return jsonify({'ok': True})
 
 
+@settings_bp.post('/settings/robot_icon')
+def set_robot_icon():
+    """Saves robot header icon to local.cfg. Body: {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset to default SVG."""
+    data = request.get_json() or {}
+    icon = data.get('icon', '').strip()
+    _write_key('robot', 'icon', icon)
+    return jsonify({'status': 'ok', 'icon': icon})
+
+
 @settings_bp.post('/settings/robot_name')
 def set_robot_name():
     """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""

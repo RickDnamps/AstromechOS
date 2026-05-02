@@ -4187,6 +4187,9 @@ class StatusPoller {
       if (nameInput && !nameInput.matches(':focus')) nameInput.value = data.robot_name;
     }
 
+    // Robot icon — update header icon wrap + highlight selected picker btn
+    if (data.robot_icon !== undefined) _applyRobotIcon(data.robot_icon);
+
     // Battery gauge
     if (data.battery_voltage) batteryGauge.update(data.battery_voltage);
 
@@ -4828,6 +4831,32 @@ async function systemUpdate() {
   if (d) toast('Update in progress — Slave will reboot', 'ok');
 }
 
+const _R2_LOGO_SVG = `<svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/></svg>`;
+
+function _applyRobotIcon(icon) {
+  const wrap = el('header-robot-icon');
+  if (wrap) wrap.innerHTML = icon ? `<span class="brand-icon-emoji">${icon}</span>` : _R2_LOGO_SVG;
+  // Highlight selected button in picker
+  document.querySelectorAll('.icon-picker-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.icon === (icon || ''));
+  });
+}
+
+async function saveRobotIcon(icon) {
+  const d = await api('/settings/robot_icon', 'POST', { icon });
+  if (d?.status === 'ok') {
+    _applyRobotIcon(icon);
+    toast(icon ? `Icon set to ${icon}` : 'Icon reset to default', 'ok');
+  }
+}
+
+// Wire up icon picker buttons (called once DOM is ready)
+function _initIconPicker() {
+  document.querySelectorAll('.icon-picker-btn').forEach(btn => {
+    btn.addEventListener('click', () => saveRobotIcon(btn.dataset.icon));
+  });
+}
+
 async function saveRobotName() {
   const input  = el('robot-name-input');
   const status = el('robot-name-status');
@@ -5005,6 +5034,7 @@ document.addEventListener('DOMContentLoaded', () => {
     syncHoloSlider(s);
   });
   _initCamVisibilityHandler();
+  _initIconPicker();
   init();
 });
 

@@ -80,6 +80,12 @@ def _robot_name() -> str:
     return cfg.get('robot', 'name', fallback='R2-D2')
 
 
+def _robot_icon() -> str:
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return cfg.get('robot', 'icon', fallback='')
+
+
 def _mem_info() -> dict | None:
     try:
         info = {}
@@ -197,6 +203,7 @@ def get_status():
     bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
     return jsonify({
         'robot_name':   _robot_name(),
+        'robot_icon':   _robot_icon(),
         'version':      _read_version(),
         'uptime':       _uptime(),
         'temperature':  _cpu_temp(),
