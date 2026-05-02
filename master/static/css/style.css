@@ -4139,9 +4139,9 @@ body.admin-unlocked .admin-gear-btn { color: var(--orange); border-color: var(--
 
 .cockpit-panel {
   position: fixed;
-  top: var(--topbar-h);
+  top: calc(var(--topbar-h) + var(--tabbar-h));
   left: 0; right: 0;
-  z-index: 190;
+  z-index: 195;
   background: rgba(10, 11, 22, 0.97);
   border-bottom: 1px solid rgba(0,200,100,0.2);
   backdrop-filter: blur(10px);
