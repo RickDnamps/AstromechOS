@@ -251,6 +251,32 @@ def set_choreo_label():
     return jsonify({'status': 'ok'})
 
 
+@choreo_bp.post('/choreo/rename')
+def choreo_rename():
+    """Rename a .chor file. Body: {"old_name": "foo", "new_name": "bar"}"""
+    data = request.get_json(silent=True) or {}
+    old_name = data.get('old_name', '').strip()
+    new_name = data.get('new_name', '').strip()
+    if not old_name or not new_name:
+        return jsonify({'error': 'old_name and new_name required'}), 400
+    if old_name == new_name:
+        return jsonify({'status': 'ok', 'name': new_name})
+    old_path = _choreo_path(old_name)
+    new_path = _choreo_path(new_name)
+    if not os.path.exists(old_path):
+        return jsonify({'error': 'not found'}), 404
+    if os.path.exists(new_path):
+        return jsonify({'error': f'"{new_name}" already exists'}), 409
+    with open(old_path, encoding='utf-8') as f:
+        chor = json.load(f)
+    chor.setdefault('meta', {})['name'] = new_name
+    with open(new_path, 'w', encoding='utf-8') as f:
+        json.dump(chor, f, indent=2, ensure_ascii=False)
+    os.remove(old_path)
+    log.info(f"Choreo renamed: {old_name} → {new_name}")
+    return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
+
+
 @choreo_bp.get('/choreo/load')
 def choreo_load():
     name = request.args.get('name', '')

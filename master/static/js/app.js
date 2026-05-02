@@ -6547,6 +6547,34 @@ const choreoEditor = (() => {
       toast(`Deleted: ${name}`, 'ok');
     },
 
+    async renameChor() {
+      if (!adminGuard.unlocked && !_choreoUnlocked) {
+        adminGuard.showModal(null, () => choreoEditor.renameChor());
+        return;
+      }
+      if (!_chor) { toast('No choreography loaded', 'error'); return; }
+      const oldName = _chor.meta.name;
+      const newName = (prompt('New filename (without .chor):', oldName) || '').trim();
+      if (!newName || newName === oldName) return;
+      const result = await api('/choreo/rename', 'POST', { old_name: oldName, new_name: newName });
+      if (!result || result.error) { toast(result?.error || 'Rename failed', 'error'); return; }
+      _chor.meta.name = newName;
+      // Refresh select dropdown: update existing option value + text
+      const sel = document.getElementById('chor-select');
+      if (sel) {
+        const opt = [...sel.options].find(o => o.value === oldName);
+        if (opt) {
+          const lbl = _chor.meta.label || newName;
+          const emj = _chor.meta.emoji ? _chor.meta.emoji + ' ' : '';
+          const diff = lbl.toLowerCase().replace(/\s+/g,'_') !== newName.toLowerCase();
+          opt.value = newName;
+          opt.textContent = `${emj}${lbl}${diff ? ' (' + newName + ')' : ''}`;
+        }
+        sel.value = newName;
+      }
+      toast(`Renamed: ${oldName} → ${newName}`, 'ok');
+    },
+
     newChor() {
       const name = prompt('Choreography name:', 'my_show');
       if (!name) return;
