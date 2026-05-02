@@ -3927,12 +3927,25 @@ const cockpitPanel = {
     }
     const t  = data.temperature;
     const pt = el('ck-pi-temp');
-    const ph = el('ck-pi-hint');
     if (pt) {
       pt.textContent = t != null ? t + '°C' : '--°C';
       pt.style.color = t == null ? '' : t >= 75 ? 'var(--red)' : t >= 60 ? 'var(--orange)' : 'var(--green)';
     }
-    if (ph) ph.textContent = t == null ? '' : t >= 75 ? '⚠ critical' : t >= 60 ? '⚠ hot' : 'OK';
+    const st = data.slave_temp;
+    const ps = el('ck-slave-temp');
+    if (ps) {
+      ps.textContent = st != null ? st + '°C' : '--°C';
+      ps.style.color = st == null ? 'rgba(255,255,255,0.3)' : st >= 75 ? 'var(--red)' : st >= 60 ? 'var(--orange)' : 'var(--green)';
+    }
+    const ram = el('ck-pi-ram');
+    if (ram) {
+      const mm = data.master_mem;
+      if (mm) {
+        const usedG  = (mm.used_mb  / 1024).toFixed(1);
+        const totalG = (mm.total_mb / 1024).toFixed(1);
+        ram.textContent = `M RAM ${usedG}/${totalG} GB`;
+      }
+    }
     const up = el('ck-uptime');
     if (up) up.textContent = data.uptime || '--';
     const ver = el('ck-version');
@@ -4012,8 +4025,13 @@ const cockpitPanel = {
     const alerts = [];
     const t = data.temperature;
     if (t != null) {
-      if (t >= 75) alerts.push({ cls: 'err',  msg: `Pi ${t}°C — overheating` });
-      else if (t >= 60) alerts.push({ cls: 'warn', msg: `Pi ${t}°C — watch temp` });
+      if (t >= 75) alerts.push({ cls: 'err',  msg: `Master Pi ${t}°C — overheating` });
+      else if (t >= 60) alerts.push({ cls: 'warn', msg: `Master Pi ${t}°C — watch temp` });
+    }
+    const st = data.slave_temp;
+    if (st != null) {
+      if (st >= 75) alerts.push({ cls: 'err',  msg: `Slave Pi ${st}°C — overheating` });
+      else if (st >= 60) alerts.push({ cls: 'warn', msg: `Slave Pi ${st}°C — watch temp` });
     }
     const lt = data.vesc_l_temp;
     const rt = data.vesc_r_temp;

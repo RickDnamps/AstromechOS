@@ -57,6 +57,20 @@ def _slave_host() -> str:
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
     return cfg.get('slave', 'host', fallback='r2-slave.local')
 
+
+def _mem_info() -> dict | None:
+    try:
+        info = {}
+        with open('/proc/meminfo') as f:
+            for line in f:
+                k, v = line.split(':', 1)
+                info[k.strip()] = int(v.strip().split()[0])
+        total = info.get('MemTotal', 0)
+        used  = total - info.get('MemAvailable', 0)
+        return {'used_mb': round(used / 1024), 'total_mb': round(total / 1024)}
+    except Exception:
+        return None
+
 try:
     from master.api import camera_bp as _cam_bp
 except Exception:
@@ -158,6 +172,9 @@ def get_status():
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
         'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
         'slave_host':        _slave_host(),
+        'master_mem':        _mem_info(),
+        'slave_temp':        (reg.slave_uart_health or {}).get('cpu_temp'),
+        'slave_mem':         (reg.slave_uart_health or {}).get('mem'),
         **bt_status,
     })
 

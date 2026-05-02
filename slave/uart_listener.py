@@ -143,13 +143,12 @@ class UARTListener:
                 time.sleep(0.1)
 
     def get_health_stats(self) -> dict:
-        """Returns UART health stats over the 60s sliding window.
+        """Returns UART health stats + system vitals (temp, RAM).
         Thread-safe — called from the HTTP health server (port 5001).
         """
         now = time.monotonic()
         cutoff = now - _HEALTH_WINDOW_S
         with self._health_lock:
-            # Inline pruning — avoids a separate cleanup thread
             while self._health_window and self._health_window[0][0] < cutoff:
                 self._health_window.popleft()
             total  = len(self._health_window)
@@ -160,7 +159,31 @@ class UARTListener:
             'errors':     errors,
             'health_pct': health_pct,
             'window_s':   _HEALTH_WINDOW_S,
+            'cpu_temp':   _cpu_temp(),
+            'mem':        _mem_info(),
         }
+
+
+def _cpu_temp() -> float | None:
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+            return round(int(f.read().strip()) / 1000, 1)
+    except Exception:
+        return None
+
+
+def _mem_info() -> dict | None:
+    try:
+        info = {}
+        with open('/proc/meminfo') as f:
+            for line in f:
+                k, v = line.split(':', 1)
+                info[k.strip()] = int(v.strip().split()[0])
+        total = info.get('MemTotal', 0)
+        used  = total - info.get('MemAvailable', 0)
+        return {'used_mb': round(used / 1024), 'total_mb': round(total / 1024)}
+    except Exception:
+        return None
 
     def _process_line(self, line: str) -> None:
         if not line:
