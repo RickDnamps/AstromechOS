@@ -5012,6 +5012,7 @@ const choreoEditor = (() => {
   let _selected    = null;
   let _pollTimer   = null;
   let _dirty       = false;
+  let _existsOnDisk = false;  // true only after an explicit admin Save or loading an existing file
   let _lanesWired  = false;
   let _lastTelem   = null;
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
@@ -6499,7 +6500,7 @@ const choreoEditor = (() => {
         if (!ev.duration || ev.duration <= 0) ev.duration = 1.0;
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
-      _dirty = false; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
+      _dirty = false; _existsOnDisk = true; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
       // Ensure servo settings are loaded before migration/validation (race guard)
       if (Object.keys(_servoSettings).length === 0) {
         const r = await api('/servo/settings');
@@ -6582,7 +6583,7 @@ const choreoEditor = (() => {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'R2-D2 Control' },
         tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
       };
-      _dirty = true; _renderAllTracks();
+      _dirty = true; _existsOnDisk = false; _renderAllTracks();
       const sel = document.getElementById('chor-select');
       if (sel) { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; opt.selected = true; sel.appendChild(opt); }
       toast(`New choreography: ${name}`, 'ok');
@@ -6590,9 +6591,17 @@ const choreoEditor = (() => {
 
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
-      // Auto-save before playing (no auth required — this is an internal save for playback only)
-      if (_dirty) await this.save({ requireAuth: false });
-      const result = await api('/choreo/play', 'POST', { name: _chor.meta.name });
+      let playName = _chor.meta.name;
+      if (_existsOnDisk) {
+        // File already saved by admin — auto-sync to disk before playing
+        if (_dirty) await this.save({ requireAuth: false });
+      } else {
+        // Unsaved new choreo — write to invisible temp file, never appears in the list
+        const preview = { ..._chor, meta: { ..._chor.meta, name: '__preview__' } };
+        await api('/choreo/save', 'POST', { chor: preview });
+        playName = '__preview__';
+      }
+      const result = await api('/choreo/play', 'POST', { name: playName });
       if (result) { toast(`Playing: ${_chor.meta.name}`, 'ok'); _startPolling(); }
     },
 
@@ -6624,8 +6633,8 @@ const choreoEditor = (() => {
       }
       const result = await api('/choreo/save', 'POST', { chor: _chor });
       if (result) {
-        _dirty = false;
-        _validateServoRefs(); _validateAudioRefs();   // refresh badges after label refresh
+        _dirty = false; _existsOnDisk = true;
+        _validateServoRefs(); _validateAudioRefs();
         toast(`Saved: ${_chor.meta.name}`, 'ok');
       }
     },

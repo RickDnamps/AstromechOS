@@ -100,6 +100,8 @@ def choreo_list():
         if not fname.endswith('.chor'):
             continue
         name = fname[:-5]
+        if name.startswith('__'):
+            continue  # skip temp/preview files (e.g. __preview__)
         try:
             with open(os.path.join(_CHOREO_DIR, fname), encoding='utf-8') as f:
                 meta = json.load(f).get('meta', {})
