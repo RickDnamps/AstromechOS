@@ -168,7 +168,7 @@ function openDrawer(tab) {
   document.getElementById('drawer-' + tab)?.classList.add('active');
 
   // Update title
-  const titles = { audio: '🔊 AUDIO', choreo: '🎭 CHOREO', lights: '💡 LIGHTS' };
+  const titles = { audio: '🔊 AUDIO', choreo: '▶ SEQUENCES', lights: '💡 LIGHTS' };
   document.getElementById('drawer-title').textContent = titles[tab] || tab;
 
   // Active pill highlight
