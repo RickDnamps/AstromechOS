@@ -719,7 +719,7 @@
         <option value="">— select —</option>
       </select>
       <button class="btn btn-sm" onclick="choreoEditor.newChor()">+ NEW</button>
-      <button class="btn btn-danger btn-sm" onclick="choreoEditor.deleteChor()">🗑 DELETE</button>
+      <button class="btn btn-danger btn-sm chor-admin-btn" onclick="choreoEditor.deleteChor()">🗑 DELETE</button>
       <div class="chor-cmd-gap"></div>
       <!-- TRANSPORT: play / stop -->
       <button class="btn btn-active btn-sm" id="chor-btn-play" onclick="choreoEditor.play()">▶ PLAY</button>
@@ -734,10 +734,10 @@
       <button class="btn btn-sm" onclick="choreoEditor.zoom(-10)">−</button>
       <button class="btn btn-sm" onclick="choreoEditor.zoom(10)">+</button>
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
-        <button class="btn btn-sm" onclick="choreoEditor.renameChor()">✏️ RENAME</button>
-        <button class="btn btn-sm" onclick="choreoEditor.save()">💾 SAVE</button>
-        <button class="btn btn-sm" onclick="choreoEditor.exportChor()" title="Download .chor file">📤 EXPORT</button>
-        <button class="btn btn-sm" onclick="choreoEditor.importChor()" title="Upload .chor file">📥 IMPORT</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.renameChor()">✏️ RENAME</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.save()">💾 SAVE</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.exportChor()" title="Download .chor file">📤 EXPORT</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.importChor()" title="Upload .chor file">📥 IMPORT</button>
       </div>
     </div>
 

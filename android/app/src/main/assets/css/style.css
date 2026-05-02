@@ -3362,6 +3362,9 @@ body[data-lock-mode="2"] #speed-slider   { pointer-events: none; opacity: 0.35; 
 /* Onglets protégés : cachés par défaut, visibles quand admin déverrouillé */
 .tab.tab-protected { display: none; }
 body.admin-unlocked .tab.tab-protected { display: flex; }
+/* Choreo toolbar buttons — admin only */
+.chor-admin-btn { display: none !important; }
+body.admin-unlocked .chor-admin-btn { display: inline-flex !important; }
 
 /* Gear icon — toujours visible à droite de la tabbar */
 .admin-gear-btn {
