@@ -217,6 +217,14 @@ class _HealthHandler(BaseHTTPRequestHandler):
                 self._json({'ok': False, 'error': 'mac required'}, 400)
                 return
             ok, out = _bt_run(['bluetoothctl', 'disconnect', mac])
+            # Explicitly restore ALSA jack as default so mpg123 doesn't stay silent
+            _, sinks = _bt_run(['pactl', 'list', 'short', 'sinks'], pa_env=True)
+            for line in sinks.splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and 'bluez' not in parts[1]:
+                    _bt_run(['pactl', 'set-default-sink', parts[1]], pa_env=True, timeout=5)
+                    out += f' | restored sink: {parts[1]}'
+                    break
             self._json({'ok': ok, 'output': out})
 
         elif self.path == '/audio/bt/remove':
@@ -225,6 +233,24 @@ class _HealthHandler(BaseHTTPRequestHandler):
                 return
             ok, out = _bt_run(['bluetoothctl', 'remove', mac])
             self._json({'ok': ok, 'output': out})
+
+        elif self.path == '/audio/bt/volume':
+            try:
+                vol = max(0, min(100, int(body.get('volume', 80))))
+            except (TypeError, ValueError):
+                self._json({'ok': False, 'error': 'volume must be 0-100'}, 400)
+                return
+            # Apply to current default sink (BT or ALSA, whichever is active)
+            _, sink = _bt_run(['pactl', 'get-default-sink'], pa_env=True, timeout=3)
+            sink = sink.strip()
+            if sink:
+                ok, out = _bt_run(
+                    ['pactl', 'set-sink-volume', sink, f'{vol}%'],
+                    pa_env=True, timeout=5,
+                )
+                self._json({'ok': ok, 'sink': sink, 'volume': vol, 'output': out})
+            else:
+                self._json({'ok': False, 'error': 'no default sink found'})
 
         else:
             self.send_response(404)

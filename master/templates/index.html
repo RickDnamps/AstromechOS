@@ -1435,6 +1435,14 @@
           </div>
           <div id="btspk-scanning" class="settings-note" style="display:none;color:#f0c040;margin-top:4px">🔵 Scanning for nearby devices…</div>
           <div id="btspk-device-list" style="margin-top:8px"></div>
+          <!-- Volume — visible only when connected -->
+          <div id="btspk-vol-row" style="display:none;margin-top:10px;align-items:center;gap:10px" class="bt-spk-header">
+            <span style="font-size:10px;color:var(--txt-dim);letter-spacing:.05em;white-space:nowrap">🔊 VOL</span>
+            <input type="range" id="btspk-vol-slider" min="0" max="100" value="80" class="holo-slider"
+                   style="flex:1" oninput="el('btspk-vol-val').textContent=this.value+'%'"
+                   onchange="btSpeaker.setVolume(this.value)">
+            <span id="btspk-vol-val" style="font-size:11px;color:var(--blue);min-width:32px">80%</span>
+          </div>
           <div class="settings-status" id="btspk-status"></div>
         </section>
 

@@ -401,3 +401,10 @@ def bt_speaker_remove():
     body = request.get_json(silent=True) or {}
     data, code = _slave_bt('/audio/bt/remove', 'POST', body)
     return jsonify(data), code
+
+
+@audio_bp.post('/bt/volume')
+def bt_speaker_volume():
+    body = request.get_json(silent=True) or {}
+    data, code = _slave_bt('/audio/bt/volume', 'POST', body)
+    return jsonify(data), code

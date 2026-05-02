@@ -4528,8 +4528,12 @@ const btSpeaker = {
     if (text) text.textContent = connected ? `CONNECTED: ${connected.name}` : 'NOT CONNECTED';
     if (d.scanning) { const b = el('btspk-scanning'); if (b) b.style.display = ''; }
 
+    // Show/hide volume slider depending on connection state
+    const volRow = el('btspk-vol-row');
+    if (volRow) volRow.style.display = connected ? 'flex' : 'none';
+
     let html = '';
-    for (const dev of (d.paired || []))    html += this._row(dev, true);
+    for (const dev of (d.paired || []))     html += this._row(dev, true);
     for (const dev of (d.discovered || [])) html += this._row(dev, false);
     if (!html) html = '<div style="color:var(--txt-dim);font-size:11px;padding:4px 0">— No devices —</div>';
     const list = el('btspk-device-list');
@@ -4562,6 +4566,15 @@ const btSpeaker = {
     } catch(e) {
       if (status) { status.textContent = '✗ ' + e; status.className = 'settings-status error'; }
     }
+  },
+
+  async setVolume(val) {
+    const volume = parseInt(val);
+    const lbl = el('btspk-vol-val');
+    if (lbl) lbl.textContent = volume + '%';
+    try {
+      await api('/audio/bt/volume', 'POST', { volume });
+    } catch(e) {}
   },
 };
 
