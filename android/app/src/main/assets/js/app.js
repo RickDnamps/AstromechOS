@@ -477,7 +477,7 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'servos')  loadServoSettings();
   if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
   if (panelId === 'behavior') behaviorPanel.load();
-  if (panelId === 'audio')   soundProfiles.load();
+  if (panelId === 'audio')   { soundProfiles.load(); btSpeaker.refresh(); }
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -4487,6 +4487,80 @@ const soundProfiles = {
       if (mainSlider) { mainSlider.value = vol; }
       if (mainLabel)  { mainLabel.textContent = vol + '%'; }
       toast(`${name.charAt(0).toUpperCase() + name.slice(1)}: ${vol}% applied`, 'ok');
+    }
+  },
+};
+
+// ─── BT Speaker ───────────────────────────────────────────────────────────────
+const btSpeaker = {
+  _pollTimer: null,
+
+  scan() {
+    const btn = el('btspk-scan-btn');
+    if (btn) btn.disabled = true;
+    api('/audio/bt/scan', 'POST').then(d => {
+      if (!d) { if (btn) btn.disabled = false; return; }
+      const badge = el('btspk-scanning');
+      if (badge) badge.style.display = '';
+      let ticks = 0;
+      if (this._pollTimer) clearInterval(this._pollTimer);
+      this._pollTimer = setInterval(() => {
+        this.refresh();
+        if (++ticks >= 5) {
+          clearInterval(this._pollTimer);
+          this._pollTimer = null;
+          if (badge) badge.style.display = 'none';
+          if (btn) btn.disabled = false;
+        }
+      }, 2000);
+    }).catch(() => { if (btn) btn.disabled = false; });
+  },
+
+  refresh() {
+    api('/audio/bt/status').then(d => { if (d) this._render(d); }).catch(() => {});
+  },
+
+  _render(d) {
+    const connected = (d.paired || []).find(p => p.connected);
+    const icon = el('btspk-icon');
+    const text = el('btspk-status-text');
+    if (icon) icon.textContent = connected ? '🔊' : '🔇';
+    if (text) text.textContent = connected ? `CONNECTED: ${connected.name}` : 'NOT CONNECTED';
+    if (d.scanning) { const b = el('btspk-scanning'); if (b) b.style.display = ''; }
+
+    let html = '';
+    for (const dev of (d.paired || []))    html += this._row(dev, true);
+    for (const dev of (d.discovered || [])) html += this._row(dev, false);
+    if (!html) html = '<div style="color:var(--txt-dim);font-size:11px;padding:4px 0">— No devices —</div>';
+    const list = el('btspk-device-list');
+    if (list) list.innerHTML = html;
+  },
+
+  _row(dev, isPaired) {
+    const name = escapeHtml(dev.name || dev.mac);
+    const mac  = escapeHtml(dev.mac);
+    const dot  = dev.connected ? '<span style="color:#5cb85c;font-size:10px">●</span> ' : '';
+    let btns = '';
+    if (!isPaired)   btns += `<button class="btn btn-xs btn-active" onclick="btSpeaker._act('/audio/bt/pair','${dev.mac}')">PAIR</button>`;
+    if (isPaired && !dev.connected) btns += `<button class="btn btn-xs btn-active" onclick="btSpeaker._act('/audio/bt/connect','${dev.mac}')">CONNECT</button>`;
+    if (dev.connected)              btns += `<button class="btn btn-xs btn-warn" onclick="btSpeaker._act('/audio/bt/disconnect','${dev.mac}')">DISCONNECT</button>`;
+    if (isPaired)                   btns += `<button class="btn btn-xs" onclick="btSpeaker._act('/audio/bt/remove','${dev.mac}')">✕</button>`;
+    return `<div class="bt-pair-row">${dot}<span class="bt-pair-name">${name}</span><span class="bt-pair-addr">${mac}</span><div style="display:flex;gap:4px;margin-left:auto">${btns}</div></div>`;
+  },
+
+  async _act(endpoint, mac) {
+    const status = el('btspk-status');
+    if (status) { status.textContent = 'Working…'; status.className = 'settings-status'; }
+    try {
+      const d = await api(endpoint, 'POST', { mac });
+      const ok = d?.ok !== false;
+      if (status) {
+        status.textContent = ok ? '✓ Done' : ('✗ ' + (d?.error || d?.output || 'Error'));
+        status.className = 'settings-status ' + (ok ? 'ok' : 'error');
+      }
+      setTimeout(() => this.refresh(), 1200);
+    } catch(e) {
+      if (status) { status.textContent = '✗ ' + e; status.className = 'settings-status error'; }
     }
   },
 };

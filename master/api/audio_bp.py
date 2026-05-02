@@ -38,6 +38,7 @@ Endpoints:
   GET  /audio/categories    → list of categories
 """
 
+import configparser
 import json
 import logging
 import os
@@ -45,7 +46,17 @@ import re
 import threading
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file, abort
+import requests as _requests
 import master.registry as reg
+
+_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
+_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+
+
+def _slave_host() -> str:
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return cfg.get('slave', 'host', fallback='r2-slave.local')
 
 log = logging.getLogger(__name__)
 _upload_lock = threading.Lock()
@@ -335,3 +346,58 @@ def _sftp_sync_sound(local_mp3: str, stem: str, index: dict) -> None:
         log.info(f'Audio upload: synced {stem}.mp3 to slave')
     except Exception as e:
         log.warning(f'Audio upload: SFTP sync failed — {e}. File saved locally only.')
+
+
+# ── BT Speaker proxy (forwards to slave port 5001) ────────────────────────────
+
+def _slave_bt(path: str, method: str = 'GET', body: dict | None = None):
+    """Forward a BT request to the slave health server."""
+    url = f'http://{_slave_host()}:5001{path}'
+    try:
+        if method == 'POST':
+            r = _requests.post(url, json=body or {}, timeout=12)
+        else:
+            r = _requests.get(url, timeout=12)
+        return r.json(), r.status_code
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}, 503
+
+
+@audio_bp.get('/bt/status')
+def bt_speaker_status():
+    data, code = _slave_bt('/audio/bt/status')
+    return jsonify(data), code
+
+
+@audio_bp.post('/bt/scan')
+def bt_speaker_scan():
+    data, code = _slave_bt('/audio/bt/scan', 'POST')
+    return jsonify(data), code
+
+
+@audio_bp.post('/bt/pair')
+def bt_speaker_pair():
+    body = request.get_json(silent=True) or {}
+    data, code = _slave_bt('/audio/bt/pair', 'POST', body)
+    return jsonify(data), code
+
+
+@audio_bp.post('/bt/connect')
+def bt_speaker_connect():
+    body = request.get_json(silent=True) or {}
+    data, code = _slave_bt('/audio/bt/connect', 'POST', body)
+    return jsonify(data), code
+
+
+@audio_bp.post('/bt/disconnect')
+def bt_speaker_disconnect():
+    body = request.get_json(silent=True) or {}
+    data, code = _slave_bt('/audio/bt/disconnect', 'POST', body)
+    return jsonify(data), code
+
+
+@audio_bp.post('/bt/remove')
+def bt_speaker_remove():
+    body = request.get_json(silent=True) or {}
+    data, code = _slave_bt('/audio/bt/remove', 'POST', body)
+    return jsonify(data), code

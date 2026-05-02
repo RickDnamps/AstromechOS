@@ -898,7 +898,7 @@
       <button class="settings-nav-item active" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
       <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
-      <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 Bluetooth</button>
+      <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 BT Gamepad</button>
       <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
       <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
       <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
@@ -916,7 +916,7 @@
       <!-- 🎮 Bluetooth -->
       <div class="settings-panel" id="spanel-bluetooth">
         <section class="card settings-card">
-          <h2 class="card-title">BLUETOOTH CONTROLLER</h2>
+          <h2 class="card-title">BT GAMEPAD</h2>
           <div class="bt-status-row">
             <svg class="gamepad-icon" width="48" height="32" viewBox="0 0 48 32">
               <rect x="4" y="8" width="40" height="18" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
@@ -1421,6 +1421,21 @@
             <button class="btn btn-sm" onclick="soundProfiles.apply('exterieur')">▶ APPLY</button>
           </div>
           <div class="settings-status" id="audio-profiles-status"></div>
+        </section>
+
+        <!-- 🔊 Bluetooth Speaker -->
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">BLUETOOTH SPEAKER</h2>
+          <p class="settings-note">Pair and connect a BT speaker on the Slave Pi (body). Requires pulseaudio + BT on Slave.</p>
+          <div class="bt-spk-header">
+            <span id="btspk-icon" style="font-size:20px">🔇</span>
+            <div id="btspk-status-text" style="flex:1;margin-left:8px;font-size:11px;color:var(--txt-dim)">NOT CONNECTED</div>
+            <button class="btn btn-sm" id="btspk-scan-btn" onclick="btSpeaker.scan()">🔍 SCAN (8s)</button>
+            <button class="btn btn-sm" style="margin-left:4px" onclick="btSpeaker.refresh()" title="Refresh">↺</button>
+          </div>
+          <div id="btspk-scanning" class="settings-note" style="display:none;color:#f0c040;margin-top:4px">🔵 Scanning for nearby devices…</div>
+          <div id="btspk-device-list" style="margin-top:8px"></div>
+          <div class="settings-status" id="btspk-status"></div>
         </section>
 
       </div>
