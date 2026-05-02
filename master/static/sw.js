@@ -1,5 +1,5 @@
 /**
- * R2-D2 Control System — Service Worker
+ * AstromechOS — Service Worker
  * Cache strategy:
  *   - Static assets (/static/*): cache-first
  *   - API calls (/status, /audio/*, etc.): network-first, fallback to cache

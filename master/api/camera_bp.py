@@ -1,5 +1,5 @@
 # ============================================================
-#  R2-D2 Control System — Camera Stream Proxy
+#  AstromechOS — Camera Stream Proxy
 # ============================================================
 """
 Camera blueprint — single-slot MJPEG proxy with last-connect-wins.

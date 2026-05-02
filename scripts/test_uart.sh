@@ -7,7 +7,7 @@
 #  ██║  ██║███████╗      ██████╔╝███████╗
 #  ╚═╝  ╚═╝╚══════╝      ╚═════╝ ╚══════╝
 #
-#  R2-D2 Control System — Distributed Robot Controller
+#  AstromechOS — Open control platform for astromech builders
 # ============================================================
 #  Copyright (C) 2025 RickDnamps
 #  https://github.com/RickDnamps/AstromechOS
