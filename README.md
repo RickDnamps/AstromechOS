@@ -189,6 +189,7 @@ Bar indicators (temp/current/duty) · Power (W) · L/R symmetry · Session peaks
 | 🦾 **22 servo panels** | Hardware IDs (Servo_M0/Servo_S0) · editable labels · per-panel calibration · arm body-panel auto-open/close |
 | 📊 **VESC diagnostic** | Bar indicators · Power (W) · L/R symmetry · session peaks · fault log — battery gauge auto-scaled by cell count · **safety lock** (blocks drive when VESC offline or faulted — red banner in Drive tab) · **bench mode** toggle (persisted bypass for testing without motors) |
 | 📺 **Cockpit Status Panel** | Collapsible STATUS overlay in the header — always available from any tab. Shows: audio (current sound / "via Choreo") · lights (driver + animation) · VESC (voltage · amps · watts) · PI INFO (Master CPU%/RAM/SD · Slave CPU%/temp/RAM) · Network (Master wlan0+wlan1 IPs · Slave IP) · E-Stop and Bench mode state indicators |
+| 🔐 **Admin toggle in tab bar** | Lock icon (🔒/🔓) beside the Settings gear — unlock admin from any tab without navigating away · inactivity timer resets on any interaction in any tab |
 | 📷 **Camera USB autodetect** | Scans sysfs — no hardcoded `/dev/videoN` · auto-reconnect after service restart · temporary cam active, permanent cam on order |
 | 🖥️ **RP2040 LCD** | 6 diagnostic screens driven by UART commands |
 
@@ -204,7 +205,7 @@ The **CHOREO tab** is the main authoring tool. Build multi-track timelines that 
 
 **VESC mismatch banner** — if the choreography was saved with different motor invert settings than the current config, a warning banner appears before playback to prevent the robot moving backwards.
 
-**Admin guard** — Save, Delete, Export, and Import require admin password. New, Play, Stop, and Load are always free. Once authenticated in the Choreo tab, the session stays unlocked until you switch tabs — no repeated prompts during editing.
+**Admin guard** — Save, Delete, Export, and Import require admin password. New, Play, Stop, and Load are always free. Once authenticated in the Choreo tab, the session stays unlocked until you switch tabs — no repeated prompts during editing. The **🔒 ADMIN button** in the tab bar lets you unlock from any tab without navigating to Settings first — the 5-minute inactivity timer resets on any mouse or keyboard activity regardless of which tab you're on.
 
 **Choreography management** (admin) — each choreo card exposes inline editing: click the label to rename it, pick an emoji from the emoji picker, and assign the choreo to a category. Categories themselves can be created, renamed, reordered, and deleted from the category management panel — without touching any files directly. All changes are persisted to `choreo_categories.json`.
 
@@ -728,7 +729,7 @@ Sequences are **created visually in the in-browser Sequence Editor** — no file
 | **4** | REST API + Web dashboard (8 tabs) + Android app | ✅ Active |
 | **4+** | Choreography timeline editor · Lights plugin (Teeces/AstroPixels+) · BT gamepad + pairing UI · Kids Lock / Child Lock · VESC telemetry · Battery gauge (configurable cell count) · Servo hardware IDs + labels | ✅ Active |
 | **4++** | Camera USB autodetect + stream auto-reconnect · BT battery/RSSI · BT keep-alive (VESC fix) · BT panels config-aware · admin inactivity all tabs · BT speaker on Slave (scan/pair/volume/jack fallback) | ✅ Active |
-| **4+++** | VESC safety lock (blocks drive when offline/faulted) · bench mode bypass toggle · Cockpit Status Panel (collapsible header overlay — audio/lights/VESC/Pi info/Network) · Choreo file selector with label+emoji · admin filename tags on choreo cards | ✅ Active |
+| **4+++** | VESC safety lock (blocks drive when offline/faulted) · bench mode bypass toggle · Cockpit Status Panel (collapsible header overlay — audio/lights/VESC/Pi info/Network) · Choreo file selector with label+emoji · Admin toggle icon in tab bar (unlock from any tab, inactivity timer on all tabs) | ✅ Active |
 | **5** | Vision — USB camera stream ✅ · person tracking 📋 | 🔄 In progress |
 
 > Physical assembly in progress — 3D parts printing, slip ring ordered. All testing on bench with direct BCM14/15 UART wiring.

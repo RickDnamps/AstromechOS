@@ -235,6 +235,10 @@ Connect your device to Wi-Fi **R2D2_Control**, then open: **http://192.168.4.1:5
 
 ## Daily use
 
+### Admin mode
+
+Click the **🔒 ADMIN** button in the tab bar (beside the ⚙️ gear) to unlock admin mode from any tab — no need to navigate to Settings first. Enter the password once, and admin stays active for 5 minutes of inactivity. The timer resets on any mouse movement, click, or key press, so you won't be logged out while actively working. Click the button again (now 🔓) to lock immediately.
+
 ### Adding sounds
 
 In admin mode, the **Audio tab** shows an upload zone. Drag an MP3 onto it (or click to browse), choose a category, and upload. The sound is saved and synced to the Slave Pi automatically — no SSH, no restart, available immediately.
