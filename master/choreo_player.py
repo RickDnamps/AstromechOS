@@ -24,20 +24,23 @@ _SERVO_SPECIAL = ('all', 'all_dome', 'all_body')
 _ARM_PANEL_DELAY = 0.5
 
 
-def _read_arm_panel_map() -> dict:
-    """Returns {arm_servo_id: panel_servo_id} from local.cfg [arms].
-    Only includes entries where both arm and panel are configured.
-    """
+def _read_arm_entries() -> list:
+    """Returns ordered list of (arm_servo_id, panel_servo_id_or_None) for all configured arm slots."""
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
-    count  = cfg.getint('arms', 'count', fallback=0)
-    result = {}
+    count = cfg.getint('arms', 'count', fallback=0)
+    result = []
     for i in range(1, count + 1):
         arm   = cfg.get('arms', f'arm_{i}',   fallback='').strip()
         panel = cfg.get('arms', f'panel_{i}', fallback='').strip()
-        if arm and panel:
-            result[arm] = panel
+        if arm:
+            result.append((arm, panel or None))
     return result
+
+
+def _read_arm_panel_map() -> dict:
+    """Returns {arm_servo_id: panel_servo_id} — backward compat for legacy .chor events with servo: field."""
+    return {arm: panel for arm, panel in _read_arm_entries() if panel}
 
 
 def _normalise_label(s: str) -> str:
@@ -524,17 +527,27 @@ class ChoreoPlayer:
                 easing  = ev.get('easing', 'ease-in-out')
                 group   = ev.get('group', '')
 
-                # Arm servo with associated body panel — auto open/close panel
-                if group == 'arms' and servo and self._body_servo:
-                    panel = getattr(self, '_arm_panel_map', {}).get(servo)
+                # Arm servo dispatch — new format uses arm index, old format uses servo ID
+                if group == 'arms' and self._body_servo:
+                    arm_idx = ev.get('arm')
+                    if arm_idx is not None:
+                        # New format: resolve arm slot index → servo + panel
+                        arm_entries = _read_arm_entries()
+                        if arm_idx < 1 or arm_idx > len(arm_entries):
+                            log.warning("Arm %d not configured (only %d arm(s) — skipping event)", arm_idx, len(arm_entries))
+                            return
+                        servo, panel = arm_entries[arm_idx - 1]
+                    else:
+                        # Legacy format: servo ID + panel from arm_panel_map
+                        panel = getattr(self, '_arm_panel_map', {}).get(servo)
+
                     if panel:
                         if action == 'open':
-                            # Open body panel immediately, then extend arm after delay
                             try:
                                 self._body_servo.open(panel)
                             except Exception:
                                 log.exception("Arm panel open failed: %s", panel)
-                            arm_servo = servo
+                            arm_servo  = servo
                             arm_driver = self._body_servo
                             def _delayed_arm_open(drv=arm_driver, s=arm_servo):
                                 try:
@@ -546,7 +559,6 @@ class ChoreoPlayer:
                             t.start()
                             return
                         elif action == 'close':
-                            # Retract arm immediately, then close body panel after delay
                             try:
                                 self._body_servo.close(servo)
                             except Exception:
@@ -560,7 +572,7 @@ class ChoreoPlayer:
                             t.daemon = True
                             t.start()
                             return
-                    # No panel configured — fall through to normal servo dispatch
+                    # No panel — fall through to normal servo dispatch (arm only, no panel)
 
                 is_body     = servo.startswith('body_') or servo.startswith('arm_') or servo.startswith('Servo_S')
                 is_all_dome = servo in ('all', 'all_dome')

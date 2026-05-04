@@ -5182,8 +5182,8 @@ const choreoEditor = (() => {
     { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
     { track:'body_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'body', duration:1   } },
     { track:'body_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'body', duration:1   } },
-    { track:'arm_servos',  label:'OPEN',   tpl:{ servo:'', action:'open',  group:'arms', duration:1   } },
-    { track:'arm_servos',  label:'CLOSE',  tpl:{ servo:'', action:'close', group:'arms', duration:1   } },
+    { track:'arm_servos',  label:'OPEN',   tpl:{ arm:1, action:'open',  group:'arms', duration:1   } },
+    { track:'arm_servos',  label:'CLOSE',  tpl:{ arm:1, action:'close', group:'arms', duration:1   } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
     { track:'propulsion', label:'STOP',   tpl:{ left:0,   right:0,                   duration:0.5 } },
   ];
@@ -5667,7 +5667,17 @@ const choreoEditor = (() => {
       if (item.mode === 'psi')  return `PSI ${(item.target||'both').toUpperCase()} — ${(item.sequence||'normal').toUpperCase()}`;
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
-    if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
+    if (track === 'arm_servos') {
+      if (item.arm !== undefined) {
+        const invalid = item.arm < 1 || item.arm > armsConfig._count;
+        return `${invalid ? '⚠ ' : ''}ARM ${item.arm} ${item.action || ''}`.trim().toUpperCase();
+      }
+      // Legacy event with servo ID
+      const sid = item.servo || '?';
+      const lbl = _servoSettings[sid]?.label || item.servo_label || sid;
+      return `⚠ ${lbl} ${item.action || ''}`.trim().toUpperCase();
+    }
+    if (track === 'dome_servos' || track === 'body_servos') {
       const sid = item.servo || '?';
       if (_SERVO_SPECIAL.has(sid)) {
         const names = { all: 'ALL', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
@@ -5709,7 +5719,16 @@ const choreoEditor = (() => {
       return (_lightModes[item.mode] || item.mode || '?').toUpperCase();
     }
     if (track === 'dome')   return item.power !== undefined ? `${item.power}%` : 'KF';
-    if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
+    if (track === 'arm_servos') {
+      if (item.arm !== undefined) {
+        const invalid = item.arm < 1 || item.arm > armsConfig._count;
+        return `${invalid ? '⚠ ' : ''}ARM ${item.arm} ${item.action || ''}`.trim().toUpperCase();
+      }
+      const sid = item.servo || '?';
+      const lbl = _servoSettings[sid]?.label || item.servo_label || sid;
+      return `⚠ ${lbl} ${item.action || ''}`.trim().toUpperCase();
+    }
+    if (track === 'dome_servos' || track === 'body_servos') {
       const sid = item.servo || '?';
       if (_SERVO_SPECIAL.has(sid)) {
         const names = { all: 'ALL', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
@@ -6201,25 +6220,53 @@ const choreoEditor = (() => {
         'linear':'LINEAR', 'ease-in':'EASE IN', 'ease-out':'EASE OUT', 'ease-in-out':'IN-OUT'
       });
 
-    } else if (track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') {
-      let pool;
-      if (track === 'arm_servos') {
-        // Only show servos configured as arms in Settings > Arms
-        const configured = armsConfig._servos.slice(0, armsConfig._count).filter(s => s);
-        pool = configured.length ? configured : _servoList.filter(s => s.startsWith('Servo_S'));
-      } else {
-        const prefix   = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
-        let filtered = _servoList.filter(s => s.startsWith(prefix));
-        if (track === 'body_servos' && armsConfig._count > 0) {
-          // Exclude servos configured as arms — only when at least 1 arm is configured
-          const armSet = new Set(armsConfig._servos.slice(0, armsConfig._count).filter(s => s));
-          if (armSet.size > 0) filtered = filtered.filter(s => !armSet.has(s));
+    } else if (track === 'arm_servos') {
+      const count = armsConfig._count;
+      if (item.arm !== undefined) {
+        // New format — arm slot picker
+        if (count === 0) {
+          html += `<div style="background:#1a1000;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+            ⚠️ No arms configured — go to <b>Settings → Arms</b> to assign arm servos.
+          </div>`;
+        } else if (item.arm < 1 || item.arm > count) {
+          html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+            ❌ <b>Arm ${item.arm}</b> is not configured — only ${count} arm(s) in Settings.<br>
+            Change arm slot below and save to fix.
+          </div>`;
         }
-        pool = filtered.length ? filtered : _servoList;
+        const armOpts = Object.fromEntries(
+          Array.from({length: Math.max(count, item.arm || 1)}, (_, i) => [
+            i + 1,
+            i + 1 <= count ? `Arm ${i + 1}` : `Arm ${i + 1} ⚠️ not configured`
+          ])
+        );
+        if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
+        html += selectRow('ARM SLOT', 'arm', armOpts);
+        html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
+      } else {
+        // Legacy format — servo ID stored directly
+        html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+          ⚠️ Legacy event — uses servo ID directly (<b>${item.servo_label || item.servo || '?'}</b>).<br>
+          Select an arm slot below and save to migrate to the new format.
+        </div>`;
+        const armOpts = count > 0
+          ? Object.fromEntries(Array.from({length: count}, (_, i) => [i + 1, `Arm ${i + 1}`]))
+          : { 1: 'Arm 1' };
+        if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
+        html += selectRow('ARM SLOT', 'arm', armOpts);
+        html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
       }
+
+    } else if (track === 'dome_servos' || track === 'body_servos') {
+      const prefix = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
+      let filtered = _servoList.filter(s => s.startsWith(prefix));
+      if (track === 'body_servos' && armsConfig._count > 0) {
+        const armSet = new Set(armsConfig._servos.slice(0, armsConfig._count).filter(s => s));
+        if (armSet.size > 0) filtered = filtered.filter(s => !armSet.has(s));
+      }
+      const pool = filtered.length ? filtered : _servoList;
       const servoOpts = Object.fromEntries(pool.map(s => [s, _servoSettings[s]?.label || s]));
 
-      // Mismatch context banner in inspector — skip for special group keywords
       const sid = item.servo || '';
       const isSpecial = _SERVO_SPECIAL.has(sid);
       if (isSpecial) {
@@ -6227,10 +6274,10 @@ const choreoEditor = (() => {
           ℹ️ Group command — controls <b>${sid === 'all' ? 'all servos' : sid === 'all_dome' ? 'all dome servos' : 'all body servos'}</b> at once.
         </div>`;
       } else {
-        const configLabel  = _servoSettings[sid]?.label;
-        const storedLabel  = item.servo_label;
-        const isUnknown    = sid && !configLabel;
-        const isMismatch   = configLabel && storedLabel && configLabel !== storedLabel;
+        const configLabel = _servoSettings[sid]?.label;
+        const storedLabel = item.servo_label;
+        const isUnknown   = sid && !configLabel;
+        const isMismatch  = configLabel && storedLabel && configLabel !== storedLabel;
         if (isUnknown) {
           html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
             ❌ <b>${storedLabel || sid}</b> — servo ID not found in config.<br>
@@ -6245,8 +6292,7 @@ const choreoEditor = (() => {
         }
       }
 
-      // Special group keywords — not applicable to arm track
-      const specialOpts = track === 'arm_servos' ? {} : { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+      const specialOpts = { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
       const allServoOpts = { ...specialOpts, ...servoOpts };
 
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
@@ -6274,7 +6320,17 @@ const choreoEditor = (() => {
   function _onFieldChange(track, idx, field, value) {
     if (track === 'audio') _validateAudioOverflow();
     // Re-validate servo issues when servo assignment changes in inspector
-    if ((track === 'dome_servos' || track === 'body_servos' || track === 'arm_servos') && field === 'servo') {
+    if (track === 'arm_servos' && field === 'arm') {
+      // Migrate legacy event to new arm-slot format when user picks a slot
+      const item = (_chor.tracks[track] || [])[idx];
+      if (item) {
+        item.arm = parseInt(value) || 1;
+        delete item.servo;
+        delete item.servo_label;
+      }
+      _renderTrack('arm_servos');
+    }
+    if ((track === 'dome_servos' || track === 'body_servos') && field === 'servo') {
       // Auto-refresh servo_label from current config when user picks a new servo
       const settings = _servoSettings[value];
       if (settings?.label) {
@@ -6282,10 +6338,8 @@ const choreoEditor = (() => {
         if (item) item.servo_label = settings.label;
       }
       _validateServoRefs(); _validateAudioRefs();
-      // Re-render ALL servo tracks so badges stay correct everywhere
       _renderTrack('dome_servos');
       _renderTrack('body_servos');
-      _renderTrack('arm_servos');
     }
     if (track !== 'audio' || field !== 'file' || !value) return;
     // Auto-detect duration via an Audio element + /audio/file/<sound>
