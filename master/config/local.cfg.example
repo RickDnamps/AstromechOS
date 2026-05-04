@@ -44,6 +44,18 @@ host = r2-slave.local
 # Change it from the dashboard: Admin → Config → System → Change Admin Password
 password = deetoo
 
+[arms]
+# Number of robot arms (0 = no arms configured)
+# Configure arm servos in the dashboard: Settings → Arms
+# Each arm needs a body servo (the arm itself) and optionally a panel servo
+# (the body panel that opens automatically before the arm extends).
+# Labels in Calibration update automatically when arms are saved.
+count = 0
+# arm_1 = Servo_S12
+# panel_1 = Servo_S5
+# arm_2 =
+# panel_2 =
+
 [behavior]
 # Startup sequence — plays a choreo after boot
 startup_enabled  = true
