@@ -29,16 +29,15 @@
 # ============================================================
 """
 Slave Body Servo Driver — Phase 2 (MG90S 180°).
-Receives SRV: commands from the Master and drives the PCA9685 I2C @ 0x41 via smbus2.
+Drives one or more PCA9685 HATs via smbus2.
+HAT addresses come from slave.cfg [i2c_servo_hats] slave_hats (default: 0x41).
+Each HAT covers 16 channels: HAT1 → Servo_S0..S15, HAT2 → Servo_S16..S31, etc.
 
 MG90S 180° servo: pulse_us = 500 + (angle_deg / 180.0) * 2000
-open()  → moves to open_angle_deg and holds position (no timer)
-close() → moves to close_angle_deg and holds position
-
-12-bit formula (PCA9685 hardware registers):
-    tick = int((pulse_us / 20000.0) * 4096)
+12-bit formula: tick = int((pulse_us / 20000.0) * 4096)
 """
 
+import configparser
 import json
 import logging
 import threading
@@ -52,51 +51,45 @@ from shared.base_driver import BaseDriver
 log = logging.getLogger(__name__)
 
 SERVO_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
+_SLAVE_CFG        = '/home/artoo/r2d2/slave/config/slave.cfg'
 
-PCA9685_ADDRESS = 0x41
 PCA9685_FREQ_HZ = 50
 MODE1_REG       = 0x00
 PRE_SCALE_REG   = 0xFE
 PRE_SCALE_50HZ  = 121
 
-DEFAULT_OPEN_DEG  = 110   # MG90S open angle (0–180°)
-DEFAULT_CLOSE_DEG =  20   # MG90S close angle (0–180°)
-ANGLE_MIN_DEG     =  10   # hardware safety limit
-ANGLE_MAX_DEG     = 170   # hardware safety limit
+DEFAULT_OPEN_DEG  = 110
+DEFAULT_CLOSE_DEG =  20
+ANGLE_MIN_DEG     =  10
+ANGLE_MAX_DEG     = 170
 
-SERVO_MAP: dict[str, int] = {
-    'Servo_S0':   0,
-    'Servo_S1':   1,
-    'Servo_S2':   2,
-    'Servo_S3':   3,
-    'Servo_S4':   4,
-    'Servo_S5':   5,
-    'Servo_S6':   6,
-    'Servo_S7':   7,
-    'Servo_S8':   8,
-    'Servo_S9':   9,
-    'Servo_S10': 10,
-    'Servo_S11': 11,
-    'Servo_S12': 12,
-    'Servo_S13': 13,
-    'Servo_S14': 14,
-    'Servo_S15': 15,
-}
+
+def _read_slave_hat_addresses() -> list:
+    """Returns list of I2C addresses for Slave servo HATs from slave.cfg."""
+    cfg = configparser.ConfigParser()
+    cfg.read([_SLAVE_CFG])
+    raw = cfg.get('i2c_servo_hats', 'slave_hats', fallback='0x41')
+    result = []
+    for p in raw.split(','):
+        p = p.strip()
+        if p:
+            try:
+                result.append(int(p, 16) if p.startswith('0x') else int(p))
+            except ValueError:
+                pass
+    return result or [0x41]
 
 
 def _angle_to_pulse(angle_deg: float) -> float:
-    """Converts an MG90S angle to µs for PCA9685."""
     angle_deg = max(ANGLE_MIN_DEG, min(ANGLE_MAX_DEG, angle_deg))
     return 500.0 + (angle_deg / 180.0) * 2000.0
 
 
 def _pulse_to_tick(pulse_us: float) -> int:
-    """Converts µs to 12-bit PCA9685 value (hardware registers)."""
     return max(0, min(4095, int(pulse_us / 20000.0 * 4096)))
 
 
 def _load_servo_angles() -> dict:
-    """Loads calibrated angles from slave/config/servo_angles.json."""
     try:
         with open(SERVO_ANGLES_FILE) as f:
             return json.load(f)
@@ -106,13 +99,20 @@ def _load_servo_angles() -> dict:
 
 class BodyServoDriver(BaseDriver):
 
-    def __init__(self, i2c_address: int = PCA9685_ADDRESS):
-        self._address = i2c_address
-        self._bus     = None
-        self._ready   = False
-        self._lock    = threading.Lock()
-        self._angles  = {}   # calibrated angles loaded at setup()
-        self._pos     = {}   # last commanded angle per servo
+    def __init__(self, i2c_address: int = None):
+        # i2c_address param kept for backward compat but ignored — config-driven
+        self._addresses = _read_slave_hat_addresses()
+        self._buses     = [None] * len(self._addresses)
+        self._ready     = False
+        self._lock      = threading.Lock()
+        self._angles    = {}
+        self._pos       = {}
+        # servo_name → (hat_idx, channel)
+        self._servo_map = {
+            f'Servo_S{hat * 16 + ch}': (hat, ch)
+            for hat in range(len(self._addresses))
+            for ch in range(16)
+        }
 
     def _get_angle(self, name: str, key: str, default: float) -> float:
         return float(self._angles.get(name, {}).get(key, default))
@@ -124,40 +124,47 @@ class BodyServoDriver(BaseDriver):
         try:
             import smbus2
             self._angles = _load_servo_angles()
-            self._bus = smbus2.SMBus(1)
-            self._init_chip()
+            bus = smbus2.SMBus(1)
+            for i, addr in enumerate(self._addresses):
+                self._buses[i] = bus
+                self._init_chip(i)
             self._ready = True
-            log.info("BodyServoDriver ready — smbus2 @ 0x%02X, %d servos",
-                     self._address, len(SERVO_MAP))
+            log.info("BodyServoDriver ready — %d HAT(s) %s, %d servos",
+                     len(self._addresses),
+                     [hex(a) for a in self._addresses],
+                     len(self._servo_map))
             return True
         except Exception as e:
             log.error("PCA9685 body init error: %s", e)
             return False
 
     def shutdown(self) -> None:
-        if self._bus:
-            # Close each panel with its calibrated angle
-            for name, ch in SERVO_MAP.items():
-                self._set_pulse(ch, _angle_to_pulse(self._get_close_angle(name)))
+        for hat_idx in range(len(self._addresses)):
+            bus = self._buses[hat_idx]
+            if not bus:
+                continue
+            for name, (hi, ch) in self._servo_map.items():
+                if hi == hat_idx:
+                    self._set_pulse(hat_idx, ch, _angle_to_pulse(self._get_close_angle(name)))
             time.sleep(0.3)
             try:
-                self._bus.write_byte_data(self._address, MODE1_REG, 0x10)  # SLEEP
+                bus.write_byte_data(self._addresses[hat_idx], MODE1_REG, 0x10)
             except Exception:
                 pass
-            try:
-                self._bus.close()
-            except Exception:
-                pass
-        self._bus   = None
+        try:
+            if self._buses and self._buses[0]:
+                self._buses[0].close()
+        except Exception:
+            pass
+        self._buses = [None] * len(self._addresses)
         self._ready = False
 
     def is_ready(self) -> bool:
         return self._ready
 
     def reload(self) -> None:
-        """Reloads calibrated angles from servo_angles.json without restarting the driver."""
         self._angles = _load_servo_angles()
-        log.info("BodyServoDriver: angles reloaded from disk (%d entries)", len(self._angles))
+        log.info("BodyServoDriver: angles reloaded (%d entries)", len(self._angles))
 
     # ------------------------------------------------------------------
     # Public API
@@ -180,13 +187,12 @@ class BodyServoDriver(BaseDriver):
     def move(self, name: str, position: float,
              angle_open: float = DEFAULT_OPEN_DEG,
              angle_close: float = DEFAULT_CLOSE_DEG) -> None:
-        """position 0.0=closed … 1.0=open — interpolated between angle_close and angle_open."""
         angle = angle_close + max(0.0, min(1.0, position)) * (angle_open - angle_close)
         self._move(name, angle)
 
     def open_all(self) -> None:
         threads = []
-        for name in SERVO_MAP:
+        for name in self._servo_map:
             angle = self._get_angle(name, 'open', DEFAULT_OPEN_DEG)
             speed = int(self._get_angle(name, 'speed', 10))
             t = threading.Thread(target=self._move_ramp, args=(name, angle, speed), daemon=True)
@@ -195,7 +201,7 @@ class BodyServoDriver(BaseDriver):
 
     def close_all(self) -> None:
         threads = []
-        for name in SERVO_MAP:
+        for name in self._servo_map:
             angle = self._get_close_angle(name)
             speed = int(self._get_angle(name, 'speed', 10))
             t = threading.Thread(target=self._move_ramp, args=(name, angle, speed), daemon=True)
@@ -216,83 +222,85 @@ class BodyServoDriver(BaseDriver):
 
     @property
     def state(self) -> dict:
-        return {n: 'unknown' for n in SERVO_MAP}
+        return {n: 'unknown' for n in self._servo_map}
 
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
-    def _init_chip(self) -> None:
-        """Initializes the PCA9685 at 50Hz frequency.
-        Servo channels go directly to calibrated close_angle — no intermediate _full_off()
-        which would cause torque loss and a jerk at boot."""
-        self._bus.write_byte_data(self._address, MODE1_REG, 0x00)
+    def _init_chip(self, hat_idx: int) -> None:
+        addr = self._addresses[hat_idx]
+        bus  = self._buses[hat_idx]
+        bus.write_byte_data(addr, MODE1_REG, 0x00)
         time.sleep(0.005)
-        self._bus.write_byte_data(self._address, MODE1_REG, 0x10)
+        bus.write_byte_data(addr, MODE1_REG, 0x10)
         time.sleep(0.005)
-        self._bus.write_byte_data(self._address, PRE_SCALE_REG, PRE_SCALE_50HZ)
-        self._bus.write_byte_data(self._address, MODE1_REG, 0x00)
+        bus.write_byte_data(addr, PRE_SCALE_REG, PRE_SCALE_50HZ)
+        bus.write_byte_data(addr, MODE1_REG, 0x00)
         time.sleep(0.005)
-        self._bus.write_byte_data(self._address, MODE1_REG, 0x80)
+        bus.write_byte_data(addr, MODE1_REG, 0x80)
         time.sleep(0.005)
-        # Non-servo channels → full_off (no load)
-        servo_channels = set(SERVO_MAP.values())
+        servo_channels = {ch for (hi, ch) in self._servo_map.values() if hi == hat_idx}
         for ch in range(16):
             if ch not in servo_channels:
-                self._full_off(ch)
-        # Servo channels → calibrated closed position directly, without full_off
-        for name, ch in SERVO_MAP.items():
-            close_a = self._get_close_angle(name)
-            self._set_pulse(ch, _angle_to_pulse(close_a))
-            self._pos[name] = close_a
-        log.info("PCA9685 @ 0x%02X initialized 50Hz — servos → calibrated close_angle", self._address)
+                self._full_off(hat_idx, ch)
+        for name, (hi, ch) in self._servo_map.items():
+            if hi == hat_idx:
+                close_a = self._get_close_angle(name)
+                self._set_pulse(hat_idx, ch, _angle_to_pulse(close_a))
+                self._pos[name] = close_a
+        log.info("PCA9685 @ 0x%02X initialized 50Hz — servos → calibrated close_angle", addr)
 
-    def _ensure_awake(self) -> None:
-        """Wakes the chip if it is sleeping (e.g. after estop.py)."""
+    def _ensure_awake(self, hat_idx: int) -> None:
+        addr = self._addresses[hat_idx]
+        bus  = self._buses[hat_idx]
         try:
-            mode1 = self._bus.read_byte_data(self._address, MODE1_REG)
+            mode1 = bus.read_byte_data(addr, MODE1_REG)
             if mode1 & 0x10:
-                self._bus.write_byte_data(self._address, MODE1_REG, mode1 & ~0x10)
+                bus.write_byte_data(addr, MODE1_REG, mode1 & ~0x10)
                 time.sleep(0.002)
-                log.info("PCA9685 @ 0x%02X woken up (was sleeping)", self._address)
+                log.info("PCA9685 @ 0x%02X woken up", addr)
         except Exception as e:
-            log.warning("_ensure_awake 0x%02X: %s", self._address, e)
+            log.warning("_ensure_awake 0x%02X: %s", addr, e)
 
-    def _full_off(self, channel: int) -> None:
+    def _full_off(self, hat_idx: int, channel: int) -> None:
+        addr = self._addresses[hat_idx]
+        bus  = self._buses[hat_idx]
         base = 0x06 + 4 * channel
-        self._bus.write_byte_data(self._address, base,     0x00)
-        self._bus.write_byte_data(self._address, base + 1, 0x00)
-        self._bus.write_byte_data(self._address, base + 2, 0x00)
-        self._bus.write_byte_data(self._address, base + 3, 0x10)
+        bus.write_byte_data(addr, base,     0x00)
+        bus.write_byte_data(addr, base + 1, 0x00)
+        bus.write_byte_data(addr, base + 2, 0x00)
+        bus.write_byte_data(addr, base + 3, 0x10)
 
-    def _set_pulse(self, channel: int, pulse_us: float) -> None:
+    def _set_pulse(self, hat_idx: int, channel: int, pulse_us: float) -> None:
         tick = _pulse_to_tick(pulse_us)
+        addr = self._addresses[hat_idx]
+        bus  = self._buses[hat_idx]
         base = 0x06 + 4 * channel
         with self._lock:
             try:
-                self._bus.write_byte_data(self._address, base,     0x00)
-                self._bus.write_byte_data(self._address, base + 1, 0x00)
-                self._bus.write_byte_data(self._address, base + 2, tick & 0xFF)
-                self._bus.write_byte_data(self._address, base + 3, tick >> 8)
+                bus.write_byte_data(addr, base,     0x00)
+                bus.write_byte_data(addr, base + 1, 0x00)
+                bus.write_byte_data(addr, base + 2, tick & 0xFF)
+                bus.write_byte_data(addr, base + 3, tick >> 8)
             except Exception as e:
-                log.error("smbus2 body channel %d error: %s", channel, e)
+                log.error("smbus2 body HAT%d ch%d error: %s", hat_idx, channel, e)
 
     def _move(self, name: str, angle_deg: float) -> None:
         if not self._ready:
             log.warning("BodyServoDriver not ready — command ignored (%r)", name)
             return
-        if name not in SERVO_MAP:
+        if name not in self._servo_map:
             log.warning("Unknown servo: %r", name)
             return
-        channel  = SERVO_MAP[name]
+        hat_idx, channel = self._servo_map[name]
         pulse_us = _angle_to_pulse(angle_deg)
-        self._ensure_awake()
-        self._set_pulse(channel, pulse_us)
+        self._ensure_awake(hat_idx)
+        self._set_pulse(hat_idx, channel, pulse_us)
         self._pos[name] = angle_deg
-        log.info("Body servo %r ch%d → %.1f° (%.0fµs)", name, channel, angle_deg, pulse_us)
+        log.info("Body servo %r HAT%d ch%d → %.1f°", name, hat_idx, channel, angle_deg)
 
     def _move_ramp(self, name: str, target: float, speed: int = 10) -> None:
-        """Moves the servo with an optional ramp (speed 1=slow … 10=instant)."""
         speed = max(1, min(10, int(speed)))
         if speed >= 10:
             self._move(name, target); return

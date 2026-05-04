@@ -58,6 +58,17 @@ count = 0
 # panel_2 =
 # delay_2 = 0.5
 
+[i2c_servo_hats]
+# PCA9685 servo HAT I2C addresses on Master Pi (dome servos).
+# HAT 1 → Servo_M0–M15, HAT 2 → Servo_M16–M31, etc.
+# Do NOT include non-servo HATs (motor HATs, etc.).
+# Add a second address (e.g. 0x42) if you install a second dome servo HAT.
+master_hats = 0x40
+# PCA9685 servo HAT I2C addresses on Slave Pi (body servos).
+# HAT 1 → Servo_S0–S15, HAT 2 → Servo_S16–S31, etc.
+# Slave Motor HAT (TB6612 @ 0x40) is NOT a servo HAT — do not list it here.
+slave_hats = 0x41
+
 [behavior]
 # Startup sequence — plays a choreo after boot
 startup_enabled  = true

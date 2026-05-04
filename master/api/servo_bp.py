@@ -86,8 +86,29 @@ def _slave_host() -> str:
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
     return 'artoo@' + cfg.get('slave', 'host', fallback='r2-slave.local')
 
-BODY_SERVOS = [f'Servo_S{i}' for i in range(16)]
-DOME_SERVOS = [f'Servo_M{i}' for i in range(16)]
+def _read_hat_addresses() -> tuple[list, list]:
+    """Returns (master_hat_addrs, slave_hat_addrs) from local.cfg [i2c_servo_hats].
+    Defaults to one HAT each: Master 0x40, Slave 0x41.
+    """
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    def _parse(s: str) -> list[int]:
+        result = []
+        for p in s.split(','):
+            p = p.strip()
+            if p:
+                try:
+                    result.append(int(p, 16) if p.startswith('0x') else int(p))
+                except ValueError:
+                    pass
+        return result
+    master = _parse(cfg.get('i2c_servo_hats', 'master_hats', fallback='0x40')) or [0x40]
+    slave  = _parse(cfg.get('i2c_servo_hats', 'slave_hats',  fallback='0x41')) or [0x41]
+    return master, slave
+
+_master_hat_addrs, _slave_hat_addrs = _read_hat_addresses()
+DOME_SERVOS = [f'Servo_M{i}' for i in range(len(_master_hat_addrs) * 16)]
+BODY_SERVOS = [f'Servo_S{i}' for i in range(len(_slave_hat_addrs)  * 16)]
 _ALL_PANELS = DOME_SERVOS + BODY_SERVOS
 
 _DEFAULT_OPEN  = 110
@@ -529,7 +550,18 @@ def servo_close_all():
 
 @servo_bp.get('/settings')
 def servo_settings_get():
-    return jsonify(_read_panels_cfg())
+    data = _read_panels_cfg()
+    data['dome_hats'] = [
+        {'hat': i + 1, 'addr': hex(_master_hat_addrs[i]),
+         'servos': [f'Servo_M{i * 16 + j}' for j in range(16)]}
+        for i in range(len(_master_hat_addrs))
+    ]
+    data['body_hats'] = [
+        {'hat': i + 1, 'addr': hex(_slave_hat_addrs[i]),
+         'servos': [f'Servo_S{i * 16 + j}' for j in range(16)]}
+        for i in range(len(_slave_hat_addrs))
+    ]
+    return jsonify(data)
 
 
 @servo_bp.post('/settings')

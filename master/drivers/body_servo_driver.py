@@ -65,7 +65,15 @@ def _calibrated_angle(name: str, action: str) -> float:
     except Exception:
         return default
 
-KNOWN_SERVOS = {f'Servo_S{i}' for i in range(16)}
+def _slave_servo_count() -> int:
+    """Returns total number of body servos based on slave HAT count in local.cfg."""
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    raw = cfg.get('i2c_servo_hats', 'slave_hats', fallback='0x41')
+    count = sum(1 for p in raw.split(',') if p.strip())
+    return max(1, count) * 16
+
+KNOWN_SERVOS = {f'Servo_S{i}' for i in range(_slave_servo_count())}
 
 
 class BodyServoDriver:
