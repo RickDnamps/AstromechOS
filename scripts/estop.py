@@ -28,56 +28,30 @@
 #  You should have received a copy of the GNU GPL along with
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Emergency servo stop
-# Envoie 1500µs (neutre = STOP pour servo continu) puis coupe PWM
-# Master : PCA9685 @ 0x40 via I2C local
-# Slave  : PCA9685 @ 0x41 via SSH
-import smbus2, time, subprocess
+# Emergency stop — halts VESCs and dome motor via UART.
+# Servos are NOT touched: they hold their current position.
+# This script is the guaranteed low-level fallback when the
+# Flask process is unavailable.
+import serial, time
 
-SLAVE = "artoo@r2-slave.local"
-MODE1 = 0x00
+UART_PORT = '/dev/ttyAMA0'
+BAUD      = 115200
 
-def stop_pca(bus, addr):
-    """Send 1500µs on all channels then put into sleep mode."""
-    bus.write_byte_data(addr, MODE1, 0x00)
-    time.sleep(0.01)
-    tick = int((1500 / 20000.0) * 4096)  # 1500µs = neutre
-    for ch in range(16):
-        base = 0x06 + 4 * ch
-        bus.write_byte_data(addr, base,     0x00)
-        bus.write_byte_data(addr, base + 1, 0x00)
-        bus.write_byte_data(addr, base + 2, tick & 0xFF)
-        bus.write_byte_data(addr, base + 3, tick >> 8)
-    time.sleep(0.3)
-    bus.write_byte_data(addr, MODE1, 0x10)  # sleep
+def crc(payload: str) -> str:
+    return format(sum(payload.encode()) % 256, '02X')
 
-# --- Master : 0x40 ---
+def send(ser, msg_type: str, value: str) -> None:
+    payload = f"{msg_type}:{value}"
+    ser.write(f"{payload}:{crc(payload)}\n".encode())
+
 try:
-    bus = smbus2.SMBus(1)
-    stop_pca(bus, 0x40)
-    bus.close()
-    print("Master PCA9685 @ 0x40 — STOP OK")
+    ser = serial.Serial(UART_PORT, BAUD, timeout=1)
+    time.sleep(0.05)
+    send(ser, 'M', '0.0,0.0')   # stop VESCs
+    send(ser, 'D', '0.0')        # stop dome motor
+    ser.close()
+    print("Estop UART — VESCs + dome stopped, servos held")
 except Exception as e:
-    print(f"Master PCA9685 @ 0x40 — {e}")
-
-# --- Slave : 0x41 via SSH ---
-slave_cmd = (
-    "python3 -c '"
-    "import smbus2,time;"
-    "b=smbus2.SMBus(1);"
-    "b.write_byte_data(0x41,0,0);"
-    "time.sleep(0.01);"
-    "t=int((1500/20000)*4096);"
-    "[b.write_byte_data(0x41,6+4*c+i,v) for c in range(16) for i,v in enumerate([0,0,t&0xFF,t>>8])];"
-    "time.sleep(0.3);"
-    "b.write_byte_data(0x41,0,0x10);"
-    "b.close();"
-    "print(\"Slave PCA9685 @ 0x41 — STOP OK\")'"
-)
-result = subprocess.run(
-    ["ssh", "-o", "ConnectTimeout=5", SLAVE, slave_cmd],
-    capture_output=True, text=True
-)
-print(result.stdout.strip() if result.stdout else f"Slave — SSH failed or offline")
+    print(f"Estop UART — {e}")
 
 print("Estop complete")

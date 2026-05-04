@@ -351,42 +351,38 @@ def app_heartbeat():
 
 @status_bp.post('/system/estop')
 def system_estop():
-    """Emergency stop servos — cuts PWM PCA9685 Master (0x40) + Slave (0x41) via smbus2."""
-    # Cut via active drivers if available
-    if reg.dome_servo:
+    """Emergency stop — halts motors and choreo, servos hold their current position."""
+    # Stop propulsion
+    if reg.vesc:
         try:
-            reg.dome_servo.shutdown()
+            reg.vesc.stop()
         except Exception:
             pass
-    if reg.servo:
+    # Stop dome rotation
+    if reg.dome:
         try:
-            reg.servo.shutdown()
+            reg.dome.stop()
+        except Exception:
+            pass
+    # Abort any running choreography
+    if reg.choreo:
+        try:
+            reg.choreo.stop()
+        except Exception:
+            pass
+    # Send explicit drive-stop over UART in case VESC driver is unavailable
+    if reg.uart:
+        try:
+            reg.uart.send('M', '0.0,0.0')
+            reg.uart.send('D', '0.0')
         except Exception:
             pass
     reg.estop_active = True
-    # Guaranteed fallback: estop.py directly via subprocess
-    threading.Thread(
-        target=lambda: subprocess.run(
-            ['python3', '/home/artoo/r2d2/scripts/estop.py'], check=False
-        ),
-        daemon=True
-    ).start()
     return jsonify({'status': 'estop_sent'})
 
 
 @status_bp.post('/system/estop_reset')
 def system_estop_reset():
-    """Re-arms servo drivers after an E-STOP — reinitializes PCA9685 without restarting the service."""
-    import logging
-    log = logging.getLogger(__name__)
+    """Clears E-STOP flag — motors and choreo can be used again."""
     reg.estop_active = False
-    results = {}
-    if reg.dome_servo:
-        ok = reg.dome_servo.setup()
-        results['dome_servo'] = 'ok' if ok else 'error'
-        log.info("estop_reset: dome_servo setup → %s", results['dome_servo'])
-    if reg.servo:
-        ok = reg.servo.setup()
-        results['body_servo'] = 'ok' if ok else 'error'
-        log.info("estop_reset: body_servo setup → %s", results['body_servo'])
-    return jsonify({'status': 'reset', 'drivers': results})
+    return jsonify({'status': 'reset'})
