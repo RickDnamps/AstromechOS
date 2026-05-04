@@ -65,7 +65,9 @@ ANGLE_MAX_DEG     = 170
 
 
 def _read_slave_hat_addresses() -> list:
-    """Returns list of I2C addresses for Slave servo HATs from slave.cfg."""
+    """Returns list of I2C addresses for Slave servo HATs from slave.cfg.
+    Warns if the motor HAT address is accidentally listed as a servo HAT.
+    """
     cfg = configparser.ConfigParser()
     cfg.read([_SLAVE_CFG])
     raw = cfg.get('i2c_servo_hats', 'slave_hats', fallback='0x41')
@@ -77,7 +79,20 @@ def _read_slave_hat_addresses() -> list:
                 result.append(int(p, 16) if p.startswith('0x') else int(p))
             except ValueError:
                 pass
-    return result or [0x41]
+    addresses = result or [0x41]
+    # Safety check — warn if motor HAT address is in the servo HAT list
+    motor_raw = cfg.get('i2c_servo_hats', 'slave_motor_hat', fallback='0x40')
+    try:
+        motor_addr = int(motor_raw.strip(), 16) if motor_raw.strip().startswith('0x') else int(motor_raw.strip())
+        if motor_addr in addresses:
+            log.error(
+                "CONFIGURATION ERROR: Motor HAT address 0x%02X is listed as a servo HAT in slave.cfg! "
+                "This will damage your Motor HAT. Fix slave_hats to exclude 0x%02X.",
+                motor_addr, motor_addr
+            )
+    except ValueError:
+        pass
+    return addresses
 
 
 def _angle_to_pulse(angle_deg: float) -> float:

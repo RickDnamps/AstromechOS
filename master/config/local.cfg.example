@@ -59,14 +59,24 @@ count = 0
 # delay_2 = 0.5
 
 [i2c_servo_hats]
-# PCA9685 servo HAT I2C addresses on Master Pi (dome servos).
+# ── MASTER (dome servos) ──────────────────────────────────────────
+# PCA9685 servo HAT address(es) on Master Pi — comma-separated if multiple.
 # HAT 1 → Servo_M0–M15, HAT 2 → Servo_M16–M31, etc.
-# Do NOT include non-servo HATs (motor HATs, etc.).
-# Add a second address (e.g. 0x42) if you install a second dome servo HAT.
+# Master has no motor HAT conflict — default address is 0x40.
+# Example with two dome servo HATs: master_hats = 0x40, 0x42
 master_hats = 0x40
-# PCA9685 servo HAT I2C addresses on Slave Pi (body servos).
+
+# ── SLAVE (body servos) ──────────────────────────────────────────
+# Motor HAT I2C address on Slave Pi — informational only, never used for servos.
+# The software warns if this address appears in slave_hats by mistake.
+# Waveshare Motor HAT default: 0x40
+slave_motor_hat = 0x40
+
+# PCA9685 servo HAT address(es) on Slave Pi — comma-separated if multiple.
 # HAT 1 → Servo_S0–S15, HAT 2 → Servo_S16–S31, etc.
-# Slave Motor HAT (TB6612 @ 0x40) is NOT a servo HAT — do not list it here.
+# NOTE: Waveshare Servo HAT ships at 0x40 — you MUST move it to 0x41 (or other)
+#       by soldering the A0 address jumper to avoid conflict with the Motor HAT.
+# Example with two body servo HATs: slave_hats = 0x41, 0x42
 slave_hats = 0x41
 
 [behavior]
