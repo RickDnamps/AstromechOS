@@ -407,24 +407,62 @@ def arms_config_get():
 
 @servo_bp.post('/arms')
 def arms_config_save():
+    import logging
+    log = logging.getLogger(__name__)
     data   = request.get_json(silent=True) or {}
     count  = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
     servos = data.get('servos', [])
     panels = data.get('panels', [])
+
+    # Snapshot previous config so we can revert labels for removed arms
+    prev = _read_arms_cfg()
+
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
     if not cfg.has_section('arms'):
         cfg.add_section('arms')
     cfg.set('arms', 'count', str(count))
+    new_servos, new_panels = [], []
     for i in range(1, _ARM_COUNT_MAX + 1):
         raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
         raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
-        # Only accept valid body servo IDs — never store labels
-        cfg.set('arms', f'arm_{i}',   raw_servo if raw_servo in BODY_SERVOS else '')
-        cfg.set('arms', f'panel_{i}', raw_panel if raw_panel in BODY_SERVOS else '')
+        sv = raw_servo if raw_servo in BODY_SERVOS else ''
+        pn = raw_panel if raw_panel in BODY_SERVOS else ''
+        cfg.set('arms', f'arm_{i}',   sv)
+        cfg.set('arms', f'panel_{i}', pn)
+        new_servos.append(sv)
+        new_panels.append(pn)
     os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
     write_cfg_atomic(cfg, _LOCAL_CFG)
-    import logging; logging.getLogger(__name__).info("Arms config saved: count=%d servos=%s panels=%s", count, servos, panels)
+
+    # Auto-label servos in servo_angles.json to match their arm role.
+    # Build a map of every body servo → desired label after this save.
+    label_updates = {}
+    for i in range(_ARM_COUNT_MAX):
+        sv = new_servos[i]
+        pn = new_panels[i]
+        slot = i + 1
+        if sv:
+            label_updates[sv] = f'Arm{slot}'
+        if pn:
+            label_updates[pn] = f'Arm{slot}_panel'
+
+    # Revert labels for servos that were arms/panels before but are no longer assigned
+    for i in range(_ARM_COUNT_MAX):
+        prev_sv = prev['servos'][i]
+        prev_pn = prev['panels'][i]
+        if prev_sv and prev_sv not in label_updates:
+            label_updates[prev_sv] = prev_sv  # revert to servo ID
+        if prev_pn and prev_pn not in label_updates:
+            label_updates[prev_pn] = prev_pn  # revert to servo ID
+
+    if label_updates:
+        panels_cfg = _read_panels_cfg()['panels']
+        patch = {sid: {**panels_cfg.get(sid, {}), 'label': lbl} for sid, lbl in label_updates.items()}
+        _sync_angles_json({'panels': {**panels_cfg, **patch}})
+        log.info("Arms auto-label: %s", label_updates)
+
+    log.info("Arms config saved: count=%d servos=%s panels=%s", count, new_servos, new_panels)
     return jsonify({'status': 'ok', **_read_arms_cfg()})
 
 
