@@ -4659,9 +4659,10 @@ async function saveBatteryCells() {
 // ─── Arms config ──────────────────────────────────────────────────────────────
 const armsConfig = {
   _count:  0,
-  _servos: ['', '', '', ''],   // 4 slots, servo IDs (never labels)
-  _panels: ['', '', '', ''],   // 4 slots, body panel that opens before arm extends
-  _labels: {},                 // {Servo_S0: 'My Label', ...}
+  _servos: ['', '', '', ''],          // 4 slots, servo IDs (never labels)
+  _panels: ['', '', '', ''],          // 4 slots, body panel that opens before arm extends
+  _delays: [0.5, 0.5, 0.5, 0.5],     // 4 slots, seconds between panel open and arm extension
+  _labels: {},                        // {Servo_S0: 'My Label', ...}
 
   async load() {
     const [armsData, settingsData] = await Promise.all([
@@ -4672,6 +4673,7 @@ const armsConfig = {
     this._count  = armsData.count  || 0;
     this._servos = armsData.servos || ['', '', '', ''];
     this._panels = armsData.panels || ['', '', '', ''];
+    this._delays = armsData.delays || [0.5, 0.5, 0.5, 0.5];
     // Build label map — only body servos (Servo_S*)
     const panels = settingsData?.panels || {};
     this._labels = {};
@@ -4704,6 +4706,7 @@ const armsConfig = {
         const sel = this._panels[i] === id ? ' selected' : '';
         return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
       }).join('');
+      const delay = this._delays[i] ?? 0.5;
       div.innerHTML = `
         <div class="form-group">
           <label>ARM ${i + 1} — Servo</label>
@@ -4716,6 +4719,12 @@ const armsConfig = {
           <select id="arm-panel-${i}" class="input-text">
             <option value="">— none —</option>${panelOpts}
           </select>
+        </div>
+        <div class="form-group">
+          <label>ARM ${i + 1} — Panel→Arm delay (s)</label>
+          <input id="arm-delay-${i}" type="number" class="input-text"
+            min="0.1" max="5.0" step="0.1" value="${delay}"
+            style="width:80px">
         </div>`;
       container.appendChild(div);
     }
@@ -4730,13 +4739,15 @@ const armsConfig = {
     const count  = parseInt(el('arms-count')?.value) || 0;
     const servos = Array.from({length: 4}, (_, i) => el(`arm-servo-${i}`)?.value || '');
     const panels = Array.from({length: 4}, (_, i) => el(`arm-panel-${i}`)?.value || '');
+    const delays = Array.from({length: 4}, (_, i) => parseFloat(el(`arm-delay-${i}`)?.value) || 0.5);
     const status = el('arms-status');
     if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-    const data = await api('/servo/arms', 'POST', { count, servos, panels });
+    const data = await api('/servo/arms', 'POST', { count, servos, panels, delays });
     if (data?.status === 'ok') {
       this._count  = data.count;
       this._servos = data.servos;
       this._panels = data.panels;
+      this._delays = data.delays || [0.5, 0.5, 0.5, 0.5];
       toast(`Arms: ${count} arm(s) configured`, 'ok');
       if (status) { status.textContent = `${count} arm(s) saved`; status.className = 'settings-status ok'; }
     } else {

@@ -51,10 +51,12 @@ password = deetoo
 # (the body panel that opens automatically before the arm extends).
 # Labels in Calibration update automatically when arms are saved.
 count = 0
-# arm_1 = Servo_S12
+# arm_1   = Servo_S12
 # panel_1 = Servo_S5
-# arm_2 =
+# delay_1 = 0.5        # seconds between panel open and arm extension (0.1–5.0)
+# arm_2   =
 # panel_2 =
+# delay_2 = 0.5
 
 [behavior]
 # Startup sequence — plays a choreo after boot

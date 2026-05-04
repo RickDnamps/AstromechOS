@@ -387,17 +387,22 @@ def dome_close_all():
 _ARM_COUNT_MAX = 4
 
 
+_ARM_DEFAULT_DELAY = 0.5  # seconds between panel open and arm extension
+
 def _read_arms_cfg() -> dict:
-    """Returns {count, servos[4], panels[4]} from local.cfg [arms].
+    """Returns {count, servos[4], panels[4], delays[4]} from local.cfg [arms].
     Always returns exactly 4 slots (empty string = not assigned).
     Values are servo IDs (e.g. 'Servo_S12'), never labels.
+    delays are floats in seconds (default 0.5).
     """
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
     count  = max(0, min(_ARM_COUNT_MAX, cfg.getint('arms', 'count', fallback=0)))
     servos = [cfg.get('arms', f'arm_{i}',   fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
     panels = [cfg.get('arms', f'panel_{i}', fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
-    return {'count': count, 'servos': servos, 'panels': panels}
+    delays = [round(max(0.1, min(5.0, cfg.getfloat('arms', f'delay_{i}', fallback=_ARM_DEFAULT_DELAY))), 2)
+              for i in range(1, _ARM_COUNT_MAX + 1)]
+    return {'count': count, 'servos': servos, 'panels': panels, 'delays': delays}
 
 
 @servo_bp.get('/arms')
@@ -413,6 +418,7 @@ def arms_config_save():
     count  = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
     servos = data.get('servos', [])
     panels = data.get('panels', [])
+    delays = data.get('delays', [])
 
     # Snapshot previous config so we can revert labels for removed arms
     prev = _read_arms_cfg()
@@ -426,10 +432,13 @@ def arms_config_save():
     for i in range(1, _ARM_COUNT_MAX + 1):
         raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
         raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
+        raw_delay = delays[i - 1] if i - 1 < len(delays) else _ARM_DEFAULT_DELAY
         sv = raw_servo if raw_servo in BODY_SERVOS else ''
         pn = raw_panel if raw_panel in BODY_SERVOS else ''
+        dl = round(max(0.1, min(5.0, float(raw_delay))), 2)
         cfg.set('arms', f'arm_{i}',   sv)
         cfg.set('arms', f'panel_{i}', pn)
+        cfg.set('arms', f'delay_{i}', str(dl))
         new_servos.append(sv)
         new_panels.append(pn)
     os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)

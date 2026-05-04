@@ -387,28 +387,27 @@ def system_estop_reset():
     reg.estop_active = False
 
     def _safe_home():
-        # Read arm→panel relationships from config
+        # Read arm→panel→delay from config
         cfg = configparser.ConfigParser()
         cfg.read('/home/artoo/r2d2/master/config/local.cfg')
         count = cfg.getint('arms', 'count', fallback=0)
-        arm_panel_pairs = []
+        arm_entries = []
         for i in range(1, count + 1):
             arm   = cfg.get('arms', f'arm_{i}',   fallback='').strip()
             panel = cfg.get('arms', f'panel_{i}', fallback='').strip()
+            delay = max(0.1, min(5.0, cfg.getfloat('arms', f'delay_{i}', fallback=0.5)))
             if arm:
-                arm_panel_pairs.append((arm, panel))
+                arm_entries.append((arm, panel, delay))
 
-        if arm_panel_pairs and reg.servo:
-            # Step 1: retract all arms immediately
-            for arm, _ in arm_panel_pairs:
+        if arm_entries and reg.servo:
+            # Retract each arm then close its panel after its individual delay
+            for arm, panel, delay in arm_entries:
                 try:
                     reg.servo.close(arm)
                 except Exception:
                     pass
-            # Step 2: after arm retract delay, close associated panels
-            _time.sleep(0.6)
-            for _, panel in arm_panel_pairs:
                 if panel:
+                    _time.sleep(delay)
                     try:
                         reg.servo.close(panel)
                     except Exception:

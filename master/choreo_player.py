@@ -25,7 +25,7 @@ _ARM_PANEL_DELAY = 0.5
 
 
 def _read_arm_entries() -> list:
-    """Returns ordered list of (arm_servo_id, panel_servo_id_or_None) for all configured arm slots."""
+    """Returns ordered list of (arm_servo_id, panel_servo_id_or_None, delay_s) for all configured arm slots."""
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
     count = cfg.getint('arms', 'count', fallback=0)
@@ -33,8 +33,9 @@ def _read_arm_entries() -> list:
     for i in range(1, count + 1):
         arm   = cfg.get('arms', f'arm_{i}',   fallback='').strip()
         panel = cfg.get('arms', f'panel_{i}', fallback='').strip()
+        delay = max(0.1, min(5.0, cfg.getfloat('arms', f'delay_{i}', fallback=_ARM_PANEL_DELAY)))
         if arm:
-            result.append((arm, panel or None))
+            result.append((arm, panel or None, delay))
     return result
 
 
@@ -531,15 +532,16 @@ class ChoreoPlayer:
                 if group == 'arms' and self._body_servo:
                     arm_idx = ev.get('arm')
                     if arm_idx is not None:
-                        # New format: resolve arm slot index → servo + panel
+                        # New format: resolve arm slot index → servo + panel + delay
                         arm_entries = _read_arm_entries()
                         if arm_idx < 1 or arm_idx > len(arm_entries):
                             log.warning("Arm %d not configured (only %d arm(s) — skipping event)", arm_idx, len(arm_entries))
                             return
-                        servo, panel = arm_entries[arm_idx - 1]
+                        servo, panel, arm_delay = arm_entries[arm_idx - 1]
                     else:
-                        # Legacy format: servo ID + panel from arm_panel_map
-                        panel = getattr(self, '_arm_panel_map', {}).get(servo)
+                        # Legacy format: servo ID + panel from arm_panel_map, default delay
+                        panel     = getattr(self, '_arm_panel_map', {}).get(servo)
+                        arm_delay = _ARM_PANEL_DELAY
 
                     if panel:
                         if action == 'open':
@@ -554,7 +556,7 @@ class ChoreoPlayer:
                                     drv.open(s)
                                 except Exception:
                                     log.exception("Delayed arm open failed: %s", s)
-                            t = threading.Timer(_ARM_PANEL_DELAY, _delayed_arm_open)
+                            t = threading.Timer(arm_delay, _delayed_arm_open)
                             t.daemon = True
                             t.start()
                             return
@@ -568,7 +570,7 @@ class ChoreoPlayer:
                                     drv.close(s)
                                 except Exception:
                                     log.exception("Delayed panel close failed: %s", s)
-                            t = threading.Timer(_ARM_PANEL_DELAY, _delayed_panel_close)
+                            t = threading.Timer(arm_delay, _delayed_panel_close)
                             t.daemon = True
                             t.start()
                             return
