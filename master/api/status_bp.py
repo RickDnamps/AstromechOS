@@ -383,6 +383,51 @@ def system_estop():
 
 @status_bp.post('/system/estop_reset')
 def system_estop_reset():
-    """Clears E-STOP flag — motors and choreo can be used again."""
+    """Clears E-STOP and runs safe-home: arms retract first, then panels close, then all servos go to close position."""
     reg.estop_active = False
+
+    def _safe_home():
+        # Read arm→panel relationships from config
+        cfg = configparser.ConfigParser()
+        cfg.read('/home/artoo/r2d2/master/config/local.cfg')
+        count = cfg.getint('arms', 'count', fallback=0)
+        arm_panel_pairs = []
+        for i in range(1, count + 1):
+            arm   = cfg.get('arms', f'arm_{i}',   fallback='').strip()
+            panel = cfg.get('arms', f'panel_{i}', fallback='').strip()
+            if arm:
+                arm_panel_pairs.append((arm, panel))
+
+        if arm_panel_pairs and reg.servo:
+            # Step 1: retract all arms immediately
+            for arm, _ in arm_panel_pairs:
+                try:
+                    reg.servo.close(arm)
+                except Exception:
+                    pass
+            # Step 2: after arm retract delay, close associated panels
+            _time.sleep(0.6)
+            for _, panel in arm_panel_pairs:
+                if panel:
+                    try:
+                        reg.servo.close(panel)
+                    except Exception:
+                        pass
+            _time.sleep(0.3)
+
+        # Step 3: close all remaining body servos
+        if reg.servo:
+            try:
+                reg.servo.close_all()
+            except Exception:
+                pass
+
+        # Step 4: close all dome servos
+        if reg.dome_servo:
+            try:
+                reg.dome_servo.close_all()
+            except Exception:
+                pass
+
+    threading.Thread(target=_safe_home, daemon=True).start()
     return jsonify({'status': 'reset'})
