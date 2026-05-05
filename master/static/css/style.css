@@ -3268,15 +3268,28 @@ select.input-text option { background: #0a1525; }
 
 
 /* Arms config — two dropdowns side by side per arm */
-.arms-row {
+.arms-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 52px 1fr 1fr 64px;
+  gap: 4px 6px;
+  align-items: center;
   margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(0,170,255,.08);
 }
-.arms-row:last-child { border-bottom: none; margin-bottom: 0; }
+.arms-gh {
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(0,170,255,.12);
+}
+.arms-gl {
+  font-size: 0.76em;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
 
 .settings-divider {
   border: none;

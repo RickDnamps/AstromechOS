@@ -134,9 +134,68 @@ body::after {
   flex-shrink: 0;
 }
 
+.brand-icon-wrap {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-icon-emoji {
+  font-size: 26px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(0,170,255,0.7));
+  animation: logo-pulse 3s ease-in-out infinite;
+}
+
+.brand-icon-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(0,170,255,0.7));
+  animation: logo-pulse 3s ease-in-out infinite;
+  border-radius: 4px;
+}
+
 .r2-logo {
   filter: drop-shadow(0 0 6px rgba(0,170,255,0.7));
   animation: logo-pulse 3s ease-in-out infinite;
+}
+
+/* Icon picker — Settings → System */
+.icon-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.icon-picker-btn {
+  width: 46px;
+  height: 46px;
+  font-size: 20px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.04);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.6);
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.icon-picker-btn:hover {
+  border-color: var(--blue);
+  background: rgba(0,170,255,0.1);
+}
+
+.icon-picker-btn.selected {
+  border-color: var(--cyan);
+  background: rgba(0,255,234,0.12);
+  box-shadow: 0 0 8px rgba(0,255,234,0.3);
+  color: var(--cyan);
 }
 
 @keyframes logo-pulse {
@@ -3209,15 +3268,28 @@ select.input-text option { background: #0a1525; }
 
 
 /* Arms config — two dropdowns side by side per arm */
-.arms-row {
+.arms-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: 52px 1fr 1fr 64px;
+  gap: 4px 6px;
+  align-items: center;
   margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid rgba(0,170,255,.08);
 }
-.arms-row:last-child { border-bottom: none; margin-bottom: 0; }
+.arms-gh {
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  opacity: 0.5;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(0,170,255,.12);
+}
+.arms-gl {
+  font-size: 0.76em;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
 
 .settings-divider {
   border: none;

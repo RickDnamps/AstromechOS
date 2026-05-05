@@ -463,7 +463,7 @@ def dome_close_all():
 # ARMS CONFIG — which body servos are the arm servos
 # ================================================================
 
-_ARM_COUNT_MAX = 4
+_ARM_COUNT_MAX = 6
 
 
 _ARM_DEFAULT_DELAY = 0.5  # seconds between panel open and arm extension

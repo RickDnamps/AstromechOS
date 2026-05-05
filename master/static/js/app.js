@@ -4683,10 +4683,10 @@ async function saveBatteryCells() {
 // ─── Arms config ──────────────────────────────────────────────────────────────
 const armsConfig = {
   _count:  0,
-  _servos: ['', '', '', ''],          // 4 slots, servo IDs (never labels)
-  _panels: ['', '', '', ''],          // 4 slots, body panel that opens before arm extends
-  _delays: [0.5, 0.5, 0.5, 0.5],     // 4 slots, seconds between panel open and arm extension
-  _labels: {},                        // {Servo_S0: 'My Label', ...}
+  _servos: ['', '', '', '', '', ''],   // 6 slots, servo IDs (never labels)
+  _panels: ['', '', '', '', '', ''],   // 6 slots, body panel that opens before arm extends
+  _delays: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5], // 6 slots, seconds between panel open and arm extension
+  _labels: {},                         // {Servo_S0: 'My Label', ...}
 
   async load() {
     const [armsData, settingsData] = await Promise.all([
@@ -4695,9 +4695,9 @@ const armsConfig = {
     ]);
     if (!armsData) return;
     this._count  = armsData.count  || 0;
-    this._servos = armsData.servos || ['', '', '', ''];
-    this._panels = armsData.panels || ['', '', '', ''];
-    this._delays = armsData.delays || [0.5, 0.5, 0.5, 0.5];
+    this._servos = armsData.servos || ['', '', '', '', '', ''];
+    this._panels = armsData.panels || ['', '', '', '', '', ''];
+    this._delays = armsData.delays || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
     // Body servo total from HAT info
     const bodyHats = settingsData?.body_hats || [{ servos: Array.from({length:16}, (_,i) => `Servo_S${i}`) }];
     this._bodyServos = bodyHats.flatMap(h => h.servos);
@@ -4715,46 +4715,33 @@ const armsConfig = {
   _renderSelectors() {
     const container = el('arms-selectors');
     if (!container) return;
-    container.innerHTML = '';
+    if (this._count === 0) { container.innerHTML = ''; return; }
+    const allBodyServos = this._bodyServos || Array.from({length:16}, (_,j) => `Servo_S${j}`);
+    const panelServos   = allBodyServos.slice(0, 16);
+    const mkOpts = (list, selected) => list.map(id => {
+      const lbl = this._labels[id] || id;
+      return `<option value="${id}"${id === selected ? ' selected' : ''}>${lbl !== id ? lbl : id}</option>`;
+    }).join('');
+    let html = `<div class="arms-grid">
+      <div class="arms-gh">#</div>
+      <div class="arms-gh">Arm servo</div>
+      <div class="arms-gh">Body panel</div>
+      <div class="arms-gh">Delay (s)</div>`;
     for (let i = 0; i < this._count; i++) {
-      const div = document.createElement('div');
-      div.className = 'arms-row';
-      // Arm servo options — all body servos across all HATs
-      const allBodyServos = this._bodyServos || Array.from({length:16}, (_,j) => `Servo_S${j}`);
-      const armOpts = allBodyServos.map(id => {
-        const lbl = this._labels[id] || id;
-        const sel = this._servos[i] === id ? ' selected' : '';
-        return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
-      }).join('');
-      // Body panel options — first 12 servos of HAT1 only (arm servos not excluded; filtered at save)
-      const panelServos = allBodyServos.slice(0, 12);
-      const panelOpts = panelServos.map(id => {
-        const lbl = this._labels[id] || id;
-        const sel = this._panels[i] === id ? ' selected' : '';
-        return `<option value="${id}"${sel}>${id} — ${lbl}</option>`;
-      }).join('');
-      const delay = this._delays[i] ?? 0.5;
-      div.innerHTML = `
-        <div class="form-group">
-          <label>ARM ${i + 1} — Servo</label>
-          <select id="arm-servo-${i}" class="input-text">
-            <option value="">— not assigned —</option>${armOpts}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>ARM ${i + 1} — Body panel</label>
-          <select id="arm-panel-${i}" class="input-text">
-            <option value="">— none —</option>${panelOpts}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>ARM ${i + 1} — Panel→Arm delay (s)</label>
-          <input id="arm-delay-${i}" type="number" class="input-text"
-            min="0.1" max="5.0" step="0.1" value="${delay}"
-            style="width:80px">
-        </div>`;
-      container.appendChild(div);
+      const delay = (this._delays[i] ?? 0.5).toFixed(1);
+      html += `
+      <div class="arms-gl">ARM ${i + 1}</div>
+      <select id="arm-servo-${i}" class="input-text" style="font-size:.78em;padding:3px 4px">
+        <option value="">— none —</option>${mkOpts(allBodyServos, this._servos[i])}
+      </select>
+      <select id="arm-panel-${i}" class="input-text" style="font-size:.78em;padding:3px 4px">
+        <option value="">— none —</option>${mkOpts(panelServos, this._panels[i])}
+      </select>
+      <input id="arm-delay-${i}" type="number" class="input-text" min="0.1" max="5.0" step="0.1"
+             value="${delay}" style="width:60px;font-size:.82em;padding:3px 4px">`;
     }
+    html += '</div>';
+    container.innerHTML = html;
   },
 
   onCountChange() {
@@ -4764,9 +4751,9 @@ const armsConfig = {
 
   async save() {
     const count  = parseInt(el('arms-count')?.value) || 0;
-    const servos = Array.from({length: 4}, (_, i) => el(`arm-servo-${i}`)?.value || '');
-    const panels = Array.from({length: 4}, (_, i) => el(`arm-panel-${i}`)?.value || '');
-    const delays = Array.from({length: 4}, (_, i) => parseFloat(el(`arm-delay-${i}`)?.value) || 0.5);
+    const servos = Array.from({length: 6}, (_, i) => el(`arm-servo-${i}`)?.value || '');
+    const panels = Array.from({length: 6}, (_, i) => el(`arm-panel-${i}`)?.value || '');
+    const delays = Array.from({length: 6}, (_, i) => parseFloat(el(`arm-delay-${i}`)?.value) || 0.5);
     const status = el('arms-status');
     if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
     const data = await api('/servo/arms', 'POST', { count, servos, panels, delays });
@@ -4774,7 +4761,7 @@ const armsConfig = {
       this._count  = data.count;
       this._servos = data.servos;
       this._panels = data.panels;
-      this._delays = data.delays || [0.5, 0.5, 0.5, 0.5];
+      this._delays = data.delays || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
       toast(`Arms: ${count} arm(s) configured`, 'ok');
       if (status) { status.textContent = `${count} arm(s) saved`; status.className = 'settings-status ok'; }
     } else {
