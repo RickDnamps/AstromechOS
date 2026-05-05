@@ -6299,7 +6299,9 @@ const choreoEditor = (() => {
       const prefix = track === 'dome_servos' ? 'Servo_M' : 'Servo_S';
       let filtered = _servoList.filter(s => s.startsWith(prefix));
       if (track === 'body_servos' && armsConfig._count > 0) {
-        const armSet = new Set(armsConfig._servos.slice(0, armsConfig._count).filter(s => s));
+        const armServos = armsConfig._servos.slice(0, armsConfig._count).filter(s => s);
+        const armPanels = armsConfig._panels.slice(0, armsConfig._count).filter(s => s);
+        const armSet = new Set([...armServos, ...armPanels]);
         if (armSet.size > 0) filtered = filtered.filter(s => !armSet.has(s));
       }
       const pool = filtered.length ? filtered : _servoList;
