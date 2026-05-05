@@ -67,6 +67,8 @@ import configparser
 import json
 import os
 import subprocess
+import threading
+import time
 
 from flask import Blueprint, request, jsonify
 import master.registry as reg
@@ -307,6 +309,52 @@ def _arm_servo_set() -> set:
     )
 
 
+def _servo_open(name: str, cfg: dict) -> None:
+    angle = _panel_angle(name, 'open', cfg)
+    speed = _panel_speed(name, cfg)
+    if reg.servo:
+        reg.servo.open(name, angle, speed)
+    elif reg.uart:
+        reg.uart.send('SRV', f'{name},{angle},{speed}')
+
+
+def _servo_close(name: str, cfg: dict) -> None:
+    angle = _panel_angle(name, 'close', cfg)
+    speed = _panel_speed(name, cfg)
+    if reg.servo:
+        reg.servo.close(name, angle, speed)
+    elif reg.uart:
+        reg.uart.send('SRV', f'{name},{angle},{speed}')
+
+
+def _arm_open_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
+    """Open panel → wait delay → open arm (runs in its own thread)."""
+    if panel:
+        _servo_open(panel, cfg)
+        time.sleep(delay)
+    _servo_open(arm, cfg)
+
+
+def _arm_close_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
+    """Close arm → wait delay → close panel (runs in its own thread)."""
+    _servo_close(arm, cfg)
+    if panel:
+        time.sleep(delay)
+        _servo_close(panel, cfg)
+
+
+def _launch_arm_sequences(arms_cfg: dict, cfg: dict, action: str) -> None:
+    """Start one daemon thread per configured arm for open or close sequences."""
+    for i in range(arms_cfg['count']):
+        arm   = arms_cfg['servos'][i]
+        panel = arms_cfg['panels'][i]
+        delay = arms_cfg['delays'][i]
+        if not arm:
+            continue
+        target = _arm_open_sequence if action == 'open' else _arm_close_sequence
+        threading.Thread(target=target, args=(arm, panel, delay, cfg), daemon=True).start()
+
+
 @servo_bp.post('/body/open_all')
 def body_open_all():
     cfg     = _read_panels_cfg()
@@ -314,12 +362,8 @@ def body_open_all():
     for name in BODY_SERVOS:
         if name in arm_set:
             continue
-        angle = _panel_angle(name, 'open', cfg)
-        speed = _panel_speed(name, cfg)
-        if reg.servo:
-            reg.servo.open(name, angle, speed)
-        elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle},{speed}')
+        _servo_open(name, cfg)
+    _launch_arm_sequences(_read_arms_cfg(), cfg, 'open')
     return jsonify({'status': 'ok'})
 
 
@@ -330,12 +374,8 @@ def body_close_all():
     for name in BODY_SERVOS:
         if name in arm_set:
             continue
-        angle = _panel_angle(name, 'close', cfg)
-        speed = _panel_speed(name, cfg)
-        if reg.servo:
-            reg.servo.close(name, angle, speed)
-        elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle},{speed}')
+        _servo_close(name, cfg)
+    _launch_arm_sequences(_read_arms_cfg(), cfg, 'close')
     return jsonify({'status': 'ok'})
 
 
@@ -547,12 +587,8 @@ def servo_open_all():
     for name in BODY_SERVOS:
         if name in arm_set:
             continue
-        angle = _panel_angle(name, 'open', cfg)
-        speed = _panel_speed(name, cfg)
-        if reg.servo:
-            reg.servo.open(name, angle, speed)
-        elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle},{speed}')
+        _servo_open(name, cfg)
+    _launch_arm_sequences(_read_arms_cfg(), cfg, 'open')
     if reg.dome_servo:
         for name in DOME_SERVOS:
             reg.dome_servo.open(name, _panel_angle(name, 'open', cfg), _panel_speed(name, cfg))
@@ -566,12 +602,8 @@ def servo_close_all():
     for name in BODY_SERVOS:
         if name in arm_set:
             continue
-        angle = _panel_angle(name, 'close', cfg)
-        speed = _panel_speed(name, cfg)
-        if reg.servo:
-            reg.servo.close(name, angle, speed)
-        elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle},{speed}')
+        _servo_close(name, cfg)
+    _launch_arm_sequences(_read_arms_cfg(), cfg, 'close')
     if reg.dome_servo:
         for name in DOME_SERVOS:
             reg.dome_servo.close(name, _panel_angle(name, 'close', cfg), _panel_speed(name, cfg))
