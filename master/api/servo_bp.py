@@ -486,8 +486,9 @@ def arms_config_save():
     # Auto-label servos in servo_angles.json to match their arm role.
     # Only overwrites if the current label doesn't already start with the expected prefix —
     # so custom suffixes like "Arm1_Pince" or "Arm1_panel_Pince" are preserved.
-    panels_cfg = _read_panels_cfg()['panels']
+    panels_cfg    = _read_panels_cfg()['panels']
     label_updates = {}
+    still_assigned = set()  # all servos that remain assigned in the NEW config
     for i in range(_ARM_COUNT_MAX):
         sv   = new_servos[i]
         pn   = new_panels[i]
@@ -495,21 +496,23 @@ def arms_config_save():
         arm_prefix   = f'Arm{slot}'
         panel_prefix = f'Arm{slot}_panel'
         if sv:
+            still_assigned.add(sv)
             current = panels_cfg.get(sv, {}).get('label', sv)
             if not current.startswith(arm_prefix):
                 label_updates[sv] = arm_prefix
         if pn:
+            still_assigned.add(pn)
             current = panels_cfg.get(pn, {}).get('label', pn)
             if not current.startswith(panel_prefix):
                 label_updates[pn] = panel_prefix
 
-    # Revert labels for servos that were arms/panels before but are no longer assigned
+    # Revert labels ONLY for servos that were arms/panels before but are no longer assigned
     for i in range(_ARM_COUNT_MAX):
         prev_sv = prev['servos'][i]
         prev_pn = prev['panels'][i]
-        if prev_sv and prev_sv not in label_updates:
+        if prev_sv and prev_sv not in still_assigned:
             label_updates[prev_sv] = prev_sv  # revert to servo ID
-        if prev_pn and prev_pn not in label_updates:
+        if prev_pn and prev_pn not in still_assigned:
             label_updates[prev_pn] = prev_pn  # revert to servo ID
 
     if label_updates:
