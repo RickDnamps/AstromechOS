@@ -4719,8 +4719,9 @@ const armsConfig = {
     const allBodyServos = this._bodyServos || Array.from({length:16}, (_,j) => `Servo_S${j}`);
     const panelServos   = allBodyServos.slice(0, 16);
     const mkOpts = (list, selected) => list.map(id => {
-      const lbl = this._labels[id] || id;
-      return `<option value="${id}"${id === selected ? ' selected' : ''}>${lbl !== id ? lbl : id}</option>`;
+      const lbl  = this._labels[id] || id;
+      const text = lbl !== id ? `${lbl} (${id})` : id;
+      return `<option value="${id}"${id === selected ? ' selected' : ''}>${text}</option>`;
     }).join('');
     let html = `<div class="arms-grid">
       <div class="arms-gh">#</div>
