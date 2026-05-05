@@ -295,10 +295,25 @@ def body_close():
     return jsonify({'status': 'ok', 'name': name, 'angle': angle})
 
 
+def _arm_servo_set() -> set:
+    """Returns the set of servo IDs under arm control (arm servos + their panels).
+    These are excluded from open_all/close_all — arm sequences must run in panel-first order.
+    """
+    arms = _read_arms_cfg()
+    count = arms['count']
+    return (
+        {s for s in arms['servos'][:count] if s} |
+        {s for s in arms['panels'][:count] if s}
+    )
+
+
 @servo_bp.post('/body/open_all')
 def body_open_all():
-    cfg = _read_panels_cfg()
+    cfg     = _read_panels_cfg()
+    arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
+        if name in arm_set:
+            continue
         angle = _panel_angle(name, 'open', cfg)
         speed = _panel_speed(name, cfg)
         if reg.servo:
@@ -310,8 +325,11 @@ def body_open_all():
 
 @servo_bp.post('/body/close_all')
 def body_close_all():
-    cfg = _read_panels_cfg()
+    cfg     = _read_panels_cfg()
+    arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
+        if name in arm_set:
+            continue
         angle = _panel_angle(name, 'close', cfg)
         speed = _panel_speed(name, cfg)
         if reg.servo:
@@ -514,8 +532,11 @@ def servo_state():
 
 @servo_bp.post('/open_all')
 def servo_open_all():
-    cfg = _read_panels_cfg()
+    cfg     = _read_panels_cfg()
+    arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
+        if name in arm_set:
+            continue
         angle = _panel_angle(name, 'open', cfg)
         speed = _panel_speed(name, cfg)
         if reg.servo:
@@ -530,8 +551,11 @@ def servo_open_all():
 
 @servo_bp.post('/close_all')
 def servo_close_all():
-    cfg = _read_panels_cfg()
+    cfg     = _read_panels_cfg()
+    arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
+        if name in arm_set:
+            continue
         angle = _panel_angle(name, 'close', cfg)
         speed = _panel_speed(name, cfg)
         if reg.servo:
