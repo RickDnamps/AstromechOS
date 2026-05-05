@@ -6332,7 +6332,7 @@ const choreoEditor = (() => {
         }
       }
 
-      const specialOpts = { all: 'ALL (every servo)', all_dome: 'ALL DOME', all_body: 'ALL BODY' };
+      const specialOpts = track === 'dome_servos' ? { all_dome: 'ALL DOME' } : { all_body: 'ALL BODY' };
       const allServoOpts = { ...specialOpts, ...servoOpts };
 
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
