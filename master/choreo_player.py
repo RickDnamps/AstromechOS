@@ -41,7 +41,7 @@ def _read_arm_entries() -> list:
 
 def _read_arm_panel_map() -> dict:
     """Returns {arm_servo_id: panel_servo_id} — backward compat for legacy .chor events with servo: field."""
-    return {arm: panel for arm, panel in _read_arm_entries() if panel}
+    return {arm: panel for arm, panel, _delay in _read_arm_entries() if panel}
 
 
 def _normalise_label(s: str) -> str:
