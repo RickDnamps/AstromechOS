@@ -592,7 +592,30 @@ class ChoreoPlayer:
                         self._dome_servo.close_all()
                     return
                 if is_all_body:
-                    return   # no open_all on body servo yet
+                    if self._body_servo:
+                        from master.api.servo_bp import (
+                            _read_panels_cfg, _read_arms_cfg,
+                            _arm_servo_set, _launch_arm_sequences, BODY_SERVOS,
+                        )
+                        cfg_panels = _read_panels_cfg()
+                        arms_cfg   = _read_arms_cfg()
+                        arm_set    = _arm_servo_set()
+                        for _name in BODY_SERVOS:
+                            if _name in arm_set:
+                                continue
+                            _panel = cfg_panels['panels'].get(_name, {})
+                            _angle = _panel.get('open' if action == 'open' else 'close',
+                                                110 if action == 'open' else 20)
+                            _speed = _panel.get('speed', 10)
+                            try:
+                                if action == 'open':
+                                    self._body_servo.open(_name, _angle, _speed)
+                                else:
+                                    self._body_servo.close(_name, _angle, _speed)
+                            except Exception:
+                                log.exception("all_body %s failed: %s", action, _name)
+                        _launch_arm_sequences(arms_cfg, cfg_panels, action)
+                    return
 
                 # Resolve target angle for 'degree' action or explicit target
                 if target is not None:
