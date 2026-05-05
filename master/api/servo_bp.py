@@ -489,7 +489,7 @@ def arms_config_save():
     if label_updates:
         panels_cfg = _read_panels_cfg()['panels']
         patch = {sid: {**panels_cfg.get(sid, {}), 'label': lbl} for sid, lbl in label_updates.items()}
-        _sync_angles_json({'panels': {**panels_cfg, **patch}})
+        _sync_angles_json({**panels_cfg, **patch})
         log.info("Arms auto-label: %s", label_updates)
 
     log.info("Arms config saved: count=%d servos=%s panels=%s", count, new_servos, new_panels)
