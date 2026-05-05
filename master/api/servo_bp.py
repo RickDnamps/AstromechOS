@@ -484,16 +484,24 @@ def arms_config_save():
     write_cfg_atomic(cfg, _LOCAL_CFG)
 
     # Auto-label servos in servo_angles.json to match their arm role.
-    # Build a map of every body servo → desired label after this save.
+    # Only overwrites if the current label doesn't already start with the expected prefix —
+    # so custom suffixes like "Arm1_Pince" or "Arm1_panel_Pince" are preserved.
+    panels_cfg = _read_panels_cfg()['panels']
     label_updates = {}
     for i in range(_ARM_COUNT_MAX):
-        sv = new_servos[i]
-        pn = new_panels[i]
+        sv   = new_servos[i]
+        pn   = new_panels[i]
         slot = i + 1
+        arm_prefix   = f'Arm{slot}'
+        panel_prefix = f'Arm{slot}_panel'
         if sv:
-            label_updates[sv] = f'Arm{slot}'
+            current = panels_cfg.get(sv, {}).get('label', sv)
+            if not current.startswith(arm_prefix):
+                label_updates[sv] = arm_prefix
         if pn:
-            label_updates[pn] = f'Arm{slot}_panel'
+            current = panels_cfg.get(pn, {}).get('label', pn)
+            if not current.startswith(panel_prefix):
+                label_updates[pn] = panel_prefix
 
     # Revert labels for servos that were arms/panels before but are no longer assigned
     for i in range(_ARM_COUNT_MAX):
@@ -505,7 +513,6 @@ def arms_config_save():
             label_updates[prev_pn] = prev_pn  # revert to servo ID
 
     if label_updates:
-        panels_cfg = _read_panels_cfg()['panels']
         patch = {sid: {**panels_cfg.get(sid, {}), 'label': lbl} for sid, lbl in label_updates.items()}
         _sync_angles_json({**panels_cfg, **patch})
         log.info("Arms auto-label: %s", label_updates)

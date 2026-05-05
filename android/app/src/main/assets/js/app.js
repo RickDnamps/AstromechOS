@@ -5708,7 +5708,9 @@ const choreoEditor = (() => {
     if (track === 'arm_servos') {
       if (item.arm !== undefined) {
         const invalid = item.arm < 1 || item.arm > armsConfig._count;
-        return `${invalid ? '⚠ ' : ''}ARM ${item.arm} ${item.action || ''}`.trim().toUpperCase();
+        const armSid  = armsConfig._servos[item.arm - 1];
+        const lbl     = (armSid && _servoSettings[armSid]?.label) || `ARM ${item.arm}`;
+        return `${invalid ? '⚠ ' : ''}${lbl} ${item.action || ''}`.trim().toUpperCase();
       }
       // Legacy event with servo ID
       const sid = item.servo || '?';
@@ -5760,7 +5762,9 @@ const choreoEditor = (() => {
     if (track === 'arm_servos') {
       if (item.arm !== undefined) {
         const invalid = item.arm < 1 || item.arm > armsConfig._count;
-        return `${invalid ? '⚠ ' : ''}ARM ${item.arm} ${item.action || ''}`.trim().toUpperCase();
+        const armSid  = armsConfig._servos[item.arm - 1];
+        const lbl     = (armSid && _servoSettings[armSid]?.label) || `ARM ${item.arm}`;
+        return `${invalid ? '⚠ ' : ''}${lbl} ${item.action || ''}`.trim().toUpperCase();
       }
       const sid = item.servo || '?';
       const lbl = _servoSettings[sid]?.label || item.servo_label || sid;
@@ -6273,10 +6277,11 @@ const choreoEditor = (() => {
           </div>`;
         }
         const armOpts = Object.fromEntries(
-          Array.from({length: Math.max(count, item.arm || 1)}, (_, i) => [
-            i + 1,
-            i + 1 <= count ? `Arm ${i + 1}` : `Arm ${i + 1} ⚠️ not configured`
-          ])
+          Array.from({length: Math.max(count, item.arm || 1)}, (_, i) => {
+            const sid = armsConfig._servos[i];
+            const lbl = (sid && _servoSettings[sid]?.label) || `Arm ${i + 1}`;
+            return [i + 1, i + 1 <= count ? lbl : `${lbl} ⚠️ not configured`];
+          })
         );
         if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
         html += selectRow('ARM SLOT', 'arm', armOpts);
@@ -6288,7 +6293,11 @@ const choreoEditor = (() => {
           Select an arm slot below and save to migrate to the new format.
         </div>`;
         const armOpts = count > 0
-          ? Object.fromEntries(Array.from({length: count}, (_, i) => [i + 1, `Arm ${i + 1}`]))
+          ? Object.fromEntries(Array.from({length: count}, (_, i) => {
+              const sid = armsConfig._servos[i];
+              const lbl = (sid && _servoSettings[sid]?.label) || `Arm ${i + 1}`;
+              return [i + 1, lbl];
+            }))
           : { 1: 'Arm 1' };
         if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
         html += selectRow('ARM SLOT', 'arm', armOpts);
