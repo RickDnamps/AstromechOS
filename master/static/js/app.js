@@ -6660,27 +6660,17 @@ const choreoEditor = (() => {
         }
       });
 
-      // Pre-fetch dropdown data (non-blocking — failures are silent)
+      // Pre-fetch dropdown data — wait for ALL before re-rendering so arm labels are fresh
       Promise.all([
         // Audio: disk scan is authoritative; fall back to index for grouped display
         api('/audio/scan').then(r => {
           if (r && r.sounds) _audioScanned = r.sounds;
         }).catch(() => {}),
         api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
-        api('/servo/body/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
-        api('/servo/dome/list').then(r => { if (r && r.servos) _servoList.push(...r.servos); }),
-        api('/servo/settings').then(r => {
-          if (r && r.panels) {
-            _servoSettings = r.panels;
-            // If a choreo was loaded before settings resolved, re-validate and re-render badges
-            if (_chor) {
-              _validateServoRefs(); _validateAudioRefs();
-              _renderTrack('dome_servos');
-              _renderTrack('body_servos');
-              _renderTrack('arm_servos');
-            }
-          }
-        }),
+        // Reset servo list on each init to avoid accumulation across tab switches
+        api('/servo/body/list').then(r => { if (r && r.servos) _servoList = [...new Set([..._servoList, ...r.servos])]; }),
+        api('/servo/dome/list').then(r => { if (r && r.servos) _servoList = [...new Set([..._servoList, ...r.servos])]; }),
+        api('/servo/settings').then(r => { if (r && r.panels) _servoSettings = r.panels; }),
         // Lights: full T-code list from Animations panel + custom .lseq files
         api('/teeces/animations').then(r => {
           if (r && r.animations) {
@@ -6693,7 +6683,14 @@ const choreoEditor = (() => {
             r.sequences.forEach(s => { if (!_lightModes[s]) _lightModes[s] = s; });
         }),
         api('/vesc/config').then(r => { if (r) _vescCfgSnapshot = r; }),
-      ]).catch(() => {});
+        armsConfig.load(),
+      ]).then(() => {
+        // Re-render once ALL data (servo settings + arm config) is fresh
+        if (_chor) {
+          _validateServoRefs(); _validateAudioRefs();
+          _renderAllTracks();
+        }
+      }).catch(() => {});
 
       const names = await api('/choreo/list');
       const sel   = document.getElementById('chor-select');
