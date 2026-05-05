@@ -199,9 +199,24 @@ PSI sequences : `normal|flash|alarm|failure|redalert|leia|march`.
 
 ## 🦾 Servos — IDs + Labels
 
-`Servo_M0`–`M10` = canaux 0–10 Master PCA9685 @ 0x40 (dome).
-`Servo_S0`–`S11` = canaux 0–11 Slave PCA9685 @ 0x41 (body).
+`Servo_M0`–`M15` = HAT 1 Master PCA9685 (dome) · `Servo_M16`–`M31` = HAT 2 · etc.
+`Servo_S0`–`S15` = HAT 1 Slave PCA9685 (body)  · `Servo_S16`–`S31` = HAT 2 · etc.
 ID hardware immuable. Label éditable, sauvé dans `dome_angles.json` / `servo_angles.json`.
+
+**Config multi-HAT** (comma-separated, reload → reboot requis) :
+```ini
+# local.cfg (Master) — dome servo HATs
+[i2c_servo_hats]
+master_hats = 0x40           # ajouter ex: 0x40, 0x42 pour 32 servos dôme
+
+# slave/config/slave.cfg — body servo HATs
+[i2c_servo_hats]
+slave_hats      = 0x41       # ajouter ex: 0x41, 0x42 pour 32 servos body
+slave_motor_hat = 0x40       # ⚠️ guard — ne JAMAIS mettre cette adresse dans slave_hats
+```
+BODY_SERVOS / DOME_SERVOS calculés une fois à l'import → reboot Master+Slave après changement.
+Adresses PCA9685 : 0x40 (défaut) · 0x41 (A0) · 0x42 (A1) · 0x43 (A0+A1) · etc. via solder jumpers.
+Voir ELECTRONICS.md §6 pour la table complète des adresses et le câblage.
 
 **Arms config (`local.cfg [arms]`) :**
 ```ini

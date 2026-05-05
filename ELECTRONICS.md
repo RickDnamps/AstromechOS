@@ -335,9 +335,50 @@ flowchart TD
 
 | Pi | Bus | Address | Component | Purpose |
 |----|-----|---------|-----------|---------|
-| Master (Dome) | I2C-1 | **0x40** | Waveshare Servo Driver HAT | 11 dome panel servos (ch 0–10) |
+| Master (Dome) | I2C-1 | **0x40** | Waveshare Servo Driver HAT | dome panel servos — HAT 1 (Servo_M0..M15) |
 | Slave (Body) | I2C-1 | **0x40** | Waveshare Motor Driver HAT (TB6612) | Dome rotation DC motor |
-| Slave (Body) | I2C-1 | **0x41** | PCA9685 Breakout | 11 body panel servos (ch 0–10) |
+| Slave (Body) | I2C-1 | **0x41** | PCA9685 Breakout | body panel servos — HAT 1 (Servo_S0..S15) |
+
+### Multiple Servo HATs — Expanding Servo Count
+
+Each PCA9685 board supports up to 6 address bits (A0–A5) via solder jumpers or pads, giving 64 possible I2C addresses (0x40–0x7F). Adding more HATs extends servo capacity by 16 channels per board.
+
+**PCA9685 address map (A0–A5 pins) :**
+
+| Address | A5 | A4 | A3 | A2 | A1 | A0 | Notes |
+|---------|----|----|----|----|----|----|-------|
+| 0x40 | 0 | 0 | 0 | 0 | 0 | 0 | All pins low — default |
+| 0x41 | 0 | 0 | 0 | 0 | 0 | 1 | A0 bridged |
+| 0x42 | 0 | 0 | 0 | 0 | 1 | 0 | A1 bridged |
+| 0x43 | 0 | 0 | 0 | 0 | 1 | 1 | A0+A1 bridged |
+| 0x44 | 0 | 0 | 0 | 1 | 0 | 0 | A2 bridged |
+
+**Servo ID mapping :**
+```
+HAT 1 (first address)  → Servo_M0..M15   /  Servo_S0..S15
+HAT 2 (second address) → Servo_M16..M31  /  Servo_S16..S31
+HAT 3 (third address)  → Servo_M32..M47  /  Servo_S32..S47
+```
+
+**Configuration — add addresses comma-separated in config files :**
+
+Master dome servos → `local.cfg`:
+```ini
+[i2c_servo_hats]
+master_hats = 0x40, 0x42     # HAT 1 = 0x40, HAT 2 = 0x42
+```
+
+Slave body servos → `slave/config/slave.cfg`:
+```ini
+[i2c_servo_hats]
+slave_hats      = 0x41, 0x42   # HAT 1 = 0x41, HAT 2 = 0x42
+slave_motor_hat = 0x40          # ⚠️ Motor HAT guard — never add 0x40 to slave_hats
+```
+
+> ⚠️ **Slave Motor HAT conflict** — the Waveshare Motor Driver HAT (TB6612) sits at 0x40 on the Slave.
+> Never put 0x40 in `slave_hats`. The firmware logs an ERROR at boot if it detects the conflict, but will NOT stop — it will silently write PWM to the motor driver and damage it.
+
+> ⚠️ Reboot both Master and Slave after changing HAT addresses — `BODY_SERVOS` and `DOME_SERVOS` lists are computed once at module import time.
 
 ### GPIO Pins — both Pi 4B
 
@@ -396,7 +437,8 @@ CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 he
 | `H` | S→M | `H:OK:CRC` | Heartbeat ACK |
 | `M` | M→S | `M:0.5,0.5:CRC` | Drive — left/right float [-1.0…1.0] |
 | `D` | M→S | `D:0.3:CRC` | Dome motor speed float [-1.0…1.0] |
-| `SRV` | M→S | `SRV:body_panel_1,1.0,500:CRC` | Servo — name, position, duration ms |
+| `SRV` | M→S | `SRV:Servo_S0,110.0,8:CRC` | Body servo — name, angle_deg (10–170°), speed (1–10, optional) |
+| `SRV` | M→S | `SRV:RELOAD:CRC` | Reload servo_angles.json on Slave (after calibration push) |
 | `S` | M→S | `S:Happy001:CRC` | Play specific sound |
 | `S` | M→S | `S:RANDOM:happy:CRC` | Play random sound by category |
 | `S` | M→S | `S:STOP:CRC` | Stop audio |
