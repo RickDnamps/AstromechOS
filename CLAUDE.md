@@ -25,6 +25,7 @@
   c.close()
   ```
   > ⚠️ `sshpass` non dispo sur Windows — toujours `paramiko`
+  > ⚠️ Sur Windows, appeler `python` (pas `python3` — introuvable, exit 127)
   > ⚠️ Ne jamais git push depuis le Pi — toujours depuis le PC dev
   > ⚠️ IPs : Master=`192.168.2.104`, Slave=`192.168.4.171` (pas `.local` — mDNS capricieux)
 
@@ -108,14 +109,14 @@ POST /motion/dome/random        {"enabled":true}
 POST /servo/dome/open|close     {"name":"Servo_M0"}
 POST /servo/dome/open_all|close_all
 POST /servo/body/open|close     {"name":"Servo_S0"}
-POST /servo/body/open_all|close_all
+POST /servo/body/open_all|close_all   ← arm-aware: réguliers immédiats, bras en thread panel→delay→arm
 GET  /servo/list
 GET  /servo/settings
 POST /servo/settings            {"panels":{"Servo_M0":{"label":"..","open":110,"close":20,"speed":10}}}
 
-GET  /servo/arms                {count, servos:["Servo_S0",...], panels:["Servo_S5",...]}
-POST /servo/arms                {count:2, servos:["Servo_S0","Servo_S1"], panels:["Servo_S5","Servo_S6"]}
-  → local.cfg [arms] count/arm_1..arm_N/panel_1..panel_N
+GET  /servo/arms                {count, servos:["Servo_S0",...], panels:["Servo_S5",...], delays:[0.5,...]}
+POST /servo/arms                {count:2, servos:["Servo_S0","Servo_S1"], panels:["Servo_S5","Servo_S6"], delays:[0.5,0.5]}
+  → local.cfg [arms] count/arm_1..arm_N/panel_1..panel_N/delay_1..delay_N
 
 POST /teeces/random|leia|off
 POST /teeces/text               {"text":"HELLO"}
@@ -209,8 +210,16 @@ arm_1 = Servo_S0
 arm_2 = Servo_S1
 panel_1 = Servo_S5    # body panel à ouvrir avant l'extension du bras 1
 panel_2 = Servo_S6
+delay_1 = 0.5         # secondes entre ouverture panel et extension bras (default 0.5)
+delay_2 = 0.5
 ```
-Les panels body (S0–S11 seulement, pas S12–S15) sont optionnels — si non défini, le bras s'ouvre directement.
+Panel optionnel — si absent, le bras s'ouvre directement sans attente.
+Séquence open : `open panel → sleep(delay) → open arm` · close : `close arm → sleep(delay) → close panel`.
+Chaque bras tourne dans son propre daemon thread — le Flask répond immédiatement.
+
+**Auto-label** (save dans Arms Settings) : assigne automatiquement `Arm1`, `Arm1_panel`, etc.
+Préserve les suffixes custom : `Arm1_Pince` reste inchangé si le label commence déjà par `Arm1`.
+Réinitialise au servo ID uniquement si le servo est retiré de la config arms.
 
 ```json
 {"Servo_M0": {"label":"Dome_Panel_1","open":110,"close":20,"speed":10}}
@@ -264,6 +273,7 @@ SSH     artoo / deetoo
 | 4++ | Caméra USB autodetect + BT battery/RSSI + keepalive + admin timers | ✅ |
 | 4+++ | Choreo admin guard · Arms body-panel auto-dispatch · Settings sidebar refonte · Choreo toolbar/footer | ✅ |
 | 4++++ | Sequences tab redesign : catégories + emoji + pills/grid · Behavior engine ALIVE | ✅ |
+| 4+++++ | Arms : séquence panel→delay→arm · all_body arm-aware · labels Calibration dans Choreo · auto-label prefix-safe | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -283,7 +293,20 @@ SSH     artoo / deetoo
 **Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat`=25ms.
 **Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails → `GET /choreo/status` retourne `abort_reason`.
 **Loop :** `play(chor, loop=True)` → reset `t_start` + `ev_idx` en fin de séquence dans `_run()`.
-**Arms + durée :** `bd memories choreoplayer` pour les détails (panel delay, duration calc).
+
+**Arm blocks (track `arm_servos`) :**
+Format JSON : `{"arm": 1, "action": "open", "duration": 1, "group": "arms"}` — slot number, PAS servo ID.
+⚠️ `_initPalette()` lit le template depuis `btn.dataset.tpl` dans le HTML (pas la constante JS `_PALETTE`).
+Si `data-tpl` contient `"servo":""` (ancien format) → avertissement "Legacy event" à chaque drop.
+Séquence correcte assurée par ChoreoPlayer : panel open → Timer(delay) → arm open (thread daemon).
+
+**Commandes bulk (`all_body` / `all_dome`) :**
+`all_body` : ouvre/ferme tous les body panels sauf bras → lance les séquences bras en threads.
+`all_dome` : appelle `dome_servo.open_all()` / `close_all()` directement.
+Dans le Choreo timeline : Dome Servo track → seulement `ALL DOME` · Body Servo track → seulement `ALL BODY`.
+
+**Labels servos dans Choreo :** ARM SLOT dropdown + block label utilisent le label de Calibration
+(lu depuis `_servoSettings` via `GET /servo/settings`). `armsConfig` rechargé à chaque `choreoEditor.init()`.
 
 ---
 
