@@ -42,8 +42,8 @@
 // ================================================================
 
 const _THEMES = {
-  r2d2: {
-    label: 'R2-D2', swatch: '#00aaff',
+  default: {
+    label: 'Default', swatch: '#00aaff',
     vars: {
       '--bg': '#080c14', '--bg2': '#0a1020', '--bg3': '#0c1428',
       '--bg-card': 'rgba(8,18,35,0.92)', '--bg-hover': 'rgba(0,170,255,0.08)',
@@ -54,6 +54,25 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(0,255,234,0.3)',
       '--text': '#c8d8ea', '--text-dim': '#4a6a8a',
       '--grid-line': 'rgba(0,170,255,0.03)', '--scan-color': '#00ffea',
+    },
+  },
+  r2d2: {
+    label: 'R2-D2', swatch: '#1166dd',
+    vars: {
+      // Inspired by R2-D2's actual livery: white body, royal blue panels,
+      // silver/metallic gray details, black trim, light blue accents
+      '--bg': '#06080f', '--bg2': '#080c1a', '--bg3': '#0a1022',
+      '--bg-card': 'rgba(6,8,15,0.93)', '--bg-hover': 'rgba(17,102,221,0.09)',
+      '--blue': '#1166dd',      // R2-D2 royal blue
+      '--cyan': '#88bbff',      // light blue / silver-blue highlights
+      '--teal': '#88bbff',
+      '--border': 'rgba(17,102,221,0.25)', '--border2': 'rgba(17,102,221,0.18)',
+      '--border-hi': 'rgba(17,102,221,0.55)',
+      '--glow': '0 0 16px rgba(17,102,221,0.45)',
+      '--glow-cyan': '0 0 12px rgba(136,187,255,0.35)',
+      '--text': '#ddeeff',      // near-white with blue tint (white body panels)
+      '--text-dim': '#4466aa',  // muted silver-blue
+      '--grid-line': 'rgba(17,102,221,0.04)', '--scan-color': '#88bbff',
     },
   },
   r5d4: {
@@ -114,7 +133,7 @@ const _THEMES = {
   },
 };
 
-let _activeTheme = 'r2d2';
+let _activeTheme = 'default';
 
 function applyTheme(id) {
   const theme = _THEMES[id];
@@ -144,10 +163,11 @@ function _initThemes() {
 // Apply saved theme immediately when script loads — before first paint
 ;(function () {
   const saved = localStorage.getItem('astromech-theme');
-  if (saved && _THEMES[saved]) {
-    _activeTheme = saved;
+  const id = (saved && _THEMES[saved]) ? saved : 'default';
+  _activeTheme = id;
+  if (id !== 'default') {
     const root = document.documentElement;
-    Object.entries(_THEMES[saved].vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    Object.entries(_THEMES[id].vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
 }());
 
