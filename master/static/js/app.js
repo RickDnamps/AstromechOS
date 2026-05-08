@@ -57,22 +57,42 @@ const _THEMES = {
     },
   },
   r2d2: {
-    label: 'R2-D2', swatch: '#1166dd',
+    label: 'R2-D2', swatch: '#0849d6',
     vars: {
-      // Inspired by R2-D2's actual livery: white body, royal blue panels,
-      // silver/metallic gray details, black trim, light blue accents
-      '--bg': '#06080f', '--bg2': '#080c1a', '--bg3': '#0a1022',
-      '--bg-card': 'rgba(6,8,15,0.93)', '--bg-hover': 'rgba(17,102,221,0.09)',
-      '--blue': '#1166dd',      // R2-D2 royal blue
-      '--cyan': '#88bbff',      // light blue / silver-blue highlights
-      '--teal': '#88bbff',
-      '--border': 'rgba(17,102,221,0.25)', '--border2': 'rgba(17,102,221,0.18)',
-      '--border-hi': 'rgba(17,102,221,0.55)',
-      '--glow': '0 0 16px rgba(17,102,221,0.45)',
-      '--glow-cyan': '0 0 12px rgba(136,187,255,0.35)',
-      '--text': '#ddeeff',      // near-white with blue tint (white body panels)
-      '--text-dim': '#4466aa',  // muted silver-blue
-      '--grid-line': 'rgba(17,102,221,0.04)', '--scan-color': '#88bbff',
+      // Prop-accurate R2-D2: #0849d6 royal blue, #c1c3c9 silver, #3f4655 dark panels
+      '--bg': '#05080e', '--bg2': '#080c18', '--bg3': '#0c1226',
+      '--bg-card': 'rgba(5,8,14,0.94)', '--bg-hover': 'rgba(8,73,214,0.09)',
+      '--blue': '#0849d6',      // official prop-maker R2-D2 royal blue
+      '--cyan': '#c1c3c9',      // metallic silver (body panel highlights)
+      '--teal': '#c1c3c9',
+      '--border': 'rgba(8,73,214,0.28)', '--border2': 'rgba(8,73,214,0.18)',
+      '--border-hi': 'rgba(8,73,214,0.60)',
+      '--glow': '0 0 16px rgba(8,73,214,0.50)',
+      '--glow-cyan': '0 0 12px rgba(193,195,201,0.25)',
+      '--text': '#eef4ff',      // near-white (white body panels)
+      '--text-dim': '#4466aa',
+      '--grid-line': 'rgba(8,73,214,0.04)', '--scan-color': '#c1c3c9',
+    },
+  },
+  r2d2_light: {
+    label: 'R2-D2 Clair', swatch: '#0849d6', light: true,
+    vars: {
+      // Light theme — white like R2's body panels, royal blue accents
+      '--bg': '#edf2fc',        // off-white / very pale blue (white body)
+      '--bg2': '#dce6f6',       // slightly deeper
+      '--bg3': '#ccd8f0',       // card inner / input background
+      '--bg-card': 'rgba(255,255,255,0.92)',
+      '--bg-hover': 'rgba(8,73,214,0.07)',
+      '--blue': '#0849d6',      // royal blue
+      '--cyan': '#3f4655',      // dark navy-gray (panel shadow/detail)
+      '--teal': '#3f4655',
+      '--border': 'rgba(8,73,214,0.20)', '--border2': 'rgba(8,73,214,0.13)',
+      '--border-hi': 'rgba(8,73,214,0.45)',
+      '--glow': '0 0 12px rgba(8,73,214,0.20)',
+      '--glow-cyan': '0 0 10px rgba(63,70,85,0.15)',
+      '--text': '#0a1840',      // dark navy (readable on white)
+      '--text-dim': '#4a6090',  // muted steel blue
+      '--grid-line': 'rgba(8,73,214,0.05)', '--scan-color': '#0849d6',
     },
   },
   r5d4: {
@@ -155,7 +175,10 @@ function _initThemes() {
     btn.className = 'theme-btn' + (id === _activeTheme ? ' active' : '');
     btn.dataset.theme = id;
     btn.onclick = () => applyTheme(id);
-    btn.innerHTML = `<span class="theme-swatch" style="background:${theme.swatch}"></span>${theme.label}`;
+    const swatchStyle = theme.light
+      ? `background:linear-gradient(135deg,#ffffff 50%,${theme.swatch} 50%);border-color:${theme.swatch}`
+      : `background:${theme.swatch}`;
+    btn.innerHTML = `<span class="theme-swatch" style="${swatchStyle}"></span>${theme.label}`;
     grid.appendChild(btn);
   });
 }
