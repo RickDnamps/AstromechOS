@@ -221,38 +221,44 @@ function _shadeHex(hex, amt) {
 
 function _buildCustomVars() {
   const bg      = document.getElementById('theme-editor-bg').value;
+  const topbar  = document.getElementById('theme-editor-topbar').value;
+  const card    = document.getElementById('theme-editor-card').value;
   const accent  = document.getElementById('theme-editor-accent').value;
   const textVal = document.getElementById('theme-editor-text').value;
+  const stOk    = document.getElementById('theme-editor-ok').value;
+  const stWarn  = document.getElementById('theme-editor-warn').value;
+  const stErr   = document.getElementById('theme-editor-err').value;
   const fontOpt = (document.querySelector('input[name="theme-font"]:checked') || {}).value || 'system';
   const bg2 = _shadeHex(bg, 6);
   const bg3 = _shadeHex(bg, 12);
   const accent2 = _shadeHex(accent, 40);
   const _fontMap = {
-    orbitron:   ["'Orbitron', 'Courier New', monospace",        "'Share Tech Mono', 'Courier New', monospace"],
-    sharetech:  ["'Share Tech Mono', 'Courier New', monospace", "'Share Tech Mono', 'Courier New', monospace"],
-    audiowide:  ["'Audiowide', 'Courier New', monospace",       "'Share Tech Mono', 'Courier New', monospace"],
-    electrolize:["'Electrolize', 'Courier New', monospace",     "'Electrolize', 'Courier New', monospace"],
-    exo2:       ["'Exo 2', 'Courier New', monospace",           "'Share Tech Mono', 'Courier New', monospace"],
-    rajdhani:   ["'Rajdhani', 'Courier New', monospace",        "'Share Tech Mono', 'Courier New', monospace"],
-    system:     ["'Courier New', Courier, monospace",           "'Courier New', Courier, monospace"],
+    orbitron:    ["'Orbitron', 'Courier New', monospace",        "'Share Tech Mono', 'Courier New', monospace"],
+    sharetech:   ["'Share Tech Mono', 'Courier New', monospace", "'Share Tech Mono', 'Courier New', monospace"],
+    audiowide:   ["'Audiowide', 'Courier New', monospace",       "'Share Tech Mono', 'Courier New', monospace"],
+    electrolize: ["'Electrolize', 'Courier New', monospace",     "'Electrolize', 'Courier New', monospace"],
+    exo2:        ["'Exo 2', 'Courier New', monospace",           "'Share Tech Mono', 'Courier New', monospace"],
+    rajdhani:    ["'Rajdhani', 'Courier New', monospace",        "'Share Tech Mono', 'Courier New', monospace"],
+    system:      ["'Courier New', Courier, monospace",           "'Courier New', Courier, monospace"],
   };
   const [fontUI, fontData] = _fontMap[fontOpt] || _fontMap.system;
-  const bgRgb     = _hexToRgbStr(bg);
-  const accentRgb = _hexToRgbStr(accent);
-  const accent2Rgb= _hexToRgbStr(accent2);
+  const bgRgb      = _hexToRgbStr(bg);
+  const accentRgb  = _hexToRgbStr(accent);
+  const accent2Rgb = _hexToRgbStr(accent2);
+  const cardRgb    = _hexToRgbStr(card);
   return {
     '--bg': bg, '--bg2': bg2, '--bg3': bg3,
-    '--bg-card': `rgba(${bgRgb},0.92)`,
+    '--bg-card': card,
     '--blue': accent, '--blue-rgb': accentRgb,
     '--cyan': accent2, '--cyan-rgb': accent2Rgb, '--teal': accent2,
     '--text': textVal, '--text-dim': `rgba(${_hexToRgbStr(textVal)},0.5)`,
-    '--topbar-bg': _shadeHex(bg, -10),
+    '--topbar-bg': topbar,
     '--sidebar-bg': `rgba(${bgRgb},0.5)`,
     '--input-bg': `rgba(${bgRgb},0.8)`,
     '--input-option': bg2,
     '--bg-dark-overlay': 'rgba(0,0,0,0.4)',
-    '--card-dark': `rgba(${_hexToRgbStr(bg2)},0.7)`,
-    '--pill-bg': `rgba(${_hexToRgbStr(bg2)},0.8)`,
+    '--card-dark': card,
+    '--pill-bg': `rgba(${cardRgb},0.9)`,
     '--btn-bg': `rgba(${accentRgb},0.12)`,
     '--btn-hover-bg': `rgba(${accentRgb},0.25)`,
     '--modal-overlay': 'rgba(0,0,0,0.6)',
@@ -267,8 +273,9 @@ function _buildCustomVars() {
     '--glow': `0 0 14px rgba(${accentRgb},0.35)`,
     '--glow-cyan': `0 0 14px rgba(${accent2Rgb},0.3)`,
     '--scan-color': accent,
-    '--font': fontUI,
-    '--font-data': fontData,
+    '--status-ok': stOk, '--status-warn': stWarn, '--status-err': stErr,
+    '--val-color': accent,
+    '--font': fontUI, '--font-data': fontData,
   };
 }
 
@@ -277,9 +284,11 @@ function previewCustomTheme() {
   const root = document.documentElement;
   root.removeAttribute('style');
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
-  const lbg   = document.getElementById('lbl-bg');     if (lbg)   lbg.textContent   = document.getElementById('theme-editor-bg').value;
-  const lacc  = document.getElementById('lbl-accent');  if (lacc)  lacc.textContent  = document.getElementById('theme-editor-accent').value;
-  const ltxt  = document.getElementById('lbl-text');    if (ltxt)  ltxt.textContent  = document.getElementById('theme-editor-text').value;
+  ['bg','topbar','card','accent','text','ok','warn','err'].forEach(f => {
+    const lbl = document.getElementById('lbl-' + f);
+    const inp = document.getElementById('theme-editor-' + f);
+    if (lbl && inp) lbl.textContent = inp.value;
+  });
 }
 
 function openThemeEditor(id) {
@@ -288,21 +297,28 @@ function openThemeEditor(id) {
   editor.style.display = 'block';
   editor.dataset.editId = id || '';
   document.getElementById('theme-editor-title').textContent = id ? 'EDIT THEME' : 'NEW THEME';
+  const defaults = {
+    bg: '#080c14', topbar: '#050810', card: '#0d1525',
+    accent: '#00aaff', text: '#c8d8ea',
+    ok: '#00ff88', warn: '#ffcc00', err: '#ff4455',
+  };
   if (id) {
     const t = _loadCustomThemes().find(c => c.id === id);
     if (t) {
-      document.getElementById('theme-editor-name').value    = t.label        || '';
-      document.getElementById('theme-editor-bg').value      = t._pickerBg    || '#080c14';
-      document.getElementById('theme-editor-accent').value  = t._pickerAccent|| '#00aaff';
-      document.getElementById('theme-editor-text').value    = t._pickerText  || '#c8d8ea';
+      document.getElementById('theme-editor-name').value = t.label || '';
+      Object.keys(defaults).forEach(f => {
+        const el = document.getElementById('theme-editor-' + f);
+        if (el) el.value = t['_picker' + f.charAt(0).toUpperCase() + f.slice(1)] || defaults[f];
+      });
       const r = document.querySelector(`input[name="theme-font"][value="${t._pickerFont||'system'}"]`);
       if (r) r.checked = true;
     }
   } else {
-    document.getElementById('theme-editor-name').value   = '';
-    document.getElementById('theme-editor-bg').value     = '#080c14';
-    document.getElementById('theme-editor-accent').value = '#00aaff';
-    document.getElementById('theme-editor-text').value   = '#c8d8ea';
+    document.getElementById('theme-editor-name').value = '';
+    Object.keys(defaults).forEach(f => {
+      const el = document.getElementById('theme-editor-' + f);
+      if (el) el.value = defaults[f];
+    });
     const r = document.querySelector('input[name="theme-font"][value="system"]');
     if (r) r.checked = true;
   }
@@ -326,8 +342,13 @@ function saveCustomTheme() {
     swatch: document.getElementById('theme-editor-accent').value,
     vars: _buildCustomVars(),
     _pickerBg:     document.getElementById('theme-editor-bg').value,
+    _pickerTopbar: document.getElementById('theme-editor-topbar').value,
+    _pickerCard:   document.getElementById('theme-editor-card').value,
     _pickerAccent: document.getElementById('theme-editor-accent').value,
     _pickerText:   document.getElementById('theme-editor-text').value,
+    _pickerOk:     document.getElementById('theme-editor-ok').value,
+    _pickerWarn:   document.getElementById('theme-editor-warn').value,
+    _pickerErr:    document.getElementById('theme-editor-err').value,
     _pickerFont:   fontOpt,
   };
   const list = _loadCustomThemes().filter(c => c.id !== entry.id);

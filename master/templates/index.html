@@ -1611,11 +1611,23 @@
                     <label>Name</label>
                     <input type="text" id="theme-editor-name" class="input-text input-sm" placeholder="My Theme" maxlength="24">
                   </div>
+                  <div class="theme-editor-section">INTERFACE</div>
                   <div class="theme-editor-row">
                     <label>BG</label>
                     <input type="color" id="theme-editor-bg" value="#080c14" oninput="previewCustomTheme()">
                     <span class="theme-color-label" id="lbl-bg">#080c14</span>
                   </div>
+                  <div class="theme-editor-row">
+                    <label>Topbar</label>
+                    <input type="color" id="theme-editor-topbar" value="#050810" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-topbar">#050810</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Card</label>
+                    <input type="color" id="theme-editor-card" value="#0d1525" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-card">#0d1525</span>
+                  </div>
+                  <div class="theme-editor-section">ACCENT & TEXT</div>
                   <div class="theme-editor-row">
                     <label>Accent</label>
                     <input type="color" id="theme-editor-accent" value="#00aaff" oninput="previewCustomTheme()">
@@ -1626,17 +1638,31 @@
                     <input type="color" id="theme-editor-text" value="#c8d8ea" oninput="previewCustomTheme()">
                     <span class="theme-color-label" id="lbl-text">#c8d8ea</span>
                   </div>
-                  <div class="theme-editor-row theme-editor-row-font">
-                    <label>Font</label>
-                    <div class="font-picker">
-                      <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Courier New</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech Mono</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="audiowide" onchange="previewCustomTheme()"><span class="font-sample-audiowide">Audiowide</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="electrolize" onchange="previewCustomTheme()"><span class="font-sample-electrolize">Electrolize</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="exo2" onchange="previewCustomTheme()"><span class="font-sample-exo2">Exo 2</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="rajdhani" onchange="previewCustomTheme()"><span class="font-sample-rajdhani">Rajdhani</span></label>
-                    </div>
+                  <div class="theme-editor-section">STATUS</div>
+                  <div class="theme-editor-row">
+                    <label>OK</label>
+                    <input type="color" id="theme-editor-ok" value="#00ff88" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-ok">#00ff88</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Warn</label>
+                    <input type="color" id="theme-editor-warn" value="#ffcc00" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-warn">#ffcc00</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Error</label>
+                    <input type="color" id="theme-editor-err" value="#ff4455" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-err">#ff4455</span>
+                  </div>
+                  <div class="theme-editor-section">FONT</div>
+                  <div class="font-picker">
+                    <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Courier New</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech Mono</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="audiowide" onchange="previewCustomTheme()"><span class="font-sample-audiowide">Audiowide</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="electrolize" onchange="previewCustomTheme()"><span class="font-sample-electrolize">Electrolize</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="exo2" onchange="previewCustomTheme()"><span class="font-sample-exo2">Exo 2</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="rajdhani" onchange="previewCustomTheme()"><span class="font-sample-rajdhani">Rajdhani</span></label>
                   </div>
                 </div>
                 <!-- Live mini preview — inherits CSS vars from document.documentElement -->
@@ -1647,31 +1673,60 @@
                       <div class="theme-preview-tab active">DRIVE</div>
                       <div class="theme-preview-tab">AUDIO</div>
                       <div class="theme-preview-tab">CHOREO</div>
+                      <div class="theme-preview-tab">SETTINGS</div>
                     </div>
                     <div class="theme-preview-body">
                       <div class="theme-preview-card">
                         <div class="theme-preview-card-title">STATUS</div>
-                        <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:3px">
+                        <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:4px">
                           <div class="theme-preview-pill ok">VESC ●</div>
-                          <div class="theme-preview-pill">UART ●</div>
+                          <div class="theme-preview-pill ok">UART ●</div>
+                          <div class="theme-preview-pill warn">TEMP ●</div>
+                          <div class="theme-preview-pill err">FAULT ●</div>
                         </div>
                       </div>
-                      <div class="theme-preview-card" style="margin-top:4px">
+                      <div class="theme-preview-card" style="margin-top:5px">
                         <div class="theme-preview-card-title">AUDIO</div>
-                        <div style="display:flex;gap:3px;margin-top:3px">
-                          <div class="theme-preview-btn-accent">PLAY</div>
-                          <div class="theme-preview-btn">STOP</div>
+                        <div style="display:flex;gap:3px;margin-top:4px">
+                          <div class="theme-preview-btn-accent">▶ PLAY</div>
+                          <div class="theme-preview-btn">■ STOP</div>
+                          <div class="theme-preview-btn">⟳ RANDOM</div>
                         </div>
-                        <div class="theme-preview-bar" style="margin-top:4px">
-                          <div class="theme-preview-bar-fill"></div>
+                        <div class="theme-preview-bar" style="margin-top:5px">
+                          <div class="theme-preview-bar-fill" style="width:65%"></div>
                         </div>
                       </div>
-                      <div class="theme-preview-card" style="margin-top:4px">
+                      <div class="theme-preview-card" style="margin-top:5px">
+                        <div class="theme-preview-card-title">VESC TELEMETRY</div>
+                        <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+                          <div class="theme-preview-pill ok">23.8V</div>
+                          <div class="theme-preview-pill">1240 RPM</div>
+                          <div class="theme-preview-pill warn">42°C</div>
+                          <div class="theme-preview-pill">8.2A</div>
+                        </div>
+                        <div class="theme-preview-bar" style="margin-top:5px">
+                          <div class="theme-preview-bar-fill" style="width:35%;background:var(--status-ok)"></div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:5px">
                         <div class="theme-preview-card-title">DRIVE</div>
+                        <div style="display:flex;gap:3px;margin-top:4px">
+                          <div class="theme-preview-btn">◀ LEFT</div>
+                          <div class="theme-preview-btn-accent">▲ FWD</div>
+                          <div class="theme-preview-btn">▶ RIGHT</div>
+                        </div>
                         <div style="display:flex;gap:3px;margin-top:3px">
-                          <div class="theme-preview-btn">◀ L</div>
-                          <div class="theme-preview-btn">▶ R</div>
-                          <div class="theme-preview-btn">■ STOP</div>
+                          <div class="theme-preview-btn">▼ BACK</div>
+                          <div class="theme-preview-btn err-btn">⬡ E-STOP</div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:5px">
+                        <div class="theme-preview-card-title">SEQUENCES</div>
+                        <div style="display:flex;gap:3px;margin-top:4px;flex-wrap:wrap">
+                          <div class="theme-preview-pill ok">😄 Happy</div>
+                          <div class="theme-preview-pill">😮 Scared</div>
+                          <div class="theme-preview-pill warn">🎵 Cantina</div>
+                          <div class="theme-preview-pill">🔍 Scan</div>
                         </div>
                       </div>
                     </div>

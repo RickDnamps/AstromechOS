@@ -4544,6 +4544,14 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .theme-btn-custom:hover .theme-btn-del { opacity: 1; }
 
 /* ── Theme editor: live mini preview ── */
+.theme-editor-section {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--blue);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 3px;
+  margin: 8px 0 4px;
+}
 .theme-editor-main {
   display: flex;
   flex-direction: column;
@@ -4552,7 +4560,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .theme-editor-controls { width: 100%; }
 .theme-preview-clip {
   width: 100%;
-  height: 210px;
+  height: 400px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -4561,7 +4569,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 }
 .theme-preview-mini {
   width: 400px;
-  height: 350px;
+  height: 700px;
   transform: scale(0.58);
   transform-origin: top left;
   pointer-events: none;
@@ -4617,7 +4625,9 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   font-size: 9px;
   color: var(--text-dim);
 }
-.theme-preview-pill.ok { color: var(--status-ok); border-color: var(--status-ok); }
+.theme-preview-pill.ok   { color: var(--status-ok);   border-color: var(--status-ok); }
+.theme-preview-pill.warn { color: var(--status-warn); border-color: var(--status-warn); }
+.theme-preview-pill.err  { color: var(--status-err);  border-color: var(--status-err); }
 .theme-preview-btn {
   padding: 3px 8px;
   background: var(--btn-bg);
@@ -4625,6 +4635,11 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   border-radius: 3px;
   font-size: 9px;
   color: var(--text);
+}
+.theme-preview-btn.err-btn {
+  background: rgba(255,50,70,0.15);
+  border-color: var(--status-err);
+  color: var(--status-err);
 }
 .theme-preview-btn-accent {
   padding: 3px 8px;
