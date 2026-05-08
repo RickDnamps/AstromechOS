@@ -4491,9 +4491,13 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   color: var(--text);
 }
 .font-opt input[type="radio"] { cursor: pointer; accent-color: var(--blue); }
-.font-sample-system   { font-family: 'Courier New', monospace; font-size: 11px; }
-.font-sample-orbitron { font-family: 'Orbitron', monospace; font-size: 10px; }
-.font-sample-sharetech{ font-family: 'Share Tech Mono', monospace; font-size: 11px; }
+.font-sample-system    { font-family: 'Courier New', monospace; font-size: 11px; }
+.font-sample-orbitron  { font-family: 'Orbitron', monospace; font-size: 10px; }
+.font-sample-sharetech { font-family: 'Share Tech Mono', monospace; font-size: 11px; }
+.font-sample-audiowide { font-family: 'Audiowide', monospace; font-size: 10px; }
+.font-sample-electrolize{ font-family: 'Electrolize', monospace; font-size: 11px; }
+.font-sample-exo2      { font-family: 'Exo 2', monospace; font-size: 11px; }
+.font-sample-rajdhani  { font-family: 'Rajdhani', monospace; font-size: 12px; font-weight: 600; }
 .theme-editor-actions {
   display: flex;
   gap: 8px;

@@ -227,12 +227,16 @@ function _buildCustomVars() {
   const bg2 = _shadeHex(bg, 6);
   const bg3 = _shadeHex(bg, 12);
   const accent2 = _shadeHex(accent, 40);
-  const fontUI   = fontOpt === 'orbitron'   ? "'Orbitron', 'Courier New', monospace"
-                 : fontOpt === 'sharetech'  ? "'Share Tech Mono', 'Courier New', monospace"
-                 :                            "'Courier New', Courier, monospace";
-  const fontData = fontOpt === 'sharetech'  ? "'Share Tech Mono', 'Courier New', monospace"
-                 : fontOpt === 'orbitron'   ? "'Orbitron', 'Courier New', monospace"
-                 :                            "'Courier New', Courier, monospace";
+  const _fontMap = {
+    orbitron:   ["'Orbitron', 'Courier New', monospace",        "'Share Tech Mono', 'Courier New', monospace"],
+    sharetech:  ["'Share Tech Mono', 'Courier New', monospace", "'Share Tech Mono', 'Courier New', monospace"],
+    audiowide:  ["'Audiowide', 'Courier New', monospace",       "'Share Tech Mono', 'Courier New', monospace"],
+    electrolize:["'Electrolize', 'Courier New', monospace",     "'Electrolize', 'Courier New', monospace"],
+    exo2:       ["'Exo 2', 'Courier New', monospace",           "'Share Tech Mono', 'Courier New', monospace"],
+    rajdhani:   ["'Rajdhani', 'Courier New', monospace",        "'Share Tech Mono', 'Courier New', monospace"],
+    system:     ["'Courier New', Courier, monospace",           "'Courier New', Courier, monospace"],
+  };
+  const [fontUI, fontData] = _fontMap[fontOpt] || _fontMap.system;
   const bgRgb     = _hexToRgbStr(bg);
   const accentRgb = _hexToRgbStr(accent);
   const accent2Rgb= _hexToRgbStr(accent2);

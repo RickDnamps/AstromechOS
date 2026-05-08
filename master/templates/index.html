@@ -37,7 +37,7 @@
   <title>AstromechOS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Audiowide&family=Electrolize&family=Exo+2:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
   <!-- PWA -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -1629,9 +1629,13 @@
                   <div class="theme-editor-row theme-editor-row-font">
                     <label>Font</label>
                     <div class="font-picker">
-                      <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">System</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Courier New</span></label>
                       <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
-                      <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech Mono</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="audiowide" onchange="previewCustomTheme()"><span class="font-sample-audiowide">Audiowide</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="electrolize" onchange="previewCustomTheme()"><span class="font-sample-electrolize">Electrolize</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="exo2" onchange="previewCustomTheme()"><span class="font-sample-exo2">Exo 2</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="rajdhani" onchange="previewCustomTheme()"><span class="font-sample-rajdhani">Rajdhani</span></label>
                     </div>
                   </div>
                 </div>
