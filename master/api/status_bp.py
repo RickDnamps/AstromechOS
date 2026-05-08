@@ -40,6 +40,7 @@ Endpoints:
 
 import configparser
 import datetime
+import glob
 import os
 import subprocess
 import threading
@@ -249,6 +250,8 @@ def get_status():
         'vesc_drive_safe':   _vesc_side_ok(reg.vesc_telem.get('L')) and _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_bench_mode':   bool(reg.vesc_bench_mode),
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
+        'camera_found':      len(glob.glob('/dev/video*')) > 0,
+        'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],
         'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
         'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('curr'),

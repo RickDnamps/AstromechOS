@@ -4488,7 +4488,11 @@ const cockpitPanel = {
       this._svcRow('Camera',     data.camera_active    ? 'ok' : 'dim', data.camera_active    ? '✓ streaming' : '— idle') +
       this._svcRow('BT Gamepad', btCls, btVal) +
       this._svcRow('Servo Dome', data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A') +
-      this._svcRow('Servo Body', data.servo_ready      ? 'ok' : 'dim', data.servo_ready      ? '✓ OK' : '— N/A');
+      this._svcRow('Servo Body', data.servo_ready      ? 'ok' : 'dim', data.servo_ready      ? '✓ OK' : '— N/A') +
+      this._svcRow('Camera',     data.camera_found ? 'ok' : 'warn', data.camera_found ? (data.camera_active ? '✓ streaming' : '✓ found') : '⚠ not found') +
+      (Array.isArray(data.dome_hat_health) ? data.dome_hat_health.map(h =>
+        this._svcRow(`HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
+      ).join('') : '');
   },
 
   _updateActivity(data) {
@@ -4581,6 +4585,14 @@ const cockpitPanel = {
       alerts.push({ cls: 'warn', msg: 'Dome servos not ready' });
     if (data.servo_ready === false)
       alerts.push({ cls: 'warn', msg: 'Body servos not ready' });
+    if (data.camera_found === false)
+      alerts.push({ cls: 'warn', msg: 'Camera not found — check USB' });
+    if (Array.isArray(data.dome_hat_health)) {
+      data.dome_hat_health.forEach(h => {
+        if (!h.ok)
+          alerts.push({ cls: 'warn', msg: `Dome HAT ${h.addr} — ${h.errors} I2C errors` });
+      });
+    }
     const rssi = data.bt_rssi;
     if (data.bt_connected && rssi != null && rssi <= -80)
       alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });

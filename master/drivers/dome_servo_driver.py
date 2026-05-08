@@ -168,6 +168,17 @@ class DomeServoDriver(BaseDriver):
         self._angles = _load_dome_angles()
         log.info("DomeServoDriver: angles reloaded (%d entries)", len(self._angles))
 
+    def hat_health(self) -> list:
+        """Returns per-HAT status: [{addr, ok, errors}]"""
+        return [
+            {
+                'addr':   f'0x{addr:02X}',
+                'ok':     self._buses[i] is not None and self._error_cnt[i] < 3,
+                'errors': self._error_cnt[i],
+            }
+            for i, addr in enumerate(self._addresses)
+        ]
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
