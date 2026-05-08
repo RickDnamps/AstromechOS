@@ -44,12 +44,22 @@ host = r2-slave.local
 # Change it from the dashboard: Admin → Config → System → Change Admin Password
 password = deetoo
 
+[robot]
+# Display name shown in the dashboard header
+# name = R2-D2
+
+# Location labels for Master Pi (dome servos) and Slave Pi (body servos).
+# Change these if you use this software on a different type of robot.
+# Affects: Calibration section headers, Choreo track labels, joystick label.
+# master_location = Dome
+# slave_location  = Body
+
 [arms]
-# Number of robot arms (0 = no arms configured)
-# Configure arm servos in the dashboard: Settings → Arms
-# Each arm needs a body servo (the arm itself) and optionally a panel servo
-# (the body panel that opens automatically before the arm extends).
-# Labels in Calibration update automatically when arms are saved.
+# Number of robot arms (0–6). Configure via dashboard: Settings → Arms.
+# Each arm needs a body servo (the arm itself) and optionally a body panel servo
+# that opens automatically before the arm extends.
+# Sequence: open panel → sleep(delay) → extend arm
+#           retract arm → sleep(delay) → close panel
 count = 0
 # arm_1   = Servo_S12
 # panel_1 = Servo_S5
@@ -57,6 +67,18 @@ count = 0
 # arm_2   =
 # panel_2 =
 # delay_2 = 0.5
+# arm_3   =
+# panel_3 =
+# delay_3 = 0.5
+# arm_4   =
+# panel_4 =
+# delay_4 = 0.5
+# arm_5   =
+# panel_5 =
+# delay_5 = 0.5
+# arm_6   =
+# panel_6 =
+# delay_6 = 0.5
 
 [i2c_servo_hats]
 # ── MASTER (dome servos) ──────────────────────────────────────────
