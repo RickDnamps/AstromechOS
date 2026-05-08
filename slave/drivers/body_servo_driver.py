@@ -122,6 +122,7 @@ class BodyServoDriver(BaseDriver):
         self._lock      = threading.Lock()
         self._angles    = {}
         self._pos       = {}
+        self._error_cnt = [0] * len(self._addresses)
         # servo_name → (hat_idx, channel)
         self._servo_map = {
             f'Servo_S{hat * 16 + ch}': (hat, ch)
@@ -180,6 +181,17 @@ class BodyServoDriver(BaseDriver):
     def reload(self) -> None:
         self._angles = _load_servo_angles()
         log.info("BodyServoDriver: angles reloaded (%d entries)", len(self._angles))
+
+    def hat_health(self) -> list:
+        """Returns per-HAT status: [{addr, ok, errors}]"""
+        return [
+            {
+                'addr':   f'0x{addr:02X}',
+                'ok':     self._buses[i] is not None and self._error_cnt[i] < 3,
+                'errors': self._error_cnt[i],
+            }
+            for i, addr in enumerate(self._addresses)
+        ]
 
     # ------------------------------------------------------------------
     # Public API
@@ -299,7 +311,8 @@ class BodyServoDriver(BaseDriver):
                 bus.write_byte_data(addr, base + 2, tick & 0xFF)
                 bus.write_byte_data(addr, base + 3, tick >> 8)
             except Exception as e:
-                log.error("smbus2 body HAT%d ch%d error: %s", hat_idx, channel, e)
+                self._error_cnt[hat_idx] += 1
+                log.error("smbus2 body HAT%d ch%d error: %s (total: %d)", hat_idx, channel, e, self._error_cnt[hat_idx])
 
     def _move(self, name: str, angle_deg: float) -> None:
         if not self._ready:

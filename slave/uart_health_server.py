@@ -31,7 +31,7 @@
 Lightweight HTTP server — Slave health stats + BT speaker management.
 Port 5001
 
-  GET  /uart_health          → UART stats JSON
+  GET  /uart_health          → UART stats + HAT health JSON
   GET  /audio/bt/status      → BT devices + connection state
   POST /audio/bt/scan        → start 8-second BT scan (async)
   POST /audio/bt/pair        → {"mac": "AA:BB:CC:DD:EE:FF"}
@@ -40,6 +40,7 @@ Port 5001
   POST /audio/bt/remove      → {"mac": "..."}
 """
 
+import configparser
 import json
 import logging
 import re
@@ -51,6 +52,29 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 log = logging.getLogger(__name__)
 
 _DEFAULT_PORT = 5001
+_SLAVE_CFG    = '/home/artoo/r2d2/slave/config/slave.cfg'
+
+
+def _read_motor_hat_addr() -> int:
+    cfg = configparser.ConfigParser()
+    cfg.read([_SLAVE_CFG])
+    raw = cfg.get('i2c_servo_hats', 'slave_motor_hat', fallback='0x40').strip()
+    try:
+        return int(raw, 16) if raw.startswith('0x') else int(raw)
+    except ValueError:
+        return 0x40
+
+
+def _probe_motor_hat(addr: int) -> dict:
+    """Probe motor HAT presence via a single I2C read. Non-destructive."""
+    try:
+        import smbus2
+        bus = smbus2.SMBus(1)
+        bus.read_byte_data(addr, 0x00)
+        bus.close()
+        return {'addr': f'0x{addr:02X}', 'ok': True}
+    except Exception:
+        return {'addr': f'0x{addr:02X}', 'ok': False}
 
 # BT scan state (module-level — shared across requests)
 _scan_active = False
@@ -162,7 +186,13 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == '/uart_health':
-            self._json(self.server.uart_listener.get_health_stats())
+            stats = self.server.uart_listener.get_health_stats()
+            body_servo = self.server.body_servo
+            stats['body_hat_health'] = (
+                body_servo.hat_health() if body_servo is not None and body_servo.is_ready() else []
+            )
+            stats['motor_hat_health'] = _probe_motor_hat(self.server.motor_hat_addr)
+            self._json(stats)
         elif self.path == '/audio/bt/status':
             self._json(_bt_status())
         else:
@@ -268,10 +298,12 @@ class _HealthHandler(BaseHTTPRequestHandler):
         pass   # suppress access logs
 
 
-def start_health_server(uart_listener, port: int = _DEFAULT_PORT) -> None:
+def start_health_server(uart_listener, body_servo=None, port: int = _DEFAULT_PORT) -> None:
     """Start the HTTP health + BT server as a daemon thread (non-blocking)."""
     server = HTTPServer(('', port), _HealthHandler)
-    server.uart_listener = uart_listener
+    server.uart_listener   = uart_listener
+    server.body_servo      = body_servo
+    server.motor_hat_addr  = _read_motor_hat_addr()
     threading.Thread(
         target=server.serve_forever,
         name='uart-health-http',

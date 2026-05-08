@@ -252,6 +252,8 @@ def get_status():
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
         'camera_found':      len(glob.glob('/dev/video*')) > 0,
         'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],
+        'body_hat_health':   (reg.slave_uart_health or {}).get('body_hat_health', []),
+        'motor_hat_health':  (reg.slave_uart_health or {}).get('motor_hat_health'),
         'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
         'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('curr'),
