@@ -65,7 +65,8 @@ def create_app() -> Flask:
     from master.api.bt_bp       import bt_bp
     from master.api.choreo_bp   import choreo_bp
     from master.api.camera_bp   import camera_bp
-    from master.api.behavior_bp import behavior_bp
+    from master.api.behavior_bp     import behavior_bp
+    from master.api.diagnostics_bp  import diagnostics_bp
 
     app.register_blueprint(audio_bp)
     app.register_blueprint(motion_bp)
@@ -78,6 +79,7 @@ def create_app() -> Flask:
     app.register_blueprint(choreo_bp)
     app.register_blueprint(camera_bp)
     app.register_blueprint(behavior_bp)
+    app.register_blueprint(diagnostics_bp)
 
     # ------------------------------------------------------------------
     # Activity tracking — update last_activity on every POST request
@@ -118,5 +120,5 @@ def create_app() -> Flask:
     def server_error(e):
         return jsonify({'error': 'Internal server error'}), 500
 
-    log.info("Flask app created — blueprints: audio, motion, servo, status, teeces, settings, vesc, bt, choreo, camera, behavior")
+    log.info("Flask app created — blueprints: audio, motion, servo, status, teeces, settings, vesc, bt, choreo, camera, behavior, diagnostics")
     return app

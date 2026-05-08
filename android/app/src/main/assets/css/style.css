@@ -3070,6 +3070,30 @@ body[data-lock-mode="2"] #js-left-ring::after {
 
 .btn.btn-sm    { padding: 5px 10px; font-size: 10px; }
 .btn.btn-xs    { padding: 3px 6px;  font-size: 9px; letter-spacing: 0.5px; }
+
+/* Diagnostics panel */
+.diag-filter-btn        { background: transparent; border-color: var(--surface); color: var(--dim); }
+.diag-filter-btn.active { border-color: var(--blue); color: var(--blue); background: rgba(var(--blue-rgb),0.12); }
+.diag-log-box {
+  font-family: var(--font-data);
+  font-size: 11px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 4px;
+  padding: 6px 8px;
+  max-height: 280px;
+  min-height: 60px;
+  overflow-y: auto;
+  line-height: 1.55;
+}
+.diag-log-box .diag-line-err  { color: var(--red); }
+.diag-log-box .diag-line-warn { color: var(--orange); }
+.diag-log-box .diag-line-info { color: var(--dim); }
+.diag-stats-box {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  padding: 2px 0;
+}
 .bt-pair-row   { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--surface); }
 .bt-spk-header { display:flex; align-items:center; gap:6px; }
 .bt-pair-name  { flex:1; font-size:11px; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

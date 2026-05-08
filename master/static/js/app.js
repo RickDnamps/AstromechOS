@@ -888,10 +888,11 @@ function switchSettingsPanel(panelId) {
 
   // Lazy-load panel data when opening
   if (panelId === 'network' || panelId === 'deploy' || panelId === 'system') loadSettings();
-  if (panelId === 'servos')  loadServoSettings();
-  if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
-  if (panelId === 'behavior') behaviorPanel.load();
-  if (panelId === 'audio')   { soundProfiles.load(); btSpeaker.refresh(); }
+  if (panelId === 'servos')      loadServoSettings();
+  if (panelId === 'arms')        armsConfig.load();
+  if (panelId === 'behavior')    behaviorPanel.load();
+  if (panelId === 'audio')       { soundProfiles.load(); btSpeaker.refresh(); }
+  if (panelId === 'diagnostics') diagPanel.load();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -4641,6 +4642,101 @@ document.addEventListener('click', (e) => {
   if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target))
     cockpitPanel.close();
 });
+
+// ================================================================
+// DIAGNOSTICS PANEL
+// ================================================================
+const diagPanel = {
+  _filter: 'ALL',
+
+  load() {
+    this.loadLogs();
+    this.loadStats();
+  },
+
+  setFilter(f) {
+    this._filter = f;
+    document.querySelectorAll('.diag-filter-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.filter === f)
+    );
+    this.loadLogs();
+  },
+
+  loadLogs() {
+    const box    = el('diag-log-output');
+    const status = el('diag-log-status');
+    if (!box) return;
+    box.textContent = 'Loading...';
+    fetch(`/diagnostics/logs?filter=${this._filter}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.lines || data.lines.length === 0) {
+          box.innerHTML = '<span style="color:var(--dim)">— no entries —</span>';
+          if (status) status.textContent = '';
+          return;
+        }
+        box.innerHTML = data.lines.map(l => {
+          const cls = /error|critical|exception|traceback/i.test(l) ? 'diag-line-err'
+                    : /warning/i.test(l)                             ? 'diag-line-warn'
+                    : 'diag-line-info';
+          return `<div class="${cls}">${escapeHtml(l)}</div>`;
+        }).join('');
+        box.scrollTop = box.scrollHeight;
+        if (status) status.textContent = `${data.lines.length} lines`;
+      })
+      .catch(e => {
+        box.textContent = `Error: ${e}`;
+        if (status) status.textContent = '';
+      });
+  },
+
+  loadStats() {
+    const box = el('diag-stats-output');
+    if (!box) return;
+    fetch('/diagnostics/stats')
+      .then(r => r.json())
+      .then(data => {
+        const m = data.master || {};
+        const s = data.slave  || {};
+        const row = (lbl, val) =>
+          `<div class="cockpit-row"><span class="cockpit-row-lbl">${lbl}</span><span class="cockpit-row-val">${val}</span></div>`;
+        const ok   = v => `<span class="cockpit-ok">${v}</span>`;
+        const warn = v => `<span class="cockpit-warn">${v}</span>`;
+        const err  = v => `<span class="cockpit-err">${v}</span>`;
+        const dim  = v => `<span class="cockpit-dim">${v}</span>`;
+        box.innerHTML =
+          row('Master UART',   m.uart_ready ? ok('✓ open') : err('✗ closed')) +
+          row('CRC errors',    m.crc_errors > 0 ? warn(m.crc_errors) : ok('0')) +
+          row('App HB age',    m.hb_age_ms != null ? `${m.hb_age_ms} ms` : dim('—')) +
+          row('Slave reach',   s.reachable  ? ok('✓ OK') : warn('⚠ unreachable')) +
+          row('UART quality',  s.health_pct != null ? `${s.health_pct}%` : dim('—')) +
+          row('UART errors',   s.errors != null ? (s.errors > 0 ? warn(s.errors) : ok(s.errors)) : dim('—')) +
+          row('Slave CPU',     s.cpu_pct  != null ? `${s.cpu_pct}%`  : dim('—')) +
+          row('Slave temp',    s.cpu_temp != null ? `${s.cpu_temp}°C` : dim('—'));
+      })
+      .catch(e => { box.innerHTML = err(`Error: ${e}`); });
+  },
+
+  ping() {
+    const result = el('diag-ping-result');
+    if (result) { result.style.color = 'var(--dim)'; result.textContent = 'Pinging…'; }
+    fetch('/diagnostics/ping_slave', { method: 'POST' })
+      .then(r => r.json())
+      .then(data => {
+        if (!result) return;
+        if (data.ok) {
+          result.style.color = 'var(--green)';
+          result.textContent = `✓ ${data.ms} ms`;
+        } else {
+          result.style.color = 'var(--red)';
+          result.textContent = `✗ ${data.error || 'timeout'} (${data.ms} ms)`;
+        }
+      })
+      .catch(e => {
+        if (result) { result.style.color = 'var(--red)'; result.textContent = `Error: ${e}`; }
+      });
+  },
+};
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && cockpitPanel.isOpen) cockpitPanel.close();

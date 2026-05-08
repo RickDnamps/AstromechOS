@@ -925,7 +925,8 @@
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
       <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
-      <button class="settings-nav-item" data-panel="system"    onclick="switchSettingsPanel('system')">🖥️ System</button>
+      <button class="settings-nav-item" data-panel="system"       onclick="switchSettingsPanel('system')">🖥️ System</button>
+      <button class="settings-nav-item" data-panel="diagnostics" onclick="switchSettingsPanel('diagnostics')">🔍 Diagnostics</button>
     </nav>
 
     <!-- Content panels -->
@@ -1786,6 +1787,36 @@
           </div>
           <button class="btn btn-primary" onclick="adminChangePassword()">CHANGE PASSWORD</button>
           <div class="settings-status" id="admin-pwd-status"></div>
+        </section>
+      </div>
+
+      <div class="settings-panel" id="spanel-diagnostics">
+        <section class="card settings-card">
+          <h2 class="card-title">DIAGNOSTICS</h2>
+
+          <h3 class="settings-sub-title">MASTER LOG</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
+            <button class="btn btn-sm diag-filter-btn active" data-filter="ALL"     onclick="diagPanel.setFilter('ALL')">ALL</button>
+            <button class="btn btn-sm diag-filter-btn"        data-filter="WARNING" onclick="diagPanel.setFilter('WARNING')">WARNING+</button>
+            <button class="btn btn-sm diag-filter-btn"        data-filter="ERROR"   onclick="diagPanel.setFilter('ERROR')">ERROR</button>
+            <button class="btn btn-sm" style="margin-left:auto" onclick="diagPanel.loadLogs()">↻ REFRESH</button>
+          </div>
+          <div id="diag-log-status" class="settings-status" style="margin:2px 0 4px"></div>
+          <div id="diag-log-output" class="diag-log-box">—</div>
+
+          <div class="settings-divider"></div>
+
+          <h3 class="settings-sub-title">UART STATS</h3>
+          <div id="diag-stats-output" class="diag-stats-box">—</div>
+          <button class="btn btn-sm" style="margin-top:6px" onclick="diagPanel.loadStats()">↻ REFRESH STATS</button>
+
+          <div class="settings-divider"></div>
+
+          <h3 class="settings-sub-title">CONNECTIVITY</h3>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="btn btn-secondary" onclick="diagPanel.ping()">PING SLAVE</button>
+            <span id="diag-ping-result" style="font-family:var(--font-data);font-size:13px"></span>
+          </div>
         </section>
       </div>
 
