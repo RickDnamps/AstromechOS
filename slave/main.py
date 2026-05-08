@@ -113,6 +113,15 @@ def handle_reboot(value: str) -> None:
     threading.Thread(target=_do_reboot, daemon=True).start()
 
 
+def handle_shutdown(value: str) -> None:
+    """SHUTDOWN command received from Master — run in a thread to avoid blocking UART."""
+    logging.getLogger(__name__).info("SHUTDOWN command received — shutting down in 3s")
+    def _do_shutdown():
+        time.sleep(3)
+        subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False)
+    threading.Thread(target=_do_shutdown, daemon=True).start()
+
+
 def main() -> None:
     setup_logging(LOG_LEVEL)
     log = logging.getLogger(__name__)
@@ -166,7 +175,8 @@ def main() -> None:
     watchdog.start()
 
     uart.register_callback('H',      lambda v: watchdog.feed())
-    uart.register_callback('REBOOT', handle_reboot)
+    uart.register_callback('REBOOT',   handle_reboot)
+    uart.register_callback('SHUTDOWN', handle_shutdown)
     uart.register_callback('DISP',   lambda v: display.send_raw(f"DISP:{v}"))
 
     # ------------------------------------------------------------------

@@ -1770,11 +1770,13 @@
           <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
           <div class="settings-status" id="hardware-config-status"></div>
           <div class="settings-divider"></div>
-          <div class="btn-group-v">
-            <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>
-            <button class="btn btn-warn" onclick="confirmAction('Reboot Slave?', '/system/reboot_slave')">REBOOT SLAVE</button>
-            <button class="btn btn-warn" onclick="confirmAction('Reboot both Master and Slave?', '/system/reboot_both')">REBOOT BOTH</button>
-            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master?', '/system/shutdown')">SHUTDOWN MASTER</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot Master?',            '/system/reboot')">REBOOT MASTER</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master?',           '/system/shutdown')">SHUTDOWN MASTER</button>
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot Slave?',              '/system/reboot_slave')">REBOOT SLAVE</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Slave?',            '/system/shutdown_slave')">SHUTDOWN SLAVE</button>
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot both Master + Slave?',   '/system/reboot_both')">REBOOT BOTH</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN both Master + Slave?', '/system/shutdown_both')">SHUTDOWN BOTH</button>
           </div>
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>

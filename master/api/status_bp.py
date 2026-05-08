@@ -366,6 +366,28 @@ def system_reboot_both():
     return jsonify({'status': 'rebooting'})
 
 
+@status_bp.post('/system/shutdown_slave')
+def system_shutdown_slave():
+    """Sends a shutdown command to the Slave via UART."""
+    if reg.uart:
+        reg.uart.send('SHUTDOWN', '1')
+        return jsonify({'status': 'ok'})
+    return jsonify({'error': 'UART not available'}), 503
+
+
+@status_bp.post('/system/shutdown_both')
+def system_shutdown_both():
+    """Shuts down Slave first (via UART), then Master after a short delay."""
+    if reg.uart:
+        reg.uart.send('SHUTDOWN', '1')
+    def _shutdown_master():
+        import time as _t
+        _t.sleep(1)
+        subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False)
+    threading.Thread(target=_shutdown_master, daemon=True).start()
+    return jsonify({'status': 'shutting down'})
+
+
 @status_bp.post('/system/shutdown')
 def system_shutdown():
     """Shuts down the Master."""
