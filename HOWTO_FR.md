@@ -249,7 +249,9 @@ ssh artoo@r2-slave.local
 
 ### Mettre à jour R2-D2
 
-**Depuis le dashboard :** cliquer sur le bouton **Admin** (en haut à droite) → entrer le mot de passe **`deetoo`** → les menus Config et autres onglets protégés deviennent visibles → Config → System → bouton Update (git pull + rsync + restart, tout automatique).
+**Depuis le dashboard :** cliquer sur le bouton **Admin** (en haut à droite) → entrer le mot de passe **`deetoo`** → les menus protégés deviennent visibles → Settings → Deploy → bouton **UPDATE** (git pull + rsync Slave + restart, tout automatique).
+
+En cas de problème après une mise à jour, le bouton **ROLLBACK** (même panneau) revient au commit précédent.
 
 > La session admin expire après 5 minutes d'inactivité. Le mot de passe peut être changé dans l'onglet Config une fois connecté.
 
@@ -296,6 +298,36 @@ Voir [ELECTRONICS.md](ELECTRONICS.md) pour tous les détails de câblage :
 - Contrôleurs moteurs VESC (USB + CAN)
 - LED logic Teeces32 / AstroPixels+
 - Écran RP2040
+
+### Ajouter un HAT servo supplémentaire
+
+Chaque HAT PCA9685 ajoute 16 servos. Les HATs se distinguent par leur adresse I2C, configurée en soudant les jumpers A0–A5 sur la carte.
+
+**Adresses courantes :**
+
+| Adresse | Jumper soudé | Utilisation typique |
+|---------|-------------|---------------------|
+| `0x40`  | aucun       | Master HAT 1 (Servo_M0–M15) |
+| `0x41`  | A0          | Slave HAT 1 (Servo_S0–S15) |
+| `0x42`  | A1          | HAT 2 (Servo_M16–M31 ou Servo_S16–S31) |
+| `0x43`  | A0 + A1     | HAT 3 (Servo_M32–M47 ou Servo_S32–S47) |
+
+> ⚠️ Ne jamais mettre `0x40` dans les adresses Slave — c'est l'adresse du Motor HAT. Ça endommagerait le driver moteur.
+
+**Configuration depuis le dashboard (Settings → System → Hardware) :**
+
+- **Master HAT addresses** : entrer les adresses séparées par des virgules
+  - 1 HAT : `0x40`
+  - 2 HATs : `0x40, 0x42`
+  - 3 HATs : `0x40, 0x42, 0x43`
+- **Slave HAT addresses** : idem, en commençant par `0x41`
+  - 1 HAT : `0x41`
+  - 2 HATs : `0x41, 0x42`
+  - 3 HATs : `0x41, 0x42, 0x43`
+
+Cliquer **SAVE HARDWARE CONFIG** puis **REBOOT MASTER** pour appliquer.
+
+> Les listes `DOME_SERVOS` et `BODY_SERVOS` sont calculées au démarrage — un reboot est obligatoire après tout changement d'adresse.
 
 ---
 
