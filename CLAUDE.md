@@ -346,15 +346,27 @@ Dans le Choreo timeline : Dome Servo track → seulement `ALL DOME` · Body Serv
 - `light: true` flag on light themes (affects swatch gradient rendering in picker)
 
 **Custom themes :** stored in `localStorage` key `astromech-custom-themes` as JSON array
-- Each entry: `{ id, label, swatch, vars, _pickerBg, _pickerAccent, _pickerText, _pickerFont }`
-- `_picker*` fields = raw hex values to re-populate editor on re-edit
+- Each entry: `{ id, label, swatch, vars, _pickerBg, _pickerTopbar, _pickerCard, _pickerAccent, _pickerText, _pickerOk, _pickerWarn, _pickerErr, _pickerFont }`
+- `_picker*` fields = raw hex values to re-populate all 8 pickers on re-edit
 - `applyTheme(id)` checks `_THEMES` first, then `_loadCustomThemes()` — handles both
+- Clicking a custom theme button opens the editor (not just applies) — edit in place
+
+**Theme customizer — 8 color pickers :**
+- **INTERFACE**: BG · Topbar · Card
+- **ACCENT & TEXT**: Accent · Text
+- **STATUS**: OK · Warn · Error (shown live on the preview pills)
+- Font picker: Courier New · Orbitron · Share Tech Mono · Audiowide · Electrolize · Exo 2 · Rajdhani
+
+**Live preview :** right side of editor, fills available width dynamically
+- Mini: 900×850px native, `_fitPreview()` calculates `scale = clipWidth/900` and sets clip height
+- Called on open (setTimeout), every color change, and window resize
+- Preview shows: topbar · tabs · status pills · audio · VESC telemetry · drive + E-STOP · sequences
 
 **Font vars :**
 - `--font` = UI labels, buttons, tabs (default: Orbitron)
-- `--font-data` = telemetry values, code, inputs (default: Share Tech Mono)
-- Available options: Orbitron · Share Tech Mono · Audiowide · Electrolize · Exo 2 · Rajdhani · Courier New (system)
-- Custom theme editor stores chosen font as `_pickerFont` and writes `--font`/`--font-data` into vars
+- `--font-data` = telemetry values, code, inputs, **topbar status elements** (default: Share Tech Mono)
+- Topbar status pills, temp, uptime, battery % forced to `var(--font-data)` — prevents layout shift when numbers change (monospace = fixed-width digits)
+- Available font options: Orbitron · Share Tech Mono · Audiowide · Electrolize · Exo 2 · Rajdhani · Courier New (system)
 
 **Built-in themes :** default · r2d2 · r2d2_light (Blueprint) · r5d4 · bb8 · chopper · r2q5
 **Theme customizer UI :** Settings → Interface → `+ NEW THEME` (or click any custom theme to edit)
