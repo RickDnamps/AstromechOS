@@ -265,6 +265,14 @@ body::after {
   justify-content: center;
 }
 
+.topbar-center .status-pill,
+.topbar-right,
+.header-stats,
+.battery-pct,
+.uptime-label {
+  font-family: var(--font-data);
+}
+
 .status-pill {
   display: flex;
   align-items: center;
