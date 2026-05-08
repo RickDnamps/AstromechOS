@@ -71,16 +71,7 @@
 
   <div class="topbar-center">
     <div class="status-pill error" id="pill-offline" style="display:none"><span class="pulse-dot"></span>OFFLINE</div>
-    <div class="status-pill" id="pill-heartbeat" title="Heartbeat App ↔ Master">
-      <span class="pulse-dot"></span>HB
-    </div>
-    <div class="status-pill" id="pill-uart" title="UART Master ↔ Slave — bus quality (% valid packets / 1 min)">
-      <span class="pulse-dot"></span>UART
-    </div>
-    <div class="status-pill" id="pill-bt" title="Bluetooth Controller">
-      <span id="pill-bt-label">BT</span>
-    </div>
-    <div class="status-pill" id="pill-version">v?</div>
+    <div class="status-pill error" id="pill-slave" style="display:none">SLAVE</div>
     <button id="cockpit-btn" class="cockpit-btn" onclick="cockpitPanel.toggle()" title="System status overview">&#x2B21; STATUS &#x25BC;</button>
   </div>
 
@@ -97,13 +88,18 @@
       <span class="stat-sep">|</span>
       <span id="clock-label" class="stat-val">--:--:--</span>
     </div>
-    <span id="uptime-label" class="uptime-label">up --:--</span>
   </div>
 </header>
 
 <!-- Cockpit Status Panel — fixed overlay below header -->
 <div id="cockpit-panel" class="cockpit-panel">
   <div class="cockpit-inner">
+
+    <div class="cockpit-pills-row">
+      <div class="status-pill" id="ck-pill-hb" title="Heartbeat App ↔ Master"><span class="pulse-dot"></span>HB</div>
+      <div class="status-pill" id="ck-pill-uart" title="UART Master ↔ Slave"><span class="pulse-dot"></span>UART</div>
+      <div class="status-pill" id="ck-pill-bt" title="Bluetooth Controller"><span id="ck-pill-bt-label">BT</span></div>
+    </div>
 
     <div>
       <div class="cockpit-section-title">VITALS</div>

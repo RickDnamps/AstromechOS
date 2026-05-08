@@ -1,4 +1,4 @@
-﻿<!--
+<!--
  ============================================================
    █████╗  ██████╗ ███████╗
   ██╔══██╗██╔═══██╗██╔════╝
@@ -35,9 +35,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AstromechOS</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Audiowide&family=Electrolize&family=Exo+2:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
   <!-- PWA -->
-<meta name="theme-color" content="#00aaff">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <meta name="theme-color" content="#00aaff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="AstromechOS">
@@ -50,13 +54,15 @@
 ================================================================ -->
 <header class="topbar">
   <div class="topbar-brand">
-    <svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32">
-      <circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/>
-      <rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/>
-      <circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
-      <circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
-      <rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/>
-    </svg>
+    <div id="header-robot-icon" class="brand-icon-wrap" title="Change icon in Settings → System">
+      <svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/>
+        <rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/>
+        <circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
+        <circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
+        <rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/>
+      </svg>
+    </div>
     <div class="brand-text">
       <span class="brand-r2" id="header-robot-name">R2-D2</span>
       <span class="brand-sub">ASTROMECH OS</span>
@@ -65,16 +71,7 @@
 
   <div class="topbar-center">
     <div class="status-pill error" id="pill-offline" style="display:none"><span class="pulse-dot"></span>OFFLINE</div>
-    <div class="status-pill" id="pill-heartbeat" title="Heartbeat App ↔ Master">
-      <span class="pulse-dot"></span>HB
-    </div>
-    <div class="status-pill" id="pill-uart" title="UART Master ↔ Slave — bus quality (% valid packets / 1 min)">
-      <span class="pulse-dot"></span>UART
-    </div>
-    <div class="status-pill" id="pill-bt" title="Bluetooth Controller">
-      <span id="pill-bt-label">BT</span>
-    </div>
-    <div class="status-pill" id="pill-version">v?</div>
+    <div class="status-pill error" id="pill-slave" style="display:none">SLAVE</div>
     <button id="cockpit-btn" class="cockpit-btn" onclick="cockpitPanel.toggle()" title="System status overview">&#x2B21; STATUS &#x25BC;</button>
   </div>
 
@@ -91,13 +88,18 @@
       <span class="stat-sep">|</span>
       <span id="clock-label" class="stat-val">--:--:--</span>
     </div>
-    <span id="uptime-label" class="uptime-label">up --:--</span>
   </div>
 </header>
 
 <!-- Cockpit Status Panel — fixed overlay below header -->
 <div id="cockpit-panel" class="cockpit-panel">
   <div class="cockpit-inner">
+
+    <div class="cockpit-pills-row">
+      <div class="status-pill" id="ck-pill-hb" title="Heartbeat App ↔ Master"><span class="pulse-dot"></span>HB</div>
+      <div class="status-pill" id="ck-pill-uart" title="UART Master ↔ Slave"><span class="pulse-dot"></span>UART</div>
+      <div class="status-pill" id="ck-pill-bt" title="Bluetooth Controller"><span id="ck-pill-bt-label">BT</span></div>
+    </div>
 
     <div>
       <div class="cockpit-section-title">VITALS</div>
@@ -404,7 +406,7 @@
 
       <!-- Right joystick — Dome -->
       <div class="joystick-panel joystick-panel-right">
-        <div class="joystick-label">DOME</div>
+        <div class="joystick-label" id="joystick-master-label">DOME</div>
         <div class="joystick-ring" id="js-right-ring">
           <div class="joystick-crosshair"></div>
           <div class="joystick-knob" id="js-right-knob"></div>
@@ -814,24 +816,24 @@
         <div class="chor-track-row chor-track-row-dome" data-track="dome">
           <div class="chor-src-btn" data-track="dome"
                data-tpl='{"angle":0,"easing":"linear"}'
-               draggable="true">+ DOME</div>
+               draggable="true" id="chor-btn-dome">+ DOME</div>
         </div>
 
         <div class="chor-track-row" data-track="dome_servos">
           <div class="chor-src-btn" data-track="dome_servos"
                data-tpl='{"servo":"","action":"open","duration":1,"group":"dome"}'
-               draggable="true">+ DOME SRV</div>
+               draggable="true" id="chor-btn-dome-srv">+ DOME SRV</div>
         </div>
 
         <div class="chor-track-row" data-track="body_servos">
           <div class="chor-src-btn" data-track="body_servos"
                data-tpl='{"servo":"","action":"open","duration":1,"group":"body"}'
-               draggable="true">+ BODY SRV</div>
+               draggable="true" id="chor-btn-body-srv">+ BODY SRV</div>
         </div>
 
         <div class="chor-track-row" data-track="arm_servos">
           <div class="chor-src-btn" data-track="arm_servos"
-               data-tpl='{"servo":"","action":"open","duration":1,"group":"arms"}'
+               data-tpl='{"arm":1,"action":"open","duration":1,"group":"arms"}'
                draggable="true">+ ARM SRV</div>
         </div>
 
@@ -909,17 +911,18 @@
     <!-- Sidebar -->
     <nav class="settings-sidebar">
       <button class="settings-nav-item active" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
+      <button class="settings-nav-item" data-panel="interface"  onclick="switchSettingsPanel('interface')">🎨 Interface</button>
       <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
       <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 BT Gamepad</button>
       <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
-      <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
       <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
       <button class="settings-nav-item" data-panel="arms"      onclick="switchSettingsPanel('arms')">🦾 Arms</button>
       <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
       <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
+      <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
       <button class="settings-nav-item" data-panel="system"    onclick="switchSettingsPanel('system')">🖥️ System</button>
     </nav>
 
@@ -1091,15 +1094,17 @@
       <div class="settings-panel" id="spanel-arms">
         <section class="card settings-card">
           <h2 class="card-title">ARMS</h2>
-          <p class="settings-note">Select which body servos control the arms. Arms retract automatically before any new sequence starts.</p>
+          <p class="settings-note">Arm servos run a panel→delay→arm sequence — excluded from OPEN ALL / CLOSE ALL.</p>
           <div class="form-group">
-            <label>Number of arms</label>
-            <select id="arms-count" class="input-text" style="width:80px" onchange="armsConfig.onCountChange()">
+            <label>Arms</label>
+            <select id="arms-count" class="input-text" style="width:68px" onchange="armsConfig.onCountChange()">
               <option value="0">0</option>
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
               <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
             </select>
           </div>
           <div id="arms-selectors"></div>
@@ -1180,26 +1185,10 @@
       <!-- 🔧 Servos -->
       <div class="settings-panel" id="spanel-servos">
         <div class="spanel-2col">
-          <section class="card systems-card">
-            <h2 class="card-title">DOME PANELS</h2>
-            <div class="settings-note" style="margin-bottom:6px;">O° = open &nbsp;|&nbsp; C° = close &nbsp;|&nbsp; S = speed (1=slow…10=instant)</div>
-            <div class="servo-grid" id="dome-servo-list"><!-- generated by JS --></div>
-            <div class="row mt">
-              <button class="btn btn-active" onclick="api('/servo/dome/open_all','POST').then(()=>toast('Dome panels open','ok'))">OPEN ALL</button>
-              <button class="btn btn-dark" onclick="api('/servo/dome/close_all','POST').then(()=>toast('Dome panels closed','ok'))">CLOSE ALL</button>
-              <button class="btn" onclick="domeServoPanel.saveAngles()">SAVE CONFIG</button>
-            </div>
-          </section>
-          <section class="card systems-card">
-            <h2 class="card-title">BODY PANELS</h2>
-            <div class="settings-note" style="margin-bottom:6px;">O° = open &nbsp;|&nbsp; C° = close &nbsp;|&nbsp; S = speed (1=slow…10=instant)</div>
-            <div class="servo-grid" id="body-servo-list"><!-- generated by JS --></div>
-            <div class="row mt">
-              <button class="btn btn-active" onclick="api('/servo/body/open_all','POST').then(()=>toast('Body panels open','ok'))">OPEN ALL</button>
-              <button class="btn btn-dark" onclick="api('/servo/body/close_all','POST').then(()=>toast('Body panels closed','ok'))">CLOSE ALL</button>
-              <button class="btn" onclick="bodyServoPanel.saveAngles()">SAVE CONFIG</button>
-            </div>
-          </section>
+          <!-- Dome servo HAT blocks — generated by renderCalibration() in app.js -->
+          <div id="dome-servo-hats"></div>
+          <!-- Body servo HAT blocks — generated by renderCalibration() in app.js -->
+          <div id="body-servo-hats"></div>
         </div>
       </div>
 
@@ -1538,6 +1527,10 @@
         <section class="card settings-card">
           <h2 class="card-title">GITHUB / DEPLOY</h2>
           <div class="form-group">
+            <label>GitHub repo URL</label>
+            <input type="text" id="repo-url" class="input-text" placeholder="https://github.com/user/repo.git">
+          </div>
+          <div class="form-group">
             <label>Git branch</label>
             <input type="text" id="git-branch" class="input-text">
           </div>
@@ -1558,6 +1551,191 @@
           <h2 class="card-title">DEPLOY</h2>
           <p class="settings-note">Git pull on Master + rsync Slave + restart services.</p>
           <button class="btn btn-primary" onclick="systemUpdate()">⬆ UPDATE — git pull + sync Slave</button>
+          <button class="btn btn-warn admin-only" onclick="systemRollback()" style="margin-top:8px">↩ ROLLBACK — revert to previous commit</button>
+        </section>
+      </div>
+
+      <!-- 🎨 Interface -->
+      <div class="settings-panel" id="spanel-interface">
+        <section class="card settings-card">
+          <h2 class="card-title">IDENTITY</h2>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Robot name</label>
+            <input type="text" id="robot-name-input" class="settings-input" maxlength="32" placeholder="R2-D2">
+          </div>
+          <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
+          <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-divider admin-only"></div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Master Pi — location name</label>
+            <input type="text" id="master-location-input" class="settings-input" maxlength="20" placeholder="Dome">
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave Pi — location name</label>
+            <input type="text" id="slave-location-input" class="settings-input" maxlength="20" placeholder="Body">
+          </div>
+          <button class="btn btn-primary admin-only" onclick="saveRobotLocations()">SAVE LOCATIONS</button>
+          <div class="settings-status" id="robot-locations-status"></div>
+          <div class="settings-divider admin-only"></div>
+          <div class="settings-row admin-only" style="flex-direction:column;align-items:flex-start;gap:10px">
+            <label class="settings-label">Robot icon</label>
+            <div class="icon-picker-grid" id="icon-picker-grid">
+              <!-- Populated by JS from /settings/icons -->
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <label class="btn btn-secondary" style="cursor:pointer;font-size:10px;padding:4px 12px">
+                + UPLOAD IMAGE
+                <input type="file" id="icon-upload-input" accept="image/*" style="display:none" onchange="uploadIcon(this)">
+              </label>
+              <span id="icon-upload-status" style="font-size:10px;color:var(--text-dim)"></span>
+            </div>
+          </div>
+        </section>
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">THEMES</h2>
+          <div class="theme-grid" id="theme-grid"><!-- Populated by JS --></div>
+          <!-- Custom theme editor -->
+          <div id="theme-editor" class="theme-editor" style="display:none">
+            <div class="theme-editor-header">
+              <span id="theme-editor-title">NEW THEME</span>
+              <button class="btn btn-xs" onclick="closeThemeEditor()">✕</button>
+            </div>
+            <div class="theme-editor-body">
+              <div class="theme-editor-main">
+                <div class="theme-editor-controls">
+                  <div class="theme-editor-row">
+                    <label>Name</label>
+                    <input type="text" id="theme-editor-name" class="input-text input-sm" placeholder="My Theme" maxlength="24">
+                  </div>
+                  <div class="theme-editor-section">INTERFACE</div>
+                  <div class="theme-editor-row">
+                    <label>BG</label>
+                    <input type="color" id="theme-editor-bg" value="#080c14" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-bg">#080c14</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Topbar</label>
+                    <input type="color" id="theme-editor-topbar" value="#050810" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-topbar">#050810</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Card</label>
+                    <input type="color" id="theme-editor-card" value="#0d1525" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-card">#0d1525</span>
+                  </div>
+                  <div class="theme-editor-section">ACCENT & TEXT</div>
+                  <div class="theme-editor-row">
+                    <label>Accent</label>
+                    <input type="color" id="theme-editor-accent" value="#00aaff" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-accent">#00aaff</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Text</label>
+                    <input type="color" id="theme-editor-text" value="#c8d8ea" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-text">#c8d8ea</span>
+                  </div>
+                  <div class="theme-editor-section">STATUS</div>
+                  <div class="theme-editor-row">
+                    <label>OK</label>
+                    <input type="color" id="theme-editor-ok" value="#00ff88" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-ok">#00ff88</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Warn</label>
+                    <input type="color" id="theme-editor-warn" value="#ffcc00" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-warn">#ffcc00</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Error</label>
+                    <input type="color" id="theme-editor-err" value="#ff4455" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-err">#ff4455</span>
+                  </div>
+                  <div class="theme-editor-section">FONT</div>
+                  <div class="font-picker">
+                    <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Courier New</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech Mono</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="audiowide" onchange="previewCustomTheme()"><span class="font-sample-audiowide">Audiowide</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="electrolize" onchange="previewCustomTheme()"><span class="font-sample-electrolize">Electrolize</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="exo2" onchange="previewCustomTheme()"><span class="font-sample-exo2">Exo 2</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="rajdhani" onchange="previewCustomTheme()"><span class="font-sample-rajdhani">Rajdhani</span></label>
+                  </div>
+                </div>
+                <!-- Live mini preview — inherits CSS vars from document.documentElement -->
+                <div class="theme-preview-clip">
+                  <div class="theme-preview-mini">
+                    <div class="theme-preview-topbar">⚙ AstromechOS<span>R2-D2 ●</span></div>
+                    <div class="theme-preview-tabs">
+                      <div class="theme-preview-tab active">DRIVE</div>
+                      <div class="theme-preview-tab">AUDIO</div>
+                      <div class="theme-preview-tab">CHOREO</div>
+                      <div class="theme-preview-tab">SETTINGS</div>
+                    </div>
+                    <div class="theme-preview-body">
+                      <div class="theme-preview-card">
+                        <div class="theme-preview-card-title">STATUS</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                          <div class="theme-preview-pill ok">VESC ●</div>
+                          <div class="theme-preview-pill ok">UART ●</div>
+                          <div class="theme-preview-pill warn">TEMP ●</div>
+                          <div class="theme-preview-pill err">FAULT ●</div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">AUDIO</div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div class="theme-preview-btn-accent">▶ PLAY</div>
+                          <div class="theme-preview-btn">■ STOP</div>
+                          <div class="theme-preview-btn">⟳ RANDOM</div>
+                        </div>
+                        <div class="theme-preview-bar" style="margin-top:10px">
+                          <div class="theme-preview-bar-fill" style="width:65%"></div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">VESC TELEMETRY</div>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                          <div class="theme-preview-pill ok">23.8V</div>
+                          <div class="theme-preview-pill">1240 RPM</div>
+                          <div class="theme-preview-pill warn">42°C</div>
+                          <div class="theme-preview-pill">8.2A</div>
+                        </div>
+                        <div class="theme-preview-bar" style="margin-top:10px">
+                          <div class="theme-preview-bar-fill" style="width:35%;background:var(--status-ok)"></div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">DRIVE</div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div class="theme-preview-btn">◀ LEFT</div>
+                          <div class="theme-preview-btn-accent">▲ FWD</div>
+                          <div class="theme-preview-btn">▶ RIGHT</div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div class="theme-preview-btn">▼ BACK</div>
+                          <div class="theme-preview-btn err-btn">⬡ E-STOP</div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">SEQUENCES</div>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                          <div class="theme-preview-pill ok">😄 Happy</div>
+                          <div class="theme-preview-pill">😮 Scared</div>
+                          <div class="theme-preview-pill warn">🎵 Cantina</div>
+                          <div class="theme-preview-pill">🔍 Scan</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="theme-editor-actions">
+                <button class="btn btn-sm" onclick="saveCustomTheme()">SAVE</button>
+                <button class="btn btn-sm" onclick="closeThemeEditor()">CANCEL</button>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="openThemeEditor(null)">+ NEW THEME</button>
         </section>
       </div>
 
@@ -1566,12 +1744,24 @@
         <section class="card settings-card">
           <h2 class="card-title">SYSTEM</h2>
           <div class="settings-status" id="system-version">Loading...</div>
+          <div class="settings-divider"></div>
+          <h3 class="settings-sub-title admin-only">HARDWARE</h3>
+          <p class="settings-note admin-only">HAT address changes require a Master reboot to take effect.</p>
           <div class="settings-row admin-only">
-            <label class="settings-label">Robot name</label>
-            <input type="text" id="robot-name-input" class="settings-input" maxlength="32" placeholder="R2-D2">
+            <label class="settings-label">Master servo HAT addresses (I2C)</label>
+            <input type="text" id="master-hats-input" class="settings-input" placeholder="0x40, 0x42, ..." maxlength="60">
           </div>
-          <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
-          <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave servo HAT addresses (I2C)</label>
+            <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41, 0x42, ..." maxlength="60">
+          </div>
+          <p class="settings-note admin-only">⚠️ Never use 0x40 for Slave HATs — reserved for the Motor HAT.</p>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Body servo UART latency (ms)</label>
+            <input type="number" id="body-uart-lat-input" class="settings-input" min="0" max="200" step="1" placeholder="25">
+          </div>
+          <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
+          <div class="settings-status" id="hardware-config-status"></div>
           <div class="settings-divider"></div>
           <div class="btn-group-v">
             <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>
@@ -1625,9 +1815,14 @@
 <!-- Toast notifications -->
 <div id="toast" class="toast"></div>
 
-<script src="vendor/sortable.min.js"></script>
-<script src="js/app.js"></script>
-<script></script>
+<script src="/static/vendor/sortable.min.js"></script>
+<script src="/static/js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW error:', e));
+  }
+</script>
 </body>
 </html>
-

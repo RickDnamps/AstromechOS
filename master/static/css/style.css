@@ -4350,6 +4350,14 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   gap: 10px;
 }
 
+.cockpit-pills-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
 .cockpit-section-title {
   font-size: 8px;
   letter-spacing: 2px;

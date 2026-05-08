@@ -3887,6 +3887,7 @@ class BTController {
     this._piConnected = false;
     this._piEnabled   = true;
     this._batteryPct  = 0;
+    this._rssi        = null;
     this._gamepadIdx  = null;
     this._prevBtns    = {};
     this._driveActive = false;
@@ -4049,8 +4050,8 @@ class BTController {
   }
 
   _updatePill() {
-    const pill  = el('pill-bt');
-    const label = el('pill-bt-label');
+    const pill  = el('ck-pill-bt');
+    const label = el('ck-pill-bt-label');
     if (!pill) return;
     const enabled   = this._piEnabled;
     const connected = this._piConnected || this._connected;
@@ -4058,10 +4059,13 @@ class BTController {
     if (!enabled) {
       cls = 'status-pill error'; txt = 'BT OFF';
     } else if (connected) {
-      cls = 'status-pill ok';
+      const weakSignal = this._rssi != null && this._rssi <= -75;
+      cls = weakSignal ? 'status-pill warn' : 'status-pill ok';
       txt = (this._batteryPct > 0) ? `BT ${this._batteryPct}%` : 'BT';
+      pill.title = weakSignal ? `Weak signal: ${this._rssi} dBm` : 'Bluetooth connected';
     } else {
-      cls = 'status-pill';      txt = 'BT';
+      cls = 'status-pill'; txt = 'BT';
+      pill.title = 'Bluetooth not connected';
     }
     pill.className = cls;
     if (label) label.textContent = txt;
@@ -4085,6 +4089,9 @@ class BTController {
       if (statusText) { statusText.textContent = 'CONNECTED (Pi)'; statusText.classList.add('connected'); }
     }
 
+    // RSSI
+    this._rssi = data.bt_rssi ?? null;
+
     // Battery
     const pct    = data.bt_battery || 0;
     this._batteryPct = pct;
@@ -4098,14 +4105,11 @@ class BTController {
       if (fillEl) fillEl.style.width = '0%';
       if (pctEl)  pctEl.textContent = '--%';
     }
-    this._updatePill();
-
     // RSSI signal strength
     const rssiEl = el('bt-rssi-val');
     if (rssiEl) {
       const rssi = data.bt_rssi;
       if (rssi !== null && rssi !== undefined) {
-        // dBm: -50=excellent, -70=good, -85=fair, <-90=poor
         const quality = rssi >= -60 ? 'excellent' : rssi >= -75 ? 'good' : rssi >= -90 ? 'fair' : 'poor';
         const color   = rssi >= -60 ? '#00cc66'   : rssi >= -75 ? '#88cc00' : rssi >= -90 ? '#ff8800' : '#ff2244';
         rssiEl.textContent = rssi + ' dBm';
@@ -4609,14 +4613,13 @@ class StatusPoller {
     }
     this._setOffline(false);
 
-    this._setPill('pill-heartbeat', data.heartbeat_ok, 'HB');
-    this._setUartPill(data.uart_ready, data.uart_health, data.uart_crc_errors ?? 0);
+    // Conditional topbar pills — visible only when something is wrong
+    const pillSlave = el('pill-slave');
+    if (pillSlave) pillSlave.style.display = data.uart_ready ? 'none' : '';
 
-    const version = el('pill-version');
-    if (version) version.textContent = 'v' + (data.version || '?');
-
-    const uptime = el('uptime-label');
-    if (uptime) uptime.textContent = 'up ' + (data.uptime || '--');
+    // Cockpit pills — always updated (panel may be closed)
+    this._setCockpitHbPill(data.heartbeat_ok);
+    this._setCockpitUartPill(data.uart_ready, data.uart_health, data.uart_crc_errors ?? 0);
 
     const sysver = el('system-version');
     if (sysver) sysver.textContent =
@@ -4723,10 +4726,8 @@ class StatusPoller {
     this._offline = offline;
     const pillOffline = el('pill-offline');
     if (pillOffline) pillOffline.style.display = offline ? '' : 'none';
-    ['pill-heartbeat', 'pill-uart', 'pill-bt', 'pill-version'].forEach(id => {
-      const p = el(id);
-      if (p) p.style.display = offline ? 'none' : '';
-    });
+    const pillSlave = el('pill-slave');
+    if (pillSlave && offline) pillSlave.style.display = 'none';
     // Reload data when coming back online
     if (wasOffline && !offline) {
       audioBoard.loadCategories();
@@ -4735,26 +4736,31 @@ class StatusPoller {
     }
   }
 
-  _setUartPill(uartReady, health, masterCrcErrors) {
-    const p = el('pill-uart');
+  _setCockpitHbPill(heartbeatOk) {
+    const p = el('ck-pill-hb');
+    if (!p) return;
+    p.className = 'status-pill ' + (heartbeatOk ? 'ok' : 'error');
+    p.title     = heartbeatOk ? 'Heartbeat OK' : 'Heartbeat lost — app watchdog will fire';
+    for (const node of p.childNodes)
+      if (node.nodeType === Node.TEXT_NODE) node.textContent = 'HB';
+  },
+
+  _setCockpitUartPill(uartReady, health, masterCrcErrors) {
+    const p = el('ck-pill-uart');
     if (!p) return;
     const dot = p.querySelector('.pulse-dot');
     let cls, label, tooltip;
-
     if (!uartReady) {
-      // Port série pas ouvert — erreur niveau OS
       cls     = 'status-pill error';
       label   = 'UART';
       tooltip = 'Serial port not open';
     } else if (health == null) {
-      // Port ouvert mais Slave injoignable (ou pas encore pollé au démarrage)
-      cls     = 'status-pill warn';
-      label   = masterCrcErrors > 0 ? 'UART ERR' : 'UART';
+      cls     = masterCrcErrors > 0 ? 'status-pill error' : 'status-pill warn';
+      label   = 'UART';
       tooltip = masterCrcErrors > 0
         ? `Slave unreachable | Master invalid CRC: ${masterCrcErrors}`
         : 'Slave unreachable';
     } else {
-      // Port ouvert + données qualité disponibles — 3 niveaux
       const pct = health.health_pct;
       if      (pct >= 95) cls = 'status-pill ok';
       else if (pct >= 70) cls = 'status-pill warn';
@@ -4763,17 +4769,11 @@ class StatusPoller {
       tooltip = `${health.errors} errors / ${health.total} msg (${health.window_s}s)`
               + (masterCrcErrors > 0 ? ` | Master invalid CRC: ${masterCrcErrors}` : '');
     }
-
     p.className = cls;
     p.title     = tooltip;
-    if (dot) {
-      for (const node of p.childNodes) {
-        if (node.nodeType === Node.TEXT_NODE) node.textContent = label;
-      }
-    } else {
-      p.textContent = label;
-    }
-  }
+    for (const node of p.childNodes)
+      if (node.nodeType === Node.TEXT_NODE) node.textContent = label;
+  },
 
   _setPill(id, ok, label) {
     const p = el(id);
