@@ -4521,21 +4521,28 @@ const cockpitPanel = {
   },
 
   updateBtn(data) {
-    const alerts   = this._buildAlerts(data);
-    const hasAlert = alerts.some(a => a.cls !== 'ok');
-    const btn      = el('cockpit-btn');
-    if (btn) btn.classList.toggle('alert', hasAlert);
+    const alerts  = this._buildAlerts(data);
+    const hasDanger = alerts.some(a => a.cls === 'err');
+    const hasWarn   = !hasDanger && alerts.some(a => a.cls === 'warn');
+    const btn = el('cockpit-btn');
+    if (!btn) return;
+    btn.classList.toggle('danger', hasDanger);
+    btn.classList.toggle('alert',  hasWarn);
   },
 
   _updateAlerts(data) {
     const box = el('ck-alerts');
     if (!box) return;
-    const alerts  = this._buildAlerts(data);
-    const hasAlert = alerts.some(a => a.cls !== 'ok');
-    const panel   = el('cockpit-panel');
-    const btn     = el('cockpit-btn');
-    if (panel) panel.classList.toggle('has-alert', hasAlert);
-    if (btn)   btn.classList.toggle('alert', hasAlert);
+    const alerts    = this._buildAlerts(data);
+    const hasDanger = alerts.some(a => a.cls === 'err');
+    const hasWarn   = !hasDanger && alerts.some(a => a.cls === 'warn');
+    const panel     = el('cockpit-panel');
+    const btn       = el('cockpit-btn');
+    if (panel) panel.classList.toggle('has-alert', hasDanger || hasWarn);
+    if (btn) {
+      btn.classList.toggle('danger', hasDanger);
+      btn.classList.toggle('alert',  hasWarn);
+    }
     box.innerHTML = alerts.map(a =>
       `<span class="cockpit-alert ${a.cls}">${escapeHtml(a.msg)}</span>`
     ).join('');

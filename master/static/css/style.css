@@ -785,16 +785,16 @@ body[data-lock-mode="2"] #js-left-ring::after {
 }
 
 .estop-toggle-btn.estop-tripped {
-  background: rgba(0, 20, 10, 0.9);
-  border: 2px solid var(--green);
-  color: var(--green);
-  text-shadow: 0 0 8px var(--green);
+  background: rgba(20, 8, 0, 0.9);
+  border: 2px solid var(--orange);
+  color: var(--orange);
+  text-shadow: 0 0 8px var(--orange);
   animation: none;
 }
 
 .estop-toggle-btn.estop-tripped:hover,
 .estop-toggle-btn.estop-tripped:active {
-  background: var(--green);
+  background: var(--orange);
   color: #000;
   text-shadow: none;
 }
@@ -4336,6 +4336,11 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   border-color: var(--orange);
   color: var(--orange);
   background: rgba(255,136,0,0.1);
+}
+.cockpit-btn.danger {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(255,34,68,0.1);
 }
 
 .cockpit-panel {
