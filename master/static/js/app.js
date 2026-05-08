@@ -4518,7 +4518,7 @@ const cockpitPanel = {
     const box = el('ck-alerts');
     if (!box) return;
     const alerts  = this._buildAlerts(data);
-    const hasAlert = alerts.some(a => a.cls !== 'ok');
+    const hasAlert = alerts.some(a => a.cls !== 'ok' && !a.noBtn);
     const panel   = el('cockpit-panel');
     const btn     = el('cockpit-btn');
     if (panel) panel.classList.toggle('has-alert', hasAlert);
@@ -4561,7 +4561,7 @@ const cockpitPanel = {
     if (data.estop_active)
       alerts.push({ cls: 'err', msg: '⚠ E-STOP TRIPPED — servos cut' });
     if (data.vesc_bench_mode)
-      alerts.push({ cls: 'warn', msg: 'Bench mode ON — VESC safety bypassed' });
+      alerts.push({ cls: 'warn', msg: 'Bench mode ON — VESC safety bypassed', noBtn: true });
     if (alerts.length === 0)
       alerts.push({ cls: 'ok', msg: '✓ No issues detected' });
     return alerts;
