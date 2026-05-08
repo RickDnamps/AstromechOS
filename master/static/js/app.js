@@ -4491,13 +4491,13 @@ const cockpitPanel = {
       this._svcRow('Servo Dome', data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A') +
       this._svcRow('Servo Body', data.servo_ready      ? 'ok' : 'dim', data.servo_ready      ? '✓ OK' : '— N/A') +
       (Array.isArray(data.dome_hat_health) ? data.dome_hat_health.map(h =>
-        this._svcRow(`Dome HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
+        this._svcRow(`${data.master_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
       ).join('') : '') +
       (Array.isArray(data.body_hat_health) ? data.body_hat_health.map(h =>
-        this._svcRow(`Body HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
+        this._svcRow(`${data.slave_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
       ).join('') : '') +
       (data.motor_hat_health ?
-        this._svcRow(`Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
+        this._svcRow(`${data.slave_location} Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
                      data.motor_hat_health.ok ? '✓ OK' : '✗ not responding')
       : '');
   },
@@ -4597,17 +4597,17 @@ const cockpitPanel = {
     if (Array.isArray(data.dome_hat_health)) {
       data.dome_hat_health.forEach(h => {
         if (!h.ok)
-          alerts.push({ cls: 'warn', msg: `Dome HAT ${h.addr} — ${h.errors} I2C errors` });
+          alerts.push({ cls: 'warn', msg: `${data.master_location} Servo HAT ${h.addr} — ${h.errors} I2C errors` });
       });
     }
     if (Array.isArray(data.body_hat_health)) {
       data.body_hat_health.forEach(h => {
         if (!h.ok)
-          alerts.push({ cls: 'warn', msg: `Body HAT ${h.addr} — ${h.errors} I2C errors` });
+          alerts.push({ cls: 'warn', msg: `${data.slave_location} Servo HAT ${h.addr} — ${h.errors} I2C errors` });
       });
     }
     if (data.motor_hat_health && !data.motor_hat_health.ok)
-      alerts.push({ cls: 'err', msg: `Motor HAT ${data.motor_hat_health.addr} — not responding` });
+      alerts.push({ cls: 'err', msg: `${data.slave_location} Motor HAT ${data.motor_hat_health.addr} — not responding` });
     const rssi = data.bt_rssi;
     if (data.bt_connected && rssi != null && rssi <= -80)
       alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });
