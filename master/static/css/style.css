@@ -54,8 +54,8 @@
   --glow-cyan: 0 0 14px rgba(var(--cyan-rgb), 0.3);
   --glow-red:  0 0 18px rgba(255, 34, 68, 0.6);
   --radius:     8px;
-  --font:       'Courier New', Courier, monospace;
-  --font-data:  'Courier New', Courier, monospace;
+  --font:       'Orbitron', 'Courier New', monospace;
+  --font-data:  'Share Tech Mono', 'Courier New', monospace;
   --topbar-h:  52px;
   --tabbar-h:  42px;
   /* Theme-controlled — overridden per theme */

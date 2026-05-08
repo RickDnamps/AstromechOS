@@ -58,8 +58,6 @@ const _THEMES = {
       '--glow-cyan': '0 0 12px rgba(193,195,201,0.25)',
       '--text': '#eef4ff', '--text-dim': '#4466aa',
       '--scan-color': '#c1c3c9',
-      '--font': "'Orbitron', 'Courier New', monospace",
-      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   r2d2_light: {
@@ -105,8 +103,6 @@ const _THEMES = {
       '--status-warn': '#aa5500',
       '--status-err':  '#cc1133',
       '--val-color':   '#0849d6',
-      '--font': "'Orbitron', 'Courier New', monospace",
-      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   r5d4: {
@@ -121,8 +117,6 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(255,136,68,0.3)',
       '--text': '#eacaca', '--text-dim': '#8a4a4a',
       '--scan-color': '#ff8844',
-      '--font': "'Orbitron', 'Courier New', monospace",
-      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   bb8: {
@@ -137,8 +131,6 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(255,204,0,0.3)',
       '--text': '#ead8c0', '--text-dim': '#8a6840',
       '--scan-color': '#ffcc00',
-      '--font': "'Orbitron', 'Courier New', monospace",
-      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   chopper: {
@@ -153,8 +145,6 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(68,153,255,0.3)',
       '--text': '#dddab0', '--text-dim': '#7a7840',
       '--scan-color': '#4499ff',
-      '--font': "'Orbitron', 'Courier New', monospace",
-      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   r2q5: {
@@ -169,8 +159,6 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(204,17,34,0.3)',
       '--text': '#b0bcc8', '--text-dim': '#445566',
       '--scan-color': '#cc1122',
-      '--font': "'Orbitron', 'Courier New', monospace",
-      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
 };
@@ -295,7 +283,7 @@ function openThemeEditor(id) {
   if (!editor) return;
   editor.style.display = 'block';
   editor.dataset.editId = id || '';
-  document.getElementById('theme-editor-title').textContent = id ? 'MODIFIER THÈME' : 'NOUVEAU THÈME';
+  document.getElementById('theme-editor-title').textContent = id ? 'EDIT THEME' : 'NEW THEME';
   if (id) {
     const t = _loadCustomThemes().find(c => c.id === id);
     if (t) {
@@ -325,7 +313,7 @@ function closeThemeEditor() {
 
 function saveCustomTheme() {
   const name = document.getElementById('theme-editor-name').value.trim();
-  if (!name) { alert('Donne un nom au thème'); return; }
+  if (!name) { alert('Please enter a theme name'); return; }
   const editId  = document.getElementById('theme-editor').dataset.editId;
   const fontOpt = (document.querySelector('input[name="theme-font"]:checked') || {}).value || 'system';
   const entry = {
@@ -373,16 +361,16 @@ function _renderThemePicker() {
     const btn = document.createElement('button');
     btn.className = 'theme-btn' + (t.id === _activeTheme ? ' active' : '');
     btn.dataset.theme = t.id;
-    btn.onclick = () => applyTheme(t.id);
+    btn.onclick = () => openThemeEditor(t.id);
     btn.innerHTML = `<span class="theme-swatch" style="background:${t.swatch}"></span>${t.label}`;
     const editBtn = document.createElement('button');
     editBtn.className = 'theme-btn-edit';
-    editBtn.title = 'Modifier';
+    editBtn.title = 'Edit';
     editBtn.innerHTML = '✏';
     editBtn.onclick = e => { e.stopPropagation(); openThemeEditor(t.id); };
     const delBtn = document.createElement('button');
     delBtn.className = 'theme-btn-del';
-    delBtn.title = 'Supprimer';
+    delBtn.title = 'Delete';
     delBtn.innerHTML = '✕';
     delBtn.onclick = e => { e.stopPropagation(); deleteCustomTheme(t.id); };
     wrap.appendChild(btn);

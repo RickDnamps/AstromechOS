@@ -1601,18 +1601,18 @@
           <!-- Custom theme editor -->
           <div id="theme-editor" class="theme-editor" style="display:none">
             <div class="theme-editor-header">
-              <span id="theme-editor-title">NOUVEAU THÈME</span>
+              <span id="theme-editor-title">NEW THEME</span>
               <button class="btn btn-xs" onclick="closeThemeEditor()">✕</button>
             </div>
             <div class="theme-editor-body">
               <div class="theme-editor-main">
                 <div class="theme-editor-controls">
                   <div class="theme-editor-row">
-                    <label>Nom</label>
-                    <input type="text" id="theme-editor-name" class="input-text input-sm" placeholder="Mon Thème" maxlength="24">
+                    <label>Name</label>
+                    <input type="text" id="theme-editor-name" class="input-text input-sm" placeholder="My Theme" maxlength="24">
                   </div>
                   <div class="theme-editor-row">
-                    <label>Fond</label>
+                    <label>BG</label>
                     <input type="color" id="theme-editor-bg" value="#080c14" oninput="previewCustomTheme()">
                     <span class="theme-color-label" id="lbl-bg">#080c14</span>
                   </div>
@@ -1622,14 +1622,14 @@
                     <span class="theme-color-label" id="lbl-accent">#00aaff</span>
                   </div>
                   <div class="theme-editor-row">
-                    <label>Texte</label>
+                    <label>Text</label>
                     <input type="color" id="theme-editor-text" value="#c8d8ea" oninput="previewCustomTheme()">
                     <span class="theme-color-label" id="lbl-text">#c8d8ea</span>
                   </div>
                   <div class="theme-editor-row theme-editor-row-font">
-                    <label>Police</label>
+                    <label>Font</label>
                     <div class="font-picker">
-                      <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Système</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">System</span></label>
                       <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
                       <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech</span></label>
                     </div>
@@ -1675,12 +1675,12 @@
                 </div>
               </div>
               <div class="theme-editor-actions">
-                <button class="btn btn-sm" onclick="saveCustomTheme()">SAUVEGARDER</button>
-                <button class="btn btn-sm" onclick="closeThemeEditor()">ANNULER</button>
+                <button class="btn btn-sm" onclick="saveCustomTheme()">SAVE</button>
+                <button class="btn btn-sm" onclick="closeThemeEditor()">CANCEL</button>
               </div>
             </div>
           </div>
-          <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="openThemeEditor(null)">+ NOUVEAU THÈME</button>
+          <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="openThemeEditor(null)">+ NEW THEME</button>
         </section>
       </div>
 
