@@ -4542,23 +4542,23 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 /* ── Theme editor: live mini preview ── */
 .theme-editor-main {
   display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: flex-start;
 }
-.theme-editor-controls { flex: 1; min-width: 0; }
+.theme-editor-controls { width: 100%; }
 .theme-preview-clip {
-  width: 160px;
-  height: 220px;
+  width: 100%;
+  height: 210px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;
-  flex-shrink: 0;
   background: var(--bg);
+  position: relative;
 }
 .theme-preview-mini {
   width: 400px;
-  height: 550px;
-  transform: scale(0.4);
+  height: 350px;
+  transform: scale(0.58);
   transform-origin: top left;
   pointer-events: none;
   overflow: hidden;
