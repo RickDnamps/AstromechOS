@@ -102,7 +102,7 @@ TELEM_INTERVAL = 0.2   # 5 Hz
 
 class VescDriver(BaseDriver):
     """
-    VESC driver for R2-D2 differential drive.
+    VESC driver for robot differential drive.
 
     Topology: single USB to VESC ID 1, CAN forwarding to VESC ID 2.
     - Controls left/right motors via ERPM commands (closed-loop speed control)

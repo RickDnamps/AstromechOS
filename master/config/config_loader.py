@@ -69,7 +69,7 @@ def load() -> configparser.ConfigParser:
         print(f"  nano {LOCAL_CFG}")
         print("\nMinimum required in local.cfg:")
         print("  [github]")
-        print("  repo_url = https://github.com/TON_USER/r2d2.git")
+        print("  repo_url = https://github.com/TON_USER/AstromechOS.git")
         print("="*60 + "\n")
         sys.exit(1)
 

@@ -7,10 +7,10 @@
 
 [github]
 # URL de ton repo GitHub (ou fork)
-# Exemple original  : https://github.com/TON_USER/r2d2.git
-# Exemple fork      : https://github.com/FORK_USER/r2d2.git
-# Exemple SSH       : git@github.com:TON_USER/r2d2.git
-repo_url = https://github.com/RickDnamps/R2D2_Control.git
+# Exemple original  : https://github.com/TON_USER/AstromechOS.git
+# Exemple fork      : https://github.com/FORK_USER/AstromechOS.git
+# Exemple SSH       : git@github.com:TON_USER/AstromechOS.git
+repo_url = https://github.com/RickDnamps/AstromechOS.git
 
 # Branche à suivre (défaut: main)
 branch = main

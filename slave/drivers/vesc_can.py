@@ -37,7 +37,7 @@ Architecture:
 VESC 1 sert de pont USB↔CAN. Toutes les commandes vers VESC 2 passent par lui.
 
 ⚠️ IMPORTANT: Ne jamais activer "Multiple ESC over CAN" — cela synchroniserait
-   les deux moteurs et empêcherait la rotation différentielle de R2-D2.
+   les deux moteurs et empêcherait la rotation différentielle du robot.
    Chaque VESC doit recevoir des commandes INDÉPENDANTES.
 """
 
@@ -271,7 +271,7 @@ def get_values_can(ser, can_id: int) -> dict | None:
 
 def check_multi_esc(ser, can_id: int) -> bool | None:
     """
-    Vérifie si 'Multiple ESC over CAN' est activé (DANGEREUX pour R2-D2).
+    Vérifie si 'Multiple ESC over CAN' est activé (DANGEREUX pour le robot).
     ⚠️  Si True → les deux moteurs reçoivent la même commande → impossible de tourner !
     Retourne True=activé(danger), False=désactivé(ok), None=inconnu.
     Note: nécessite lecture AppConf complète — implémentation future.
