@@ -192,6 +192,13 @@ class _HealthHandler(BaseHTTPRequestHandler):
                 body_servo.hat_health() if body_servo is not None and body_servo.is_ready() else []
             )
             stats['motor_hat_health'] = _probe_motor_hat(self.server.motor_hat_addr)
+            display = self.server.display
+            if display is not None:
+                stats['display_ready'] = display.is_ready()
+                stats['display_port']  = display.used_port
+            else:
+                stats['display_ready'] = False
+                stats['display_port']  = None
             self._json(stats)
         elif self.path == '/audio/bt/status':
             self._json(_bt_status())
@@ -298,11 +305,12 @@ class _HealthHandler(BaseHTTPRequestHandler):
         pass   # suppress access logs
 
 
-def start_health_server(uart_listener, body_servo=None, port: int = _DEFAULT_PORT) -> None:
+def start_health_server(uart_listener, body_servo=None, display=None, port: int = _DEFAULT_PORT) -> None:
     """Start the HTTP health + BT server as a daemon thread (non-blocking)."""
     server = HTTPServer(('', port), _HealthHandler)
     server.uart_listener   = uart_listener
     server.body_servo      = body_servo
+    server.display         = display
     server.motor_hat_addr  = _read_motor_hat_addr()
     threading.Thread(
         target=server.serve_forever,

@@ -254,6 +254,8 @@ def get_status():
         'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],
         'body_hat_health':   (reg.slave_uart_health or {}).get('body_hat_health', []),
         'motor_hat_health':  (reg.slave_uart_health or {}).get('motor_hat_health'),
+        'display_ready':     (reg.slave_uart_health or {}).get('display_ready'),
+        'display_port':      (reg.slave_uart_health or {}).get('display_port'),
         'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
         'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('curr'),

@@ -4503,7 +4503,12 @@ const cockpitPanel = {
       (data.motor_hat_health
         ? this._svcRow(`${data.slave_location} Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
                        data.motor_hat_health.ok ? '✓ OK' : '✗ not responding')
-        : '');
+        : '') +
+      (data.display_ready != null
+        ? this._svcRow(`${data.slave_location} Screen`,
+                       data.display_ready ? 'ok' : 'warn',
+                       data.display_ready ? `✓ ${data.display_port || 'OK'}` : '⚠ not connected')
+        : this._svcRow(`${data.slave_location} Screen`, 'dim', '— N/A'));
   },
 
   _updateActivity(data) {
@@ -4612,6 +4617,8 @@ const cockpitPanel = {
     }
     if (data.motor_hat_health && !data.motor_hat_health.ok)
       alerts.push({ cls: 'err', msg: `${data.slave_location} Motor HAT ${data.motor_hat_health.addr} — not responding` });
+    if (data.display_ready === false)
+      alerts.push({ cls: 'warn', msg: `${data.slave_location} Screen (RP2040) not connected` });
     const rssi = data.bt_rssi;
     if (data.bt_connected && rssi != null && rssi <= -80)
       alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });
