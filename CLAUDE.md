@@ -122,7 +122,10 @@ POST /teeces/random|leia|off
 POST /teeces/text               {"text":"HELLO"}
 POST /teeces/psi                {"mode":1}
 
-POST /system/update|reboot|reboot_slave
+POST /system/update             git pull + rsync Slave + reboot Slave
+POST /system/rollback           git checkout HEAD^ + rsync Slave + reboot Slave
+POST /system/reboot             reboot Master
+POST /system/reboot_slave       reboot Slave via UART
 POST /system/estop              coupe PWM PCA9685 Master+Slave, _ready=False
 POST /system/estop_reset        réarme drivers sans restart
 
@@ -289,6 +292,7 @@ SSH     artoo / deetoo
 | 4+++ | Choreo admin guard · Arms body-panel auto-dispatch · Settings sidebar refonte · Choreo toolbar/footer | ✅ |
 | 4++++ | Sequences tab redesign : catégories + emoji + pills/grid · Behavior engine ALIVE | ✅ |
 | 4+++++ | Arms : séquence panel→delay→arm · all_body arm-aware · labels Calibration dans Choreo · auto-label prefix-safe | ✅ |
+| 4++++++ | GPIO dome button retiré · Rollback web UI · Hardware config UI (HATs + uart_lat) · repo_url éditable | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -349,7 +353,7 @@ host = cfg.get('slave', 'host', fallback='r2-slave.local')
 Repo : https://github.com/RickDnamps/AstromechOS.git   Branch : main
 ```
 
-**Bouton dôme :** court = git pull + rsync + reboot Slave · long = rollback HEAD^
+**Bouton dôme :** retiré (sécurité conventions). Deploy et Rollback accessibles via l'UI web → onglet Settings → Deploy.
 
 ---
 

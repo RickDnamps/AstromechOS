@@ -105,7 +105,7 @@ flowchart TB
         FLASK["🌐 Flask REST API\nport 5000"]
         ENGINE["🎬 Script Engine\n40 behavioral sequences"]
         UART_M["📡 UART Controller\nHeartbeat every 200ms"]
-        DEPLOY["🔘 Deploy Controller\nDome button — git pull + rsync"]
+        DEPLOY["🚀 Deploy Controller\ngit pull + rsync Slave — web UI"]
 
         subgraph MASTER_HW["Master Hardware"]
             direction LR
@@ -282,7 +282,7 @@ flowchart LR
     PC    <-->|"Wi-Fi  192.168.4.1:5000"| WLAN0
     WLAN0_S <-->|"hotspot"| WLAN0
     WLAN1 <-->|"home Wi-Fi"| INTERNET
-    WLAN1 -.->|"git pull on boot\nor dome button"| GITHUB
+    WLAN1 -.->|"git pull on boot\nor web UI deploy"| GITHUB
 ```
 
 ---
@@ -389,7 +389,7 @@ slave_motor_hat = 0x40          # ⚠️ Motor HAT guard — never add 0x40 to s
 | **14** | UART TX | → slip ring → other Pi RX |
 | **15** | UART RX | ← slip ring ← other Pi TX |
 | **2, 4** | 5V power in | GPIO header pins — Pi powered from buck (bypass USB-C) |
-| **XX** | Dome button | BCM pin TBD — configure in `local.cfg [deploy] button_pin` |
+| — | Dome button | Removed in v2 — deploy/rollback via web UI (Settings → Deploy) |
 
 ### USB Ports — Slave Pi
 
