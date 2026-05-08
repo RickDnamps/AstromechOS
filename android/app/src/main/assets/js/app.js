@@ -279,6 +279,16 @@ function _buildCustomVars() {
   };
 }
 
+function _fitPreview() {
+  const clip = document.querySelector('.theme-preview-clip');
+  const mini = document.querySelector('.theme-preview-mini');
+  if (!clip || !mini) return;
+  const W = 900, H = 850;
+  const scale = clip.offsetWidth / W;
+  mini.style.transform = `scale(${scale})`;
+  clip.style.height = Math.ceil(H * scale) + 'px';
+}
+
 function previewCustomTheme() {
   const vars = _buildCustomVars();
   const root = document.documentElement;
@@ -289,6 +299,7 @@ function previewCustomTheme() {
     const inp = document.getElementById('theme-editor-' + f);
     if (lbl && inp) lbl.textContent = inp.value;
   });
+  _fitPreview();
 }
 
 function openThemeEditor(id) {
@@ -297,6 +308,7 @@ function openThemeEditor(id) {
   editor.style.display = 'block';
   editor.dataset.editId = id || '';
   document.getElementById('theme-editor-title').textContent = id ? 'EDIT THEME' : 'NEW THEME';
+  setTimeout(_fitPreview, 0);
   const defaults = {
     bg: '#080c14', topbar: '#050810', card: '#0d1525',
     accent: '#00aaff', text: '#c8d8ea',
@@ -407,6 +419,7 @@ function _renderThemePicker() {
 
 function _initThemes() {
   _renderThemePicker();
+  window.addEventListener('resize', _fitPreview);
 }
 
 // Apply saved theme immediately when script loads — before first paint
