@@ -35,6 +35,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AstromechOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/css/style.css">
   <!-- PWA -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -1594,9 +1597,90 @@
         </section>
         <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">THEMES</h2>
-          <div class="theme-grid" id="theme-grid">
-            <!-- Populated by JS -->
+          <div class="theme-grid" id="theme-grid"><!-- Populated by JS --></div>
+          <!-- Custom theme editor -->
+          <div id="theme-editor" class="theme-editor" style="display:none">
+            <div class="theme-editor-header">
+              <span id="theme-editor-title">NOUVEAU THÈME</span>
+              <button class="btn btn-xs" onclick="closeThemeEditor()">✕</button>
+            </div>
+            <div class="theme-editor-body">
+              <div class="theme-editor-main">
+                <div class="theme-editor-controls">
+                  <div class="theme-editor-row">
+                    <label>Nom</label>
+                    <input type="text" id="theme-editor-name" class="input-text input-sm" placeholder="Mon Thème" maxlength="24">
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Fond</label>
+                    <input type="color" id="theme-editor-bg" value="#080c14" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-bg">#080c14</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Accent</label>
+                    <input type="color" id="theme-editor-accent" value="#00aaff" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-accent">#00aaff</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Texte</label>
+                    <input type="color" id="theme-editor-text" value="#c8d8ea" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-text">#c8d8ea</span>
+                  </div>
+                  <div class="theme-editor-row theme-editor-row-font">
+                    <label>Police</label>
+                    <div class="font-picker">
+                      <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Système</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
+                      <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech</span></label>
+                    </div>
+                  </div>
+                </div>
+                <!-- Live mini preview — inherits CSS vars from document.documentElement -->
+                <div class="theme-preview-clip">
+                  <div class="theme-preview-mini">
+                    <div class="theme-preview-topbar">⚙ AstromechOS<span>R2-D2 ●</span></div>
+                    <div class="theme-preview-tabs">
+                      <div class="theme-preview-tab active">DRIVE</div>
+                      <div class="theme-preview-tab">AUDIO</div>
+                      <div class="theme-preview-tab">CHOREO</div>
+                    </div>
+                    <div class="theme-preview-body">
+                      <div class="theme-preview-card">
+                        <div class="theme-preview-card-title">STATUS</div>
+                        <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:3px">
+                          <div class="theme-preview-pill ok">VESC ●</div>
+                          <div class="theme-preview-pill">UART ●</div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:4px">
+                        <div class="theme-preview-card-title">AUDIO</div>
+                        <div style="display:flex;gap:3px;margin-top:3px">
+                          <div class="theme-preview-btn-accent">PLAY</div>
+                          <div class="theme-preview-btn">STOP</div>
+                        </div>
+                        <div class="theme-preview-bar" style="margin-top:4px">
+                          <div class="theme-preview-bar-fill"></div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:4px">
+                        <div class="theme-preview-card-title">DRIVE</div>
+                        <div style="display:flex;gap:3px;margin-top:3px">
+                          <div class="theme-preview-btn">◀ L</div>
+                          <div class="theme-preview-btn">▶ R</div>
+                          <div class="theme-preview-btn">■ STOP</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="theme-editor-actions">
+                <button class="btn btn-sm" onclick="saveCustomTheme()">SAUVEGARDER</button>
+                <button class="btn btn-sm" onclick="closeThemeEditor()">ANNULER</button>
+              </div>
+            </div>
           </div>
+          <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="openThemeEditor(null)">+ NOUVEAU THÈME</button>
         </section>
       </div>
 

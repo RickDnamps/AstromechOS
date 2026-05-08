@@ -58,6 +58,8 @@ const _THEMES = {
       '--glow-cyan': '0 0 12px rgba(193,195,201,0.25)',
       '--text': '#eef4ff', '--text-dim': '#4466aa',
       '--scan-color': '#c1c3c9',
+      '--font': "'Orbitron', 'Courier New', monospace",
+      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   r2d2_light: {
@@ -103,6 +105,8 @@ const _THEMES = {
       '--status-warn': '#aa5500',
       '--status-err':  '#cc1133',
       '--val-color':   '#0849d6',
+      '--font': "'Orbitron', 'Courier New', monospace",
+      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   r5d4: {
@@ -117,6 +121,8 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(255,136,68,0.3)',
       '--text': '#eacaca', '--text-dim': '#8a4a4a',
       '--scan-color': '#ff8844',
+      '--font': "'Orbitron', 'Courier New', monospace",
+      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   bb8: {
@@ -131,6 +137,8 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(255,204,0,0.3)',
       '--text': '#ead8c0', '--text-dim': '#8a6840',
       '--scan-color': '#ffcc00',
+      '--font': "'Orbitron', 'Courier New', monospace",
+      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   chopper: {
@@ -145,6 +153,8 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(68,153,255,0.3)',
       '--text': '#dddab0', '--text-dim': '#7a7840',
       '--scan-color': '#4499ff',
+      '--font': "'Orbitron', 'Courier New', monospace",
+      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
   r2q5: {
@@ -159,20 +169,31 @@ const _THEMES = {
       '--glow-cyan': '0 0 14px rgba(204,17,34,0.3)',
       '--text': '#b0bcc8', '--text-dim': '#445566',
       '--scan-color': '#cc1122',
+      '--font': "'Orbitron', 'Courier New', monospace",
+      '--font-data': "'Share Tech Mono', 'Courier New', monospace",
     },
   },
 };
 
 let _activeTheme = 'default';
 
+// ----------------------------------------------------------------
+// Theme application
+// ----------------------------------------------------------------
 function applyTheme(id) {
-  const theme = _THEMES[id];
-  if (!theme) return;
+  let vars = null;
+  if (_THEMES[id]) {
+    vars = _THEMES[id].vars;
+  } else {
+    const custom = _loadCustomThemes().find(c => c.id === id);
+    if (custom) vars = custom.vars;
+  }
+  if (!vars && id !== 'default') return;
   _activeTheme = id;
   const root = document.documentElement;
   root.removeAttribute('style');
-  if (id !== 'default') {
-    Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  if (id !== 'default' && vars) {
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
   localStorage.setItem('astromech-theme', id);
   document.querySelectorAll('.theme-btn').forEach(b =>
@@ -180,9 +201,161 @@ function applyTheme(id) {
   );
 }
 
-function _initThemes() {
+// ----------------------------------------------------------------
+// Theme customizer
+// ----------------------------------------------------------------
+const _CUSTOM_THEMES_KEY = 'astromech-custom-themes';
+
+function _loadCustomThemes() {
+  try { return JSON.parse(localStorage.getItem(_CUSTOM_THEMES_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+
+function _saveCustomThemesStore(list) {
+  localStorage.setItem(_CUSTOM_THEMES_KEY, JSON.stringify(list));
+}
+
+function _hexToRgbStr(hex) {
+  return [
+    parseInt(hex.slice(1,3),16),
+    parseInt(hex.slice(3,5),16),
+    parseInt(hex.slice(5,7),16)
+  ].join(', ');
+}
+
+function _shadeHex(hex, amt) {
+  const clamp = v => Math.min(255, Math.max(0, v));
+  const r = clamp(parseInt(hex.slice(1,3),16) + amt);
+  const g = clamp(parseInt(hex.slice(3,5),16) + amt);
+  const b = clamp(parseInt(hex.slice(5,7),16) + amt);
+  return '#' + [r,g,b].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function _buildCustomVars() {
+  const bg      = document.getElementById('theme-editor-bg').value;
+  const accent  = document.getElementById('theme-editor-accent').value;
+  const textVal = document.getElementById('theme-editor-text').value;
+  const fontOpt = (document.querySelector('input[name="theme-font"]:checked') || {}).value || 'system';
+  const bg2 = _shadeHex(bg, 6);
+  const bg3 = _shadeHex(bg, 12);
+  const accent2 = _shadeHex(accent, 40);
+  const fontUI   = fontOpt === 'orbitron'   ? "'Orbitron', 'Courier New', monospace"
+                 : fontOpt === 'sharetech'  ? "'Share Tech Mono', 'Courier New', monospace"
+                 :                            "'Courier New', Courier, monospace";
+  const fontData = fontOpt === 'sharetech'  ? "'Share Tech Mono', 'Courier New', monospace"
+                 : fontOpt === 'orbitron'   ? "'Orbitron', 'Courier New', monospace"
+                 :                            "'Courier New', Courier, monospace";
+  const bgRgb     = _hexToRgbStr(bg);
+  const accentRgb = _hexToRgbStr(accent);
+  const accent2Rgb= _hexToRgbStr(accent2);
+  return {
+    '--bg': bg, '--bg2': bg2, '--bg3': bg3,
+    '--bg-card': `rgba(${bgRgb},0.92)`,
+    '--blue': accent, '--blue-rgb': accentRgb,
+    '--cyan': accent2, '--cyan-rgb': accent2Rgb, '--teal': accent2,
+    '--text': textVal, '--text-dim': `rgba(${_hexToRgbStr(textVal)},0.5)`,
+    '--topbar-bg': _shadeHex(bg, -10),
+    '--sidebar-bg': `rgba(${bgRgb},0.5)`,
+    '--input-bg': `rgba(${bgRgb},0.8)`,
+    '--input-option': bg2,
+    '--bg-dark-overlay': 'rgba(0,0,0,0.4)',
+    '--card-dark': `rgba(${_hexToRgbStr(bg2)},0.7)`,
+    '--pill-bg': `rgba(${_hexToRgbStr(bg2)},0.8)`,
+    '--btn-bg': `rgba(${accentRgb},0.12)`,
+    '--btn-hover-bg': `rgba(${accentRgb},0.25)`,
+    '--modal-overlay': 'rgba(0,0,0,0.6)',
+    '--modal-bg': `rgba(${bgRgb},0.95)`,
+    '--surface-dim': `rgba(${accentRgb},0.04)`,
+    '--surface': `rgba(${accentRgb},0.06)`,
+    '--surface-subtle': `rgba(${accentRgb},0.07)`,
+    '--surface2': `rgba(${accentRgb},0.09)`,
+    '--surface3': `rgba(${accentRgb},0.12)`,
+    '--surface4': `rgba(${accentRgb},0.15)`,
+    '--surface5': `rgba(${accentRgb},0.20)`,
+    '--glow': `0 0 14px rgba(${accentRgb},0.35)`,
+    '--glow-cyan': `0 0 14px rgba(${accent2Rgb},0.3)`,
+    '--scan-color': accent,
+    '--font': fontUI,
+    '--font-data': fontData,
+  };
+}
+
+function previewCustomTheme() {
+  const vars = _buildCustomVars();
+  const root = document.documentElement;
+  root.removeAttribute('style');
+  Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  const lbg   = document.getElementById('lbl-bg');     if (lbg)   lbg.textContent   = document.getElementById('theme-editor-bg').value;
+  const lacc  = document.getElementById('lbl-accent');  if (lacc)  lacc.textContent  = document.getElementById('theme-editor-accent').value;
+  const ltxt  = document.getElementById('lbl-text');    if (ltxt)  ltxt.textContent  = document.getElementById('theme-editor-text').value;
+}
+
+function openThemeEditor(id) {
+  const editor = document.getElementById('theme-editor');
+  if (!editor) return;
+  editor.style.display = 'block';
+  editor.dataset.editId = id || '';
+  document.getElementById('theme-editor-title').textContent = id ? 'MODIFIER THÈME' : 'NOUVEAU THÈME';
+  if (id) {
+    const t = _loadCustomThemes().find(c => c.id === id);
+    if (t) {
+      document.getElementById('theme-editor-name').value    = t.label        || '';
+      document.getElementById('theme-editor-bg').value      = t._pickerBg    || '#080c14';
+      document.getElementById('theme-editor-accent').value  = t._pickerAccent|| '#00aaff';
+      document.getElementById('theme-editor-text').value    = t._pickerText  || '#c8d8ea';
+      const r = document.querySelector(`input[name="theme-font"][value="${t._pickerFont||'system'}"]`);
+      if (r) r.checked = true;
+    }
+  } else {
+    document.getElementById('theme-editor-name').value   = '';
+    document.getElementById('theme-editor-bg').value     = '#080c14';
+    document.getElementById('theme-editor-accent').value = '#00aaff';
+    document.getElementById('theme-editor-text').value   = '#c8d8ea';
+    const r = document.querySelector('input[name="theme-font"][value="system"]');
+    if (r) r.checked = true;
+  }
+  previewCustomTheme();
+}
+
+function closeThemeEditor() {
+  const editor = document.getElementById('theme-editor');
+  if (editor) editor.style.display = 'none';
+  applyTheme(_activeTheme);
+}
+
+function saveCustomTheme() {
+  const name = document.getElementById('theme-editor-name').value.trim();
+  if (!name) { alert('Donne un nom au thème'); return; }
+  const editId  = document.getElementById('theme-editor').dataset.editId;
+  const fontOpt = (document.querySelector('input[name="theme-font"]:checked') || {}).value || 'system';
+  const entry = {
+    id: editId || ('custom_' + Date.now()),
+    label: name,
+    swatch: document.getElementById('theme-editor-accent').value,
+    vars: _buildCustomVars(),
+    _pickerBg:     document.getElementById('theme-editor-bg').value,
+    _pickerAccent: document.getElementById('theme-editor-accent').value,
+    _pickerText:   document.getElementById('theme-editor-text').value,
+    _pickerFont:   fontOpt,
+  };
+  const list = _loadCustomThemes().filter(c => c.id !== entry.id);
+  list.push(entry);
+  _saveCustomThemesStore(list);
+  document.getElementById('theme-editor').style.display = 'none';
+  _renderThemePicker();
+  applyTheme(entry.id);
+}
+
+function deleteCustomTheme(id) {
+  _saveCustomThemesStore(_loadCustomThemes().filter(c => c.id !== id));
+  _renderThemePicker();
+  if (_activeTheme === id) applyTheme('default');
+}
+
+function _renderThemePicker() {
   const grid = document.getElementById('theme-grid');
   if (!grid) return;
+  grid.innerHTML = '';
   Object.entries(_THEMES).forEach(([id, theme]) => {
     const btn = document.createElement('button');
     btn.className = 'theme-btn' + (id === _activeTheme ? ' active' : '');
@@ -194,17 +367,56 @@ function _initThemes() {
     btn.innerHTML = `<span class="theme-swatch" style="${swatchStyle}"></span>${theme.label}`;
     grid.appendChild(btn);
   });
+  _loadCustomThemes().forEach(t => {
+    const wrap = document.createElement('div');
+    wrap.className = 'theme-btn-custom';
+    const btn = document.createElement('button');
+    btn.className = 'theme-btn' + (t.id === _activeTheme ? ' active' : '');
+    btn.dataset.theme = t.id;
+    btn.onclick = () => applyTheme(t.id);
+    btn.innerHTML = `<span class="theme-swatch" style="background:${t.swatch}"></span>${t.label}`;
+    const editBtn = document.createElement('button');
+    editBtn.className = 'theme-btn-edit';
+    editBtn.title = 'Modifier';
+    editBtn.innerHTML = '✏';
+    editBtn.onclick = e => { e.stopPropagation(); openThemeEditor(t.id); };
+    const delBtn = document.createElement('button');
+    delBtn.className = 'theme-btn-del';
+    delBtn.title = 'Supprimer';
+    delBtn.innerHTML = '✕';
+    delBtn.onclick = e => { e.stopPropagation(); deleteCustomTheme(t.id); };
+    wrap.appendChild(btn);
+    wrap.appendChild(editBtn);
+    wrap.appendChild(delBtn);
+    grid.appendChild(wrap);
+  });
+}
+
+function _initThemes() {
+  _renderThemePicker();
 }
 
 // Apply saved theme immediately when script loads — before first paint
 ;(function () {
   const saved = localStorage.getItem('astromech-theme');
-  const id = (saved && _THEMES[saved]) ? saved : 'default';
+  let id = 'default';
+  if (saved) {
+    if (_THEMES[saved]) {
+      id = saved;
+    } else {
+      const customs = _loadCustomThemes();
+      if (customs.find(c => c.id === saved)) id = saved;
+    }
+  }
   _activeTheme = id;
-  if (id !== 'default') {
-    const vars = _THEMES[id].vars;
-    const root = document.documentElement;
-    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  if (id === 'default') return;
+  const root = document.documentElement;
+  const builtIn = _THEMES[id];
+  if (builtIn) {
+    Object.entries(builtIn.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  } else {
+    const custom = _loadCustomThemes().find(c => c.id === id);
+    if (custom) Object.entries(custom.vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
 }());
 
