@@ -503,6 +503,17 @@ def set_robot_icon():
     return jsonify({'status': 'ok', 'icon': icon})
 
 
+@settings_bp.post('/settings/robot_locations')
+def set_robot_locations():
+    """Saves master/slave display location names. Body: {\"master_location\":\"Dome\",\"slave_location\":\"Body\"}"""
+    data   = request.get_json() or {}
+    master = data.get('master_location', '').strip()[:20]
+    slave  = data.get('slave_location',  '').strip()[:20]
+    if master: _write_key('robot', 'master_location', master)
+    if slave:  _write_key('robot', 'slave_location',  slave)
+    return jsonify({'status': 'ok', 'master_location': master, 'slave_location': slave})
+
+
 @settings_bp.post('/settings/robot_name')
 def set_robot_name():
     """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""

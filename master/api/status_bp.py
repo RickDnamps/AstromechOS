@@ -86,6 +86,12 @@ def _robot_icon() -> str:
     return cfg.get('robot', 'icon', fallback='')
 
 
+def _robot_location(key: str, fallback: str) -> str:
+    cfg = configparser.ConfigParser()
+    cfg.read([_MAIN_CFG, _LOCAL_CFG])
+    return cfg.get('robot', key, fallback=fallback)
+
+
 def _mem_info() -> dict | None:
     try:
         info = {}
@@ -202,8 +208,10 @@ def get_status():
     # BT controller status
     bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
     return jsonify({
-        'robot_name':   _robot_name(),
-        'robot_icon':   _robot_icon(),
+        'robot_name':        _robot_name(),
+        'robot_icon':        _robot_icon(),
+        'master_location':   _robot_location('master_location', 'Dome'),
+        'slave_location':    _robot_location('slave_location',  'Body'),
         'version':      _read_version(),
         'uptime':       _uptime(),
         'temperature':  _cpu_temp(),

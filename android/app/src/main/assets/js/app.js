@@ -2074,6 +2074,8 @@ class ServoPanel {
 
 // Servo calibration config (loaded from /servo/settings at init)
 let _servoCfg = { panels: {}, dome_hats: [], body_hats: [] };
+let _masterLocation = 'Dome';
+let _slaveLocation  = 'Body';
 
 // HAT ServoPanel registry — keyed by grid div id
 const _hatPanels = {};
@@ -2083,7 +2085,8 @@ function _renderHatBlocks(container, hats, apiPrefix, side) {
   container.innerHTML = '';
   hats.forEach(hat => {
     const gridId  = `${side}-servo-hat${hat.hat}-list`;
-    const label   = hats.length > 1 ? `${side === 'dome' ? 'DOME' : 'BODY'} SERVOS ${hat.hat} (${hat.addr})` : `${side === 'dome' ? 'DOME' : 'BODY'} SERVOS`;
+    const loc   = (side === 'dome' ? _masterLocation : _slaveLocation).toUpperCase();
+    const label = hats.length > 1 ? `${loc} SERVOS ${hat.hat} (${hat.addr})` : `${loc} SERVOS`;
     const varKey  = `_hatPanels['${gridId}']`;
     const section = document.createElement('section');
     section.className = 'card systems-card';
@@ -4211,6 +4214,11 @@ class StatusPoller {
       if (nameInput && !nameInput.matches(':focus')) nameInput.value = data.robot_name;
     }
 
+    // Location names — Dome/Body can be renamed per robot
+    if (data.master_location || data.slave_location) {
+      _applyLocationLabels(data.master_location || 'Dome', data.slave_location || 'Body');
+    }
+
     // Robot icon — update header icon wrap + highlight selected picker btn
     if (data.robot_icon !== undefined) _applyRobotIcon(data.robot_icon);
 
@@ -4964,6 +4972,47 @@ async function uploadIcon(input) {
 // Wire up icon picker (called once DOM is ready)
 function _initIconPicker() {
   loadIconPicker();
+}
+
+function _applyLocationLabels(master, slave) {
+  _masterLocation = master || 'Dome';
+  _slaveLocation  = slave  || 'Body';
+  const mu = _masterLocation.toUpperCase();
+  const su = _slaveLocation.toUpperCase();
+  const joyLbl = el('joystick-master-label');
+  if (joyLbl) joyLbl.textContent = mu;
+  const domeBtn = el('chor-btn-dome');
+  if (domeBtn) domeBtn.textContent = `+ ${mu}`;
+  const domeSrv = el('chor-btn-dome-srv');
+  if (domeSrv) domeSrv.textContent = `+ ${mu} SRV`;
+  const bodySrv = el('chor-btn-body-srv');
+  if (bodySrv) bodySrv.textContent = `+ ${su} SRV`;
+  // Pre-fill settings inputs if not focused
+  const mInput = el('master-location-input');
+  if (mInput && !mInput.matches(':focus')) mInput.value = _masterLocation;
+  const sInput = el('slave-location-input');
+  if (sInput && !sInput.matches(':focus')) sInput.value = _slaveLocation;
+  // Re-render calibration headers
+  renderCalibration();
+}
+
+async function saveRobotLocations() {
+  const master = el('master-location-input')?.value.trim();
+  const slave  = el('slave-location-input')?.value.trim();
+  const status = el('robot-locations-status');
+  if (!master || !slave) {
+    if (status) { status.textContent = 'Both fields required'; status.className = 'settings-status error'; }
+    return;
+  }
+  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+  const d = await api('/settings/robot_locations', 'POST', { master_location: master, slave_location: slave });
+  if (d?.status === 'ok') {
+    _applyLocationLabels(master, slave);
+    toast(`Locations: ${master} / ${slave}`, 'ok');
+    if (status) { status.textContent = 'Saved'; status.className = 'settings-status ok'; }
+  } else {
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  }
 }
 
 async function saveRobotName() {

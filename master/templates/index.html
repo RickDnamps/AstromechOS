@@ -407,7 +407,7 @@
 
       <!-- Right joystick — Dome -->
       <div class="joystick-panel joystick-panel-right">
-        <div class="joystick-label">DOME</div>
+        <div class="joystick-label" id="joystick-master-label">DOME</div>
         <div class="joystick-ring" id="js-right-ring">
           <div class="joystick-crosshair"></div>
           <div class="joystick-knob" id="js-right-knob"></div>
@@ -817,19 +817,19 @@
         <div class="chor-track-row chor-track-row-dome" data-track="dome">
           <div class="chor-src-btn" data-track="dome"
                data-tpl='{"angle":0,"easing":"linear"}'
-               draggable="true">+ DOME</div>
+               draggable="true" id="chor-btn-dome">+ DOME</div>
         </div>
 
         <div class="chor-track-row" data-track="dome_servos">
           <div class="chor-src-btn" data-track="dome_servos"
                data-tpl='{"servo":"","action":"open","duration":1,"group":"dome"}'
-               draggable="true">+ DOME SRV</div>
+               draggable="true" id="chor-btn-dome-srv">+ DOME SRV</div>
         </div>
 
         <div class="chor-track-row" data-track="body_servos">
           <div class="chor-src-btn" data-track="body_servos"
                data-tpl='{"servo":"","action":"open","duration":1,"group":"body"}'
-               draggable="true">+ BODY SRV</div>
+               draggable="true" id="chor-btn-body-srv">+ BODY SRV</div>
         </div>
 
         <div class="chor-track-row" data-track="arm_servos">
@@ -1561,6 +1561,16 @@
           </div>
           <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
           <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Master Pi — location name</label>
+            <input type="text" id="master-location-input" class="settings-input" maxlength="20" placeholder="Dome">
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave Pi — location name</label>
+            <input type="text" id="slave-location-input" class="settings-input" maxlength="20" placeholder="Body">
+          </div>
+          <button class="btn btn-primary admin-only" onclick="saveRobotLocations()">SAVE LOCATIONS</button>
+          <div class="settings-status" id="robot-locations-status"></div>
           <div class="settings-divider admin-only"></div>
           <div class="settings-row admin-only" style="flex-direction:column;align-items:flex-start;gap:10px">
             <label class="settings-label">Robot icon</label>
