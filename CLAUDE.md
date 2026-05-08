@@ -294,10 +294,11 @@ SSH     artoo / deetoo
 | 4+++++ | Arms : séquence panel→delay→arm · all_body arm-aware · labels Calibration dans Choreo · auto-label prefix-safe | ✅ |
 | 4++++++ | GPIO dome button retiré · Rollback web UI · Hardware config UI (HATs + uart_lat) · repo_url éditable | ✅ |
 | 4+++++++ | CSS variable system · 8 built-in themes · Blueprint light · theme customizer with live preview · sci-fi fonts | ✅ |
+| 4++++++++ | Topbar clean · Cockpit pills HB/UART/BT · pill SLAVE · E-STOP red overlay · STATUS button toujours à jour | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
-**E-STOP :** toggle ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI uniquement.
+**E-STOP :** toggle ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI + overlay rouge pulsant sur tout l'écran. Syncé depuis `/status` → survit à un reload de page.
 **Joystick :** throttle 60 req/s · **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
 **Caméra :** MJPEG proxy last-connect-wins · `r2d2-camera.service` Restart=always + watchdog `/dev/videoN` dans `scripts/camera-start.sh`. (`bd memories camera` pour détails)
 
@@ -327,6 +328,25 @@ Dans le Choreo timeline : Dome Servo track → seulement `ALL DOME` · Body Serv
 
 **Labels servos dans Choreo :** ARM SLOT dropdown + block label utilisent le label de Calibration
 (lu depuis `_servoSettings` via `GET /servo/settings`). `armsConfig` rechargé à chaque `choreoEditor.init()`.
+
+---
+
+## 🖥️ Topbar & Cockpit Status Panel — Gotchas
+
+**Topbar (clean):** brand · `pill-offline` (hidden, Master unreachable) · `pill-slave` (hidden, Slave offline/UART down) · `cockpit-btn` STATUS · battery arc · temp + clock. No uptime, no HB/UART/BT/Version pills.
+
+**pill-slave logic:** visible when `!uart_ready || uart_health == null`. Hidden when offline (pill-offline takes over).
+
+**Cockpit pills row (`#cockpit-panel .cockpit-pills-row`):**
+- `ck-pill-hb` — green `heartbeat_ok`, red `!heartbeat_ok`
+- `ck-pill-uart` — green ≥95% · orange 70–94% · red <70% or DOWN. Updated every poll via `_setCockpitUartPill()` in `StatusPoller`
+- `ck-pill-bt` — green connected · orange RSSI ≤ -75 dBm · dim disconnected. Updated via `btController._updatePill()` (targets `ck-pill-bt` / `ck-pill-bt-label`)
+
+**STATUS button color:** updated every poll via `cockpitPanel.updateBtn(data)` — does NOT wait for panel to be open. Bench mode = orange (intentional warning, user chose it).
+
+**E-STOP overlay (`#estop-overlay`):** `position:fixed; inset:0; pointer-events:none; z-index:9999`. Class `active` triggers red pulsing border animation. Set in `_setEstopUI(tripped)`. Synced from `data.estop_active` on every poll → survives page reload.
+
+**JS syntax rule:** `StatusPoller` is a `class` — methods use NO trailing comma. `cockpitPanel` is an object literal — methods use trailing comma. Mixing them causes silent syntax error that breaks the entire page. Always run `node --check master/static/js/app.js` before committing.
 
 ---
 
