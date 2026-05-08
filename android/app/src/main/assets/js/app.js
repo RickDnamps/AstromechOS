@@ -4743,7 +4743,7 @@ class StatusPoller {
     p.title     = heartbeatOk ? 'Heartbeat OK' : 'Heartbeat lost — app watchdog will fire';
     for (const node of p.childNodes)
       if (node.nodeType === Node.TEXT_NODE) node.textContent = 'HB';
-  },
+  }
 
   _setCockpitUartPill(uartReady, health, masterCrcErrors) {
     const p = el('ck-pill-uart');
@@ -4773,7 +4773,7 @@ class StatusPoller {
     p.title     = tooltip;
     for (const node of p.childNodes)
       if (node.nodeType === Node.TEXT_NODE) node.textContent = label;
-  },
+  }
 
   _setPill(id, ok, label) {
     const p = el(id);
