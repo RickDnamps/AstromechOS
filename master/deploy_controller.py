@@ -31,16 +31,13 @@
 Deploy Controller — Update and deployment.
 - git pull from wlan1 (internet)
 - rsync /slave/ to Pi Zero via SSH
-- Physical dome button (short=update, long=rollback, double=version)
 - Reboot Slave via UART
+- update_and_deploy() / rollback() called from web UI or auto-pull
 """
 
 import logging
 import subprocess
-import threading
-import time
 import configparser
-import sys
 import os
 
 log = logging.getLogger(__name__)
@@ -52,69 +49,18 @@ SYNC_RETRY_BACKOFF_S = [5, 15, 30]
 
 class DeployController:
     def __init__(self, cfg: configparser.ConfigParser, uart_controller, teeces_controller):
-        self._repo_path   = cfg.get('master', 'repo_path')
-        self._slave_user  = cfg.get('deploy', 'slave_user')
-        self._slave_host  = cfg.get('slave',  'host',             fallback=cfg.get('deploy', 'slave_host'))
-        self._slave_path  = cfg.get('deploy', 'slave_path')
-        self._button_pin  = cfg.getint('deploy', 'button_pin',    fallback=17)
-        self._short_press_threshold = cfg.getfloat('deploy', 'button_short_press_s')
+        self._repo_path      = cfg.get('master', 'repo_path')
+        self._slave_user     = cfg.get('deploy', 'slave_user')
+        self._slave_host     = cfg.get('slave',  'host',         fallback=cfg.get('deploy', 'slave_host'))
+        self._slave_path     = cfg.get('deploy', 'slave_path')
         self._internet_iface = cfg.get('network', 'internet_interface')
-        self._github_url    = cfg.get('github', 'repo_url',   fallback='')
-        self._github_branch = cfg.get('github', 'branch',     fallback='main')
-        self._uart = uart_controller
-        self._teeces = teeces_controller
-        self._running = False
+        self._github_url     = cfg.get('github', 'repo_url',     fallback='')
+        self._github_branch  = cfg.get('github', 'branch',       fallback='main')
+        self._uart    = uart_controller
+        self._teeces  = teeces_controller
 
     def start(self) -> None:
-        self._running = True
-        threading.Thread(target=self._button_loop, name="deploy-btn", daemon=True).start()
         log.info("DeployController started")
-
-    def stop(self) -> None:
-        self._running = False
-
-    # ------------------------------------------------------------------
-    # GPIO Button
-    # ------------------------------------------------------------------
-
-    def _button_loop(self) -> None:
-        try:
-            import RPi.GPIO as GPIO
-            GPIO.setmode(GPIO.BCM)
-            GPIO.setup(self._button_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        except Exception as e:
-            log.error(f"GPIO init failed: {e} — button disabled")
-            return
-
-        last_release = 0.0
-        while self._running:
-            try:
-                if GPIO.input(self._button_pin) == GPIO.LOW:
-                    press_start = time.monotonic()
-                    # Wait for release
-                    while GPIO.input(self._button_pin) == GPIO.LOW:
-                        time.sleep(0.05)
-                    duration = time.monotonic() - press_start
-
-                    now = time.monotonic()
-                    if duration >= self._short_press_threshold:
-                        # Long press → rollback
-                        log.info("Button: long press → rollback")
-                        self.rollback()
-                    elif (now - last_release) < 0.5:
-                        # Double press → show version
-                        log.info("Button: double press → show version")
-                        self._show_version()
-                    else:
-                        # Short press → update
-                        log.info("Button: short press → update")
-                        self.update_and_deploy()
-
-                    last_release = now
-                time.sleep(0.05)
-            except Exception as e:
-                log.error(f"Error in button_loop: {e}")
-                time.sleep(1)
 
     # ------------------------------------------------------------------
     # Main actions

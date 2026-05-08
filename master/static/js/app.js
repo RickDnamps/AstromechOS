@@ -4441,6 +4441,8 @@ async function loadSettings() {
   }
 
   if (data.github) {
+    const repoUrl = el('repo-url');
+    if (repoUrl) repoUrl.value = data.github.repo_url || '';
     const branch = el('git-branch');
     if (branch) branch.value = data.github.branch || 'main';
     const autoPull = el('auto-pull');
@@ -4450,6 +4452,15 @@ async function loadSettings() {
   if (data.slave) {
     const host = el('slave-host');
     if (host) host.value = data.slave.host || 'r2-slave.local';
+  }
+
+  if (data.hardware) {
+    const mh = el('master-hats-input');
+    if (mh) mh.value = data.hardware.master_hats || '0x40';
+    const sh = el('slave-hats-input');
+    if (sh) sh.value = data.hardware.slave_hats || '0x41';
+    const lat = el('body-uart-lat-input');
+    if (lat) lat.value = data.hardware.body_uart_lat_ms ?? 25;
   }
 
   if (data.lights) {
@@ -4836,8 +4847,9 @@ async function applyHotspot() {
 }
 
 async function saveConfig() {
-  if (!confirm('Save config? (git branch, slave host — restart required to take effect)')) return;
+  if (!confirm('Save deploy config?\n\nRepo URL / branch / slave host changes take effect on next git pull or reboot.')) return;
   const payload = {
+    'github.repo_url':          (el('repo-url')?.value || '').trim(),
     'github.branch':            (el('git-branch')?.value || '').trim(),
     'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
     'slave.host':               (el('slave-host')?.value || '').trim(),
@@ -4863,6 +4875,36 @@ async function systemUpdate() {
   toast('Update started…', 'info');
   const d = await api('/system/update', 'POST');
   if (d) toast('Update in progress — Slave will reboot', 'ok');
+}
+
+async function systemRollback() {
+  if (!confirm('ROLLBACK to previous commit?\n\nThis will revert the last git pull, then rsync Slave and reboot it.\n\nCannot be undone easily.')) return;
+  toast('Rollback started…', 'info');
+  const d = await api('/system/rollback', 'POST');
+  if (d) toast('Rollback in progress — Slave will reboot', 'ok');
+}
+
+async function saveHardwareConfig() {
+  const masterHats = (el('master-hats-input')?.value || '').trim();
+  const slaveHats  = (el('slave-hats-input')?.value  || '').trim();
+  const latMs      = parseInt(el('body-uart-lat-input')?.value) || 25;
+  const latSec     = (latMs / 1000).toFixed(3);
+  const status = el('hardware-config-status');
+  if (!masterHats || !slaveHats) { toast('HAT addresses are required', 'error'); return; }
+  if (!confirm('Save hardware config?\n\nHAT address changes require a Master reboot.')) return;
+  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+  const data = await api('/settings/config', 'POST', {
+    'i2c_servo_hats.master_hats':   masterHats,
+    'i2c_servo_hats.slave_hats':    slaveHats,
+    'choreo.body_servo_uart_lat':   latSec,
+  });
+  if (data?.status === 'ok') {
+    toast('Hardware config saved — reboot Master to apply HAT changes', 'ok');
+    if (status) { status.textContent = 'Saved ✓ (reboot required for HAT changes)'; status.className = 'settings-status ok'; }
+  } else {
+    toast('Error saving hardware config', 'error');
+    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  }
 }
 
 const _R2_LOGO_SVG = `<svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/></svg>`;

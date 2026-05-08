@@ -302,6 +302,16 @@ def lock_set():
     return jsonify({'status': 'ok', 'mode': mode})
 
 
+@status_bp.post('/system/rollback')
+def system_rollback():
+    """Rolls back to the previous git commit + rsync Slave + reboot Slave."""
+    if not reg.deploy:
+        return jsonify({'error': 'DeployController not available'}), 503
+    import threading
+    threading.Thread(target=reg.deploy.rollback, daemon=True).start()
+    return jsonify({'status': 'ok', 'message': 'Rollback in progress...'})
+
+
 @status_bp.post('/system/resync_slave')
 def system_resync_slave():
     """

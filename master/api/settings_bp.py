@@ -236,8 +236,10 @@ def get_settings():
         'slave': {
             'host': cfg.get('slave', 'host', fallback='r2-slave.local'),
         },
-        'deploy': {
-            'button_pin': cfg.getint('deploy', 'button_pin', fallback=17),
+        'hardware': {
+            'master_hats':       cfg.get('i2c_servo_hats', 'master_hats', fallback='0x40'),
+            'slave_hats':        cfg.get('i2c_servo_hats', 'slave_hats',  fallback='0x41'),
+            'body_uart_lat_ms':  round(cfg.getfloat('choreo', 'body_servo_uart_lat', fallback=0.025) * 1000),
         },
         'lights': {
             'backend':   cfg.get('lights', 'backend', fallback='teeces'),
@@ -372,8 +374,10 @@ def set_config():
 
     # Allowed keys (section.key)
     allowed = {
-        'github.branch', 'github.auto_pull_on_boot',
-        'slave.host', 'deploy.button_pin',
+        'github.branch', 'github.auto_pull_on_boot', 'github.repo_url',
+        'slave.host',
+        'i2c_servo_hats.master_hats', 'i2c_servo_hats.slave_hats',
+        'choreo.body_servo_uart_lat',
         'lights.backend',
         'audio.channels',
         'audio.profile_convention', 'audio.profile_maison', 'audio.profile_exterieur',

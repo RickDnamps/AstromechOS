@@ -32,8 +32,8 @@ ssid = R2D2_Control
 password = r2d2droid
 
 [deploy]
-# Pin GPIO BCM du bouton physique sur le dôme
-button_pin = 17
+# Physical dome button (GPIO BCM pin) — removed in v2, kept for reference only
+# button_pin = 17
 
 [slave]
 # Hostname du Slave sur le hotspot (username: artoo)

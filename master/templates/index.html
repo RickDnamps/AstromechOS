@@ -1527,6 +1527,10 @@
         <section class="card settings-card">
           <h2 class="card-title">GITHUB / DEPLOY</h2>
           <div class="form-group">
+            <label>GitHub repo URL</label>
+            <input type="text" id="repo-url" class="input-text" placeholder="https://github.com/user/repo.git">
+          </div>
+          <div class="form-group">
             <label>Git branch</label>
             <input type="text" id="git-branch" class="input-text">
           </div>
@@ -1547,6 +1551,7 @@
           <h2 class="card-title">DEPLOY</h2>
           <p class="settings-note">Git pull on Master + rsync Slave + restart services.</p>
           <button class="btn btn-primary" onclick="systemUpdate()">⬆ UPDATE — git pull + sync Slave</button>
+          <button class="btn btn-warn admin-only" onclick="systemRollback()" style="margin-top:8px">↩ ROLLBACK — revert to previous commit</button>
         </section>
       </div>
 
@@ -1585,6 +1590,23 @@
               <span id="icon-upload-status" style="font-size:10px;color:var(--text-dim)"></span>
             </div>
           </div>
+          <div class="settings-divider admin-only"></div>
+          <h3 class="settings-sub-title admin-only">HARDWARE</h3>
+          <p class="settings-note admin-only">HAT address changes require a Master reboot to take effect.</p>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Master HAT addresses (I2C)</label>
+            <input type="text" id="master-hats-input" class="settings-input" placeholder="0x40" maxlength="40">
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave HAT addresses (I2C)</label>
+            <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41" maxlength="40">
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Body servo UART latency (ms)</label>
+            <input type="number" id="body-uart-lat-input" class="settings-input" min="0" max="200" step="1" placeholder="25">
+          </div>
+          <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
+          <div class="settings-status" id="hardware-config-status"></div>
           <div class="settings-divider"></div>
           <div class="btn-group-v">
             <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>
