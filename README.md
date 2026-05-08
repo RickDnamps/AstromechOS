@@ -148,6 +148,12 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 ![VESC Config](Screenshots/VESC_MinimalConfig.png)
 
 </td>
+<td align="center" width="50%">
+
+### 🎨 Theme System
+8 built-in themes · Custom color picker · 7 sci-fi fonts · Live mini preview · Unlimited saved themes
+
+</td>
 </tr>
 </table>
 
@@ -169,6 +175,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🔌 **Hot-swap light drivers** | Teeces32 ↔ AstroPixels+ without reboot |
 | 🚀 **One-button OTA deploy** | Dome button → git pull + rsync + reboot — no SSH needed |
 | 📷 **USB camera autodetect** | MJPEG stream · hardware-compressed · auto-reconnect after restart |
+| 🎨 **Theme system** | 8 built-in themes · unlimited custom themes · live preview · 7 sci-fi fonts · persisted across sessions |
 
 ---
 
@@ -304,7 +311,7 @@ Or press the physical dome button (short press). Updates itself over-the-air —
 | **1** | UART + CRC · heartbeat watchdog · audio · Teeces32 · RP2040 display · auto-deploy | ✅ |
 | **2** | VESCs · dome motor · MG90S servo panels with speed ramp | ✅ |
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ |
-| **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel | ✅ |
+| **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel + theme system | ✅ |
 | **5** | Vision — person tracking · face detection · contextual AI responses (on-device) | 🔄 |
 
 ---

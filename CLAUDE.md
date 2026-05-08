@@ -293,6 +293,7 @@ SSH     artoo / deetoo
 | 4++++ | Sequences tab redesign : catégories + emoji + pills/grid · Behavior engine ALIVE | ✅ |
 | 4+++++ | Arms : séquence panel→delay→arm · all_body arm-aware · labels Calibration dans Choreo · auto-label prefix-safe | ✅ |
 | 4++++++ | GPIO dome button retiré · Rollback web UI · Hardware config UI (HATs + uart_lat) · repo_url éditable | ✅ |
+| 4+++++++ | CSS variable system · 8 built-in themes · Blueprint light · theme customizer with live preview · sci-fi fonts | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -326,6 +327,37 @@ Dans le Choreo timeline : Dome Servo track → seulement `ALL DOME` · Body Serv
 
 **Labels servos dans Choreo :** ARM SLOT dropdown + block label utilisent le label de Calibration
 (lu depuis `_servoSettings` via `GET /servo/settings`). `armsConfig` rechargé à chaque `choreoEditor.init()`.
+
+---
+
+## 🎨 Theme System — Gotchas
+
+**Files :** `master/static/css/style.css` · `master/static/js/app.js` · `master/templates/index.html`
+
+**CSS variable architecture :**
+- `:root` defines all defaults (dark R2-D2 style, Orbitron + Share Tech Mono fonts)
+- Themes override by setting inline `style` on `document.documentElement`
+- `--blue-rgb: R, G, B` pattern — all opacity variants derived: `rgba(var(--blue-rgb), 0.18)` → borders/glows/overlays all auto-update when accent changes
+- `root.removeAttribute('style')` **before** applying new theme — clears previous overrides, prevents stale vars
+
+**Theme objects (`_THEMES` in app.js) :**
+- `default: { vars: {} }` — empty, `:root` CSS applies, nothing overridden
+- All themes only need to override what differs from `:root` defaults
+- `light: true` flag on light themes (affects swatch gradient rendering in picker)
+
+**Custom themes :** stored in `localStorage` key `astromech-custom-themes` as JSON array
+- Each entry: `{ id, label, swatch, vars, _pickerBg, _pickerAccent, _pickerText, _pickerFont }`
+- `_picker*` fields = raw hex values to re-populate editor on re-edit
+- `applyTheme(id)` checks `_THEMES` first, then `_loadCustomThemes()` — handles both
+
+**Font vars :**
+- `--font` = UI labels, buttons, tabs (default: Orbitron)
+- `--font-data` = telemetry values, code, inputs (default: Share Tech Mono)
+- Available options: Orbitron · Share Tech Mono · Audiowide · Electrolize · Exo 2 · Rajdhani · Courier New (system)
+- Custom theme editor stores chosen font as `_pickerFont` and writes `--font`/`--font-data` into vars
+
+**Built-in themes :** default · r2d2 · r2d2_light (Blueprint) · r5d4 · bb8 · chopper · r2q5
+**Theme customizer UI :** Settings → Interface → `+ NEW THEME` (or click any custom theme to edit)
 
 ---
 
