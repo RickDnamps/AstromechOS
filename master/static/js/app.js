@@ -4488,18 +4488,22 @@ const cockpitPanel = {
       this._svcRow('Camera',     data.camera_found ? (data.camera_active ? 'ok' : 'dim') : 'warn',
                    data.camera_found ? (data.camera_active ? '✓ streaming' : '✓ found') : '⚠ not found') +
       this._svcRow('BT Gamepad', btCls, btVal) +
-      this._svcRow('Servo Dome', data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A') +
-      this._svcRow('Servo Body', data.servo_ready      ? 'ok' : 'dim', data.servo_ready      ? '✓ OK' : '— N/A') +
-      (Array.isArray(data.dome_hat_health) ? data.dome_hat_health.map(h =>
-        this._svcRow(`${data.master_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
-      ).join('') : '') +
-      (Array.isArray(data.body_hat_health) ? data.body_hat_health.map(h =>
-        this._svcRow(`${data.slave_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? `✓ OK` : `⚠ ${h.errors} errors`)
-      ).join('') : '') +
-      (data.motor_hat_health ?
-        this._svcRow(`${data.slave_location} Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
-                     data.motor_hat_health.ok ? '✓ OK' : '✗ not responding')
-      : '');
+      (Array.isArray(data.dome_hat_health) && data.dome_hat_health.length > 0
+        ? data.dome_hat_health.map(h =>
+            this._svcRow(`${data.master_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? '✓ OK' : `⚠ ${h.errors} errors`)
+          ).join('')
+        : this._svcRow(`${data.master_location} Servo`, data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A')
+      ) +
+      (Array.isArray(data.body_hat_health) && data.body_hat_health.length > 0
+        ? data.body_hat_health.map(h =>
+            this._svcRow(`${data.slave_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? '✓ OK' : `⚠ ${h.errors} errors`)
+          ).join('')
+        : this._svcRow(`${data.slave_location} Servo`, data.servo_ready ? 'ok' : 'dim', data.servo_ready ? '✓ OK' : '— N/A')
+      ) +
+      (data.motor_hat_health
+        ? this._svcRow(`${data.slave_location} Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
+                       data.motor_hat_health.ok ? '✓ OK' : '✗ not responding')
+        : '');
   },
 
   _updateActivity(data) {
