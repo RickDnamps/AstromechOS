@@ -191,13 +191,13 @@ SSH into the Master using whichever method you used in Step 1:
 Run the first deployment:
 
 ```bash
-bash /home/artoo/r2d2/scripts/deploy.sh --first-install
+bash /home/artoo/astromechos/scripts/deploy.sh --first-install
 ```
 
 This:
 - rsync's all code to the Slave
 - Installs pip dependencies on the Slave
-- Installs and enables `r2d2-slave` systemd service
+- Installs and enables `astromech-slave` systemd service
 - Restarts the Slave
 
 Then copy the SSH key to the Slave (enables passwordless rsync for future updates):
@@ -363,7 +363,7 @@ ssh artoo@r2-slave.local
 **Or from SSH on the Master:**
 
 ```bash
-bash /home/artoo/r2d2/scripts/update.sh
+bash /home/artoo/astromechos/scripts/update.sh
 ```
 
 This does: backup sequences → git pull → rsync to Slave → restart Slave → restart Master → verify services.
@@ -372,25 +372,25 @@ This does: backup sequences → git pull → rsync to Slave → restart Slave �
 
 ```bash
 # On Master:
-sudo systemctl status r2d2-master
-sudo journalctl -u r2d2-master -f
+sudo systemctl status astromech-master 
+sudo journalctl -u astromech-master -f
 
 # On Slave (from Master):
-ssh artoo@r2-slave.local sudo systemctl status r2d2-slave
-ssh artoo@r2-slave.local sudo journalctl -u r2d2-slave -f
+ssh artoo@r2-slave.local sudo systemctl status astromech-slave
+ssh artoo@r2-slave.local sudo journalctl -u astromech-slave -f
 ```
 
 ### Collect debug info
 
 ```bash
-bash /home/artoo/r2d2/scripts/check_logs.sh
-bash /home/artoo/r2d2/scripts/debug_collect.sh
+bash /home/artoo/astromechos/scripts/check_logs.sh
+bash /home/artoo/astromechos/scripts/debug_collect.sh
 ```
 
 ### Resync Slave only (without git pull)
 
 ```bash
-bash /home/artoo/r2d2/scripts/resync_slave.sh
+bash /home/artoo/astromechos/scripts/resync_slave.sh
 ```
 
 ---
@@ -416,13 +416,13 @@ ssh artoo@r2-slave.local
 
 # Flash (always rm before cp — mpremote compares timestamps, not content):
 python3 -m mpremote connect /dev/ttyACM0 rm :display.py
-python3 -m mpremote connect /dev/ttyACM0 cp /home/artoo/r2d2/rp2040/firmware/display.py :display.py
+python3 -m mpremote connect /dev/ttyACM0 cp /home/artoo/astromechos/rp2040/firmware/display.py :display.py
 ```
 
 Or use the dedicated script from the Master:
 
 ```bash
-bash /home/artoo/r2d2/scripts/deploy_rp2040.sh
+bash /home/artoo/astromechos/scripts/deploy_rp2040.sh
 ```
 
 ---

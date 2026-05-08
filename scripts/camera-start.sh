@@ -1,7 +1,7 @@
 #!/bin/bash
 # Auto-detect the first USB video capture device for mjpg_streamer.
 # Skips Pi-internal codec/ISP devices (bcm2835) that also appear under /dev/video*.
-# Called by r2d2-camera.service — install via setup_master.sh or update.sh.
+# Called by astromech-camera.service — install via setup_master.sh or update.sh.
 #
 # Resolution/FPS/quality are read from master/config/camera.env (written by the
 # web dashboard Config tab). Defaults: 640x480 / 30fps / quality 80.
@@ -31,12 +31,12 @@ for dev in /dev/video[0-9] /dev/video[0-9][0-9]; do
 done
 
 if [ -z "$CAM_DEV" ]; then
-    logger -t r2d2-camera "No USB video capture device found"
+    logger -t astromech-camera "No USB video capture device found"
     exit 1
 fi
 
-logger -t r2d2-camera "Starting on $CAM_DEV"
-logger -t r2d2-camera "Settings: ${CAMERA_RESOLUTION} @ ${CAMERA_FPS}fps q${CAMERA_QUALITY}"
+logger -t astromech-camera "Starting on $CAM_DEV"
+logger -t astromech-camera "Settings: ${CAMERA_RESOLUTION} @ ${CAMERA_FPS}fps q${CAMERA_QUALITY}"
 
 /usr/local/bin/mjpg_streamer \
     -i "/usr/local/lib/mjpg-streamer/input_uvc.so -d $CAM_DEV -r $CAMERA_RESOLUTION -f $CAMERA_FPS -q $CAMERA_QUALITY" \
@@ -51,7 +51,7 @@ MAX_STALE=15
 
 while kill -0 $MPID 2>/dev/null; do
     if [ ! -e "$CAM_DEV" ]; then
-        logger -t r2d2-camera "Device $CAM_DEV disappeared — stopping streamer for restart"
+        logger -t astromech-camera "Device $CAM_DEV disappeared — stopping streamer for restart"
         kill $MPID
         break
     fi
@@ -61,7 +61,7 @@ while kill -0 $MPID 2>/dev/null; do
         NOW=$(date +%s)
         STALE=$((NOW - LAST_OK))
         if [ "$STALE" -ge "$MAX_STALE" ]; then
-            logger -t r2d2-camera "Stream stale for ${STALE}s — stopping streamer for restart"
+            logger -t astromech-camera "Stream stale for ${STALE}s — stopping streamer for restart"
             kill $MPID
             break
         fi

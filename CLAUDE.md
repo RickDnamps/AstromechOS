@@ -21,7 +21,7 @@
   sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
   c = paramiko.SSHClient(); c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
   c.connect('192.168.2.104', username='artoo', password='deetoo', timeout=10)
-  stdin, stdout, stderr = c.exec_command('cd /home/artoo/r2d2 && bash scripts/update.sh 2>&1')
+  stdin, stdout, stderr = c.exec_command('cd /home/artoo/astromechos && bash scripts/update.sh 2>&1')
   for line in stdout: print(line, end='')
   c.close()
   ```
@@ -30,7 +30,7 @@
   > ⚠️ Ne jamais git push depuis le Pi — toujours depuis le PC dev
   > ⚠️ IPs : Master=`192.168.2.104`, Slave=`192.168.4.171` (pas `.local` — mDNS capricieux)
 
-- Fallback si SSH impossible : `cd /home/artoo/r2d2 && git pull && bash scripts/update.sh`
+- Fallback si SSH impossible : `cd /home/artoo/astromechos && git pull && bash scripts/update.sh`
 - Audio channels : Config tab → `local.cfg [audio] audio_channels` + SCP slave.cfg. Default 6, range 1–12.
 
 ---
@@ -232,7 +232,7 @@ SSH     artoo / deetoo
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
 **E-STOP :** toggle ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI + overlay rouge pulsant sur tout l'écran. Syncé depuis `/status` → survit à un reload de page.
 **Joystick :** throttle 60 req/s · **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
-**Caméra :** MJPEG proxy last-connect-wins · `r2d2-camera.service` Restart=always + watchdog `/dev/videoN` dans `scripts/camera-start.sh`. (`bd memories camera` pour détails)
+**Caméra :** MJPEG proxy last-connect-wins · `astromech-camera.service` Restart=always + watchdog `/dev/videoN` dans `scripts/camera-start.sh`. (`bd memories camera` pour détails)
 
 **Backlog :** `bd list --status=open`
 

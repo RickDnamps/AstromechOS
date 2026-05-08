@@ -36,12 +36,12 @@
 #   1. System update + packages
 #   2. UART fix (disable-bt to free ttyAMA0)
 #   3. Enable UART + I2C via raspi-config
-#   4. Create the /home/artoo/r2d2 directory
+#   4. Create the /home/artoo/astromechos directory
 #   5. Network configuration (wlan0 → Master hotspot)
 #   → reboot
 #
 # After reboot, the Master runs rsync + installs services automatically:
-#   bash /home/artoo/r2d2/scripts/deploy.sh --first-install
+#   bash /home/artoo/astromechos/scripts/deploy.sh --first-install
 #
 # Usage (on the R2-Slave, connected to home WiFi):
 #   curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
@@ -263,7 +263,7 @@ echo "  This will:"
 echo "    → rsync the code to the Slave"
 echo "    → install Python dependencies"
 echo "    → install systemd services"
-echo "    → start r2d2-slave"
+echo "    → start astromech-slave"
 echo "============================================================"
 echo ""
 

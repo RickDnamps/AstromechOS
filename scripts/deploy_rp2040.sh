@@ -32,7 +32,7 @@
 # Usage: bash scripts/deploy_rp2040.sh [/dev/ttyACMx]
 #
 # Must be run on the Slave Pi (where the RP2040 is connected via USB).
-# Temporarily stops r2d2-slave.service to release the USB port.
+# Temporarily stops astromech-slave.service to release the USB port.
 
 set -e
 
@@ -82,19 +82,19 @@ if ! command -v ampy &>/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-# Stop r2d2-slave.service to release the port
+# Stop astromech-slave.service to release the port
 # ---------------------------------------------------------------------------
 SLAVE_WAS_RUNNING=false
-if systemctl is-active --quiet r2d2-slave.service 2>/dev/null; then
-    log "Stopping r2d2-slave.service (releasing USB port)..."
-    sudo systemctl stop r2d2-slave.service
+if systemctl is-active --quiet astromech-slave.service 2>/dev/null; then
+    log "Stopping astromech-slave.service (releasing USB port)..."
+    sudo systemctl stop astromech-slave.service
     SLAVE_WAS_RUNNING=true
 fi
 
 cleanup() {
     if [ "$SLAVE_WAS_RUNNING" = true ]; then
-        log "Restarting r2d2-slave.service..."
-        sudo systemctl start r2d2-slave.service
+        log "Restarting astromech-slave.service..."
+        sudo systemctl start astromech-slave.service
     fi
 }
 trap cleanup EXIT
@@ -125,4 +125,4 @@ ampy --port "$PORT" reset
 log ""
 log "✓ RP2040 firmware deployed to $PORT"
 log "  The RP2040 restarts and shows the BOOTING spinner (orange)."
-log "  If the r2d2-slave service was active, it restarts automatically."
+log "  If the astromech-slave service was active, it restarts automatically."

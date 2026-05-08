@@ -134,7 +134,7 @@ def camera_config_get():
 @camera_bp.post('/camera/config')
 def camera_config_set():
     """
-    Saves camera settings and restarts r2d2-camera.service.
+    Saves camera settings and restarts astromech-camera.service.
     Body: { resolution: '1280x720', fps: 30, quality: 80 }
     """
     data       = request.get_json(silent=True) or {}
@@ -153,7 +153,7 @@ def camera_config_set():
     log.info("Camera config: %s @ %dfps q%d — restarting service", resolution, fps, quality)
 
     def _restart():
-        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-camera.service'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-camera.service'], check=False)
 
     threading.Thread(target=_restart, daemon=True).start()
     return jsonify({'status': 'ok', 'resolution': resolution, 'fps': fps, 'quality': quality})

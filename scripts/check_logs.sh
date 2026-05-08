@@ -54,11 +54,11 @@ sep
 # ──────────────────────────────────────────────
 echo ""
 echo "=== SERVICES ==="
-ssh -o ConnectTimeout=5 $MASTER "systemctl is-active r2d2-master" 2>/dev/null \
-    | grep -q "active" && ok "r2d2-master.service ACTIF" || err "r2d2-master.service INACTIF"
+ssh -o ConnectTimeout=5 $MASTER "systemctl is-active astromech-master" 2>/dev/null \
+    | grep -q "active" && ok "astromech-master.service ACTIF" || err "astromech-master.service INACTIF"
 
-ssh -o ConnectTimeout=5 $SLAVE "systemctl is-active r2d2-slave" 2>/dev/null \
-    | grep -q "active" && ok "r2d2-slave.service ACTIF"  || err "r2d2-slave.service INACTIF"
+ssh -o ConnectTimeout=5 $SLAVE "systemctl is-active astromech-slave" 2>/dev/null \
+    | grep -q "active" && ok "astromech-slave.service ACTIF"  || err "astromech-slave.service INACTIF"
 
 # ──────────────────────────────────────────────
 # 2. API Flask — status
@@ -129,13 +129,13 @@ sep
 echo -e "${CYAN}  MASTER LOGS — last $TAIL lines${NC}"
 sep
 # Read master logs directly (no SSH — already on the master)
-sudo journalctl -u r2d2-master -b --no-pager -n $TAIL --output=short-iso 2>/dev/null \
+sudo journalctl -u astromech-master -b --no-pager -n $TAIL --output=short-iso 2>/dev/null \
     | grep -iE "servo|dome|pca|smbus|error|warn|ready|setup|Error" \
     | tail -40
 
 echo ""
 echo "--- Lignes traceback / exception ---"
-sudo journalctl -u r2d2-master -b --no-pager -n $TAIL --output=short-iso 2>/dev/null \
+sudo journalctl -u astromech-master -b --no-pager -n $TAIL --output=short-iso 2>/dev/null \
     | grep -iE "traceback|Exception|NoneType|AttributeError|TypeError" | tail -20
 
 # ──────────────────────────────────────────────
@@ -146,14 +146,14 @@ sep
 echo -e "${CYAN}  SLAVE LOGS — last $TAIL lines${NC}"
 sep
 ssh -o ConnectTimeout=5 $SLAVE \
-    "sudo journalctl -u r2d2-slave -b --no-pager -n $TAIL --output=short-iso 2>/dev/null" 2>/dev/null \
+    "sudo journalctl -u astromech-slave -b --no-pager -n $TAIL --output=short-iso 2>/dev/null" 2>/dev/null \
     | grep -iE "servo|SRV|pca|smbus|error|warn|ready|setup|Error" \
     | tail -40
 
 echo ""
 echo "--- Lignes traceback / exception ---"
 ssh -o ConnectTimeout=5 $SLAVE \
-    "sudo journalctl -u r2d2-slave -b --no-pager -n $TAIL --output=short-iso 2>/dev/null" 2>/dev/null \
+    "sudo journalctl -u astromech-slave -b --no-pager -n $TAIL --output=short-iso 2>/dev/null" 2>/dev/null \
     | grep -iE "traceback|Exception|NoneType|AttributeError|TypeError" | tail -20
 
 # ──────────────────────────────────────────────

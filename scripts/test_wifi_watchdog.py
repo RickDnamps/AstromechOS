@@ -32,7 +32,7 @@
 """
 Test WiFi Watchdog — non-destructive validation.
 Run from the Master via SSH on the Slave:
-  ssh artoo@r2-slave.local "python3 /home/artoo/r2d2/scripts/test_wifi_watchdog.py"
+  ssh artoo@r2-slave.local "python3 /home/artoo/astromechos/scripts/test_wifi_watchdog.py"
 
 Steps:
   1. Verify that the Slave is connected to the Master hotspot (pre-condition)
@@ -83,7 +83,7 @@ def watch_journald_log(stop_at_keyword, timeout_s):
     print(f"  → Observation logs ({timeout_s}s max, cherche : '{stop_at_keyword}')...", flush=True)
     while time.monotonic() - start < timeout_s:
         rc, out, _ = _run(
-            "journalctl -u r2d2-slave.service --no-pager -n 30 --since '3 minutes ago' 2>/dev/null",
+            "journalctl -u astromech-slave.service --no-pager -n 30 --since '3 minutes ago' 2>/dev/null",
             timeout=5
         )
         if stop_at_keyword.lower() in out.lower():

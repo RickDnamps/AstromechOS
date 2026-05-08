@@ -114,7 +114,7 @@ def _sync_slave_hat_cfg(**kwargs) -> None:
     def _delayed_slave_restart():
         import time as _t
         _t.sleep(2)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-slave'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
 
     import threading as _th
     _th.Thread(target=_delayed_slave_restart, daemon=True).start()
@@ -228,9 +228,9 @@ def _sync_audio_channels(channels: int) -> None:
     def _delayed_restart():
         import time as _time
         _time.sleep(2)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-slave'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
         _time.sleep(1)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-master'], check=False)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-master'], check=False)
 
     import threading as _threading
     _threading.Thread(target=_delayed_restart, daemon=True).start()

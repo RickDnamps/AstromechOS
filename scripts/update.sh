@@ -169,25 +169,25 @@ ok "VERSION synced → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
 # Install the camera autodetect script on the Master
 CAM_SCRIPT="$REPO/scripts/camera-start.sh"
 if [ -f "$CAM_SCRIPT" ]; then
-    sudo cp "$CAM_SCRIPT" /usr/local/bin/r2d2-camera-start.sh \
-        && sudo chmod +x /usr/local/bin/r2d2-camera-start.sh \
+    sudo cp "$CAM_SCRIPT" /usr/local/bin/astromech-camera-start.sh \
+        && sudo chmod +x /usr/local/bin/astromech-camera-start.sh \
         && ok "Camera autodetect script installed" \
         || warn "Camera script install failed"
 fi
 
 # Install/update the camera service file (Restart=always + watchdog script)
-CAM_SVC="$REPO/master/services/r2d2-camera.service"
+CAM_SVC="$REPO/master/services/astromech-camera.service"
 if [ -f "$CAM_SVC" ]; then
-    sudo tee /etc/systemd/system/r2d2-camera.service > /dev/null < "$CAM_SVC" \
+    sudo tee /etc/systemd/system/astromech-camera.service > /dev/null < "$CAM_SVC" \
         && sudo systemctl daemon-reload \
         && ok "Camera service file updated" \
         || warn "Camera service file install failed"
 fi
 
 # Install the service file on the Slave (PYTHONPATH + config up to date)
-SERVICE_SRC="$REPO/slave/services/r2d2-slave.service"
+SERVICE_SRC="$REPO/slave/services/astromech-slave.service"
 if [ -f "$SERVICE_SRC" ]; then
-    $SSH $SLAVE "sudo tee /etc/systemd/system/r2d2-slave.service > /dev/null" < "$SERVICE_SRC" \
+    $SSH $SLAVE "sudo tee /etc/systemd/system/astromech-slave.service > /dev/null" < "$SERVICE_SRC" \
         && $SSH $SLAVE "sudo systemctl daemon-reload" \
         && ok "Service file installed (PYTHONPATH OK)" \
         || warn "Service file: sudo install failed — check sudoers"
@@ -197,14 +197,14 @@ fi
 # 4. Restart the Slave
 # ──────────────────────────────────────────────
 step "4/7" "Restarting Slave"
-if $SSH $SLAVE "sudo systemctl restart r2d2-slave.service" 2>/dev/null; then
+if $SSH $SLAVE "sudo systemctl restart astromech-slave.service" 2>/dev/null; then
     sleep 4
-    SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
+    SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active astromech-slave.service" 2>/dev/null)
     if [ "$SLAVE_STATUS" = "active" ]; then
-        ok "r2d2-slave active"
+        ok "astromech-slave active"
     else
         # Service failed → full reboot
-        warn "r2d2-slave failed ($SLAVE_STATUS) — rebooting Slave..."
+        warn "astromech-slave failed ($SLAVE_STATUS) — rebooting Slave..."
         $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave rebooting" || fail "Slave reboot failed"
     fi
 else
@@ -232,9 +232,9 @@ echo -e "  ${YELLOW}→ Restarting Master in 3 seconds...${NC}"
 echo -e "  ${YELLOW}  (AppWatchdog + MotionWatchdog + SafeStop will be restarted)${NC}"
 sleep 3
 
-# Restart Master — r2d2-monitor.service if present, otherwise just r2d2-master
-sudo systemctl restart r2d2-master.service r2d2-monitor.service 2>/dev/null || \
-    sudo systemctl restart r2d2-master.service 2>/dev/null || \
+# Restart Master — astromech-monitor.service if present, otherwise just astromech-master
+sudo systemctl restart astromech-master.service astromech-monitor.service 2>/dev/null || \
+    sudo systemctl restart astromech-master.service 2>/dev/null || \
     { fail "systemctl not available — manual restart required"; exit 1; }
 
 # ──────────────────────────────────────────────
@@ -243,20 +243,20 @@ sudo systemctl restart r2d2-master.service r2d2-monitor.service 2>/dev/null || \
 step "6/7" "Verifying services"
 sleep 3   # give the Master time to start Flask
 
-MASTER_STATUS=$(systemctl is-active r2d2-master.service 2>/dev/null)
+MASTER_STATUS=$(systemctl is-active astromech-master.service 2>/dev/null)
 if [ "$MASTER_STATUS" = "active" ]; then
-    ok "r2d2-master active"
+    ok "astromech-master active"
 else
-    fail "r2d2-master status: $MASTER_STATUS"
+    fail "astromech-master status: $MASTER_STATUS"
 fi
 
-SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
+SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active astromech-slave.service" 2>/dev/null)
 if [ "$SLAVE_STATUS" = "active" ]; then
-    ok "r2d2-slave active"
+    ok "astromech-slave active"
 elif [ -z "$SLAVE_STATUS" ]; then
-    warn "r2d2-slave — cannot verify (SSH timeout)"
+    warn "astromech-slave — cannot verify (SSH timeout)"
 else
-    fail "r2d2-slave status: $SLAVE_STATUS"
+    fail "astromech-slave status: $SLAVE_STATUS"
 fi
 
 # Flask API check (quick heartbeat)
@@ -275,7 +275,7 @@ if [ $ERRORS -eq 0 ]; then
     echo -e "  ${GREEN}✓ AstromechOS operational — version: ${VERSION}${NC}"
 else
     echo -e "  ${YELLOW}⚠ Started with $ERRORS error(s) — version: ${VERSION}${NC}"
-    echo -e "  ${YELLOW}  Check: sudo journalctl -u r2d2-master -n 30${NC}"
+    echo -e "  ${YELLOW}  Check: sudo journalctl -u astromech-master -n 30${NC}"
 fi
 echo "  ════════════════════════════════════"
 echo ""

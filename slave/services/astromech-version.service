@@ -1,0 +1,18 @@
+[Unit]
+Description=AstromechOS Slave Version Check (run once at boot)
+After=network.target
+Before=astromech-slave.service
+
+[Service]
+Type=oneshot
+User=artoo
+WorkingDirectory=/home/artoo/astromechos
+# Version check is integrated in main.py
+# This service is a placeholder for systemd dependencies
+ExecStart=/bin/true
+RemainAfterExit=yes
+StandardOutput=journal
+SyslogIdentifier=astromech-version
+
+[Install]
+WantedBy=multi-user.target

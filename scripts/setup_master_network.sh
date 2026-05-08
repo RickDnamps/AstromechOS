@@ -54,7 +54,7 @@
 #   - WiFi USB dongle plugged in (will be wlan1) OR plug in later
 #
 # Usage:
-#   sudo bash /home/artoo/r2d2/scripts/setup_master_network.sh
+#   sudo bash /home/artoo/astromechos/scripts/setup_master_network.sh
 #
 # Note the hotspot SSID and password — you will need them
 # to configure the Slave with setup_slave_network.sh.

@@ -30,7 +30,7 @@
 # ============================================================
 """
 Test UART live — injection de paquets valides/invalides sur /dev/ttyAMA0.
-A executer sur le Master Pi APRES avoir stoppe r2d2-master.
+A executer sur le Master Pi APRES avoir stoppe astromech-master.
 Le Slave reste actif et doit accepter/rejeter les paquets correctement.
 """
 import sys, time, serial

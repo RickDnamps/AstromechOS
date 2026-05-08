@@ -188,7 +188,7 @@ except:
     wifi_ev = []
 
 try:
-    r2 = subprocess.run(['journalctl', '-u', 'r2d2-master.service', '--since', '3s ago', '--no-pager', '-q'], capture_output=True, text=True)
+    r2 = subprocess.run(['journalctl', '-u', 'astromech-master.service', '--since', '3s ago', '--no-pager', '-q'], capture_output=True, text=True)
     flask_lines = [l for l in r2.stdout.splitlines() if 'motion/arcade' in l or 'heartbeat' in l or 'watchdog' in l.lower()]
     flask_hb_ok = sum(1 for l in flask_lines if 'heartbeat' in l and '204' in l)
     flask_drive = sum(1 for l in flask_lines if 'arcade' in l)

@@ -47,7 +47,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_master.sh | sudo bash
 #
 # Or if the repo is already cloned:
-#   sudo bash /home/artoo/r2d2/scripts/setup_master.sh
+#   sudo bash /home/artoo/astromechos/scripts/setup_master.sh
 #
 # =============================================================================
 
@@ -208,10 +208,10 @@ echo ""
 # STEP 8 — systemd services
 # =============================================================================
 info "Step 8/8 — Installing systemd services..."
-cp "$REPO_PATH/master/services/r2d2-master.service"  /etc/systemd/system/
-cp "$REPO_PATH/master/services/r2d2-monitor.service" /etc/systemd/system/
+cp "$REPO_PATH/master/services/astromech-master.service"  /etc/systemd/system/
+cp "$REPO_PATH/master/services/astromech-monitor.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable r2d2-master r2d2-monitor
+systemctl enable astromech-master astromech-monitor
 ok "systemd services installed and enabled"
 
 # =============================================================================
@@ -228,7 +228,7 @@ echo ""
 echo "  After reboot:"
 echo "    → Connect to the AstromechOS hotspot"
 echo "    → SSH: ssh artoo@192.168.4.1"
-echo "    → Check: sudo systemctl status r2d2-master"
+echo "    → Check: sudo systemctl status astromech-master"
 echo ""
 echo "  Next step: install the Slave"
 echo "    sudo bash $REPO_PATH/scripts/setup_slave_network.sh"

@@ -287,7 +287,7 @@ curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts
 
 # Step 3 — First deploy (from Master, once:)
 ssh-copy-id artoo@192.168.4.171
-bash /home/artoo/r2d2/scripts/deploy.sh --first-install
+bash /home/artoo/astromechos/scripts/deploy.sh --first-install
 ```
 
 **Done.** Open **`http://192.168.4.1:5000`** on any device connected to the `AstromechOS` hotspot.
@@ -297,7 +297,7 @@ bash /home/artoo/r2d2/scripts/deploy.sh --first-install
 ### Updates
 
 ```bash
-bash /home/artoo/r2d2/scripts/update.sh
+bash /home/artoo/astromechos/scripts/update.sh
 ```
 
 Or press the physical dome button (short press). Updates itself over-the-air — no SSH required.

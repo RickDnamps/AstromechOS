@@ -1,0 +1,21 @@
+[Unit]
+Description=AstromechOS Slave Controller
+After=astromech-version.service
+Wants=astromech-version.service
+
+[Service]
+Type=simple
+User=artoo
+WorkingDirectory=/home/artoo/astromechos
+Environment=PYTHONPATH=/home/artoo/astromechos
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
+ExecStart=/usr/bin/python3 /home/artoo/astromechos/slave/main.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astromech-slave
+
+[Install]
+WantedBy=multi-user.target

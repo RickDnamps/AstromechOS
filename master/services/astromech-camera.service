@@ -1,10 +1,10 @@
 [Unit]
-Description=R2-D2 Camera Stream (mjpg-streamer)
+Description=AstromechOS Camera Stream (mjpg-streamer)
 After=network.target
 
 [Service]
 User=artoo
-ExecStart=/usr/local/bin/r2d2-camera-start.sh
+ExecStart=/usr/local/bin/astromech-camera-start.sh
 Restart=always
 RestartSec=5
 

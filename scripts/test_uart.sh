@@ -33,8 +33,8 @@
 # Ctrl+C to stop everything
 #
 # If /dev/ttyAMA0 is in use (systemd service), stop it first:
-#   sudo systemctl stop r2d2-master.service r2d2-monitor.service
-#   ssh artoo@r2-slave.local "sudo systemctl stop r2d2-slave.service"
+#   sudo systemctl stop astromech-master.service astromech-monitor.service
+#   ssh artoo@r2-slave.local "sudo systemctl stop astromech-slave.service"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE=artoo@r2-slave.local

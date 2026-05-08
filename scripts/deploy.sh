@@ -160,10 +160,10 @@ if [ "$FIRST_INSTALL" = true ]; then
     echo "[4/5] Installation services systemd + audio + BT sur le Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" SLAVE_REPO="$SLAVE_REPO" bash << 'REMOTE'
         # Services systemd
-        sudo cp "$SLAVE_REPO/slave/services/r2d2-slave.service"   /etc/systemd/system/
-        sudo cp "$SLAVE_REPO/slave/services/r2d2-version.service" /etc/systemd/system/
+        sudo cp "$SLAVE_REPO/slave/services/astromech-slave.service"   /etc/systemd/system/
+        sudo cp "$SLAVE_REPO/slave/services/astromech-version.service" /etc/systemd/system/
         sudo systemctl daemon-reload
-        sudo systemctl enable r2d2-version r2d2-slave
+        sudo systemctl enable astromech-version astromech-slave
         echo "  → systemd services installed"
 
         # mpg123 (MP3 player)
@@ -223,9 +223,9 @@ fi
 # Reboot Slave
 # ------------------------------------------------------------------
 if [ "$DO_REBOOT" = true ]; then
-    echo "[5/5] Restarting r2d2-slave service on the Slave..."
+    echo "[5/5] Restarting astromech-slave service on the Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
-        "sudo systemctl restart r2d2-slave" 2>/dev/null || \
+        "sudo systemctl restart astromech-slave" 2>/dev/null || \
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" \
         "sudo reboot" 2>/dev/null || true
     echo "      Slave restarted"

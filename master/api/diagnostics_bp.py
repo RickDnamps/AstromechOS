@@ -58,9 +58,9 @@ def _slave_host() -> str:
 
 @diagnostics_bp.get('/diagnostics/logs')
 def diag_logs():
-    """Last 50 lines of r2d2-master journal, optionally filtered by severity."""
+    """Last 50 lines of astromech-master journal, optionally filtered by severity."""
     level = request.args.get('filter', 'ALL').upper()
-    cmd = ['journalctl', '-u', 'r2d2-master', '-n', '50', '--no-pager', '--output=short-iso']
+    cmd = ['journalctl', '-u', 'astromech-master', '-n', '50', '--no-pager', '--output=short-iso']
     if level == 'ERROR':
         cmd += ['--priority=err']
     elif level == 'WARNING':

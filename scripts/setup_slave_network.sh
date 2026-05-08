@@ -54,7 +54,7 @@
 #   - Master hotspot SSID + password at hand
 #
 # Usage:
-#   sudo bash /home/artoo/r2d2/scripts/setup_slave_network.sh
+#   sudo bash /home/artoo/astromechos/scripts/setup_slave_network.sh
 #
 # =============================================================================
 

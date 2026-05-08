@@ -71,8 +71,8 @@ echo "[Master] System info..."
 
   echo ""
   echo "=== SERVICES SYSTEMD ==="
-  systemctl status r2d2-master.service  --no-pager 2>&1 || echo "(service inexistant)"
-  systemctl status r2d2-monitor.service --no-pager 2>&1 || echo "(service inexistant)"
+  systemctl status astromech-master.service  --no-pager 2>&1 || echo "(service inexistant)"
+  systemctl status astromech-monitor.service --no-pager 2>&1 || echo "(service inexistant)"
 
   echo ""
   echo "=== NETWORK ==="
@@ -113,7 +113,7 @@ else
     echo '' && echo '=== UART /dev/ttyAMA0 ===' && ls -la /dev/ttyAMA0 2>&1
     echo '--- fuser ---' && fuser /dev/ttyAMA0 2>&1 || echo '(libre)'
     echo '' && echo '=== PROCESSUS PYTHON ===' && ps aux | grep python3 | grep -v grep
-    echo '' && echo '=== SERVICES SYSTEMD ===' && systemctl status r2d2-slave.service --no-pager 2>&1 || echo '(service inexistant)'
+    echo '' && echo '=== SERVICES SYSTEMD ===' && systemctl status astromech-slave.service --no-pager 2>&1 || echo '(service inexistant)'
     echo '' && echo '=== SERIAL DEVICES ===' && ls -la /dev/ttyAMA0 /dev/ttyACM* 2>&1
     echo '' && echo '=== /boot/firmware/config.txt (uart/bt) ===' && grep -E 'uart|bluetooth|miniuart|disable.bt|enable_uart' /boot/firmware/config.txt 2>&1 || echo '(aucune ligne uart/bt)'
   " > "$SLAVE_OUT/slave_system.txt" 2>&1

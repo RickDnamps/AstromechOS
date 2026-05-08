@@ -67,27 +67,27 @@ rsync -az -e "$SSH" "$VERSION_FILE" "$SLAVE:$VERSION_FILE" 2>/dev/null
 ok "VERSION → $(cat $VERSION_FILE 2>/dev/null || echo 'unknown')"
 
 # Install the service file if modified (PYTHONPATH, ExecStart, etc.)
-SERVICE_SRC="$REPO/slave/services/r2d2-slave.service"
+SERVICE_SRC="$REPO/slave/services/astromech-slave.service"
 if [ -f "$SERVICE_SRC" ]; then
-    $SSH $SLAVE "sudo tee /etc/systemd/system/r2d2-slave.service > /dev/null" < "$SERVICE_SRC" \
+    $SSH $SLAVE "sudo tee /etc/systemd/system/astromech-slave.service > /dev/null" < "$SERVICE_SRC" \
         && $SSH $SLAVE "sudo systemctl daemon-reload" \
         && ok "Service file installed" \
         || warn "Service file: install failed (check sudo)"
 fi
 
 # Restart Slave
-if $SSH $SLAVE "sudo systemctl restart r2d2-slave.service" 2>/dev/null; then
+if $SSH $SLAVE "sudo systemctl restart astromech-slave.service" 2>/dev/null; then
     sleep 4
-    SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active r2d2-slave.service" 2>/dev/null)
+    SLAVE_STATUS=$($SSH $SLAVE "systemctl is-active astromech-slave.service" 2>/dev/null)
     if [ "$SLAVE_STATUS" = "active" ]; then
-        ok "r2d2-slave active"
+        ok "astromech-slave active"
     else
         # Attempt reboot if service failed
         warn "Service failed ($SLAVE_STATUS) — rebooting Slave..."
         $SSH $SLAVE "sudo reboot" 2>/dev/null && ok "Slave rebooting" || fail "Slave reboot failed"
     fi
 else
-    fail "Unable to restart r2d2-slave"
+    fail "Unable to restart astromech-slave"
 fi
 
 [ $ERRORS -eq 0 ] && echo -e "  ${GREEN}✓ Resync OK${NC}" || echo -e "  ${RED}✗ Resync with $ERRORS error(s)${NC}"
