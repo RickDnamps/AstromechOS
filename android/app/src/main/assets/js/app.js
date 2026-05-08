@@ -38,6 +38,120 @@
 'use strict';
 
 // ================================================================
+// Themes
+// ================================================================
+
+const _THEMES = {
+  r2d2: {
+    label: 'R2-D2', swatch: '#00aaff',
+    vars: {
+      '--bg': '#080c14', '--bg2': '#0a1020', '--bg3': '#0c1428',
+      '--bg-card': 'rgba(8,18,35,0.92)', '--bg-hover': 'rgba(0,170,255,0.08)',
+      '--blue': '#00aaff', '--cyan': '#00ffea', '--teal': '#00ffea',
+      '--border': 'rgba(0,170,255,0.18)', '--border2': 'rgba(0,170,255,0.15)',
+      '--border-hi': 'rgba(0,170,255,0.45)',
+      '--glow': '0 0 14px rgba(0,170,255,0.35)',
+      '--glow-cyan': '0 0 14px rgba(0,255,234,0.3)',
+      '--text': '#c8d8ea', '--text-dim': '#4a6a8a',
+      '--grid-line': 'rgba(0,170,255,0.03)', '--scan-color': '#00ffea',
+    },
+  },
+  r5d4: {
+    label: 'R5-D4', swatch: '#ff3333',
+    vars: {
+      '--bg': '#120608', '--bg2': '#180a0c', '--bg3': '#1e0c10',
+      '--bg-card': 'rgba(18,6,8,0.92)', '--bg-hover': 'rgba(255,51,51,0.08)',
+      '--blue': '#ff3333', '--cyan': '#ff8844', '--teal': '#ff8844',
+      '--border': 'rgba(255,51,51,0.18)', '--border2': 'rgba(255,51,51,0.15)',
+      '--border-hi': 'rgba(255,51,51,0.45)',
+      '--glow': '0 0 14px rgba(255,51,51,0.35)',
+      '--glow-cyan': '0 0 14px rgba(255,136,68,0.3)',
+      '--text': '#eacaca', '--text-dim': '#8a4a4a',
+      '--grid-line': 'rgba(255,51,51,0.03)', '--scan-color': '#ff8844',
+    },
+  },
+  bb8: {
+    label: 'BB-8', swatch: '#ff8800',
+    vars: {
+      '--bg': '#120c04', '--bg2': '#181006', '--bg3': '#1e1408',
+      '--bg-card': 'rgba(18,12,4,0.92)', '--bg-hover': 'rgba(255,136,0,0.08)',
+      '--blue': '#ff8800', '--cyan': '#ffcc00', '--teal': '#ffcc00',
+      '--border': 'rgba(255,136,0,0.18)', '--border2': 'rgba(255,136,0,0.15)',
+      '--border-hi': 'rgba(255,136,0,0.45)',
+      '--glow': '0 0 14px rgba(255,136,0,0.35)',
+      '--glow-cyan': '0 0 14px rgba(255,204,0,0.3)',
+      '--text': '#ead8c0', '--text-dim': '#8a6840',
+      '--grid-line': 'rgba(255,136,0,0.03)', '--scan-color': '#ffcc00',
+    },
+  },
+  chopper: {
+    label: 'Chopper', swatch: '#ddbb00',
+    vars: {
+      '--bg': '#0a0c08', '--bg2': '#0e1008', '--bg3': '#12140a',
+      '--bg-card': 'rgba(10,12,8,0.92)', '--bg-hover': 'rgba(221,187,0,0.08)',
+      '--blue': '#ddbb00', '--cyan': '#4499ff', '--teal': '#4499ff',
+      '--border': 'rgba(221,187,0,0.18)', '--border2': 'rgba(221,187,0,0.15)',
+      '--border-hi': 'rgba(221,187,0,0.45)',
+      '--glow': '0 0 14px rgba(221,187,0,0.35)',
+      '--glow-cyan': '0 0 14px rgba(68,153,255,0.3)',
+      '--text': '#dddab0', '--text-dim': '#7a7840',
+      '--grid-line': 'rgba(221,187,0,0.03)', '--scan-color': '#4499ff',
+    },
+  },
+  r2q5: {
+    label: 'R2-Q5', swatch: '#8899aa',
+    vars: {
+      '--bg': '#070709', '--bg2': '#09090d', '--bg3': '#0b0b11',
+      '--bg-card': 'rgba(7,7,9,0.95)', '--bg-hover': 'rgba(136,153,170,0.08)',
+      '--blue': '#8899aa', '--cyan': '#cc1122', '--teal': '#cc1122',
+      '--border': 'rgba(136,153,170,0.18)', '--border2': 'rgba(136,153,170,0.15)',
+      '--border-hi': 'rgba(136,153,170,0.45)',
+      '--glow': '0 0 14px rgba(136,153,170,0.35)',
+      '--glow-cyan': '0 0 14px rgba(204,17,34,0.3)',
+      '--text': '#b0bcc8', '--text-dim': '#445566',
+      '--grid-line': 'rgba(136,153,170,0.03)', '--scan-color': '#cc1122',
+    },
+  },
+};
+
+let _activeTheme = 'r2d2';
+
+function applyTheme(id) {
+  const theme = _THEMES[id];
+  if (!theme) return;
+  _activeTheme = id;
+  const root = document.documentElement;
+  Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  localStorage.setItem('astromech-theme', id);
+  document.querySelectorAll('.theme-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.theme === id)
+  );
+}
+
+function _initThemes() {
+  const grid = document.getElementById('theme-grid');
+  if (!grid) return;
+  Object.entries(_THEMES).forEach(([id, theme]) => {
+    const btn = document.createElement('button');
+    btn.className = 'theme-btn' + (id === _activeTheme ? ' active' : '');
+    btn.dataset.theme = id;
+    btn.onclick = () => applyTheme(id);
+    btn.innerHTML = `<span class="theme-swatch" style="background:${theme.swatch}"></span>${theme.label}`;
+    grid.appendChild(btn);
+  });
+}
+
+// Apply saved theme immediately when script loads — before first paint
+;(function () {
+  const saved = localStorage.getItem('astromech-theme');
+  if (saved && _THEMES[saved]) {
+    _activeTheme = saved;
+    const root = document.documentElement;
+    Object.entries(_THEMES[saved].vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  }
+}());
+
+// ================================================================
 // Utilities
 // ================================================================
 
@@ -5235,6 +5349,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   _initCamVisibilityHandler();
   _initIconPicker();
+  _initThemes();
   init();
 });
 
