@@ -2017,8 +2017,10 @@ let _estopTripped = false;
 
 function _setEstopUI(tripped) {
   _estopTripped = tripped;
-  const btn = el('estop-toggle-btn');
-  const txt = el('estop-toggle-text');
+  const btn     = el('estop-toggle-btn');
+  const txt     = el('estop-toggle-text');
+  const overlay = el('estop-overlay');
+  if (overlay) overlay.classList.toggle('active', tripped);
   if (!btn) return;
   if (tripped) {
     btn.classList.replace('estop-armed', 'estop-tripped');
@@ -4617,6 +4619,10 @@ class StatusPoller {
     const pillSlave = el('pill-slave');
     const slaveOffline = !data.uart_ready || data.uart_health == null;
     if (pillSlave) pillSlave.style.display = slaveOffline ? '' : 'none';
+
+    // E-STOP overlay — sync from server state (survives page reload)
+    if (data.estop_active !== undefined && data.estop_active !== _estopTripped)
+      _setEstopUI(data.estop_active);
 
     // Cockpit pills — always updated (panel may be closed)
     this._setCockpitHbPill(data.heartbeat_ok);
