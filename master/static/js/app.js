@@ -4615,7 +4615,8 @@ class StatusPoller {
 
     // Conditional topbar pills — visible only when something is wrong
     const pillSlave = el('pill-slave');
-    if (pillSlave) pillSlave.style.display = data.uart_ready ? 'none' : '';
+    const slaveOffline = !data.uart_ready || data.uart_health == null;
+    if (pillSlave) pillSlave.style.display = slaveOffline ? '' : 'none';
 
     // Cockpit pills — always updated (panel may be closed)
     this._setCockpitHbPill(data.heartbeat_ok);
