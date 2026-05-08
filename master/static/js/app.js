@@ -4514,6 +4514,13 @@ const cockpitPanel = {
       `<div class="cockpit-row"><span class="cockpit-row-lbl">Version</span><span class="cockpit-row-val cockpit-dim">v${escapeHtml(String(data.version || '?'))}</span></div>`;
   },
 
+  updateBtn(data) {
+    const alerts   = this._buildAlerts(data);
+    const hasAlert = alerts.some(a => a.cls !== 'ok');
+    const btn      = el('cockpit-btn');
+    if (btn) btn.classList.toggle('alert', hasAlert);
+  },
+
   _updateAlerts(data) {
     const box = el('ck-alerts');
     if (!box) return;
@@ -4704,7 +4711,8 @@ class StatusPoller {
       }
     }
 
-    // Update cockpit panel on every status poll if open
+    // Always update cockpit button color; also refresh panel content if open
+    cockpitPanel.updateBtn(data);
     if (cockpitPanel.isOpen) cockpitPanel.update(data);
 
     // VESC tab has its own 500ms poll via _startVescTabPoll() — no refresh needed here
