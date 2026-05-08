@@ -86,6 +86,7 @@ VCFG:scale:X   power scale   VCFG:erpm:N   MAX_ERPM override
 VINV:L:0/1     motor direction explicit (0=normal 1=inverted)
 TL/TR:v:t:c:rpm:duty:fault   VESC telemetry Slave→Master
 REBOOT:1:CRC   reboot Slave
+SHUTDOWN:1:CRC shutdown Slave (sudo shutdown -h now, 3s delay)
 ```
 
 ---
@@ -133,18 +134,20 @@ Volume UI → courbe racine cubique : slider 50% → ALSA 79%. Lecture MP3 : `mp
 `Servo_S0`–`S15` = HAT 1 Slave PCA9685 (body)  · `Servo_S16`–`S31` = HAT 2 · etc.
 ID hardware immuable. Label éditable, sauvé dans `dome_angles.json` / `servo_angles.json`.
 
-**Config multi-HAT** (comma-separated, reload → reboot requis) :
+**Config multi-HAT** (comma-separated) — éditable via Settings → System → Hardware :
 ```ini
 # local.cfg (Master) — dome servo HATs
 [i2c_servo_hats]
 master_hats = 0x40           # ajouter ex: 0x40, 0x42 pour 32 servos dôme
 
-# slave/config/slave.cfg — body servo HATs
+# slave/config/slave.cfg — body servo HATs + motor HAT
 [i2c_servo_hats]
 slave_hats      = 0x41       # ajouter ex: 0x41, 0x42 pour 32 servos body
 slave_motor_hat = 0x40       # ⚠️ guard — ne JAMAIS mettre cette adresse dans slave_hats
 ```
-BODY_SERVOS / DOME_SERVOS calculés une fois à l'import → reboot Master+Slave après changement.
+`slave_hats` + `slave_motor_hat` lus/écrits depuis `slave.cfg` via `_sync_slave_hat_cfg()` → SCP + restart Slave auto.
+`master_hats` dans `local.cfg` → reboot Master requis.
+BODY_SERVOS / DOME_SERVOS calculés une fois à l'import → reboot après changement.
 Adresses PCA9685 : 0x40 (défaut) · 0x41 (A0) · 0x42 (A1) · 0x43 (A0+A1) · etc. via solder jumpers.
 Voir ELECTRONICS.md §6 pour la table complète des adresses et le câblage.
 
@@ -223,6 +226,7 @@ SSH     artoo / deetoo
 | 4+++++++ | CSS variable system · 8 built-in themes · Blueprint light · theme customizer with live preview · sci-fi fonts | ✅ |
 | 4++++++++ | Topbar clean · Cockpit pills HB/UART/BT · pill SLAVE · E-STOP red overlay · STATUS button toujours à jour | ✅ |
 | 4+++++++++ | Cockpit SERVICES diagnostic : Dome/Body Servo HATs · Motor HAT I2C probe · RP2040 Screen health | ✅ |
+| 4++++++++++ | Slave Motor HAT addr configurable UI · SHUTDOWN UART cmd · system buttons 2×3 grid (Reboot/Shutdown × Master/Slave/Both) | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
