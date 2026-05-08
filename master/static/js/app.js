@@ -44,111 +44,121 @@
 const _THEMES = {
   default: {
     label: 'Default', swatch: '#00aaff',
-    vars: {
-      '--bg': '#080c14', '--bg2': '#0a1020', '--bg3': '#0c1428',
-      '--bg-card': 'rgba(8,18,35,0.92)', '--bg-hover': 'rgba(0,170,255,0.08)',
-      '--blue': '#00aaff', '--cyan': '#00ffea', '--teal': '#00ffea',
-      '--border': 'rgba(0,170,255,0.18)', '--border2': 'rgba(0,170,255,0.15)',
-      '--border-hi': 'rgba(0,170,255,0.45)',
-      '--glow': '0 0 14px rgba(0,170,255,0.35)',
-      '--glow-cyan': '0 0 14px rgba(0,255,234,0.3)',
-      '--text': '#c8d8ea', '--text-dim': '#4a6a8a',
-      '--grid-line': 'rgba(0,170,255,0.03)', '--scan-color': '#00ffea',
-    },
+    vars: {},  // :root defaults apply — nothing to override
   },
   r2d2: {
     label: 'R2-D2', swatch: '#0849d6',
     vars: {
-      // Prop-accurate R2-D2: #0849d6 royal blue, #c1c3c9 silver, #3f4655 dark panels
       '--bg': '#05080e', '--bg2': '#080c18', '--bg3': '#0c1226',
-      '--bg-card': 'rgba(5,8,14,0.94)', '--bg-hover': 'rgba(8,73,214,0.09)',
-      '--blue': '#0849d6',      // official prop-maker R2-D2 royal blue
-      '--cyan': '#c1c3c9',      // metallic silver (body panel highlights)
-      '--teal': '#c1c3c9',
-      '--border': 'rgba(8,73,214,0.28)', '--border2': 'rgba(8,73,214,0.18)',
-      '--border-hi': 'rgba(8,73,214,0.60)',
+      '--bg-card': 'rgba(5,8,14,0.94)',
+      '--blue': '#0849d6', '--blue-rgb': '8, 73, 214',
+      '--cyan': '#c1c3c9', '--cyan-rgb': '193, 195, 201', '--teal': '#c1c3c9',
+      '--green': '#00cc66', '--orange': '#ff8800', '--red': '#ff2244',
       '--glow': '0 0 16px rgba(8,73,214,0.50)',
       '--glow-cyan': '0 0 12px rgba(193,195,201,0.25)',
-      '--text': '#eef4ff',      // near-white (white body panels)
-      '--text-dim': '#4466aa',
-      '--grid-line': 'rgba(8,73,214,0.04)', '--scan-color': '#c1c3c9',
+      '--text': '#eef4ff', '--text-dim': '#4466aa',
+      '--scan-color': '#c1c3c9',
     },
   },
   r2d2_light: {
     label: 'R2-D2 Clair', swatch: '#0849d6', light: true,
     vars: {
-      // Light theme — white like R2's body panels, royal blue accents
-      '--bg': '#edf2fc',        // off-white / very pale blue (white body)
-      '--bg2': '#dce6f6',       // slightly deeper
-      '--bg3': '#ccd8f0',       // card inner / input background
-      '--bg-card': 'rgba(255,255,255,0.92)',
-      '--bg-hover': 'rgba(8,73,214,0.07)',
-      '--blue': '#0849d6',      // royal blue
-      '--cyan': '#3f4655',      // dark navy-gray (panel shadow/detail)
-      '--teal': '#3f4655',
-      '--border': 'rgba(8,73,214,0.20)', '--border2': 'rgba(8,73,214,0.13)',
+      // ── Blueprint: pale blue-sky bg, navy topbar, light-blue cards ──
+      '--bg': '#dde8f8', '--bg2': '#d0def5', '--bg3': '#c8d8f0',
+      '--bg-card': 'rgba(238,244,255,0.95)',
+      '--bg-hover': 'rgba(8,73,214,0.08)',
+      '--blue': '#0849d6', '--blue-rgb': '8, 73, 214',
+      '--cyan': '#0066cc', '--cyan-rgb': '0, 102, 204', '--teal': '#0066cc',
+      '--green': '#006633', '--orange': '#cc5500', '--red': '#cc1133',
+      '--gray': '#5566aa', '--amber': '#b56000',
+      '--text': '#0a1840', '--text-dim': '#4a6090',
+      '--border': 'rgba(8,73,214,0.20)', '--border2': 'rgba(8,73,214,0.15)',
       '--border-hi': 'rgba(8,73,214,0.45)',
-      '--glow': '0 0 12px rgba(8,73,214,0.20)',
-      '--glow-cyan': '0 0 10px rgba(63,70,85,0.15)',
-      '--text': '#0a1840',      // dark navy (readable on white)
-      '--text-dim': '#4a6090',  // muted steel blue
-      '--grid-line': 'rgba(8,73,214,0.05)', '--scan-color': '#0849d6',
+      '--glow': '0 0 12px rgba(8,73,214,0.18)',
+      '--glow-cyan': '0 0 10px rgba(0,102,204,0.15)',
+      '--glow-red': '0 0 14px rgba(204,17,51,0.4)',
+      '--grid-line': 'rgba(8,73,214,0.04)', '--scan-color': '#0849d6',
+      // ── Structural backgrounds ──
+      '--topbar-bg':       '#0a1840',
+      '--sidebar-bg':      'rgba(8,73,214,0.06)',
+      '--input-bg':        'rgba(213,226,244,0.9)',
+      '--input-option':    '#c8d8f0',
+      '--bg-dark-overlay': 'rgba(8,73,214,0.08)',
+      '--card-dark':       'rgba(238,244,255,0.9)',
+      '--pill-bg':         'rgba(238,244,255,0.9)',
+      '--btn-bg':          'rgba(8,73,214,0.08)',
+      '--btn-hover-bg':    'rgba(8,73,214,0.18)',
+      '--modal-overlay':   'rgba(10,24,64,0.65)',
+      '--modal-bg':        'rgba(238,244,255,0.97)',
+      // ── Surface overlays (blue tint on light bg) ──
+      '--surface-dim':    'rgba(8,73,214,0.04)',
+      '--surface':        'rgba(8,73,214,0.05)',
+      '--surface-subtle': 'rgba(8,73,214,0.06)',
+      '--surface2':       'rgba(8,73,214,0.08)',
+      '--surface3':       'rgba(8,73,214,0.10)',
+      '--surface4':       'rgba(8,73,214,0.12)',
+      '--surface5':       'rgba(8,73,214,0.15)',
+      // ── Status colors (readable on light bg) ──
+      '--status-ok':   '#007744',
+      '--status-warn': '#aa5500',
+      '--status-err':  '#cc1133',
+      '--val-color':   '#0849d6',
     },
   },
   r5d4: {
     label: 'R5-D4', swatch: '#ff3333',
     vars: {
       '--bg': '#120608', '--bg2': '#180a0c', '--bg3': '#1e0c10',
-      '--bg-card': 'rgba(18,6,8,0.92)', '--bg-hover': 'rgba(255,51,51,0.08)',
-      '--blue': '#ff3333', '--cyan': '#ff8844', '--teal': '#ff8844',
-      '--border': 'rgba(255,51,51,0.18)', '--border2': 'rgba(255,51,51,0.15)',
-      '--border-hi': 'rgba(255,51,51,0.45)',
+      '--bg-card': 'rgba(18,6,8,0.92)',
+      '--blue': '#ff3333', '--blue-rgb': '255, 51, 51',
+      '--cyan': '#ff8844', '--cyan-rgb': '255, 136, 68', '--teal': '#ff8844',
+      '--green': '#cc6633', '--orange': '#ff6600', '--red': '#ff1122',
       '--glow': '0 0 14px rgba(255,51,51,0.35)',
       '--glow-cyan': '0 0 14px rgba(255,136,68,0.3)',
       '--text': '#eacaca', '--text-dim': '#8a4a4a',
-      '--grid-line': 'rgba(255,51,51,0.03)', '--scan-color': '#ff8844',
+      '--scan-color': '#ff8844',
     },
   },
   bb8: {
     label: 'BB-8', swatch: '#ff8800',
     vars: {
       '--bg': '#120c04', '--bg2': '#181006', '--bg3': '#1e1408',
-      '--bg-card': 'rgba(18,12,4,0.92)', '--bg-hover': 'rgba(255,136,0,0.08)',
-      '--blue': '#ff8800', '--cyan': '#ffcc00', '--teal': '#ffcc00',
-      '--border': 'rgba(255,136,0,0.18)', '--border2': 'rgba(255,136,0,0.15)',
-      '--border-hi': 'rgba(255,136,0,0.45)',
+      '--bg-card': 'rgba(18,12,4,0.92)',
+      '--blue': '#ff8800', '--blue-rgb': '255, 136, 0',
+      '--cyan': '#ffcc00', '--cyan-rgb': '255, 204, 0', '--teal': '#ffcc00',
+      '--green': '#cc8800', '--orange': '#ff6600', '--red': '#ff3300',
       '--glow': '0 0 14px rgba(255,136,0,0.35)',
       '--glow-cyan': '0 0 14px rgba(255,204,0,0.3)',
       '--text': '#ead8c0', '--text-dim': '#8a6840',
-      '--grid-line': 'rgba(255,136,0,0.03)', '--scan-color': '#ffcc00',
+      '--scan-color': '#ffcc00',
     },
   },
   chopper: {
     label: 'Chopper', swatch: '#ddbb00',
     vars: {
       '--bg': '#0a0c08', '--bg2': '#0e1008', '--bg3': '#12140a',
-      '--bg-card': 'rgba(10,12,8,0.92)', '--bg-hover': 'rgba(221,187,0,0.08)',
-      '--blue': '#ddbb00', '--cyan': '#4499ff', '--teal': '#4499ff',
-      '--border': 'rgba(221,187,0,0.18)', '--border2': 'rgba(221,187,0,0.15)',
-      '--border-hi': 'rgba(221,187,0,0.45)',
+      '--bg-card': 'rgba(10,12,8,0.92)',
+      '--blue': '#ddbb00', '--blue-rgb': '221, 187, 0',
+      '--cyan': '#4499ff', '--cyan-rgb': '68, 153, 255', '--teal': '#4499ff',
+      '--green': '#88aa00', '--orange': '#dd8800', '--red': '#dd3300',
       '--glow': '0 0 14px rgba(221,187,0,0.35)',
       '--glow-cyan': '0 0 14px rgba(68,153,255,0.3)',
       '--text': '#dddab0', '--text-dim': '#7a7840',
-      '--grid-line': 'rgba(221,187,0,0.03)', '--scan-color': '#4499ff',
+      '--scan-color': '#4499ff',
     },
   },
   r2q5: {
     label: 'R2-Q5', swatch: '#8899aa',
     vars: {
       '--bg': '#070709', '--bg2': '#09090d', '--bg3': '#0b0b11',
-      '--bg-card': 'rgba(7,7,9,0.95)', '--bg-hover': 'rgba(136,153,170,0.08)',
-      '--blue': '#8899aa', '--cyan': '#cc1122', '--teal': '#cc1122',
-      '--border': 'rgba(136,153,170,0.18)', '--border2': 'rgba(136,153,170,0.15)',
-      '--border-hi': 'rgba(136,153,170,0.45)',
+      '--bg-card': 'rgba(7,7,9,0.95)',
+      '--blue': '#8899aa', '--blue-rgb': '136, 153, 170',
+      '--cyan': '#cc1122', '--cyan-rgb': '204, 17, 34', '--teal': '#cc1122',
+      '--green': '#557766', '--orange': '#886644', '--red': '#cc1122',
       '--glow': '0 0 14px rgba(136,153,170,0.35)',
       '--glow-cyan': '0 0 14px rgba(204,17,34,0.3)',
       '--text': '#b0bcc8', '--text-dim': '#445566',
-      '--grid-line': 'rgba(136,153,170,0.03)', '--scan-color': '#cc1122',
+      '--scan-color': '#cc1122',
     },
   },
 };
@@ -160,7 +170,10 @@ function applyTheme(id) {
   if (!theme) return;
   _activeTheme = id;
   const root = document.documentElement;
-  Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  root.removeAttribute('style');
+  if (id !== 'default') {
+    Object.entries(theme.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  }
   localStorage.setItem('astromech-theme', id);
   document.querySelectorAll('.theme-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.theme === id)
@@ -189,8 +202,9 @@ function _initThemes() {
   const id = (saved && _THEMES[saved]) ? saved : 'default';
   _activeTheme = id;
   if (id !== 'default') {
+    const vars = _THEMES[id].vars;
     const root = document.documentElement;
-    Object.entries(_THEMES[id].vars).forEach(([k, v]) => root.style.setProperty(k, v));
+    Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
 }());
 
