@@ -76,10 +76,7 @@ from master.config.config_loader import write_cfg_atomic
 
 servo_bp = Blueprint('servo', __name__, url_prefix='/servo')
 
-_MAIN_CFG          = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG         = '/home/artoo/r2d2/master/config/local.cfg'
-_DOME_ANGLES_FILE  = '/home/artoo/r2d2/master/config/dome_angles.json'
-_SLAVE_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
+from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, DOME_ANGLES as _DOME_ANGLES_FILE, SLAVE_ANGLES as _SLAVE_ANGLES_FILE
 
 
 def _slave_host() -> str:

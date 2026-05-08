@@ -42,7 +42,7 @@ import os
 
 log = logging.getLogger(__name__)
 
-VERSION_FILE = "/home/artoo/r2d2/VERSION"
+from shared.paths import VERSION_FILE
 MAX_SYNC_RETRIES = 3
 SYNC_RETRY_BACKOFF_S = [5, 15, 30]
 

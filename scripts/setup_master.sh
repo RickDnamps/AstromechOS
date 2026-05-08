@@ -54,7 +54,7 @@
 set -e
 
 REPO_URL="https://github.com/RickDnamps/AstromechOS.git"
-REPO_PATH="/home/artoo/r2d2"
+REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 USER="artoo"
 
 # Colors

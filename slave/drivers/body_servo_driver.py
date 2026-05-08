@@ -50,8 +50,7 @@ from shared.base_driver import BaseDriver
 
 log = logging.getLogger(__name__)
 
-SERVO_ANGLES_FILE = '/home/artoo/r2d2/slave/config/servo_angles.json'
-_SLAVE_CFG        = '/home/artoo/r2d2/slave/config/slave.cfg'
+from shared.paths import SLAVE_ANGLES as SERVO_ANGLES_FILE, SLAVE_CFG as _SLAVE_CFG
 
 PCA9685_FREQ_HZ = 50
 MODE1_REG       = 0x00

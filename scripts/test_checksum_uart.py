@@ -34,7 +34,7 @@ A executer sur le Master Pi APRES avoir stoppe r2d2-master.
 Le Slave reste actif et doit accepter/rejeter les paquets correctement.
 """
 import sys, time, serial
-sys.path.insert(0, '/home/artoo/r2d2')
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent))
 from shared.uart_protocol import calc_crc, build_msg, parse_msg
 
 PORT = '/dev/ttyAMA0'

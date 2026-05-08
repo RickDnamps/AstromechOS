@@ -56,7 +56,7 @@ set -e
 # Reopen stdin from the terminal if the script is run via pipe (curl | bash)
 [ -t 0 ] || exec < /dev/tty
 
-REPO_PATH="/home/artoo/r2d2"
+REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 USER="artoo"
 GITHUB_RAW="https://raw.githubusercontent.com/RickDnamps/AstromechOS/main"
 
@@ -161,7 +161,7 @@ NETWORK_SCRIPT=""
 # Search locally (if launched from the repo or copied)
 for candidate in \
     "$(dirname "$0")/setup_slave_network.sh" \
-    "/home/artoo/r2d2/scripts/setup_slave_network.sh" \
+    "$REPO_PATH/scripts/setup_slave_network.sh" \
     "/home/artoo/setup_slave_network.sh"
 do
     if [ -f "$candidate" ]; then
@@ -257,7 +257,7 @@ echo "  After reboot:"
 echo "    The Slave connects to the AstromechOS hotspot on the Master."
 echo ""
 echo "  On the Master, run the first deployment:"
-echo "    bash /home/artoo/r2d2/scripts/deploy.sh --first-install"
+echo "    bash $REPO_PATH/scripts/deploy.sh --first-install"
 echo ""
 echo "  This will:"
 echo "    → rsync the code to the Slave"

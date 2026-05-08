@@ -50,9 +50,7 @@ from shared.base_driver import BaseDriver
 
 log = logging.getLogger(__name__)
 
-DOME_ANGLES_FILE = '/home/artoo/r2d2/master/config/dome_angles.json'
-_MAIN_CFG        = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG       = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import DOME_ANGLES as DOME_ANGLES_FILE, MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG
 
 PCA9685_FREQ_HZ = 50
 MODE1_REG       = 0x00

@@ -14,9 +14,7 @@ log = logging.getLogger(__name__)
 
 TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
 
-_DOME_ANGLES_PATH = '/home/artoo/r2d2/master/config/dome_angles.json'
-_BODY_ANGLES_PATH = '/home/artoo/r2d2/slave/config/servo_angles.json'
-_LOCAL_CFG        = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import DOME_ANGLES as _DOME_ANGLES_PATH, SLAVE_ANGLES as _BODY_ANGLES_PATH, LOCAL_CFG as _LOCAL_CFG
 
 _SERVO_SPECIAL = ('all', 'all_dome', 'all_body')
 

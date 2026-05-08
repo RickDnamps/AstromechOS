@@ -32,7 +32,7 @@
 # Usage: bash scripts/test_servos.sh
 # Ctrl+C to stop tests
 
-REPO=/home/artoo/r2d2
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE=artoo@r2-slave.local
 
 # ──────────────────────────────────────────────

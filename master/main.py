@@ -67,7 +67,7 @@ from master.flask_app import create_app
 from master.motion_watchdog import motion_watchdog
 from master.app_watchdog import app_watchdog
 
-VERSION_FILE = "/home/artoo/r2d2/VERSION"
+from shared.paths import VERSION_FILE, DEBUG_DIR
 
 
 def setup_logging(level_str: str) -> None:
@@ -84,7 +84,7 @@ def setup_logging(level_str: str) -> None:
     ch.setFormatter(fmt)
     root.addHandler(ch)
     # Persistent rotating file — survives reboots, gitignored (debug/)
-    log_dir = '/home/artoo/r2d2/debug'
+    log_dir = DEBUG_DIR
     os.makedirs(log_dir, exist_ok=True)
     fh = RotatingFileHandler(
         os.path.join(log_dir, 'master.log'),

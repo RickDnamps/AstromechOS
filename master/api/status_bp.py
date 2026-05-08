@@ -49,8 +49,7 @@ from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.app_watchdog import app_watchdog
 
-_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, VERSION_FILE, SCRIPTS_DIR
 
 
 def _iface_ip(iface: str) -> str | None:
@@ -156,7 +155,6 @@ except Exception:
 
 status_bp = Blueprint('status', __name__)
 
-VERSION_FILE = '/home/artoo/r2d2/VERSION'
 
 
 def _read_version() -> str:
@@ -327,7 +325,7 @@ def system_resync_slave():
     """
     def do_resync():
         subprocess.run(
-            ['bash', '/home/artoo/r2d2/scripts/resync_slave.sh'],
+            ['bash', f'{SCRIPTS_DIR}/resync_slave.sh'],
             check=False
         )
     threading.Thread(target=do_resync, daemon=True).start()
@@ -449,7 +447,7 @@ def system_estop_reset():
     def _safe_home():
         # Read arm→panel→delay from config
         cfg = configparser.ConfigParser()
-        cfg.read('/home/artoo/r2d2/master/config/local.cfg')
+        cfg.read(LOCAL_CFG)
         count = cfg.getint('arms', 'count', fallback=0)
         arm_entries = []
         for i in range(1, count + 1):

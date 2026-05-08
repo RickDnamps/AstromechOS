@@ -49,8 +49,7 @@ log = logging.getLogger(__name__)
 DEFAULT_OPEN_DEG  = 110
 DEFAULT_CLOSE_DEG =  20
 
-_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG
 
 
 def _calibrated_angle(name: str, action: str) -> float:

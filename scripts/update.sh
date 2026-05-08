@@ -40,7 +40,7 @@
 #   5. Restart the Master service (app + motion watchdogs included)
 #   6. Verify that services are active
 
-REPO=/home/artoo/r2d2
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE=artoo@r2-slave.local
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 VERSION_FILE=$REPO/VERSION

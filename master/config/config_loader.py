@@ -40,9 +40,9 @@ import sys
 
 log = logging.getLogger(__name__)
 
-CONFIG_DIR   = os.path.dirname(__file__)
-MAIN_CFG     = os.path.join(CONFIG_DIR, 'main.cfg')
-LOCAL_CFG    = os.path.join(CONFIG_DIR, 'local.cfg')
+from shared.paths import MAIN_CFG, LOCAL_CFG  # noqa: E402
+
+CONFIG_DIR    = os.path.dirname(__file__)
 LOCAL_EXAMPLE = os.path.join(CONFIG_DIR, 'local.cfg.example')
 
 

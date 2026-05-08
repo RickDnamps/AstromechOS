@@ -32,7 +32,7 @@
 # Called by: update.sh, API /system/resync_slave, dome button
 # Usage: bash scripts/resync_slave.sh
 
-REPO=/home/artoo/r2d2
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE=artoo@r2-slave.local
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 VERSION_FILE=$REPO/VERSION

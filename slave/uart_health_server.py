@@ -52,7 +52,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 log = logging.getLogger(__name__)
 
 _DEFAULT_PORT = 5001
-_SLAVE_CFG    = '/home/artoo/r2d2/slave/config/slave.cfg'
+from shared.paths import SLAVE_CFG as _SLAVE_CFG
 
 
 def _read_motor_hat_addr() -> int:

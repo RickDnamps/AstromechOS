@@ -49,8 +49,7 @@ from flask import Blueprint, request, jsonify, send_file, abort
 import requests as _requests
 import master.registry as reg
 
-_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, SLAVE_SOUNDS as _SLAVE_SOUNDS
 
 
 def _slave_host() -> str:
@@ -324,7 +323,7 @@ def _sftp_sync_index(index: dict) -> None:
         c.connect('192.168.4.171', username='artoo', password='deetoo', timeout=8)
         sftp = c.open_sftp()
         data = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
-        sftp.putfo(io.BytesIO(data), '/home/artoo/r2d2/slave/sounds/sounds_index.json')
+        sftp.putfo(io.BytesIO(data), f'{_SLAVE_SOUNDS}/sounds_index.json')
         sftp.close(); c.close()
     except Exception as e:
         log.warning(f'SFTP index sync failed: {e}')
@@ -338,7 +337,7 @@ def _sftp_sync_sound(local_mp3: str, stem: str, index: dict) -> None:
         c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         c.connect('192.168.4.171', username='artoo', password='deetoo', timeout=8)
         sftp = c.open_sftp()
-        remote_sounds = '/home/artoo/r2d2/slave/sounds'
+        remote_sounds = _SLAVE_SOUNDS
         sftp.put(local_mp3, f'{remote_sounds}/{stem}.mp3')
         data = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
         sftp.putfo(io.BytesIO(data), f'{remote_sounds}/sounds_index.json')

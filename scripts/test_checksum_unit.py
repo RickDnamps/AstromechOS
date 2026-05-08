@@ -33,7 +33,7 @@ Test unitaire checksum UART — somme + longueur mod 256.
 Phase 1: tests locaux, pas de hardware requis.
 """
 import sys, logging
-sys.path.insert(0, '/home/artoo/r2d2')
+sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent))
 from shared.uart_protocol import calc_crc, build_msg, parse_msg
 
 PASS = []; FAIL = []

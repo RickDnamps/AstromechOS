@@ -29,7 +29,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # Emergency servo stop — cut PWM Master (0x40) + Slave (0x41)
-REPO=/home/artoo/r2d2
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE=artoo@r2-slave.local
 
 pkill -9 -f test_servo 2>/dev/null

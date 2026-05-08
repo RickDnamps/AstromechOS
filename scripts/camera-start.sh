@@ -10,7 +10,8 @@
 #   1. Device file disappears (USB unplug) → kill & let systemd restart
 #   2. Stream stale (select() timeout zombie) → HTTP snapshot check, kill after 15s
 
-ENV_FILE="/home/artoo/r2d2/master/config/camera.env"
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+ENV_FILE="$REPO/master/config/camera.env"
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
 CAMERA_RESOLUTION="${CAMERA_RESOLUTION:-640x480}"
 CAMERA_FPS="${CAMERA_FPS:-30}"

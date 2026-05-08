@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 log = logging.getLogger(__name__)
 
-VERSION_FILE = "/home/artoo/r2d2/VERSION"
+from shared.paths import VERSION_FILE
 VERSION_REQUEST_TIMEOUT_S = 10.0
 MAX_SYNC_RETRIES = 3
 SYNC_RETRY_BACKOFF_S = [5, 15, 30]

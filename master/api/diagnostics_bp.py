@@ -45,8 +45,7 @@ from master.app_watchdog import app_watchdog
 
 log = logging.getLogger(__name__)
 
-_MAIN_CFG  = '/home/artoo/r2d2/master/config/main.cfg'
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG
 
 diagnostics_bp = Blueprint('diagnostics', __name__)
 

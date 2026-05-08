@@ -64,7 +64,7 @@ from slave.drivers.vesc_driver        import VescDriver
 from slave.drivers.body_servo_driver  import BodyServoDriver
 # from slave.drivers.dome_motor_driver  import DomeMotorDriver  # to create Phase 2
 
-_SLAVE_CFG = '/home/artoo/r2d2/slave/config/slave.cfg'
+from shared.paths import SLAVE_CFG as _SLAVE_CFG, VERSION_FILE
 
 def _read_audio_channels() -> int:
     """Reads audio_channels from slave.cfg. Defaults to 6 if absent."""
@@ -78,7 +78,6 @@ def _read_audio_channels() -> int:
 UART_PORT = "/dev/ttyAMA0"
 UART_BAUD = 115200
 LOG_LEVEL = "INFO"
-VERSION_FILE = "/home/artoo/r2d2/VERSION"
 
 
 def setup_logging(level_str: str) -> None:

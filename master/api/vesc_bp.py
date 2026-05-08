@@ -44,7 +44,7 @@ from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.config.config_loader import write_cfg_atomic
 
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import LOCAL_CFG as _LOCAL_CFG
 
 
 def _save_vesc_cfg(**kwargs) -> None:

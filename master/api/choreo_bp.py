@@ -15,7 +15,7 @@ import master.registry as reg
 log = logging.getLogger(__name__)
 choreo_bp = Blueprint('choreo', __name__)
 
-_LOCAL_CFG = '/home/artoo/r2d2/master/config/local.cfg'
+from shared.paths import LOCAL_CFG as _LOCAL_CFG
 
 _CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
 

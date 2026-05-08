@@ -63,7 +63,7 @@
 
 set -e
 
-REPO_PATH="/home/artoo/r2d2"
+REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 LOCAL_CFG="${REPO_PATH}/master/config/local.cfg"
 LOCAL_CFG_EXAMPLE="${REPO_PATH}/master/config/local.cfg.example"
 
@@ -364,7 +364,7 @@ echo -e "  ${GRN}  Hotspot SSID     : ${HOTSPOT_SSID}${NC}"
 echo -e "  ${GRN}  Hotspot Password : ${HOTSPOT_PASS}${NC}"
 echo    ""
 echo    "  Slave command (after Master reboot):"
-echo    "  sudo bash /home/artoo/r2d2/scripts/setup_slave_network.sh"
+echo    "  sudo bash $REPO_PATH/scripts/setup_slave_network.sh"
 echo    ""
 echo -e "  ${YEL}Next steps:${NC}"
 echo    "    1. Plug the WiFi USB dongle into the Master (if not already done)"

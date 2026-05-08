@@ -36,7 +36,7 @@
 #   sudo systemctl stop r2d2-master.service r2d2-monitor.service
 #   ssh artoo@r2-slave.local "sudo systemctl stop r2d2-slave.service"
 
-REPO=/home/artoo/r2d2
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE=artoo@r2-slave.local
 
 echo "=== Nettoyage ==="

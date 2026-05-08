@@ -36,7 +36,7 @@
 
 set -e
 
-REPO_PATH="/home/artoo/r2d2"
+REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 VENDOR_DIR="$REPO_PATH/slave/vendor"
 REQS="$REPO_PATH/slave/requirements.txt"
 

@@ -105,7 +105,7 @@ echo ""
 echo -e "${BLU}--- R2-Master hotspot credentials ---${NC}"
 echo ""
 echo    "  This information can be found at the end of setup_master_network.sh"
-echo    "  or in /home/artoo/r2d2/master/config/local.cfg [hotspot] on the Master."
+echo    "  or in master/config/local.cfg [hotspot] on the Master."
 echo ""
 
 HOTSPOT_SSID=""

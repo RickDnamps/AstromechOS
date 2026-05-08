@@ -48,8 +48,7 @@ from master.config.config_loader import write_cfg_atomic
 settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
 
-LOCAL_CFG    = '/home/artoo/r2d2/master/config/local.cfg'
-_SLAVE_CFG   = '/home/artoo/r2d2/slave/config/slave.cfg'
+from shared.paths import LOCAL_CFG, SLAVE_CFG as _SLAVE_CFG
 _SLAVE_HOST  = 'artoo@r2-slave.local'
 _ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
 _ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
@@ -197,7 +196,7 @@ def _sync_audio_channels(channels: int) -> None:
     SCP it to the Slave, then restart both services (delayed to let
     the HTTP response complete first).
     """
-    slave_cfg_path = '/home/artoo/r2d2/slave/config/slave.cfg'
+    slave_cfg_path = _SLAVE_CFG
     slave_host     = 'artoo@r2-slave.local'
 
     # Write slave.cfg on Master filesystem

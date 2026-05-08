@@ -37,11 +37,11 @@
 
 set -e
 
-REPO_PATH="/home/artoo/r2d2"
+REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE_USER="artoo"
 SLAVE_HOST="r2-slave.local"
-SLAVE_REPO="/home/artoo/r2d2"
-VERSION_FILE="/home/artoo/r2d2/VERSION"
+SLAVE_REPO="$REPO_PATH"
+VERSION_FILE="$REPO_PATH/VERSION"
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
 VENDOR_DIR="$REPO_PATH/slave/vendor"
 
@@ -158,10 +158,10 @@ fi
 # ------------------------------------------------------------------
 if [ "$FIRST_INSTALL" = true ]; then
     echo "[4/5] Installation services systemd + audio + BT sur le Slave..."
-    ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" bash << 'REMOTE'
+    ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" SLAVE_REPO="$SLAVE_REPO" bash << 'REMOTE'
         # Services systemd
-        sudo cp /home/artoo/r2d2/slave/services/r2d2-slave.service   /etc/systemd/system/
-        sudo cp /home/artoo/r2d2/slave/services/r2d2-version.service /etc/systemd/system/
+        sudo cp "$SLAVE_REPO/slave/services/r2d2-slave.service"   /etc/systemd/system/
+        sudo cp "$SLAVE_REPO/slave/services/r2d2-version.service" /etc/systemd/system/
         sudo systemctl daemon-reload
         sudo systemctl enable r2d2-version r2d2-slave
         echo "  → systemd services installed"
