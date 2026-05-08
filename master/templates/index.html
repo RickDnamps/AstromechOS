@@ -912,6 +912,7 @@
     <!-- Sidebar -->
     <nav class="settings-sidebar">
       <button class="settings-nav-item active" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
+      <button class="settings-nav-item" data-panel="interface"  onclick="switchSettingsPanel('interface')">🎨 Interface</button>
       <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
       <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 BT Gamepad</button>
@@ -1555,17 +1556,17 @@
         </section>
       </div>
 
-      <!-- 🖥️ System -->
-      <div class="settings-panel" id="spanel-system">
+      <!-- 🎨 Interface -->
+      <div class="settings-panel" id="spanel-interface">
         <section class="card settings-card">
-          <h2 class="card-title">SYSTEM</h2>
-          <div class="settings-status" id="system-version">Loading...</div>
+          <h2 class="card-title">IDENTITY</h2>
           <div class="settings-row admin-only">
             <label class="settings-label">Robot name</label>
             <input type="text" id="robot-name-input" class="settings-input" maxlength="32" placeholder="R2-D2">
           </div>
           <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
           <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-divider admin-only"></div>
           <div class="settings-row admin-only">
             <label class="settings-label">Master Pi — location name</label>
             <input type="text" id="master-location-input" class="settings-input" maxlength="20" placeholder="Dome">
@@ -1590,7 +1591,19 @@
               <span id="icon-upload-status" style="font-size:10px;color:var(--text-dim)"></span>
             </div>
           </div>
-          <div class="settings-divider admin-only"></div>
+        </section>
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">THEMES</h2>
+          <p class="settings-note">Coming soon — custom color themes.</p>
+        </section>
+      </div>
+
+      <!-- 🖥️ System -->
+      <div class="settings-panel" id="spanel-system">
+        <section class="card settings-card">
+          <h2 class="card-title">SYSTEM</h2>
+          <div class="settings-status" id="system-version">Loading...</div>
+          <div class="settings-divider"></div>
           <h3 class="settings-sub-title admin-only">HARDWARE</h3>
           <p class="settings-note admin-only">HAT address changes require a Master reboot to take effect.</p>
           <div class="settings-row admin-only">

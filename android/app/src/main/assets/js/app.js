@@ -478,7 +478,7 @@ function switchSettingsPanel(panelId) {
   else                    _stopVescTabPoll();
 
   // Lazy-load panel data when opening
-  if (panelId === 'network') loadSettings();
+  if (panelId === 'network' || panelId === 'deploy' || panelId === 'system') loadSettings();
   if (panelId === 'servos')  loadServoSettings();
   if (panelId === 'arms')    armsConfig.load();   // always reload — labels may have changed
   if (panelId === 'behavior') behaviorPanel.load();
