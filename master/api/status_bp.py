@@ -353,6 +353,19 @@ def system_reboot_slave():
     return jsonify({'error': 'UART not available'}), 503
 
 
+@status_bp.post('/system/reboot_both')
+def system_reboot_both():
+    """Reboots Slave first (via UART), then Master after a short delay."""
+    if reg.uart:
+        reg.uart.send('REBOOT', '1')
+    def _reboot_master():
+        import time as _t
+        _t.sleep(1)
+        subprocess.run(['sudo', 'reboot'], check=False)
+    threading.Thread(target=_reboot_master, daemon=True).start()
+    return jsonify({'status': 'rebooting'})
+
+
 @status_bp.post('/system/shutdown')
 def system_shutdown():
     """Shuts down the Master."""
