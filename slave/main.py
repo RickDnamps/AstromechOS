@@ -28,7 +28,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 Slave — Entry point.
+AstromechOS Slave — Entry point.
 Runs on Raspberry Pi 4B 2GB (body).
 
 Boot sequence:
@@ -124,7 +124,7 @@ def handle_shutdown(value: str) -> None:
 def main() -> None:
     setup_logging(LOG_LEVEL)
     log = logging.getLogger(__name__)
-    log.info("=== R2-D2 Slave starting ===")
+    log.info("=== AstromechOS Slave starting ===")
 
     # ------------------------------------------------------------------
     # RP2040 diagnostic screen — starts the boot sequence

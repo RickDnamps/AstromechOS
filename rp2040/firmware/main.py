@@ -28,7 +28,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 RP2040 Firmware — MicroPython.
+AstromechOS RP2040 Firmware — MicroPython.
 Waveshare RP2040-LCD-1.28 / RP2040-Touch-LCD-1.28 (GC9A01, CST816S).
 
 Ecran de diagnostic — "render what you're told".

@@ -29,7 +29,7 @@
 # ============================================================
 """
 Blueprint API Status — Phase 4.
-Reports R2-D2 system state in real time.
+Reports AstromechOS system state in real time.
 
 Endpoints:
   GET  /status              → full JSON state
@@ -197,7 +197,7 @@ def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
 
 @status_bp.get('/status')
 def get_status():
-    """Full R2-D2 system state."""
+    """Full AstromechOS system state."""
     _uart_serial = getattr(reg.uart, '_serial', None)
     uart_ready   = bool(_uart_serial and _uart_serial.is_open
                         and getattr(reg.uart, '_running', False))

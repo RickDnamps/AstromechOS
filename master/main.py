@@ -28,7 +28,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 Master — Entry point.
+AstromechOS Master — Entry point.
 Runs on Raspberry Pi 4B (dome).
 
 Boot sequence:
@@ -195,7 +195,7 @@ def main() -> None:
     cfg = load()
     setup_logging(cfg.get('master', 'log_level', fallback='INFO'))
     log = logging.getLogger(__name__)
-    log.info("=== R2-D2 Master starting ===")
+    log.info("=== AstromechOS Master starting ===")
     _start_network_monitor()
 
     # Boot: attempt git pull

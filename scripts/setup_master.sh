@@ -83,7 +83,7 @@ id "$USER" &>/dev/null || err "User '$USER' does not exist — reconfigure via R
 
 echo ""
 echo "============================================================"
-echo "  R2-D2 Master — Installation automatique"
+echo "  AstromechOS Master — Installation automatique"
 echo "============================================================"
 echo ""
 

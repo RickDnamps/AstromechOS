@@ -1,4 +1,4 @@
-# R2-D2 Control — Roadmap & Feature Ideas
+# AstromechOS — Roadmap & Feature Ideas
 
 > Brainstorm session 2026-03-22 — priorités et idées pour les prochaines phases de développement.
 

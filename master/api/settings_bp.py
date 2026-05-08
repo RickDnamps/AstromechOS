@@ -28,7 +28,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Blueprint API Settings — Network configuration and R2-D2 parameters.
+Blueprint API Settings — Network configuration and AstromechOS parameters.
 
 Endpoints:
   GET  /settings              → read current config (local.cfg + NM state)

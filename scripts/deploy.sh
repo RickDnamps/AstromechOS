@@ -58,7 +58,7 @@ for arg in "$@"; do
     esac
 done
 
-echo "=== R2-D2 Deploy ==="
+echo "=== AstromechOS Deploy ==="
 
 # ------------------------------------------------------------------
 # git pull optionnel

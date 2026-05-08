@@ -29,7 +29,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 Joystick Stress Test + WiFi Monitor
+AstromechOS Joystick Stress Test + WiFi Monitor
 ==========================================
 Simulates the real behaviour of the virtual joystick (mousemove rate) for N seconds
 and simultaneously monitors the Pi to identify the cause of WiFi drops.
@@ -345,7 +345,7 @@ def main():
     PI_HOST  = args.host
     BASE_URL = f'http://{PI_HOST}:5000'
 
-    print(f"\nR2-D2 Joystick Stress Test + WiFi Monitor")
+    print(f"\nAstromechOS Joystick Stress Test + WiFi Monitor")
     print(f"  Target   : {BASE_URL}")
     print(f"  Duration : {args.duration}s")
     print(f"  Rate     : {args.rate} req/s  (mousemove @ {args.rate}fps = {args.rate} POST/s)")

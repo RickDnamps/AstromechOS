@@ -28,7 +28,7 @@
 #  You should have received a copy of the GNU GPL along with
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# update.sh — Full R2-D2 update: git pull + rsync Slave + restart everything
+# update.sh — Full AstromechOS update: git pull + rsync Slave + restart everything
 # Usage: bash scripts/update.sh
 # Run on the Master (r2-master.local)
 #
@@ -272,7 +272,7 @@ fi
 echo ""
 echo "  ════════════════════════════════════"
 if [ $ERRORS -eq 0 ]; then
-    echo -e "  ${GREEN}✓ R2-D2 operational — version: ${VERSION}${NC}"
+    echo -e "  ${GREEN}✓ AstromechOS operational — version: ${VERSION}${NC}"
 else
     echo -e "  ${YELLOW}⚠ Started with $ERRORS error(s) — version: ${VERSION}${NC}"
     echo -e "  ${YELLOW}  Check: sudo journalctl -u r2d2-master -n 30${NC}"

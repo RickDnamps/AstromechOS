@@ -28,7 +28,7 @@
 #  You should have received a copy of the GNU GPL along with
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Diagnostic R2-D2 — lit les logs Master + Slave et teste les servos via API
+# Diagnostic AstromechOS — lit les logs Master + Slave et teste les servos via API
 # Usage: bash scripts/check_logs.sh
 # Options: --tail 50   (number of log lines, default 80)
 #          --servo     (envoie aussi une commande test servo via API)
@@ -46,7 +46,7 @@ err() { echo -e "${RED}✗${NC} $1"; }
 warn(){ echo -e "${YELLOW}⚠${NC} $1"; }
 
 sep
-echo -e "${CYAN}  R2-D2 Diagnostic — $(date '+%H:%M:%S')${NC}"
+echo -e "${CYAN}  AstromechOS Diagnostic — $(date '+%H:%M:%S')${NC}"
 sep
 
 # ──────────────────────────────────────────────

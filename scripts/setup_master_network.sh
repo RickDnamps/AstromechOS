@@ -29,7 +29,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 # =============================================================================
-# setup_master_network.sh — R2-D2 Master network configuration
+# setup_master_network.sh — AstromechOS Master network configuration
 # =============================================================================
 #
 # ⚠️  INSTALL THE MASTER FIRST — before the Slave.
@@ -89,7 +89,7 @@ die()   { echo -e "${RED}[ERR ]${NC}  $*" >&2; exit 1; }
 # =============================================================================
 echo ""
 echo -e "${BLU}========================================${NC}"
-echo -e "${BLU}  R2-D2 Master — Network configuration  ${NC}"
+echo -e "${BLU}  AstromechOS Master — Network configuration${NC}"
 echo -e "${BLU}========================================${NC}"
 echo ""
 

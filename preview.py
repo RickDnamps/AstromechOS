@@ -29,7 +29,7 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-R2-D2 Dashboard Preview — local server to visualise the dashboard without a Pi.
+AstromechOS Dashboard Preview — local server to visualise the dashboard without a Pi.
 Uses only the Python standard library (no Flask required).
 
 Usage:
@@ -309,7 +309,7 @@ if __name__ == '__main__':
     port = 5000
     print()
     print("  ╔══════════════════════════════════╗")
-    print("  ║   R2-D2 Dashboard — Preview      ║")
+    print("  ║  AstromechOS Dashboard — Preview  ║")
     print("  ╚══════════════════════════════════╝")
     print()
     print(f"  Open in your browser:")

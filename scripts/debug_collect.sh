@@ -28,7 +28,7 @@
 #  You should have received a copy of the GNU GPL along with
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
-# Collecte diagnostic R2-D2 et push sur GitHub dans debug/
+# Collecte diagnostic AstromechOS et push sur GitHub dans debug/
 # Usage: bash scripts/debug_collect.sh
 # Ensuite: git pull sur le PC de dev → Claude lit les fichiers
 

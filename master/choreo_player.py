@@ -1,5 +1,5 @@
 """
-ChoreoPlayer — R2-D2 Choreography Timeline Engine.
+ChoreoPlayer — AstromechOS Choreography Timeline Engine.
 Reads .chor JSON files and dispatches events to drivers in real time.
 """
 import configparser

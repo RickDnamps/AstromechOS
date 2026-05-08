@@ -8,7 +8,7 @@
 
 'use strict';
 
-const CACHE = 'r2d2-v1';
+const CACHE = 'astromech-v1';
 const STATIC_ASSETS = [
   '/',
   '/static/css/style.css',
