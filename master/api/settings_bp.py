@@ -49,6 +49,8 @@ settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
 
 LOCAL_CFG    = '/home/artoo/r2d2/master/config/local.cfg'
+_SLAVE_CFG   = '/home/artoo/r2d2/slave/config/slave.cfg'
+_SLAVE_HOST  = 'artoo@r2-slave.local'
 _ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
 _ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
 INTERNET_CON = 'r2d2-internet'
@@ -80,6 +82,44 @@ def _write_key(section: str, key: str, value: str) -> None:
         cfg.add_section(section)
     cfg.set(section, key, value)
     write_cfg_atomic(cfg, LOCAL_CFG)
+
+
+def _read_slave_cfg() -> configparser.ConfigParser:
+    cfg = configparser.ConfigParser()
+    if os.path.exists(_SLAVE_CFG):
+        cfg.read(_SLAVE_CFG)
+    return cfg
+
+
+def _sync_slave_hat_cfg(**kwargs) -> None:
+    """Write i2c_servo_hats keys to slave.cfg, SCP to Slave, restart Slave service."""
+    slave_cfg = _read_slave_cfg()
+    if not slave_cfg.has_section('i2c_servo_hats'):
+        slave_cfg.add_section('i2c_servo_hats')
+    for key, value in kwargs.items():
+        slave_cfg.set('i2c_servo_hats', key, str(value))
+    try:
+        os.makedirs(os.path.dirname(_SLAVE_CFG), exist_ok=True)
+        with open(_SLAVE_CFG, 'w') as f:
+            slave_cfg.write(f)
+        log.info("slave.cfg written: %s", kwargs)
+    except Exception as e:
+        log.warning("Failed to write slave.cfg: %s", e)
+    try:
+        subprocess.run(['scp', _SLAVE_CFG, f'{_SLAVE_HOST}:{_SLAVE_CFG}'],
+                       timeout=8, check=False, capture_output=True)
+        log.info("slave.cfg synced to Slave (hat config)")
+    except Exception as e:
+        log.warning("Failed to SCP slave.cfg: %s", e)
+
+    def _delayed_slave_restart():
+        import time as _t
+        _t.sleep(2)
+        subprocess.run(['sudo', 'systemctl', 'restart', 'r2d2-slave'], check=False)
+
+    import threading as _th
+    _th.Thread(target=_delayed_slave_restart, daemon=True).start()
+    log.info("Slave service scheduled to restart in 2s")
 
 
 def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
@@ -238,7 +278,8 @@ def get_settings():
         },
         'hardware': {
             'master_hats':       cfg.get('i2c_servo_hats', 'master_hats', fallback='0x40'),
-            'slave_hats':        cfg.get('i2c_servo_hats', 'slave_hats',  fallback='0x41'),
+            'slave_hats':        _read_slave_cfg().get('i2c_servo_hats', 'slave_hats',       fallback='0x41'),
+            'slave_motor_hat':   _read_slave_cfg().get('i2c_servo_hats', 'slave_motor_hat',  fallback='0x40'),
             'body_uart_lat_ms':  round(cfg.getfloat('choreo', 'body_servo_uart_lat', fallback=0.025) * 1000),
         },
         'lights': {
@@ -373,10 +414,11 @@ def set_config():
     data = request.get_json() or {}
 
     # Allowed keys (section.key)
+    _SLAVE_HAT_KEYS = {'i2c_servo_hats.slave_hats', 'i2c_servo_hats.slave_motor_hat'}
     allowed = {
         'github.branch', 'github.auto_pull_on_boot', 'github.repo_url',
         'slave.host',
-        'i2c_servo_hats.master_hats', 'i2c_servo_hats.slave_hats',
+        'i2c_servo_hats.master_hats', 'i2c_servo_hats.slave_hats', 'i2c_servo_hats.slave_motor_hat',
         'choreo.body_servo_uart_lat',
         'lights.backend',
         'audio.channels',
@@ -387,9 +429,22 @@ def set_config():
     updated = []
     for dotkey, value in data.items():
         if dotkey in allowed:
-            section, key = dotkey.split('.', 1)
-            _write_key(section, key, str(value))
+            if dotkey not in _SLAVE_HAT_KEYS:
+                section, key = dotkey.split('.', 1)
+                _write_key(section, key, str(value))
             updated.append(dotkey)
+
+    # Slave HAT keys go to slave.cfg (not local.cfg) and trigger a Slave restart
+    slave_hat_updates = {k.split('.', 1)[1]: data[k] for k in updated if k in _SLAVE_HAT_KEYS}
+    if slave_hat_updates:
+        # Merge with existing slave.cfg values so we don't wipe unrelated keys
+        scfg = _read_slave_cfg()
+        merged = {
+            'slave_hats':      scfg.get('i2c_servo_hats', 'slave_hats',      fallback='0x41'),
+            'slave_motor_hat': scfg.get('i2c_servo_hats', 'slave_motor_hat', fallback='0x40'),
+        }
+        merged.update(slave_hat_updates)
+        _sync_slave_hat_cfg(**merged)
 
     if 'audio.channels' in updated:
         try:

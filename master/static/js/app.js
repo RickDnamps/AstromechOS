@@ -5032,6 +5032,8 @@ async function loadSettings() {
     if (mh) mh.value = data.hardware.master_hats || '0x40';
     const sh = el('slave-hats-input');
     if (sh) sh.value = data.hardware.slave_hats || '0x41';
+    const smh = el('slave-motor-hat-input');
+    if (smh) smh.value = data.hardware.slave_motor_hat || '0x40';
     const lat = el('body-uart-lat-input');
     if (lat) lat.value = data.hardware.body_uart_lat_ms ?? 25;
   }
@@ -5458,22 +5460,24 @@ async function systemRollback() {
 }
 
 async function saveHardwareConfig() {
-  const masterHats = (el('master-hats-input')?.value || '').trim();
-  const slaveHats  = (el('slave-hats-input')?.value  || '').trim();
-  const latMs      = parseInt(el('body-uart-lat-input')?.value) || 25;
-  const latSec     = (latMs / 1000).toFixed(3);
+  const masterHats   = (el('master-hats-input')?.value     || '').trim();
+  const slaveHats    = (el('slave-hats-input')?.value      || '').trim();
+  const slaveMotor   = (el('slave-motor-hat-input')?.value || '').trim();
+  const latMs        = parseInt(el('body-uart-lat-input')?.value) || 25;
+  const latSec       = (latMs / 1000).toFixed(3);
   const status = el('hardware-config-status');
-  if (!masterHats || !slaveHats) { toast('HAT addresses are required', 'error'); return; }
-  if (!confirm('Save hardware config?\n\nHAT address changes require a Master reboot.')) return;
+  if (!masterHats || !slaveHats || !slaveMotor) { toast('HAT addresses are required', 'error'); return; }
+  if (!confirm('Save hardware config?\n\nMaster HAT changes require a Master reboot.\nSlave HAT changes will auto-restart the Slave service.')) return;
   if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
   const data = await api('/settings/config', 'POST', {
-    'i2c_servo_hats.master_hats':   masterHats,
-    'i2c_servo_hats.slave_hats':    slaveHats,
-    'choreo.body_servo_uart_lat':   latSec,
+    'i2c_servo_hats.master_hats':    masterHats,
+    'i2c_servo_hats.slave_hats':     slaveHats,
+    'i2c_servo_hats.slave_motor_hat': slaveMotor,
+    'choreo.body_servo_uart_lat':    latSec,
   });
   if (data?.status === 'ok') {
-    toast('Hardware config saved — reboot Master to apply HAT changes', 'ok');
-    if (status) { status.textContent = 'Saved ✓ (reboot required for HAT changes)'; status.className = 'settings-status ok'; }
+    toast('Hardware config saved — Master HAT changes need a reboot; Slave restarting…', 'ok');
+    if (status) { status.textContent = 'Saved ✓ (Master: reboot required · Slave: restarting)'; status.className = 'settings-status ok'; }
   } else {
     toast('Error saving hardware config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
