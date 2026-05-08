@@ -4573,6 +4573,14 @@ const cockpitPanel = {
       alerts.push({ cls: 'warn', msg: `Battery low ${v.toFixed(1)}V` });
     if (!data.vesc_l_ok) alerts.push({ cls: 'err', msg: 'VESC L offline / fault' });
     if (!data.vesc_r_ok) alerts.push({ cls: 'err', msg: 'VESC R offline / fault' });
+    if (!data.uart_ready)
+      alerts.push({ cls: 'err',  msg: 'UART port not open' });
+    else if (data.uart_health == null)
+      alerts.push({ cls: 'warn', msg: 'Slave unreachable' });
+    if (data.dome_servo_ready === false)
+      alerts.push({ cls: 'warn', msg: 'Dome servos not ready' });
+    if (data.servo_ready === false)
+      alerts.push({ cls: 'warn', msg: 'Body servos not ready' });
     const rssi = data.bt_rssi;
     if (data.bt_connected && rssi != null && rssi <= -80)
       alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });
