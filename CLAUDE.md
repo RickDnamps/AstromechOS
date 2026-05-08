@@ -1,6 +1,7 @@
 # AstromechOS — Claude Code Context
 
 > Hardware, câblage, alimentation, I2C/GPIO → **[ELECTRONICS.md](ELECTRONICS.md)**
+> API REST complète → **[docs/API.md](docs/API.md)**
 > Gotchas d'implémentation détaillés → `bd memories <keyword>` (camera, choreo, js, rp2040, admin, settings…)
 
 ---
@@ -89,69 +90,6 @@ REBOOT:1:CRC   reboot Slave
 
 ---
 
-## 🌐 API REST Flask — port 5000
-
-```
-GET  /status                    état JSON complet
-POST /heartbeat                 watchdog 600ms
-
-POST /audio/play                {"sound":"Happy001"}
-POST /audio/random              {"category":"happy"}
-POST /audio/stop
-POST /audio/volume              {"volume":79}
-
-POST /motion/drive              {"left":0.5,"right":0.5}
-POST /motion/stop
-POST /motion/dome/turn          {"speed":0.3}
-POST /motion/dome/stop
-POST /motion/dome/random        {"enabled":true}
-
-POST /servo/dome/open|close     {"name":"Servo_M0"}
-POST /servo/dome/open_all|close_all
-POST /servo/body/open|close     {"name":"Servo_S0"}
-POST /servo/body/open_all|close_all   ← arm-aware: réguliers immédiats, bras en thread panel→delay→arm
-GET  /servo/list
-GET  /servo/settings
-POST /servo/settings            {"panels":{"Servo_M0":{"label":"..","open":110,"close":20,"speed":10}}}
-
-GET  /servo/arms                {count, servos:["Servo_S0",...], panels:["Servo_S5",...], delays:[0.5,...]}
-POST /servo/arms                {count:2, servos:["Servo_S0","Servo_S1"], panels:["Servo_S5","Servo_S6"], delays:[0.5,0.5]}
-  → local.cfg [arms] count/arm_1..arm_N/panel_1..panel_N/delay_1..delay_N
-
-POST /teeces/random|leia|off
-POST /teeces/text               {"text":"HELLO"}
-POST /teeces/psi                {"mode":1}
-
-POST /system/update             git pull + rsync Slave + reboot Slave
-POST /system/rollback           git checkout HEAD^ + rsync Slave + reboot Slave
-POST /system/reboot             reboot Master
-POST /system/reboot_slave       reboot Slave via UART
-POST /system/estop              coupe PWM PCA9685 Master+Slave, _ready=False
-POST /system/estop_reset        réarme drivers sans restart
-
-GET  /vesc/telemetry            {connected,power_scale,L:{v_in,temp,current,rpm,duty,fault,fault_str},R:…}
-GET  /vesc/config               {power_scale,invert_L,invert_R}
-POST /vesc/config               {"scale":0.8}  → persisted local.cfg [vesc]
-POST /vesc/invert               {"side":"L","state":true}  → persisted local.cfg [vesc]
-GET  /vesc/can/scan             CAN bus scan via VESC1 USB (timeout 8s)
-
-POST /camera/take               claim MJPEG stream → {token}
-GET  /camera/stream?t=TOKEN     proxy last-connect-wins (evicted client → STREAM TAKEN overlay)
-GET  /camera/status             {active_token}
-
-GET  /choreo/list               [{name, label, category, emoji, duration}, …]  ← retourne objets, PAS strings
-POST /choreo/play               {"name":"foo","loop":true}
-POST /choreo/stop
-GET  /choreo/status             {running, name, progress, loop, abort_reason}
-GET  /choreo/categories         [{id, label, emoji, order}, …]
-POST /choreo/categories         create/update/reorder/delete categories
-POST /choreo/category           {"name":"foo.chor","category":"emotion"}
-POST /choreo/emoji              {"name":"foo.chor","emoji":"🎭"}
-POST /choreo/label              {"name":"foo.chor","label":"My Label"}
-```
-
----
-
 ## 🚗 VESC — Gotchas
 
 **Hardware :** 2× Flipsky Mini V6.7, fw v6.05, HW60. ID1=USB `/dev/ttyACM1`, ID2=CAN.
@@ -183,18 +121,7 @@ Tous les indicateurs : `BatteryGauge.voltToColor(v)` / `voltToPct(v)`.
 **ALSA :** `amixer -c 0 cset numid=1 <vol>%` — seule commande qui marche sur Pi 4B.
 Volume UI → courbe racine cubique : slider 50% → ALSA 79%. Lecture MP3 : `mpg123 -q`.
 
-**JawaLite (Teeces32, /dev/ttyUSB0 @ 9600) :**
-`0T1\r`=random · `0T20\r`=off · `0T6\r`=Leia · `1MTEXTE\r`=FLD text · `4S1\r`=PSI random
-
-**AstroPixels+ serial (`@`-prefix, `\r` terminator) :**
-```
-@0T{n}\r          FLD+RLD animation   (T-codes valides: T1,T2,T3,T4,T5,T6,T11,T20 seulement)
-@{1|2|3}M{text}\r FLD top/bottom/RLD text
-@{0|1|2}P{n}\r    PSI sequence (0=both 1=front 2=rear)
-@HP{target}{fx}\r holo projectors
-```
-T-codes n'affectent QUE FLD+RLD. PSI séparé. Text targets : `fld_top|fld_bottom|fld_both|rld|all`.
-PSI sequences : `normal|flash|alarm|failure|redalert|leia|march`.
+**JawaLite + AstroPixels+ serial commands** → `ELECTRONICS.md §7` (tables complètes)
 
 **Sons spéciaux :** `Theme001` `Theme002` `CANTINA` `LEIA` `FAILURE` `WOLFWSTL` `Gangnam` `SWDiscoShort` `birthday`
 
@@ -295,6 +222,7 @@ SSH     artoo / deetoo
 | 4++++++ | GPIO dome button retiré · Rollback web UI · Hardware config UI (HATs + uart_lat) · repo_url éditable | ✅ |
 | 4+++++++ | CSS variable system · 8 built-in themes · Blueprint light · theme customizer with live preview · sci-fi fonts | ✅ |
 | 4++++++++ | Topbar clean · Cockpit pills HB/UART/BT · pill SLAVE · E-STOP red overlay · STATUS button toujours à jour | ✅ |
+| 4+++++++++ | Cockpit SERVICES diagnostic : Dome/Body Servo HATs · Motor HAT I2C probe · RP2040 Screen health | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -345,6 +273,15 @@ Dans le Choreo timeline : Dome Servo track → seulement `ALL DOME` · Body Serv
 **STATUS button color:** updated every poll via `cockpitPanel.updateBtn(data)` — does NOT wait for panel to be open. Bench mode = orange (intentional warning, user chose it).
 
 **E-STOP overlay (`#estop-overlay`):** `position:fixed; inset:0; pointer-events:none; z-index:9999`. Class `active` triggers red pulsing border animation. Set in `_setEstopUI(tripped)`. Synced from `data.estop_active` on every poll → survives page reload.
+
+**SERVICES panel HAT health:**
+- Dome Servo HATs: `DomeServoDriver.hat_health()` — `[{addr, ok, errors}]` — Master-side, always available
+- Body Servo HATs + Motor HAT + Screen: via `slave/uart_health_server.py` port 5001 → `reg.slave_uart_health`
+  - `body_hat_health`: from `BodyServoDriver.hat_health()` (Slave)
+  - `motor_hat_health`: I2C probe of `slave_motor_hat` addr at each `/uart_health` request — `{addr, ok}`
+  - `display_ready` + `display_port`: from `DisplayDriver.is_ready()` / `.used_port`
+- Row labels use `data.master_location` / `data.slave_location` (from `local.cfg [robot]`) — not hardcoded
+- Fallback to generic row if HAT arrays empty (driver not ready or Slave unreachable)
 
 **JS syntax rule:** `StatusPoller` is a `class` — methods use NO trailing comma. `cockpitPanel` is an object literal — methods use trailing comma. Mixing them causes silent syntax error that breaks the entire page. Always run `node --check master/static/js/app.js` before committing.
 

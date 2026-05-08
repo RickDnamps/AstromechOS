@@ -170,7 +170,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included |
 | 🛡️ **Triple safety watchdog** | App 600ms · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
 | 🚨 **VESC safety lock** | Blocks drive when ESC offline or faulted · bench mode bypass for bench testing |
-| 📊 **Cockpit Status Panel** | Real-time robot snapshot from any tab — audio · lights · VESC · Pi temps · IPs |
+| 📊 **Cockpit Status Panel** | Real-time robot snapshot from any tab — HAT health · VESC · RP2040 screen · Pi temps · IPs · E-STOP overlay |
 | 🔒 **Admin mode** | Password-protected · unlocks editor/upload from any tab · 5-min inactivity lock |
 | 🔌 **Hot-swap light drivers** | Teeces32 ↔ AstroPixels+ without reboot |
 | 🚀 **One-button OTA deploy** | Dome button → git pull + rsync + reboot — no SSH needed |
@@ -311,7 +311,7 @@ Or press the physical dome button (short press). Updates itself over-the-air —
 | **1** | UART + CRC · heartbeat watchdog · audio · Teeces32 · RP2040 display · auto-deploy | ✅ |
 | **2** | VESCs · dome motor · MG90S servo panels with speed ramp | ✅ |
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ |
-| **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel + theme system | ✅ |
+| **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel + theme system + HAT/screen diagnostic | ✅ |
 | **5** | Vision — person tracking · face detection · contextual AI responses (on-device) | 🔄 |
 
 ---

@@ -25,6 +25,10 @@
 | Admin inactivity tous onglets | VESC / Choreo / Config trackés via pointerdown + _activeTabId |
 | Déploiement auto (bouton dôme) | git pull + rsync + reboot en un clic |
 | E-STOP + RESET sans restart | PCA9685 SLEEP instantané |
+| Cockpit Status Panel complet | Topbar propre · pills HB/UART/BT · pill SLAVE · E-STOP overlay · STATUS toujours à jour |
+| HAT diagnostic cockpit | Dome/Body Servo HATs · Motor HAT I2C probe · RP2040 Screen health · labels config-driven |
+| CSS theme system | 8 built-in themes · theme customizer avec live preview · 7 polices sci-fi |
+| Behavior engine ALIVE | idle behaviors configurables |
 
 ---
 
@@ -161,4 +165,4 @@ Le Slave Pi (corps) reste concentré sur le hardware physique : propulsion, serv
 
 ---
 
-*Dernière mise à jour : 2026-04-10*
+*Dernière mise à jour : 2026-05-08*

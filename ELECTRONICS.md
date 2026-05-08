@@ -450,6 +450,33 @@ CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 he
 
 ---
 
+### Lights Serial Protocols
+
+#### JawaLite (Teeces32 — `/dev/ttyUSB0` @ 9600 baud, `\r` terminator)
+
+| Command | Effect |
+|---------|--------|
+| `0T1\r` | Random animation |
+| `0T20\r` | Lights off |
+| `0T6\r` | Leia message animation |
+| `1MTEXT\r` | Display text on FLD |
+| `4S1\r` | PSI random sequence |
+
+#### AstroPixels+ (`@`-prefix, `\r` terminator)
+
+| Command | Effect |
+|---------|--------|
+| `@0T{n}\r` | FLD+RLD animation — valid T-codes: `T1,T2,T3,T4,T5,T6,T11,T20` only |
+| `@{1\|2\|3}M{text}\r` | Text on FLD top / FLD bottom / RLD |
+| `@{0\|1\|2}P{n}\r` | PSI sequence (0=both 1=front 2=rear) |
+| `@HP{target}{fx}\r` | Holo projectors |
+
+> T-codes affect FLD+RLD only. PSI is separate.  
+> Text targets: `fld_top` · `fld_bottom` · `fld_both` · `rld` · `all`  
+> PSI sequences: `normal` · `flash` · `alarm` · `failure` · `redalert` · `leia` · `march`
+
+---
+
 ## 8. Component Notes
 
 ### Tobsun EA50-5V (5V / 10A Buck)
