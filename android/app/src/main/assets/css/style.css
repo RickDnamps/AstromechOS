@@ -3251,6 +3251,15 @@ select.input-text option { background: #0a1525; }
   letter-spacing: 0.5px;
 }
 
+.settings-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 3px;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+}
+
 /* Audio Settings — volume profile rows */
 .profile-row {
   display: flex;
