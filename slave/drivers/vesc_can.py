@@ -34,11 +34,11 @@ Implémente COMM_FORWARD_CAN pour atteindre les VESCs connectés via CAN bus.
 Architecture:
   Pi → USB → VESC 1 (CAN ID configurable) → CAN H/L → VESC 2 (CAN ID configurable)
 
-VESC 1 sert de pont USB↔CAN. Toutes les commandes vers VESC 2 passent par lui.
+VESC 1 acts as USB↔CAN bridge. All commands to VESC 2 go through it.
 
-⚠️ IMPORTANT: Ne jamais activer "Multiple ESC over CAN" — cela synchroniserait
-   les deux moteurs et empêcherait la rotation différentielle du robot.
-   Chaque VESC doit recevoir des commandes INDÉPENDANTES.
+⚠️ IMPORTANT: Never enable "Multiple ESC over CAN" — it would synchronize
+   both motors and prevent differential steering.
+   Each VESC must receive INDEPENDENT commands.
 """
 
 import struct
@@ -271,10 +271,10 @@ def get_values_can(ser, can_id: int) -> dict | None:
 
 def check_multi_esc(ser, can_id: int) -> bool | None:
     """
-    Vérifie si 'Multiple ESC over CAN' est activé (DANGEREUX pour le robot).
-    ⚠️  Si True → les deux moteurs reçoivent la même commande → impossible de tourner !
-    Retourne True=activé(danger), False=désactivé(ok), None=inconnu.
-    Note: nécessite lecture AppConf complète — implémentation future.
+    Check if 'Multiple ESC over CAN' is enabled (DANGEROUS).
+    If True → both motors receive the same command → cannot steer.
+    Returns True=enabled(danger), False=disabled(ok), None=unknown.
+    Note: requires full AppConf read — future implementation.
     """
     # TODO: implémenter via COMM_GET_APP_CONF + désérialisation AppConf
     # Pour l'instant, retourner None (inconnu) — avertissement affiché dans le dashboard
