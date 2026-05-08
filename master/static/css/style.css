@@ -94,6 +94,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* Animated grid background */
+input, select, textarea, button { font-family: inherit; }
+
 body {
   background: var(--bg);
   color: var(--text);
