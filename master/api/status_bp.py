@@ -444,11 +444,27 @@ _SAFE_SLEW_SPEED = 3
 def system_estop():
     """Emergency stop — freeze the robot.
 
-    Cuts propulsion + dome motor + aborts any running choreography. Servos
-    are left exactly where they are (arms extended, panels open, etc.) so
-    nothing moves while the user secures the area. Cleanup is a separate
-    operation triggered by /system/estop_reset.
+    Cuts propulsion + dome motor + aborts any running choreography. Both
+    servo drivers (Master dome + Slave body) are FROZEN: in-flight ramps
+    abort instantly and the PWM holds at the last commanded angle so
+    servos stay exactly where they are with full torque (no SLEEP, no
+    drooping). Cleanup is a separate operation triggered by /system/estop_reset.
     """
+    # Freeze servos FIRST so in-flight ramps stop writing PWM updates.
+    # If we let choreo.stop() run before this, the dispatch thread may be
+    # blocked inside dome_servo.open_all() waiting for ramp threads to
+    # join — those ramp threads check _frozen on every step and exit early.
+    if reg.dome_servo:
+        try:
+            reg.dome_servo.freeze()
+        except Exception:
+            pass
+    if reg.uart:
+        try:
+            reg.uart.send('FREEZE', '1')   # body servos on Slave
+        except Exception:
+            pass
+
     # Stop propulsion
     if reg.vesc:
         try:
@@ -461,8 +477,8 @@ def system_estop():
             reg.dome.stop()
         except Exception:
             pass
-    # Abort any running choreography (this freezes its event dispatch but
-    # does NOT command servos — held positions stay held).
+    # Abort any running choreography (the freeze above already unblocks
+    # any servo ramp the choreo dispatch was waiting on).
     if reg.choreo:
         try:
             reg.choreo.stop()
@@ -494,6 +510,19 @@ def system_estop_reset():
     cannot abort the rest of the cleanup.
     """
     reg.estop_active = False
+
+    # Unfreeze BEFORE the stow sequence runs — otherwise the close commands
+    # would be rejected at the driver's _move_ramp entry check.
+    if reg.dome_servo:
+        try:
+            reg.dome_servo.unfreeze()
+        except Exception:
+            pass
+    if reg.uart:
+        try:
+            reg.uart.send('FREEZE', '0')
+        except Exception:
+            pass
 
     def _safe_home():
         # Lazy import to avoid a circular dependency between the two blueprints.

@@ -230,6 +230,10 @@ def main() -> None:
     servo = BodyServoDriver()
     if servo.setup():
         uart.register_callback('SRV', servo.handle_uart)
+        # FREEZE:1 / FREEZE:0 — Master triggers this on E-STOP / Reset E-STOP
+        # so in-flight body-servo ramps abort and the servos hold at their
+        # last commanded position instead of completing the choreographed move.
+        uart.register_callback('FREEZE', lambda v: servo.set_frozen(v.strip() == '1'))
         display.boot_ok('SERVOS')
     else:
         log.warning("BodyServoDriver unavailable")

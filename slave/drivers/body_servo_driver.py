@@ -122,6 +122,12 @@ class BodyServoDriver(BaseDriver):
         self._angles    = {}
         self._pos       = {}
         self._error_cnt = [0] * len(self._addresses)
+        # Freeze flag — same semantics as Master DomeServoDriver. Set via UART
+        # FREEZE:1 from Master (E-STOP), cleared via FREEZE:0 (Reset E-STOP).
+        # While set, in-flight ramps abort and new SRV commands are rejected
+        # so the body servos hold at their last commanded position with full
+        # PWM torque (no PCA9685 SLEEP, no drooping).
+        self._frozen    = False
         # servo_name → (hat_idx, channel)
         self._servo_map = {
             f'Servo_S{hat * 16 + ch}': (hat, ch)
@@ -327,7 +333,14 @@ class BodyServoDriver(BaseDriver):
         self._pos[name] = angle_deg
         log.info("Body servo %r HAT%d ch%d → %.1f°", name, hat_idx, channel, angle_deg)
 
+    def set_frozen(self, frozen: bool) -> None:
+        """Toggle the freeze flag — called by the FREEZE UART handler."""
+        self._frozen = bool(frozen)
+        log.info("BodyServoDriver: %s", "frozen" if self._frozen else "unfrozen")
+
     def _move_ramp(self, name: str, target: float, speed: int = 10) -> None:
+        if self._frozen:
+            return
         speed = max(1, min(10, int(speed)))
         if speed >= 10:
             self._move(name, target); return
@@ -337,6 +350,9 @@ class BodyServoDriver(BaseDriver):
         direction = 1.0 if target > current else -1.0
         angle     = current
         while True:
+            if self._frozen:
+                # Stop writing — PWM holds at self._pos[name], servo locked.
+                return
             angle += direction * step
             if direction > 0 and angle >= target:
                 angle = target

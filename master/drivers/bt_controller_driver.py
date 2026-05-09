@@ -585,11 +585,15 @@ class BTControllerDriver:
         log.warning("E-STOP triggered from BT gamepad")
         reg.estop_active = True
         self._stop_motion()
+        # Freeze servos in place rather than shutdown() — shutdown() puts the
+        # PCA9685 to SLEEP and cuts PWM, which makes servos go limp and droop
+        # under load. freeze() keeps PWM at the last commanded angle so panels
+        # stay where they are with full holding torque.
         if reg.dome_servo:
-            try: reg.dome_servo.shutdown()
+            try: reg.dome_servo.freeze()
             except Exception: pass
-        if reg.servo:
-            try: reg.servo.shutdown()
+        if reg.uart:
+            try: reg.uart.send('FREEZE', '1')   # body servos on Slave
             except Exception: pass
 
     # ------------------------------------------------------------------

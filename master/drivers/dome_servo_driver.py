@@ -106,6 +106,12 @@ class DomeServoDriver(BaseDriver):
         self._error_cnt  = [0] * len(self._addresses)
         self._angles     = {}
         self._pos        = {}
+        # Freeze flag — when True, in-flight ramps abort immediately and any
+        # new open()/close() call is rejected. The PWM stays at the last
+        # written angle so the servo holds its position with full torque
+        # (no SLEEP / no PWM cut → no drooping under load). Toggled by
+        # E-STOP (freeze) and Reset E-STOP (unfreeze) on the Master side.
+        self._frozen     = False
         # servo_name → (hat_idx, channel)
         self._servo_map  = {
             f'Servo_M{hat * 16 + ch}': (hat, ch)
@@ -321,7 +327,19 @@ class DomeServoDriver(BaseDriver):
         log.info("Dome servo %r HAT%d ch%d → %.1f°", name, hat_idx, channel, angle_deg)
         return True
 
+    def freeze(self) -> None:
+        """Halt every in-flight ramp; servos hold at their last written angle."""
+        self._frozen = True
+        log.info("DomeServoDriver: frozen — in-flight ramps will abort")
+
+    def unfreeze(self) -> None:
+        """Re-enable ramps. Called by Reset E-STOP before the safe-home stow runs."""
+        self._frozen = False
+        log.info("DomeServoDriver: unfrozen")
+
     def _move_ramp(self, name: str, target: float, speed: int = 10) -> bool:
+        if self._frozen:
+            return False
         speed = max(1, min(10, int(speed)))
         if speed >= 10:
             return self._move(name, target)
@@ -331,6 +349,10 @@ class DomeServoDriver(BaseDriver):
         direction = 1.0 if target > current else -1.0
         angle     = current
         while True:
+            if self._frozen:
+                # Stop writing — PWM holds at self._pos[name] (last commanded
+                # angle), the physical servo holds that position with torque.
+                return False
             angle += direction * step
             if direction > 0 and angle >= target:
                 angle = target
