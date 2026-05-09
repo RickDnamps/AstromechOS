@@ -35,10 +35,19 @@ Creates and configures the Flask application with all blueprints.
 import logging
 import os
 import time
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, Response
 import master.registry as reg
+from shared.paths import VERSION_FILE
 
 log = logging.getLogger(__name__)
+
+
+def _read_version() -> str:
+    try:
+        with open(VERSION_FILE, encoding='utf-8') as f:
+            return f.read().strip() or 'dev'
+    except Exception:
+        return 'dev'
 
 
 def create_app() -> Flask:
@@ -82,11 +91,16 @@ def create_app() -> Flask:
     app.register_blueprint(diagnostics_bp)
 
     # ------------------------------------------------------------------
-    # Activity tracking — update last_activity on every POST request
+    # Activity tracking — update last_activity on user-driven POSTs.
+    # /heartbeat fires every 200ms from the dashboard polling loop and would
+    # otherwise keep last_activity perpetually fresh, defeating the inactivity
+    # watchdog. The status poller is also excluded for the same reason.
     # ------------------------------------------------------------------
+    _ACTIVITY_IGNORED_PATHS = ('/heartbeat', '/status')
+
     @app.before_request
     def _update_last_activity():
-        if request.method == 'POST':
+        if request.method == 'POST' and request.path not in _ACTIVITY_IGNORED_PATHS:
             reg.last_activity = time.monotonic()
 
     # ------------------------------------------------------------------
@@ -108,6 +122,25 @@ def create_app() -> Flask:
     def serve_icon(filename):
         from flask import send_from_directory
         return send_from_directory(icons_dir, filename)
+
+    # Service worker: served dynamically so the CACHE name embeds the current
+    # deploy commit. The static file ships with the placeholder '__VERSION__'
+    # which we substitute at request time. This forces a cache flush on every
+    # deploy instead of users running stale JS until manual reload.
+    sw_path = os.path.join(static_dir, 'sw.js')
+
+    @app.get('/static/sw.js')
+    def serve_sw():
+        try:
+            with open(sw_path, encoding='utf-8') as f:
+                body = f.read()
+            body = body.replace('__VERSION__', _read_version())
+            resp = Response(body, mimetype='application/javascript')
+            resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            return resp
+        except Exception:
+            log.exception("Failed to serve sw.js")
+            return Response('', mimetype='application/javascript', status=500)
 
     # ------------------------------------------------------------------
     # JSON error handling

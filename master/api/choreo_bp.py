@@ -7,6 +7,7 @@ import configparser
 import json
 import logging
 import os
+import threading
 import time
 
 from flask import Blueprint, jsonify, request
@@ -14,6 +15,11 @@ import master.registry as reg
 
 log = logging.getLogger(__name__)
 choreo_bp = Blueprint('choreo', __name__)
+
+# Serialize the stop → reset → play sequence so two simultaneous /choreo/play
+# requests cannot both pass the is_playing() guard and start two _run loops
+# fighting over the same drivers.
+_play_lock = threading.Lock()
 
 from shared.paths import LOCAL_CFG as _LOCAL_CFG
 
@@ -395,21 +401,28 @@ def choreo_play():
     with open(path) as f:
         chor = json.load(f)
 
-    # If a choreo is already playing: stop it, reset all servos, then start the new one
-    if reg.choreo.is_playing():
-        log.info("Choreo already playing — stopping and resetting servos before starting '%s'", name)
-        reg.choreo.stop()
-        try:
-            _reset_servos()
-        except Exception:
-            log.exception("Servo reset failed — continuing with choreo start anyway")
-        time.sleep(_SERVO_RESET_DELAY)
+    # Coalesce concurrent play requests: a second request waits for the first
+    # to finish stopping/starting before deciding what to do.
+    if not _play_lock.acquire(timeout=5.0):
+        return jsonify({'error': 'play queue busy'}), 503
+    try:
+        # If a choreo is already playing: stop it, reset all servos, then start the new one
+        if reg.choreo.is_playing():
+            log.info("Choreo already playing — stopping and resetting servos before starting '%s'", name)
+            reg.choreo.stop()
+            try:
+                _reset_servos()
+            except Exception:
+                log.exception("Servo reset failed — continuing with choreo start anyway")
+            time.sleep(_SERVO_RESET_DELAY)
 
-    loop = bool(data.get('loop', False))
-    ok = reg.choreo.play(chor, loop=loop)
-    if not ok:
-        return jsonify({'error': 'already playing'}), 409
-    return jsonify({'status': 'ok', 'name': name, 'duration': chor['meta']['duration']})
+        loop = bool(data.get('loop', False))
+        ok = reg.choreo.play(chor, loop=loop)
+        if not ok:
+            return jsonify({'error': 'already playing'}), 409
+        return jsonify({'status': 'ok', 'name': name, 'duration': chor['meta']['duration']})
+    finally:
+        _play_lock.release()
 
 
 @choreo_bp.post('/choreo/stop')

@@ -8,7 +8,11 @@
 
 'use strict';
 
-const CACHE = 'astromech-v1';
+// CACHE name is rewritten by the Flask /static/sw.js handler to embed the
+// current deploy commit (e.g. 'astromech-9128f20'). Each new deploy gets a
+// fresh cache name → activate handler purges the previous one and the new
+// app.js / style.css are fetched on next load instead of being served stale.
+const CACHE = 'astromech-__VERSION__';
 const STATIC_ASSETS = [
   '/',
   '/static/css/style.css',

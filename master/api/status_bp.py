@@ -448,7 +448,7 @@ def system_estop_reset():
     def _safe_home():
         # Read arm→panel→delay from config
         cfg = configparser.ConfigParser()
-        cfg.read(LOCAL_CFG)
+        cfg.read(_LOCAL_CFG)
         count = cfg.getint('arms', 'count', fallback=0)
         arm_entries = []
         for i in range(1, count + 1):

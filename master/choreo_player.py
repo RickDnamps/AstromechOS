@@ -154,6 +154,11 @@ class ChoreoPlayer:
         self._loop       = False
         self._thread: threading.Thread | None = None
         self._servo_pos: dict[str, float] = {}   # last commanded angle per servo (for slew start)
+        # Track every Timer spawned by arm sequences so stop() can cancel them.
+        # Without this, a stop() between panel-open and the delayed arm-extend
+        # leaves the arm extending after the sequence has been aborted.
+        self._arm_timers: list[threading.Timer] = []
+        self._arm_timers_lock = threading.Lock()
         self._status_lock = threading.Lock()
         self._status = {
             'playing':      False,
@@ -240,10 +245,52 @@ class ChoreoPlayer:
 
     def stop(self) -> None:
         self._stop_flag.set()
+        # Cancel every pending arm Timer so a stop in the middle of a panel→arm
+        # sequence doesn't leave the arm extending after the player aborts.
+        with self._arm_timers_lock:
+            for t in self._arm_timers:
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+            self._arm_timers.clear()
         if self._thread:
             self._thread.join(timeout=2.0)
         with self._status_lock:
             self._status.update({'playing': False, 't_now': 0.0})
+
+    def _track_arm_timer(self, timer: threading.Timer) -> None:
+        """Register a Timer so stop() can cancel it. Auto-cleans completed timers."""
+        with self._arm_timers_lock:
+            self._arm_timers = [t for t in self._arm_timers if t.is_alive()]
+            self._arm_timers.append(timer)
+
+    def _reset_loop_state(self) -> None:
+        """Reset every per-iteration runtime state at the start of a loop pass.
+
+        Without this, slot timers, abort counters, slew start angles and arm
+        timers leak across iterations and produce surprising behaviour
+        (slots freed mid-playback, drift between iterations, etc.).
+        """
+        # Cancel any pending audio-slot release timers and clear slots
+        for i, t in enumerate(self._audio_timers):
+            if t is not None:
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+                self._audio_timers[i] = None
+        self._audio_slots = [None] * self._audio_channels
+        # Cancel any pending arm Timers from the previous iteration
+        with self._arm_timers_lock:
+            for t in self._arm_timers:
+                try:
+                    t.cancel()
+                except Exception:
+                    pass
+            self._arm_timers.clear()
+        self._drive_fail_count = 0
+        self._servo_pos.clear()
 
     # ── Event queue ───────────────────────────────────────────────────────────
 
@@ -361,6 +408,18 @@ class ChoreoPlayer:
             if t_now >= duration:
                 if self._loop and not self._stop_flag.is_set():
                     log.info(f"Choreo '{name}' looping")
+                    # Spin guard: ensure at least one tick passes between
+                    # iterations so an empty or sub-tick sequence cannot peg
+                    # the CPU at 100% by re-entering instantly.
+                    if self._stop_flag.wait(timeout=max(TICK, 0.01)):
+                        break
+                    # Full state reset — without this, audio slot timers from
+                    # iteration N can free slots used in N+1, the UART fail
+                    # counter persists across loops, and stale servo start
+                    # angles ramp the wrong direction on the first slew.
+                    self._reset_loop_state()
+                    self._arm_panel_map = _read_arm_panel_map()
+                    events = self._build_event_queue(tracks)
                     t_start = time.monotonic()
                     ev_idx  = 0
                     continue
@@ -549,13 +608,17 @@ class ChoreoPlayer:
                                 log.exception("Arm panel open failed: %s", panel)
                             arm_servo  = servo
                             arm_driver = self._body_servo
-                            def _delayed_arm_open(drv=arm_driver, s=arm_servo):
+                            stop_flag = self._stop_flag
+                            def _delayed_arm_open(drv=arm_driver, s=arm_servo, flag=stop_flag):
+                                if flag.is_set():
+                                    return
                                 try:
                                     drv.open(s)
                                 except Exception:
                                     log.exception("Delayed arm open failed: %s", s)
                             t = threading.Timer(arm_delay, _delayed_arm_open)
                             t.daemon = True
+                            self._track_arm_timer(t)
                             t.start()
                             return
                         elif action == 'close':
@@ -563,13 +626,17 @@ class ChoreoPlayer:
                                 self._body_servo.close(servo)
                             except Exception:
                                 log.exception("Arm close failed: %s", servo)
-                            def _delayed_panel_close(drv=self._body_servo, s=panel):
+                            stop_flag = self._stop_flag
+                            def _delayed_panel_close(drv=self._body_servo, s=panel, flag=stop_flag):
+                                if flag.is_set():
+                                    return
                                 try:
                                     drv.close(s)
                                 except Exception:
                                     log.exception("Delayed panel close failed: %s", s)
                             t = threading.Timer(arm_delay, _delayed_panel_close)
                             t.daemon = True
+                            self._track_arm_timer(t)
                             t.start()
                             return
                     # No panel — fall through to normal servo dispatch (arm only, no panel)
@@ -625,18 +692,23 @@ class ChoreoPlayer:
                 if dur_s > 0 and angle is not None:
                     start_a = float(self._servo_pos.get(servo, 20.0))
                     self._servo_pos[servo] = angle
+                    stop_flag = self._stop_flag
 
-                    def _slew(drv, name, a0, a1, dur, ease):
+                    def _slew(drv, name, a0, a1, dur, ease, flag=stop_flag):
                         steps = max(3, int(dur * 25))   # ~40ms per step at 25 steps/s
+                        step_dur = dur / steps
                         for i in range(steps + 1):
+                            if flag.is_set():
+                                return
                             prog = _ease(i / steps, ease)
                             a    = a0 + (a1 - a0) * prog
                             try:
                                 drv.open(name, angle_deg=a, speed=10)
                             except Exception:
                                 pass
-                            if i < steps:
-                                time.sleep(dur / steps)
+                            if i < steps and flag.wait(step_dur):
+                                # flag.wait returns True if the event was set during the wait
+                                return
 
                     threading.Thread(
                         target=_slew,

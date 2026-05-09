@@ -67,6 +67,14 @@ def _safe_int(val: str, fallback: int) -> int:
         return fallback
 
 
+import threading as _threading_cfg
+
+# Serialize all read-modify-write cycles on local.cfg + slave.cfg so that
+# concurrent saves (Settings tab + Android, two browser tabs, etc.) cannot
+# interleave and lose keys.
+_cfg_write_lock = _threading_cfg.Lock()
+
+
 def _read_cfg() -> configparser.ConfigParser:
     cfg = configparser.ConfigParser()
     if os.path.exists(LOCAL_CFG):
@@ -75,12 +83,13 @@ def _read_cfg() -> configparser.ConfigParser:
 
 
 def _write_key(section: str, key: str, value: str) -> None:
-    """Writes or updates a key in local.cfg."""
-    cfg = _read_cfg()
-    if not cfg.has_section(section):
-        cfg.add_section(section)
-    cfg.set(section, key, value)
-    write_cfg_atomic(cfg, LOCAL_CFG)
+    """Writes or updates a key in local.cfg under the global write lock."""
+    with _cfg_write_lock:
+        cfg = _read_cfg()
+        if not cfg.has_section(section):
+            cfg.add_section(section)
+        cfg.set(section, key, value)
+        write_cfg_atomic(cfg, LOCAL_CFG)
 
 
 def _read_slave_cfg() -> configparser.ConfigParser:
@@ -92,24 +101,25 @@ def _read_slave_cfg() -> configparser.ConfigParser:
 
 def _sync_slave_hat_cfg(**kwargs) -> None:
     """Write i2c_servo_hats keys to slave.cfg, SCP to Slave, restart Slave service."""
-    slave_cfg = _read_slave_cfg()
-    if not slave_cfg.has_section('i2c_servo_hats'):
-        slave_cfg.add_section('i2c_servo_hats')
-    for key, value in kwargs.items():
-        slave_cfg.set('i2c_servo_hats', key, str(value))
-    try:
-        os.makedirs(os.path.dirname(_SLAVE_CFG), exist_ok=True)
-        with open(_SLAVE_CFG, 'w') as f:
-            slave_cfg.write(f)
-        log.info("slave.cfg written: %s", kwargs)
-    except Exception as e:
-        log.warning("Failed to write slave.cfg: %s", e)
-    try:
-        subprocess.run(['scp', _SLAVE_CFG, f'{_SLAVE_HOST}:{_SLAVE_CFG}'],
-                       timeout=8, check=False, capture_output=True)
-        log.info("slave.cfg synced to Slave (hat config)")
-    except Exception as e:
-        log.warning("Failed to SCP slave.cfg: %s", e)
+    with _cfg_write_lock:
+        slave_cfg = _read_slave_cfg()
+        if not slave_cfg.has_section('i2c_servo_hats'):
+            slave_cfg.add_section('i2c_servo_hats')
+        for key, value in kwargs.items():
+            slave_cfg.set('i2c_servo_hats', key, str(value))
+        try:
+            os.makedirs(os.path.dirname(_SLAVE_CFG), exist_ok=True)
+            with open(_SLAVE_CFG, 'w') as f:
+                slave_cfg.write(f)
+            log.info("slave.cfg written: %s", kwargs)
+        except Exception as e:
+            log.warning("Failed to write slave.cfg: %s", e)
+        try:
+            subprocess.run(['scp', _SLAVE_CFG, f'{_SLAVE_HOST}:{_SLAVE_CFG}'],
+                           timeout=8, check=False, capture_output=True)
+            log.info("slave.cfg synced to Slave (hat config)")
+        except Exception as e:
+            log.warning("Failed to SCP slave.cfg: %s", e)
 
     def _delayed_slave_restart():
         import time as _t
