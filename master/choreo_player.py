@@ -661,6 +661,18 @@ class ChoreoPlayer:
                     self._vesc.drive(0.0, 0.0)
                     self._drive_fail_count = 0
                 else:
+                    # VESC safety gate: refuse propulsion if either side is offline,
+                    # stale, or faulted (bench mode bypasses the check).
+                    from master.vesc_safety import is_drive_safe, block_reason
+                    if not is_drive_safe():
+                        reason = block_reason() or 'vesc_unsafe'
+                        log.error(
+                            f"ChoreoPlayer: propulsion blocked ({reason}) — ABORT "
+                            f"[{self._status.get('name')}]"
+                        )
+                        self._abort_reason = reason
+                        self._stop_flag.set()
+                        return
                     ok = self._vesc.drive(
                         float(ev.get('left', 0.0)),
                         float(ev.get('right', 0.0)),

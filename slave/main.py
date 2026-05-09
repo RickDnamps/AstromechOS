@@ -246,6 +246,19 @@ def main() -> None:
     uart.start()
 
     # ------------------------------------------------------------------
+    # Boot banner — tells Master we just (re)started so it can re-push
+    # VESC config (scale, invert) instead of leaving the Slave at defaults.
+    # ------------------------------------------------------------------
+    def _send_boot_banner() -> None:
+        time.sleep(0.5)  # let UART listener settle before announcing
+        try:
+            uart.send('BOOT', 'READY')
+            log.info("BOOT:READY sent to Master")
+        except Exception as exc:
+            log.warning("Failed to send BOOT banner: %s", exc)
+    threading.Thread(target=_send_boot_banner, name='boot-banner', daemon=True).start()
+
+    # ------------------------------------------------------------------
     # WiFi Watchdog — automatic wlan0 reconnection
     # ------------------------------------------------------------------
     wifi_watchdog = WiFiWatchdog(display)

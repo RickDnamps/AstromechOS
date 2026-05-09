@@ -72,6 +72,7 @@ _FAULT_NAMES = {
     8:  'GATE_DRIVER_UNDER_VOLTAGE',
     9:  'MCU_UNDER_VOLTAGE',
     10: 'WATCHDOG_RESET',
+    99: 'CAN_LOST',  # synthetic fault — Slave detected paired-side CAN failure
 }
 
 

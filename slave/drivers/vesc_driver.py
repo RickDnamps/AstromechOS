@@ -130,6 +130,14 @@ class VescDriver(BaseDriver):
         self._telem_thread: threading.Thread | None = None
         self._running = False
 
+        # Paired-side liveness: when right VESC (CAN ID 2) goes silent for
+        # _FAIL_THRESHOLD consecutive reads while the left side keeps responding,
+        # the Slave refuses further drive commands and emits synthetic TR
+        # telemetry with fault=99 so Master sees the failure immediately
+        # (instead of waiting for the 2s staleness check).
+        self._can_lost = False
+        self._SYNTHETIC_FAULT_CAN_LOST = 99
+
     # ------------------------------------------------------------------
     # BaseDriver
     # ------------------------------------------------------------------
@@ -199,8 +207,16 @@ class VescDriver(BaseDriver):
         back-to-back within the same lock acquisition (synchronous):
           - Left  → VESC ID 1 via USB  (direct SetRPM)
           - Right → VESC ID 2 via CAN  (COMM_FORWARD_CAN + SetRPM)
+
+        Paired-side guard: if the right VESC (CAN) is unreachable, refuse the
+        command outright instead of running on one wheel.
         """
         if not self._ready:
+            return
+        if self._can_lost:
+            # One wheel only would spin the robot in place — refuse the command.
+            # The Slave has already stopped the motors and is emitting synthetic
+            # TR fault telemetry; Master's safety gate will block further input.
             return
         # Multiplicative scaling: power_scale is a true ceiling multiplier.
         # Drive speed × power_scale = effective power (e.g. 50% × 50% = 25%).
@@ -344,6 +360,7 @@ class VescDriver(BaseDriver):
                         _fail_left    = 0
                         _fail_right   = 0
                         _right_warned = False
+                        self._can_lost = False
                         opened = True
                         log.info(f"VescDriver reconnected on {port}")
                         break
@@ -383,12 +400,20 @@ class VescDriver(BaseDriver):
                 _fail_left = 0
                 if vr is None:
                     _fail_right += 1
-                    if _fail_right >= _FAIL_THRESHOLD and not _right_warned:
-                        log.warning("VescDriver: right VESC (CAN ID %d) not responding", VESC_ID_CAN)
-                        _right_warned = True
+                    if _fail_right >= _FAIL_THRESHOLD and not self._can_lost:
+                        log.error(
+                            "VescDriver: right VESC (CAN ID %d) lost — stopping motors and "
+                            "emitting synthetic fault=%d",
+                            VESC_ID_CAN, self._SYNTHETIC_FAULT_CAN_LOST,
+                        )
+                        self._can_lost = True
+                        self._stop_motors()
                 else:
+                    if self._can_lost:
+                        log.info("VescDriver: right VESC (CAN ID %d) recovered", VESC_ID_CAN)
                     _fail_right = 0
                     _right_warned = False
+                    self._can_lost = False
                 if self._uart:
                     self._uart.send('TL',
                         f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
@@ -398,6 +423,12 @@ class VescDriver(BaseDriver):
                     self._uart.send('TR',
                         f"{vr['v_in']}:{vr['temp']}:{vr['current']}"
                         f":{vr['rpm']}:{vr['duty']}:{vr['fault']}"
+                    )
+                elif self._can_lost and self._uart:
+                    # Push a synthetic fault frame so Master's safety gate trips
+                    # on the next telemetry tick (no waiting for staleness).
+                    self._uart.send('TR',
+                        f"{vl['v_in']}:0.0:0.0:0:0.0:{self._SYNTHETIC_FAULT_CAN_LOST}"
                     )
 
             time.sleep(TELEM_INTERVAL)

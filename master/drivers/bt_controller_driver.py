@@ -598,17 +598,13 @@ class BTControllerDriver:
 
     @staticmethod
     def _is_vesc_unsafe(reg) -> bool:
-        """True = at least one VESC side has stale (>2s) or faulted telemetry.
-        None telem = no VESC hardware (testing mode) → safe."""
-        for side in ('L', 'R'):
-            t = getattr(reg, 'vesc_telem', {}).get(side)
-            if t is None:
-                continue
-            if time.time() - t.get('ts', 0) > 2.0:
-                return True
-            if t.get('fault', 0) != 0:
-                return True
-        return False
+        """True if drive must be blocked. Delegates to the shared safety helper.
+
+        Bench mode bypasses the check (developer test mode). Otherwise both
+        VESC sides must have fresh, fault-free telemetry — a missing telemetry
+        side is treated as unsafe."""
+        from master.vesc_safety import is_drive_safe
+        return not is_drive_safe()
 
     def _do_drive(self, left: float, right: float, reg) -> None:
         from master.motion_watchdog import motion_watchdog

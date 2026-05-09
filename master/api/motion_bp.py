@@ -53,26 +53,13 @@ from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.motion_watchdog import motion_watchdog
 from master.safe_stop import cancel_ramp
+from master.vesc_safety import is_drive_safe, block_reason
 
 motion_bp = Blueprint('motion', __name__, url_prefix='/motion')
 
 
 def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, val))
-
-
-def _vesc_drive_safe() -> bool:
-    """False = at least one VESC side has stale (>2s) or faulted telemetry.
-    None telem = no VESC hardware (testing mode) → safe."""
-    for side in ('L', 'R'):
-        t = reg.vesc_telem.get(side)
-        if t is None:
-            continue
-        if time.time() - t.get('ts', 0) > 2.0:
-            return False
-        if t.get('fault', 0) != 0:
-            return False
-    return True
 
 
 # ------------------------------------------------------------------
@@ -84,8 +71,8 @@ def drive():
     """Differential drive. Body: {"left": float, "right": float}"""
     if reg.lock_mode == 2:
         return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
-    if not _vesc_drive_safe():
-        return jsonify({'status': 'blocked', 'reason': 'vesc_unsafe'}), 503
+    if not is_drive_safe():
+        return jsonify({'status': 'blocked', 'reason': block_reason() or 'vesc_unsafe'}), 503
 
     body  = request.get_json(silent=True) or {}
     reg.web_last_drive_t = time.time()
@@ -107,8 +94,8 @@ def arcade():
     """Arcade drive. Body: {"throttle": float, "steering": float}"""
     if reg.lock_mode == 2:
         return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
-    if not _vesc_drive_safe():
-        return jsonify({'status': 'blocked', 'reason': 'vesc_unsafe'}), 503
+    if not is_drive_safe():
+        return jsonify({'status': 'blocked', 'reason': block_reason() or 'vesc_unsafe'}), 503
 
     body     = request.get_json(silent=True) or {}
     reg.web_last_drive_t = time.time()

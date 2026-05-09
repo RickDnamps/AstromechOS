@@ -48,6 +48,7 @@ import time as _time
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.app_watchdog import app_watchdog
+from master.vesc_safety import is_drive_safe
 
 from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, VERSION_FILE, SCRIPTS_DIR
 
@@ -245,7 +246,7 @@ def get_status():
         'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
         'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
-        'vesc_drive_safe':   _vesc_side_ok(reg.vesc_telem.get('L')) and _vesc_side_ok(reg.vesc_telem.get('R')),
+        'vesc_drive_safe':   is_drive_safe(),
         'vesc_bench_mode':   bool(reg.vesc_bench_mode),
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
         'camera_found':      len(glob.glob('/dev/video*')) > 0,
@@ -256,8 +257,8 @@ def get_status():
         'display_port':      (reg.slave_uart_health or {}).get('display_port'),
         'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
         'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
-        'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('curr'),
-        'vesc_r_curr':       (reg.vesc_telem.get('R') or {}).get('curr'),
+        'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('current'),
+        'vesc_r_curr':       (reg.vesc_telem.get('R') or {}).get('current'),
         'vesc_l_duty':       (reg.vesc_telem.get('L') or {}).get('duty'),
         'vesc_r_duty':       (reg.vesc_telem.get('R') or {}).get('duty'),
         'vesc_l_rpm':        (reg.vesc_telem.get('L') or {}).get('rpm'),

@@ -308,11 +308,29 @@ def main() -> None:
         else:
             log.info(f"Slave version received: {value}")
 
+    def on_slave_boot(value: str) -> None:
+        """Slave reconnected/booted — re-push VESC config so it doesn't run on defaults."""
+        log.info(f"Slave boot banner received ({value!r}) — resyncing VESC config")
+        def _resync() -> None:
+            time.sleep(0.5)  # give Slave drivers time to register their UART callbacks
+            try:
+                uart.send('VCFG', f'scale:{reg.vesc_power_scale:.2f}')
+                uart.send('VINV', f"L:{1 if reg.vesc_invert_L else 0}")
+                uart.send('VINV', f"R:{1 if reg.vesc_invert_R else 0}")
+                log.info(
+                    "VESC config resynced — scale=%.2f invert_L=%s invert_R=%s",
+                    reg.vesc_power_scale, reg.vesc_invert_L, reg.vesc_invert_R
+                )
+            except Exception as exc:
+                log.error("VESC resync failed: %s", exc)
+        threading.Thread(target=_resync, name='vesc-resync', daemon=True).start()
+
     uart.register_callback('H',        on_heartbeat_ack)
     uart.register_callback('TL',       on_vesc_telem_left)
     uart.register_callback('TR',       on_vesc_telem_right)
     uart.register_callback('V',        on_version)
     uart.register_callback('CANFOUND', on_can_found)
+    uart.register_callback('BOOT',     on_slave_boot)
 
     # Start hardware
     if not uart.setup():
