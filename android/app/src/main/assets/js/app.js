@@ -2045,13 +2045,17 @@ function toggleEstop() {
 }
 
 function emergencyStop() {
+  // STRICT FREEZE — never command servos here. Drive/dome motor + audio are
+  // cut, then /system/estop tells the backend to freeze every servo at its
+  // CURRENT position (PWM held, no ramping back to close). Calling
+  // /servo/{dome,body}/close_all from here would race the freeze and let
+  // panels return to the closed position, which is exactly the bug we're
+  // avoiding — Reset E-STOP is what stows the robot at a safe slew rate.
   driveStop();
   domeStop();
   api('/audio/stop', 'POST');
-  api('/servo/dome/close_all', 'POST');
-  api('/servo/body/close_all', 'POST');
   api('/system/estop', 'POST');
-  toast('EMERGENCY STOP', 'error');
+  toast('EMERGENCY STOP — frozen in place', 'error');
   audioBoard.setPlaying(false);
   _setEstopUI(true);
 }
