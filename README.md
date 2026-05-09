@@ -213,7 +213,7 @@ All three trigger a **graceful decel ramp** — never an abrupt stop that could 
 
 **E-STOP / Reset E-STOP** — strict separation:
 
-- **E-STOP** (red button, always visible) — *freezes* the robot: cuts propulsion, dome rotation, aborts any running choreography. Servos hold their current position (arms extended, panels open) so nothing moves while you secure the area.
+- **E-STOP** (red button, always visible) — *freezes* the robot: cuts propulsion, dome rotation, aborts any running choreography. **Every servo is frozen in place** — both the Master dome driver and the Slave body driver expose a `_frozen` flag that aborts any in-flight ramp and rejects new commands. The PWM signal keeps holding the last commanded angle, so panels stay exactly where they are with full torque (no `shutdown()` / `SLEEP` mode that would let servos go limp and droop under load).
 - **Reset E-STOP** — runs an automated stow sequence at a slow slew rate (`speed=3`, ~1 s for a 90° travel) to safely close arms, then their panels (respecting the per-arm delay), then all remaining body and dome panels. Designed to be safe around children.
 
 **Universal VESC safety lock** (`master/vesc_safety.py`) — single source of truth used by every code path that can drive motors (web joystick, REST API, Bluetooth gamepad, choreography player). Drive is blocked if either VESC is offline, telemetry is stale (>2 s), or any fault code is active. Bench mode bypasses the check for benchtop development without VESC hardware.

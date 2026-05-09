@@ -230,12 +230,19 @@ SSH     artoo / deetoo
 | 4+++++++++++ | Rebrand R2D2→AstromechOS · dossier Pi `/home/artoo/astromechos` · services `astromech-*` · cache SW versionné par commit | ✅ |
 | 4++++++++++++ | VESC safety helper unifié (`master/vesc_safety.py`) · slave boot banner + auto-resync VCFG/VINV · paired-side CAN liveness · telemetry key fix curr→current | ✅ |
 | 4+++++++++++++ | E-STOP freeze · Reset stow lent (slew=3) · ChoreoPlayer event-driven scheduler · arm Timers respectent stop_flag · loop reset complet · /choreo/play locked | ✅ |
+| 4+++++++++++++++++ | E-STOP servo freeze pattern (driver `_frozen` flag + UART `FREEZE:1/0`) · UI `emergencyStop()` ne race plus close_all contre le freeze · Reset E-STOP utilise `DOME_SERVOS` (fix ImportError silencieux) | ✅ |
 | 4++++++++++++++ | Heartbeat ACK age tracking · UART buffer keep-trailing 256B · /status local.cfg cache TTL · StatusPoller in-flight · heartbeat visibility-aware | ✅ |
 | 4+++++++++++++++ | UART RTT histogramme + `/diagnostics/uart_rtt` + bouton MEASURE/APPLY dans Settings · hot-swap `body_servo_uart_lat` (no reboot) | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
-**E-STOP :** **freeze pur** — coupe propulsion+dôme+choreo, **aucun mouvement servo** (bras/panneaux gardent leur position). Reset = stow lent à `_SAFE_SLEW_SPEED=3` réutilisant la séquence Choreo arm→delay→panel.
+**E-STOP :** **freeze pur** — coupe propulsion+dôme+choreo, **aucun mouvement servo** (bras/panneaux gardent leur position).
+- `DomeServoDriver._frozen` (Master) + UART `FREEZE:1` → `BodyServoDriver._frozen` (Slave). `_move_ramp` checke le flag à chaque step ET à l'entrée → in-flight ramps abort, nouvelles SRV rejetées. PWM tient la dernière position (full torque, pas de `shutdown()` qui mettrait PCA9685 en SLEEP = drooping).
+- Frontend `emergencyStop()` ne doit JAMAIS envoyer `/servo/*/close_all` — uniquement `/system/estop`. Sinon les commandes close_all racent contre le freeze et les panneaux ramp vers close.
+
+**Reset E-STOP :** stow lent à `_SAFE_SLEW_SPEED=3` (~1s/90°), réutilise les helpers `servo_bp` (`_read_arms_cfg`, `_panel_angle`, `BODY_SERVOS`, `DOME_SERVOS`).
+- Séquence : (1) bras se rétractent en parallèle · (2) après leur `delay`, leur panneau se ferme · (3) tous les autres body panels en parallèle · (4) tous les dome panels en parallèle.
+- ⚠️ Utiliser `DOME_SERVOS` de `servo_bp.py` (PAS `from dome_servo_driver import SERVO_MAP` qui n'existe pas — `_servo_map` est un attribut d'instance). Bug 2026-05-08 : ImportError silencieusement swallowée → step 4 skippé → dome panels jamais fermés.
 **VESC safety :** `master/vesc_safety.py` source unique. `is_drive_safe()` utilisé par motion_bp / bt_controller / choreo_player (None telem = block sauf bench mode). `block_reason()` retourne tokens stables (`vesc_l_offline`, `vesc_r_stale`, `vesc_l_fault`).
 **Slave reboot resync :** Slave envoie `BOOT:READY:CRC` à `uart.start()`. Master register `BOOT` callback → re-push `VCFG:scale` + `VINV:L/R`. Pas de drift de config après reboot Slave.
 **Paired-side CAN liveness :** si VESC2 (CAN ID 2) silencieux N reads consécutifs, Slave set `_can_lost=True` → `drive()` refuse + envoie synthetic `TR:fault=99` (CAN_LOST) → safety gate Master trip immédiatement (pas d'attente staleness 2s).

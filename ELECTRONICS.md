@@ -298,8 +298,8 @@ Three independent timing watchdogs (below) plus a software safety lock and a pai
 **Slave boot banner** — on (re)start, the Slave UART listener emits `BOOT:READY:CRC` once. The Master receives it and re-pushes the persisted VESC scale + inversion config so the Slave never operates on stale defaults after a mid-session reboot.
 
 **E-STOP / Reset E-STOP** are strictly separated:
-- *E-STOP* freezes the robot (cuts propulsion + dome + choreo, **no servo movement**).
-- *Reset E-STOP* runs an automated kid-safe stow sequence at slew speed `3` (~1 s per 90°), using the same arm-then-panel dependency logic as choreographies.
+- *E-STOP* freezes the robot (cuts propulsion + dome + choreo, **no servo movement**). Both servo drivers expose a `_frozen` flag set by `dome_servo.freeze()` (Master) and the UART `FREEZE:1` message (Slave). Every `_move_ramp` checks the flag at the entry AND on every step — in-flight ramps abort, new SRV commands are rejected. PWM stays at the last commanded angle so panels hold with full torque (no PCA9685 SLEEP, no drooping). Critical: the JS `emergencyStop()` must never send `/servo/*/close_all` — those would race the freeze and let panels close instead of holding.
+- *Reset E-STOP* runs an automated kid-safe stow sequence at slew speed `3` (~1 s per 90°), using the same arm-then-panel dependency logic as choreographies. Reuses `BODY_SERVOS` / `DOME_SERVOS` / `_panel_angle` from `servo_bp.py` as the single source of truth — never imports `SERVO_MAP` from a driver (the mapping is an instance attribute, not a module-level constant).
 
 ### Three independent timing watchdogs
 
@@ -458,6 +458,7 @@ CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 he
 | `V` | M→S | `V:abc123:CRC` | Version reply (git hash) |
 | `TL`/`TR` | S→M | `TL:v_in:temp:current:rpm:duty:fault:CRC` | Per-VESC telemetry, 5 Hz. `fault=99` = synthetic CAN_LOST emitted by paired-side liveness when the right VESC stops responding. |
 | `BOOT` | S→M | `BOOT:READY:CRC` | Slave-side boot banner — emitted once after `uart.start()` settles. Master responds by re-pushing `VCFG:scale` and `VINV:L/R` so config is never lost on Slave reboot. |
+| `FREEZE` | M→S | `FREEZE:1:CRC` / `FREEZE:0:CRC` | Toggles the Slave's `BodyServoDriver._frozen` flag. Set by E-STOP, cleared by Reset E-STOP. While set, in-flight body-servo ramps abort and new SRV commands are rejected so panels hold with full PWM torque. |
 | `VCFG` | M→S | `VCFG:scale:0.85:CRC` · `VCFG:erpm:50000:CRC` | Live VESC tuning |
 | `VINV` | M→S | `VINV:L:1:CRC` · `VINV:R:0:CRC` | Per-side direction (0 = normal, 1 = inverted) |
 | `DISP` | M→S | `DISP:OK:abc123:CRC` | RP2040 display command |
