@@ -41,6 +41,7 @@ Endpoints:
 import configparser
 import datetime
 import glob
+import logging
 import os
 import subprocess
 import threading
@@ -51,6 +52,8 @@ from master.app_watchdog import app_watchdog
 from master.vesc_safety import is_drive_safe
 
 from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, VERSION_FILE, SCRIPTS_DIR
+
+log = logging.getLogger(__name__)
 
 
 def _iface_ip(iface: str) -> str | None:
@@ -408,9 +411,22 @@ def app_heartbeat():
     return '', 204   # No Content — minimal response
 
 
+# Slew speed used by the Reset E-STOP safe-home sequence.
+# The body/dome servo drivers accept speed ∈ [1..10] where 10 is fastest
+# (delay = (10-speed)×3ms per 2° step). 3 yields ≈1s for a 90° travel —
+# slow enough to avoid pinch hazards with kids around without dragging on.
+_SAFE_SLEW_SPEED = 3
+
+
 @status_bp.post('/system/estop')
 def system_estop():
-    """Emergency stop — halts motors and choreo, servos hold their current position."""
+    """Emergency stop — freeze the robot.
+
+    Cuts propulsion + dome motor + aborts any running choreography. Servos
+    are left exactly where they are (arms extended, panels open, etc.) so
+    nothing moves while the user secures the area. Cleanup is a separate
+    operation triggered by /system/estop_reset.
+    """
     # Stop propulsion
     if reg.vesc:
         try:
@@ -423,7 +439,8 @@ def system_estop():
             reg.dome.stop()
         except Exception:
             pass
-    # Abort any running choreography
+    # Abort any running choreography (this freezes its event dispatch but
+    # does NOT command servos — held positions stay held).
     if reg.choreo:
         try:
             reg.choreo.stop()
@@ -442,50 +459,113 @@ def system_estop():
 
 @status_bp.post('/system/estop_reset')
 def system_estop_reset():
-    """Clears E-STOP and runs safe-home: arms retract first, then panels close, then all servos go to close position."""
+    """Clear E-STOP and stow the robot at a safe slew rate.
+
+    Sequence (mirrors the Choreo arm dependency logic but at a slow speed):
+      1. Retract each utility arm (parallel) — speed=_SAFE_SLEW_SPEED
+      2. Wait the per-arm delay, then close its panel — speed=_SAFE_SLEW_SPEED
+      3. Close every remaining body servo (excluding arm-managed ones)
+         in parallel — speed=_SAFE_SLEW_SPEED
+      4. Close every dome servo in parallel — speed=_SAFE_SLEW_SPEED
+
+    All driver calls are wrapped in try/except so a single failed servo
+    cannot abort the rest of the cleanup.
+    """
     reg.estop_active = False
 
     def _safe_home():
-        # Read arm→panel→delay from config
-        cfg = configparser.ConfigParser()
-        cfg.read(_LOCAL_CFG)
-        count = cfg.getint('arms', 'count', fallback=0)
-        arm_entries = []
-        for i in range(1, count + 1):
-            arm   = cfg.get('arms', f'arm_{i}',   fallback='').strip()
-            panel = cfg.get('arms', f'panel_{i}', fallback='').strip()
-            delay = max(0.1, min(5.0, cfg.getfloat('arms', f'delay_{i}', fallback=0.5)))
-            if arm:
-                arm_entries.append((arm, panel, delay))
+        # Lazy import to avoid a circular dependency between the two blueprints.
+        from master.api.servo_bp import (
+            _read_arms_cfg, _read_panels_cfg, _arm_servo_set,
+            _panel_angle, BODY_SERVOS,
+        )
 
-        if arm_entries and reg.servo:
-            # Retract each arm then close its panel after its individual delay
-            for arm, panel, delay in arm_entries:
+        panels_cfg = _read_panels_cfg()
+        arms_cfg   = _read_arms_cfg()
+        arm_set    = _arm_servo_set()
+
+        # ── Step 1+2: arm-then-panel sequences in parallel ──
+        def _close_arm_then_panel(arm: str, panel: str, delay: float) -> None:
+            if arm and reg.servo:
                 try:
-                    reg.servo.close(arm)
+                    reg.servo.close(arm,
+                                    _panel_angle(arm, 'close', panels_cfg),
+                                    _SAFE_SLEW_SPEED)
                 except Exception:
-                    pass
-                if panel:
-                    _time.sleep(delay)
+                    log.exception("Safe-home: arm close failed: %s", arm)
+            if panel:
+                # Hold off until the arm has had time to fully retract before
+                # the panel starts moving — same dependency the Choreo player
+                # honours during arm sequences.
+                _time.sleep(max(0.1, min(5.0, float(delay))))
+                if reg.servo:
                     try:
-                        reg.servo.close(panel)
+                        reg.servo.close(panel,
+                                        _panel_angle(panel, 'close', panels_cfg),
+                                        _SAFE_SLEW_SPEED)
                     except Exception:
-                        pass
-            _time.sleep(0.3)
+                        log.exception("Safe-home: arm panel close failed: %s", panel)
 
-        # Step 3: close all remaining body servos
+        arm_threads = []
+        for i in range(arms_cfg['count']):
+            arm   = arms_cfg['servos'][i]
+            panel = arms_cfg['panels'][i]
+            delay = arms_cfg['delays'][i]
+            if not arm:
+                continue
+            t = threading.Thread(
+                target=_close_arm_then_panel,
+                args=(arm, panel, delay),
+                name=f'safehome-arm-{i+1}',
+                daemon=True,
+            )
+            arm_threads.append(t)
+            t.start()
+        # Wait for all arm sequences before continuing — guarantees panels do
+        # not start retracting until the arms they shield are fully home.
+        for t in arm_threads:
+            t.join(timeout=10.0)
+
+        # ── Step 3: remaining body servos (skip arm-managed ones) in parallel ──
         if reg.servo:
-            try:
-                reg.servo.close_all()
-            except Exception:
-                pass
+            body_threads = []
+            for name in BODY_SERVOS:
+                if name in arm_set:
+                    continue
+                def _close_body(n=name):
+                    try:
+                        reg.servo.close(n,
+                                        _panel_angle(n, 'close', panels_cfg),
+                                        _SAFE_SLEW_SPEED)
+                    except Exception:
+                        log.exception("Safe-home: body close failed: %s", n)
+                bt = threading.Thread(target=_close_body, name=f'safehome-body-{name}',
+                                      daemon=True)
+                body_threads.append(bt)
+                bt.start()
+            for bt in body_threads:
+                bt.join(timeout=5.0)
 
-        # Step 4: close all dome servos
+        # ── Step 4: dome servos in parallel ──
         if reg.dome_servo:
             try:
-                reg.dome_servo.close_all()
+                from master.drivers.dome_servo_driver import SERVO_MAP as _DOME_MAP
+                dome_names = list(_DOME_MAP.keys())
             except Exception:
-                pass
+                dome_names = []
+            dome_threads = []
+            for name in dome_names:
+                def _close_dome(n=name):
+                    try:
+                        reg.dome_servo.close(n, speed=_SAFE_SLEW_SPEED)
+                    except Exception:
+                        log.exception("Safe-home: dome close failed: %s", n)
+                dt = threading.Thread(target=_close_dome, name=f'safehome-dome-{name}',
+                                      daemon=True)
+                dome_threads.append(dt)
+                dt.start()
+            for dt in dome_threads:
+                dt.join(timeout=5.0)
 
-    threading.Thread(target=_safe_home, daemon=True).start()
+    threading.Thread(target=_safe_home, name='safehome', daemon=True).start()
     return jsonify({'status': 'reset'})
