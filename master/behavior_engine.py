@@ -168,17 +168,38 @@ class BehaviorEngine:
     # ------------------------------------------------------------------
 
     def _trigger_sounds(self) -> None:
-        """Send UART random audio command for idle reaction."""
+        """Send UART random audio command for idle reaction.
+
+        Schedules a delayed reset of reg.audio_playing so subsequent
+        sounds/sounds_lights idle triggers are NOT permanently blocked by
+        a flag that nothing ever clears. Mirrors the timer pattern used by
+        api/audio_bp.play_random — same 60s ceiling for unknown-duration
+        random sounds.
+        """
         try:
             category = self._cfg.get('behavior', 'idle_audio_category', fallback='happy')
             if self._reg.uart:
                 self._reg.uart.send('S', f'RANDOM:{category}')
                 self._reg.audio_playing = True
+                self._schedule_audio_reset()
                 log.info("ALIVE sounds: category=%s", category)
             else:
                 log.warning("ALIVE sounds: UART not available")
         except Exception:
             log.exception("ALIVE sounds trigger failed")
+
+    def _schedule_audio_reset(self, seconds: float = 60.0) -> None:
+        """Clear reg.audio_playing after the given delay so the idle gate
+        can re-open. Cancels any prior pending reset."""
+        prev = getattr(self, '_audio_reset_timer', None)
+        if prev is not None and prev.is_alive():
+            prev.cancel()
+        def _reset():
+            self._reg.audio_playing = False
+        t = threading.Timer(seconds, _reset)
+        t.daemon = True
+        t.start()
+        self._audio_reset_timer = t
 
     def _trigger_lights(self) -> None:
         """Trigger random lights animation via Teeces/AstroPixels controller."""

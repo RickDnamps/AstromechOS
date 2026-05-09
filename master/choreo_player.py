@@ -137,19 +137,30 @@ class ChoreoPlayer:
         self._resolved_logged: set = set()
 
         # Threshold config
+        # vesc_min_voltage is derived from cell count × per-cell floor.
+        # Per-cell floor depends on chemistry — using 3.5V on a LiFePO4 pack
+        # would trigger a false abort because LiFePO4 nominal is 3.2V.
+        # Supported chemistries:
+        #   liion / lipo (default) → 3.5V/cell  (~30% remaining, safe abort)
+        #   lifepo4               → 3.0V/cell  (~10% remaining; chemistry sits at 3.2V nominal)
+        # Override entirely with [choreo] vesc_min_voltage = <volts>.
+        _PER_CELL_FLOOR = {'liion': 3.5, 'lipo': 3.5, 'lifepo4': 3.0}
         if cfg is not None:
             self._telem_check_interval = cfg.getfloat('choreo', 'telem_check_interval', fallback=0.5)
             self._uart_fail_threshold  = cfg.getint('choreo',   'uart_fail_threshold',  fallback=3)
-            # vesc_min_voltage: derive from battery cell count (3.5V/cell) unless overridden in cfg
-            _cells = cfg.getint('battery', 'cells', fallback=4)
-            _default_min_v = _cells * 3.5
+            _cells     = cfg.getint('battery', 'cells', fallback=4)
+            _chemistry = cfg.get('battery', 'chemistry', fallback='liion').strip().lower()
+            _per_cell  = _PER_CELL_FLOOR.get(_chemistry, _PER_CELL_FLOOR['liion'])
+            _default_min_v = _cells * _per_cell
             self._vesc_min_voltage     = cfg.getfloat('choreo', 'vesc_min_voltage',     fallback=_default_min_v)
             self._vesc_max_temp        = cfg.getfloat('choreo', 'vesc_max_temp',        fallback=80.0)
             self._vesc_max_current     = cfg.getfloat('choreo', 'vesc_max_current',     fallback=30.0)
+            log.info("Battery: %d cells %s → undervoltage abort at %.1fV",
+                     _cells, _chemistry, self._vesc_min_voltage)
         else:
             self._telem_check_interval = 0.5
             self._uart_fail_threshold  = 3
-            self._vesc_min_voltage     = 14.0   # 4S default (3.5V × 4); set [battery] cells in cfg for other packs
+            self._vesc_min_voltage     = 14.0   # 4S Li-ion default (3.5V × 4)
             self._vesc_max_temp        = 80.0
             self._vesc_max_current     = 30.0
 

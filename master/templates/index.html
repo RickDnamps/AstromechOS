@@ -1366,7 +1366,7 @@
       <div class="settings-panel" id="spanel-battery">
         <section class="card settings-card">
           <h2 class="card-title">BATTERY</h2>
-          <p class="settings-note">Number of LiPo cells — sets min/max voltage for all battery gauges.</p>
+          <p class="settings-note">Cells set the voltage gauges; chemistry sets the undervoltage abort threshold for choreographies.</p>
           <div class="form-group">
             <label>Cell count</label>
             <select id="battery-cells" class="input-text" style="width:120px">
@@ -1374,6 +1374,13 @@
               <option value="6">6S — 21.0 – 25.2 V</option>
               <option value="7">7S — 24.5 – 29.4 V</option>
               <option value="8">8S — 28.0 – 33.6 V</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Chemistry</label>
+            <select id="battery-chemistry" class="input-text" style="width:160px">
+              <option value="liion">Li-ion / LiPo (3.5 V/cell abort)</option>
+              <option value="lifepo4">LiFePO4 (3.0 V/cell abort)</option>
             </select>
           </div>
           <button class="btn" onclick="saveBatteryCells()">APPLY</button>

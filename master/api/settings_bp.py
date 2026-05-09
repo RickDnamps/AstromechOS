@@ -304,7 +304,8 @@ def get_settings():
             },
         },
         'battery': {
-            'cells': cfg.getint('battery', 'cells', fallback=4),
+            'cells':     cfg.getint('battery', 'cells',     fallback=4),
+            'chemistry': cfg.get(   'battery', 'chemistry', fallback='liion').strip().lower(),
         },
     })
 
@@ -432,7 +433,7 @@ def set_config():
         'lights.backend',
         'audio.channels',
         'audio.profile_convention', 'audio.profile_maison', 'audio.profile_exterieur',
-        'battery.cells',
+        'battery.cells', 'battery.chemistry',
     }
 
     updated = []

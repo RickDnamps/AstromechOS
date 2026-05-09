@@ -265,7 +265,13 @@ class VescDriver(BaseDriver):
             parts = value.split(':')
             param, val = parts[0], parts[1]
             if param == 'scale':
-                self._power_scale = max(0.1, min(1.0, float(val)))
+                # 0.0 = drive disabled (motors stopped); 1.0 = full power.
+                # Used to be clamped at 0.1 floor which silently coerced
+                # "disable propulsion" into "10% power" — confusing UX.
+                requested = float(val)
+                self._power_scale = max(0.0, min(1.0, requested))
+                if requested != self._power_scale:
+                    log.warning("VESC power scale clamped: requested %.2f → %.2f", requested, self._power_scale)
                 log.info(f"VESC power scale: {self._power_scale:.2f}")
             elif param == 'erpm':
                 self._max_erpm = max(1000, int(float(val)))

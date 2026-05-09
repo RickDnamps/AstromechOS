@@ -5085,6 +5085,8 @@ async function loadSettings() {
     const sel = el('battery-cells');
     if (sel) sel.value = String(cells);
     batteryGauge.setCells(cells);
+    const chemSel = el('battery-chemistry');
+    if (chemSel) chemSel.value = (data.battery.chemistry || 'liion').toLowerCase();
   }
 }
 
@@ -5290,14 +5292,19 @@ const cameraConfig = {
 };
 
 async function saveBatteryCells() {
-  const cells = parseInt(el('battery-cells')?.value) || 4;
+  const cells     = parseInt(el('battery-cells')?.value) || 4;
+  const chemistry = (el('battery-chemistry')?.value || 'liion').toLowerCase();
+  const perCell   = chemistry === 'lifepo4' ? 3.0 : 3.5;
   const status = el('battery-cells-status');
   if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-  const data = await api('/settings/config', 'POST', { 'battery.cells': cells });
+  const data = await api('/settings/config', 'POST', {
+    'battery.cells':     cells,
+    'battery.chemistry': chemistry,
+  });
   if (data?.status === 'ok') {
     batteryGauge.setCells(cells);
-    toast(`Battery: ${cells}S (${(cells * 3.5).toFixed(1)}–${(cells * 4.2).toFixed(1)} V)`, 'ok');
-    if (status) { status.textContent = `${cells}S configured`; status.className = 'settings-status ok'; }
+    toast(`Battery: ${cells}S ${chemistry.toUpperCase()} — undervoltage abort @ ${(cells * perCell).toFixed(1)} V`, 'ok');
+    if (status) { status.textContent = `${cells}S ${chemistry} — abort @ ${(cells * perCell).toFixed(1)} V`; status.className = 'settings-status ok'; }
   } else {
     toast('Failed to save battery config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }

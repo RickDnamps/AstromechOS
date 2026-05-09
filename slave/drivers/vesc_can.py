@@ -58,6 +58,27 @@ COMM_TERMINAL_CMD = 16
 COMM_REBOOT       = 29
 COMM_FORWARD_CAN  = 33
 
+# Minimum length of a COMM_GET_VALUES reply payload that contains every
+# field we read — temp_fet, current, duty, rpm, v_in, fault.
+# Layout (Flipsky Mini V6.7 firmware v6.05, see commands.c::send_values):
+#   1  byte   COMM_GET_VALUES marker
+#   2  bytes  temp_fet (×10)
+#   2  bytes  temp_motor               ← skipped
+#   4  bytes  avg_motor_current (×100)
+#   4  bytes  avg_input_current        ← skipped
+#   8  bytes  id, iq                   ← skipped
+#   2  bytes  duty (×1000)
+#   4  bytes  rpm
+#   2  bytes  v_in (×10)
+#  24  bytes  amp_h, amp_h_charge, watt_h, watt_h_charge, tachometer×2 ← skipped
+#   1  byte   fault                    ← @ index 53
+# Total minimum: 54 bytes. Newer firmware appends fields AFTER fault
+# (pid_pos, controller_id, …) which is fine — we just slice less than the
+# full payload. If a future firmware reorders fields BEFORE fault, the
+# parser will read garbage; the safe response in that case is to bump
+# this constant and re-derive the offsets from commands.c.
+_MIN_GET_VALUES_PAYLOAD_LEN = 54
+
 
 # ------------------------------------------------------------------
 # Packet building
@@ -185,7 +206,7 @@ def get_values_direct(ser) -> dict | None:
         if not raw:
             return None
         payload = _extract_payload(raw)
-        if payload is None or len(payload) < 54 or payload[0] != COMM_GET_VALUES:
+        if payload is None or len(payload) < _MIN_GET_VALUES_PAYLOAD_LEN or payload[0] != COMM_GET_VALUES:
             return None
         p = 1
         temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
@@ -213,8 +234,9 @@ def get_values_direct(ser) -> dict | None:
 
 def get_values_can(ser, can_id: int) -> dict | None:
     """
-    Lit MC_VALUES d'un VESC via CAN forwarding.
-    Utilise pyvesc.decode si disponible, sinon parse manuellement.
+    Reads MC_VALUES from a VESC reached via CAN forwarding through the
+    USB-connected VESC. Native parser — does NOT use pyvesc (which conflicts
+    with PyCRC/pycrc on Python 3.13 — see CLAUDE.md gotchas).
     """
     pkt = _can_forward_packet(can_id, bytes([COMM_GET_VALUES]))
     try:
@@ -225,25 +247,8 @@ def get_values_can(ser, can_id: int) -> dict | None:
         if not raw:
             return None
 
-        # Essayer pyvesc d'abord
-        try:
-            import pyvesc
-            msg, _ = pyvesc.decode(raw)
-            if msg is not None and hasattr(msg, 'v_in'):
-                return {
-                    'v_in':    round(float(msg.v_in), 2),
-                    'temp':    round(float(msg.temp_fet), 1),
-                    'current': round(float(msg.avg_motor_current), 2),
-                    'rpm':     int(msg.rpm),
-                    'duty':    round(float(msg.duty_cycle_now), 3),
-                    'fault':   int(msg.fault_code),
-                }
-        except Exception:
-            pass
-
-        # Fallback: parse manuel
         payload = _extract_payload(raw)
-        if payload is None or len(payload) < 54 or payload[0] != COMM_GET_VALUES:
+        if payload is None or len(payload) < _MIN_GET_VALUES_PAYLOAD_LEN or payload[0] != COMM_GET_VALUES:
             return None
         p = 1
         temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
