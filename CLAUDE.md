@@ -305,6 +305,19 @@ Séquence correcte assurée par ChoreoPlayer : panel open → Timer(delay) → a
 `all_dome` : appelle `dome_servo.open_all()` / `close_all()` directement.
 Dans le Choreo timeline : Dome Servo track → seulement `ALL DOME` · Body Servo track → seulement `ALL BODY`.
 
+**Bulk + duration (depuis 2026-05-09) :**
+- `dur_s > 0` sur un block `all_dome` ou `all_body` → tous les servos (sauf arms en `all_body`) slewent en parallèle sur `dur_s` secondes vers leur angle calibré, easing appliqué.
+- `dur_s == 0` → fast path historique (`open_all()` / per-servo `open(speed=...)` à vitesse calibrée).
+- ⚠️ **`all_body` + duration NE propage PAS la durée aux arms** (panels d'arms et arm extensions). Les arms restent à vitesse calibrée + `delay_N` du Settings → Arms. Limitation **intentionnelle** : `_launch_arm_sequences` est partagée avec les boutons UI manuels et le safe-home Reset E-STOP qui veulent vraiment la vitesse calibrée. Pour un bulk open lent INCLUANT les arms, drop des blocks `arm_servos` séparés (avec PANEL DURATION / DELAY / ARM DURATION explicites).
+
+**Per-arm block (`arm_servos` track) — 3 champs indépendants :**
+- `panel_duration` (s) — temps que le panneau prend
+- `delay` (s) — gap entre panneau et bras (override le `delay_N` global de Settings)
+- `arm_duration` (s) — temps que le bras prend
+- Largeur visuelle du block sur la timeline = `panel_duration + delay + arm_duration` (auto via `_armBlockTotalDur`)
+- Backend `_dispatch` : open = panel slew → wait (panel_duration + delay) → arm slew · close = arm slew → wait (arm_duration + delay) → panel slew
+- Migration auto des vieux blocks `duration:N` → `panel_duration=N, arm_duration=N, delay=0.5` (via `scripts/migrate_arm_blocks.py`, idempotent, déjà passé en prod le 2026-05-09).
+
 **Labels servos dans Choreo :** ARM SLOT dropdown + block label utilisent le label de Calibration
 (lu depuis `_servoSettings` via `GET /servo/settings`). `armsConfig` rechargé à chaque `choreoEditor.init()`.
 

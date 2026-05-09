@@ -841,8 +841,22 @@ class ChoreoPlayer:
                                 except Exception:
                                     log.exception("all_body %s failed: %s", action, _name)
                         # Arm sequences keep their own panel→delay→arm logic.
-                        # The bulk duration does not apply to them — they
-                        # always run at their calibrated speed.
+                        # ⚠️ KNOWN LIMITATION (intentional, 2026-05-09):
+                        # The bulk `duration` on an all_body block does NOT
+                        # propagate to the arm panels or the arm extensions.
+                        # They always run at the speed calibrated in
+                        # Settings → Servos with the global Settings → Arms
+                        # `delay_N` between each panel and arm.
+                        #
+                        # Reason: _launch_arm_sequences is shared with the
+                        # manual UI buttons and the safe-home stow, which both
+                        # genuinely want the calibrated speed. Adding a
+                        # duration parameter would either pollute the helper
+                        # signature or duplicate the arm dispatch loop here.
+                        # If you need a slow all-body open INCLUDING the arms,
+                        # drop a separate `arm_servos` block per arm with
+                        # PANEL DURATION / DELAY / ARM DURATION set explicitly
+                        # (those are honoured per-block).
                         _launch_arm_sequences(arms_cfg, cfg_panels, action)
                     return
 
