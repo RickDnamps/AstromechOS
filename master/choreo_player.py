@@ -737,11 +737,27 @@ class ChoreoPlayer:
                         _launch_arm_sequences(arms_cfg, cfg_panels, action)
                     return
 
-                # Resolve target angle for 'degree' action or explicit target
+                # Resolve target angle.
+                #   - explicit `target` field (degree action) → use it
+                #   - no target but duration set → resolve calibrated open/close
+                #     angle so the slew below has a destination. Lets the user
+                #     drop a "open <servo>" block with duration=3s and have the
+                #     servo take exactly 3s to reach its calibrated open angle,
+                #     instead of running at the calibrated `speed` parameter.
+                #   - no target and no duration → instant dispatch (uses speed)
                 if target is not None:
                     angle = max(10.0, min(170.0, float(target)))
+                elif dur_s > 0:
+                    try:
+                        from master.api.servo_bp import _read_panels_cfg, _panel_angle
+                        _panels_cfg = _read_panels_cfg()
+                        _direction  = 'open' if action == 'open' else 'close'
+                        angle = float(_panel_angle(servo, _direction, _panels_cfg))
+                    except Exception:
+                        log.exception("Failed to resolve calibrated angle for %s — falling back to instant dispatch", servo)
+                        angle = None
                 else:
-                    angle = None   # driver uses calibrated open/close angle
+                    angle = None   # driver uses calibrated open/close angle + speed
 
                 # Duration-based slewing — runs in daemon thread, does not block event loop
                 if dur_s > 0 and angle is not None:
