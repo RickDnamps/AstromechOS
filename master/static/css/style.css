@@ -3848,14 +3848,13 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   text-transform: uppercase;
 }
 .chor-monitor-bottom-grid {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 24px;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
 }
 /* Compact a bit so the bar stays unobtrusive */
-.chor-monitor-bottom .dome-side          { align-items: center; }
+.chor-monitor-bottom .dome-side          { width: 100%; align-items: center; }
 .chor-monitor-bottom .dome-side-label    { font-size: 9px; margin-bottom: 2px; }
 .chor-monitor-bottom .front-inner,
 .chor-monitor-bottom .rear-inner         { gap: 8px; justify-content: center; }
