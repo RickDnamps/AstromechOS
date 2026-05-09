@@ -110,6 +110,15 @@ class ChoreoPlayer:
             if cfg is not None else 0.025
         )
 
+        # mpg123 cold-start compensation: each `S:` audio command travels
+        # Master → UART → Slave → mpg123 spawn (~30-80ms before audio actually
+        # plays). Advance audio events by this amount so the perceived sound
+        # aligns with the shifted lights/dome/body events. Tunable per install.
+        self._audio_startup_lat = (
+            cfg.getfloat('choreo', 'audio_startup_lat', fallback=0.05)
+            if cfg is not None else 0.05
+        )
+
         # Audio slot scheduler
         self._audio_channels: int = (
             cfg.getint('audio', 'audio_channels', fallback=6) if cfg is not None else 6
@@ -304,10 +313,15 @@ class ChoreoPlayer:
         events = []
         lat = self._latency
 
-        # Audio track — NOT shifted (audio fires first, everything else follows)
+        # Audio track — fired ahead of its authored t by audio_startup_lat to
+        # cover mpg123 cold-start. Without this, audio plays ~50ms LATE relative
+        # to lights/dome which were already shifted by `lat` to leave room for
+        # audio startup. Now both compensations stack correctly.
         # All blocks live in 'audio'; ch=0 → S: (primary), ch=1 → S2: (secondary)
+        audio_advance = self._audio_startup_lat
         for ev in tracks.get('audio', []):
-            events.append({**ev, 'track': 'audio'})
+            events.append({**ev, 'track': 'audio',
+                           't': max(0.0, ev['t'] - audio_advance)})
 
         # Lights — shifted; auto-restore to random at end of each block
         for ev in tracks.get('lights', []):
@@ -426,7 +440,17 @@ class ChoreoPlayer:
                 log.info(f"Choreo '{name}' finished")
                 break
 
-            self._stop_flag.wait(timeout=TICK)
+            # Event-driven sleep: wake up at the next event timestamp instead
+            # of every TICK. TICK still caps the upper bound so status_lock
+            # stays fresh and telem checks happen on schedule. Improves event
+            # firing precision from ~25ms average jitter (half a tick) to
+            # under 1ms when events are densely packed.
+            if ev_idx < len(events):
+                next_event_dt = events[ev_idx]['t'] - t_now
+            else:
+                next_event_dt = TICK
+            wait_dt = max(0.001, min(TICK, next_event_dt))
+            self._stop_flag.wait(timeout=wait_dt)
 
         self._safe_stop_all()
         with self._status_lock:

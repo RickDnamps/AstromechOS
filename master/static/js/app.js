@@ -4749,6 +4749,11 @@ document.addEventListener('keydown', (e) => {
 class StatusPoller {
   constructor() {
     this._interval = null;
+    // In-flight guard: when the Pi is slow (e.g. mid-deploy or settings save)
+    // setInterval would otherwise stack up /status requests until they all
+    // time out. Skipping ticks while one is in flight keeps Flask thread
+    // pressure bounded and the UI responsive.
+    this._inFlight = false;
   }
 
   start(intervalMs = 2000) {
@@ -4757,6 +4762,16 @@ class StatusPoller {
   }
 
   async poll() {
+    if (this._inFlight) return;
+    this._inFlight = true;
+    try {
+      await this._pollOnce();
+    } finally {
+      this._inFlight = false;
+    }
+  }
+
+  async _pollOnce() {
     const data = await api('/status');
     if (!data) {
       this._setOffline(true);
@@ -5739,12 +5754,35 @@ async function loadAudioCategories() {
 function startAppHeartbeat() {
   const base = () => (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
 
-  // Envoi POST /heartbeat toutes les 200ms tant que la page est active
-  setInterval(() => {
-    fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
-  }, 200);
+  // POST /heartbeat every 200ms while the tab is visible.
+  //
+  // Visibility-awareness is intentional safety: when the tab is hidden the
+  // user cannot see the joystick or the camera stream, so the AppWatchdog
+  // SHOULD cut motion. Browsers throttle setInterval to ~1s for hidden tabs
+  // (already > the 600ms watchdog window), so we make this explicit by
+  // stopping the interval entirely on visibilitychange. This avoids the
+  // grey-area where throttled timers fire unpredictably and motion is
+  // intermittently allowed/blocked.
+  let _hbInterval = null;
+  function _hbStart() {
+    if (_hbInterval !== null) return;
+    _hbInterval = setInterval(() => {
+      fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
+    }, 200);
+  }
+  function _hbStop() {
+    if (_hbInterval === null) return;
+    clearInterval(_hbInterval);
+    _hbInterval = null;
+  }
 
-  // Stop d'urgence si l'onglet / l'app se ferme
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _hbStart();
+    else                                        _hbStop();
+  });
+  if (document.visibilityState === 'visible') _hbStart();
+
+  // Emergency stop when the tab/app actually closes
   window.addEventListener('beforeunload', () => {
     fetch(base() + '/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
     fetch(base() + '/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});

@@ -62,6 +62,12 @@ class UARTController:
         self._callbacks: dict[str, list] = {}
         self._invalid_crc_count = 0
         self._heartbeat_invalid_crc_count = 0
+        # Tracks the wall-clock age of the last heartbeat ACK from the Slave.
+        # None until the first ACK arrives. Lets us distinguish "Slave dead"
+        # (no ACKs at all) from "Slave alive but TX corrupted" (CRC errors
+        # without missing ACKs). Fed by the internal H callback registered
+        # in start().
+        self._last_hb_ack_t: float | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -84,9 +90,16 @@ class UARTController:
 
     def start(self) -> None:
         self._running = True
+        # Internal HB ACK tracker — registered before any external H callbacks
+        # so we always observe ACKs regardless of caller registration order.
+        self.register_callback('H', self._note_hb_ack)
         threading.Thread(target=self._heartbeat_loop, name="uart-hb", daemon=True).start()
         threading.Thread(target=self._read_loop, name="uart-rx", daemon=True).start()
         log.info("UARTController started")
+
+    def _note_hb_ack(self, value: str) -> None:
+        """Internal — records every H:OK / H:* reply from the Slave."""
+        self._last_hb_ack_t = time.monotonic()
 
     def stop(self) -> None:
         self._running = False
@@ -116,6 +129,14 @@ class UARTController:
         """Number of consecutive invalid CRC messages since the last valid message."""
         return self._invalid_crc_count
 
+    @property
+    def hb_ack_age_ms(self) -> int | None:
+        """Milliseconds since the last heartbeat ACK from the Slave, or None
+        if no ACK has been received since startup."""
+        if self._last_hb_ack_t is None:
+            return None
+        return int((time.monotonic() - self._last_hb_ack_t) * 1000)
+
     # ------------------------------------------------------------------
     # Threads internes
     # ------------------------------------------------------------------
@@ -143,8 +164,11 @@ class UARTController:
                     continue
                 buffer += data.decode('utf-8', errors='replace')
                 if len(buffer) > _MAX_BUFFER:
-                    log.warning(f"Buffer UART overflow ({len(buffer)} bytes) — reset")
-                    buffer = ""
+                    # Keep the trailing 256 bytes — preserves the start of any
+                    # in-flight frame instead of dropping ~350ms of bus data
+                    # (which would silently swallow heartbeats and commands).
+                    log.warning(f"Buffer UART overflow ({len(buffer)} bytes) — keeping last 256B")
+                    buffer = buffer[-256:]
                 while '\n' in buffer:
                     line, buffer = buffer.split('\n', 1)
                     self._process_line(line)

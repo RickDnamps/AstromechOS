@@ -195,8 +195,10 @@ class UARTListener:
                     continue
                 buffer += data.decode('utf-8', errors='replace')
                 if len(buffer) > _MAX_BUFFER:
-                    log.warning(f"Slave UART buffer overflow ({len(buffer)} bytes) — reset")
-                    buffer = ""
+                    # Keep the trailing 256 bytes — preserves the start of any
+                    # in-flight frame instead of dropping ~350ms of bus data.
+                    log.warning(f"Slave UART buffer overflow ({len(buffer)} bytes) — keeping last 256B")
+                    buffer = buffer[-256:]
                 while '\n' in buffer:
                     line, buffer = buffer.split('\n', 1)
                     self._process_line(line.strip())

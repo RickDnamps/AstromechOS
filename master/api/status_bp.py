@@ -56,6 +56,34 @@ from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, VERSION
 log = logging.getLogger(__name__)
 
 
+# Tiny TTL cache around configparser so the /status endpoint (polled at 1 Hz
+# per client) does not re-parse main.cfg + local.cfg five times per call. The
+# cache is invalidated by stat'ing local.cfg's mtime, so settings_bp writes
+# are visible on the next poll without manual invalidation.
+_CFG_CACHE: dict = {'cfg': None, 'mtime': 0.0, 'expires': 0.0}
+_CFG_TTL_S = 2.0
+
+
+def _cached_cfg() -> configparser.ConfigParser:
+    now = _time.time()
+    try:
+        mtime = max(
+            os.path.getmtime(_MAIN_CFG)  if os.path.exists(_MAIN_CFG)  else 0.0,
+            os.path.getmtime(_LOCAL_CFG) if os.path.exists(_LOCAL_CFG) else 0.0,
+        )
+    except OSError:
+        mtime = 0.0
+    if (_CFG_CACHE['cfg'] is None
+            or _CFG_CACHE['mtime'] != mtime
+            or _CFG_CACHE['expires'] < now):
+        cfg = configparser.ConfigParser()
+        cfg.read([_MAIN_CFG, _LOCAL_CFG])
+        _CFG_CACHE['cfg']     = cfg
+        _CFG_CACHE['mtime']   = mtime
+        _CFG_CACHE['expires'] = now + _CFG_TTL_S
+    return _CFG_CACHE['cfg']
+
+
 def _iface_ip(iface: str) -> str | None:
     try:
         import socket, struct, fcntl
@@ -67,33 +95,23 @@ def _iface_ip(iface: str) -> str | None:
 
 
 def _slave_host() -> str:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('slave', 'host', fallback='r2-slave.local')
+    return _cached_cfg().get('slave', 'host', fallback='r2-slave.local')
 
 
 def _battery_cells() -> int:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.getint('battery', 'cells', fallback=4)
+    return _cached_cfg().getint('battery', 'cells', fallback=4)
 
 
 def _robot_name() -> str:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('robot', 'name', fallback='R2-D2')
+    return _cached_cfg().get('robot', 'name', fallback='R2-D2')
 
 
 def _robot_icon() -> str:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('robot', 'icon', fallback='')
+    return _cached_cfg().get('robot', 'icon', fallback='')
 
 
 def _robot_location(key: str, fallback: str) -> str:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('robot', key, fallback=fallback)
+    return _cached_cfg().get('robot', key, fallback=fallback)
 
 
 def _mem_info() -> dict | None:
@@ -242,6 +260,10 @@ def get_status():
         'choreo_name':     (reg.choreo.get_status().get('name') if reg.choreo and reg.choreo.is_playing() else None),
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
         'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # consecutive invalid CRC on Master side
+        # ms since the last heartbeat ACK from the Slave; None until first ACK.
+        # Distinguishes "Slave dead" (rising age) from "Slave alive but TX
+        # corrupted" (CRC errors but ACK age stays low).
+        'slave_hb_age_ms':   reg.uart.hb_ack_age_ms if reg.uart else None,
         'audio_playing':     reg.audio_playing,
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
