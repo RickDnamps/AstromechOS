@@ -283,9 +283,19 @@ The **STATUS** button in the top-right corner of the dashboard opens a collapsib
 
 ### VESC safety lock
 
-When a VESC is offline or reporting a fault, a red banner appears in the Drive tab and all drive commands are blocked (web, Android, BT gamepad). This prevents accidentally driving on a half-connected bench setup.
+When a VESC is offline, telemetry is stale (>2 s), or any fault code is active, all drive commands are blocked everywhere (web joystick, REST API, Bluetooth gamepad, choreography player). The check lives in `master/vesc_safety.py` and is the single source of truth — no input path can bypass it.
+
+If the right VESC (CAN ID 2) goes silent while the left side keeps responding, the Slave detects the asymmetry and emits a synthetic `CAN_LOST` fault so the Master's safety gate trips immediately, instead of waiting for the 2 s staleness threshold. Prevents one-wheel runaways.
 
 To test software without motors physically connected, enable **Bench mode** in **Config → VESC**. The setting is persisted in `local.cfg` and survives reboots. Disable it before field use.
+
+### UART latency calibration
+
+The body servos travel via UART to the Slave Pi before reaching their I2C HAT — this adds a one-way hop of about 5–25 ms depending on hardware, slip ring quality and load. The choreography player compensates by firing body servo events that many milliseconds *early* so they move in sync with the dome servos (which are direct I2C).
+
+**Self-tuning** — open **Settings → System → Hardware**, click **MEASURE** (samples the heartbeat round-trip over 40 s), then **APPLY & SAVE**. The value is persisted to `local.cfg` *and* hot-swapped into the running ChoreoPlayer in one click — no reboot, no Slave restart. Re-measure and re-apply iteratively until body and dome panels open in perfect sync.
+
+A coloured fit indicator (green / orange / red) tells you at a glance whether the configured value matches the current bus latency. Manual edits to the latency field auto-save on blur with a brief `✓ saved` indicator.
 
 ### Bluetooth gamepad
 

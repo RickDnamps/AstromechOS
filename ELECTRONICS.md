@@ -287,9 +287,21 @@ flowchart LR
 
 ---
 
-## 5. 3-Layer Safety System
+## 5. Safety Architecture
 
-Three independent watchdogs ensure motors stop even if any part of the system crashes.
+Three independent timing watchdogs (below) plus a software safety lock and a paired-side liveness check ensure motors cannot run uncontrolled.
+
+**Software safety helper** — `master/vesc_safety.py` is the single source of truth used by every drive path (web joystick, REST `/motion/drive`, Bluetooth gamepad, choreography player). It returns `False` (block) unless both VESC sides have fresh, fault-free telemetry, or `bench_mode` is on for benchtop development.
+
+**Paired-side CAN liveness** — the Slave's VESC driver sets a `_can_lost` flag when the right VESC (reached over CAN forwarding) misses several consecutive reads while the left VESC is still responding. The driver refuses drive commands locally and emits a synthetic fault code (`99 = CAN_LOST`) so the Master's safety gate trips on the next telemetry frame instead of waiting for the 2 s staleness threshold.
+
+**Slave boot banner** — on (re)start, the Slave UART listener emits `BOOT:READY:CRC` once. The Master receives it and re-pushes the persisted VESC scale + inversion config so the Slave never operates on stale defaults after a mid-session reboot.
+
+**E-STOP / Reset E-STOP** are strictly separated:
+- *E-STOP* freezes the robot (cuts propulsion + dome + choreo, **no servo movement**).
+- *Reset E-STOP* runs an automated kid-safe stow sequence at slew speed `3` (~1 s per 90°), using the same arm-then-panel dependency logic as choreographies.
+
+### Three independent timing watchdogs
 
 ```mermaid
 flowchart TD
@@ -444,9 +456,13 @@ CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 he
 | `S` | M→S | `S:STOP:CRC` | Stop audio |
 | `V` | S→M | `V:?:CRC` | Version request |
 | `V` | M→S | `V:abc123:CRC` | Version reply (git hash) |
-| `T` | S→M | `T:VOLT:48.2:TEMP:32:CRC` | Telemetry |
+| `TL`/`TR` | S→M | `TL:v_in:temp:current:rpm:duty:fault:CRC` | Per-VESC telemetry, 5 Hz. `fault=99` = synthetic CAN_LOST emitted by paired-side liveness when the right VESC stops responding. |
+| `BOOT` | S→M | `BOOT:READY:CRC` | Slave-side boot banner — emitted once after `uart.start()` settles. Master responds by re-pushing `VCFG:scale` and `VINV:L/R` so config is never lost on Slave reboot. |
+| `VCFG` | M→S | `VCFG:scale:0.85:CRC` · `VCFG:erpm:50000:CRC` | Live VESC tuning |
+| `VINV` | M→S | `VINV:L:1:CRC` · `VINV:R:0:CRC` | Per-side direction (0 = normal, 1 = inverted) |
 | `DISP` | M→S | `DISP:OK:abc123:CRC` | RP2040 display command |
 | `REBOOT` | M→S | `REBOOT:1:CRC` | Reboot Slave |
+| `SHUTDOWN` | M→S | `SHUTDOWN:1:CRC` | Halt Slave Pi (3 s grace) |
 
 ---
 

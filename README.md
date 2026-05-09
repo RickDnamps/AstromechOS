@@ -199,7 +199,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 
 ---
 
-## 🛡️ Safety — Triple Watchdog + E-STOP
+## 🛡️ Safety — Triple Watchdog + Universal VESC Lock + Kid-Safe Stow
 
 No single point of failure can leave the robot moving uncontrolled:
 
@@ -211,9 +211,16 @@ No single point of failure can leave the robot moving uncontrolled:
 
 All three trigger a **graceful decel ramp** — never an abrupt stop that could tip the robot.
 
-**Emergency Stop** (red button, always visible) — hard-cuts all servo PWM instantly. `RESET E-STOP` re-arms in under a second, no restart needed.
+**E-STOP / Reset E-STOP** — strict separation:
 
-**VESC safety lock** — if either VESC is offline or faulted, the Drive tab shows a red banner and all propulsion is blocked (web, BT gamepad, Android).
+- **E-STOP** (red button, always visible) — *freezes* the robot: cuts propulsion, dome rotation, aborts any running choreography. Servos hold their current position (arms extended, panels open) so nothing moves while you secure the area.
+- **Reset E-STOP** — runs an automated stow sequence at a slow slew rate (`speed=3`, ~1 s for a 90° travel) to safely close arms, then their panels (respecting the per-arm delay), then all remaining body and dome panels. Designed to be safe around children.
+
+**Universal VESC safety lock** (`master/vesc_safety.py`) — single source of truth used by every code path that can drive motors (web joystick, REST API, Bluetooth gamepad, choreography player). Drive is blocked if either VESC is offline, telemetry is stale (>2 s), or any fault code is active. Bench mode bypasses the check for benchtop development without VESC hardware.
+
+**Paired-side CAN liveness** — if the right VESC (CAN ID 2) goes silent while the left side keeps responding, the Slave detects the asymmetry, refuses further drive commands locally, and emits a synthetic fault code so the Master's safety gate trips immediately. Prevents one-wheel runaways.
+
+**Slave reboot config resync** — when the Slave reboots mid-session, it sends a `BOOT:READY` banner over UART. The Master reacts by re-pushing the persisted VESC scale and inversion config so the Slave never resumes operating with stale defaults.
 
 ---
 
@@ -312,7 +319,14 @@ Or press the physical dome button (short press). Updates itself over-the-air —
 | **2** | VESCs · dome motor · MG90S servo panels with speed ramp | ✅ |
 | **3** | Script engine — 40 expressive behavioral sequences | ✅ |
 | **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel + theme system + HAT/screen diagnostic | ✅ |
+| **4+** | Universal VESC safety helper · Slave boot banner config resync · paired-side CAN liveness · E-STOP/Reset E-STOP separation with kid-safe stow · event-driven choreo scheduler · UART RTT calibration tool with hot-swap · service worker cache versioned per deploy | ✅ |
 | **5** | Vision — person tracking · face detection · contextual AI responses (on-device) | 🔄 |
+
+### 🔬 Built-in calibration tools
+
+- **UART RTT calibration** — `Settings → System → Hardware → MEASURE` samples the heartbeat round-trip time over a 40-second rolling window and proposes a tuned `body_servo_uart_lat` based on the median latency (clamped 5–50 ms). The `APPLY & SAVE` button persists the value and hot-swaps the running ChoreoPlayer in one click — no reboot, no Slave restart. Re-measure and re-apply iteratively until body and dome panels open in perfect sync.
+- **Manual override** — type any value into the latency field, hit Tab/Enter, the value auto-saves with a brief `✓ saved` indicator. Hot-swap takes effect at the next choreography play.
+- **`/diagnostics/uart_rtt`** REST endpoint exposes the same data (`min/avg/max/p50/p95/p99` ms · current vs recommended) for scripted use.
 
 ---
 
