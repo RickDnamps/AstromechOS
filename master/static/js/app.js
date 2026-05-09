@@ -1086,6 +1086,12 @@ let _speedLimit = 0.6;
 
 // Lights backend — tracked globally so palette + editor use correct raw label
 let _lightsBackend = 'teeces';
+
+// Snapshot of hardware-config values taken at last load. Used by
+// saveHardwareConfig() to compute a diff and only send the keys the user
+// actually changed (so a UART-only edit does not trigger Slave restart or
+// the misleading "Master reboot required" toast).
+let _hardwareLoaded = null;
 function _rawLabel() {
   return _lightsBackend === 'astropixels' ? '⚙️ Raw @-command' : '⚙️ Raw JawaLite';
 }
@@ -5051,6 +5057,15 @@ async function loadSettings() {
     if (smh) smh.value = data.hardware.slave_motor_hat || '0x40';
     const lat = el('body-uart-lat-input');
     if (lat) lat.value = data.hardware.body_uart_lat_ms ?? 25;
+    // Snapshot of loaded values — saveHardwareConfig() compares against these
+    // to send ONLY the fields the user actually changed (avoids needlessly
+    // restarting the Slave when only the UART latency was tweaked).
+    _hardwareLoaded = {
+      master_hats:     data.hardware.master_hats     || '0x40',
+      slave_hats:      data.hardware.slave_hats      || '0x41',
+      slave_motor_hat: data.hardware.slave_motor_hat || '0x40',
+      body_uart_lat_ms: data.hardware.body_uart_lat_ms ?? 25,
+    };
   }
 
   if (data.lights) {
@@ -5548,17 +5563,50 @@ async function saveHardwareConfig() {
   const latSec       = (latMs / 1000).toFixed(3);
   const status = el('hardware-config-status');
   if (!masterHats || !slaveHats || !slaveMotor) { toast('HAT addresses are required', 'error'); return; }
-  if (!confirm('Save hardware config?\n\nMaster HAT changes require a Master reboot.\nSlave HAT changes will auto-restart the Slave service.')) return;
+
+  // Compute diff vs the snapshot taken at load time. We send only the
+  // fields the user actually changed — avoids triggering a Slave restart
+  // when only UART latency was tweaked, and avoids the misleading
+  // "Master reboot required" toast on a UART-only save.
+  const loaded = _hardwareLoaded || {};
+  const payload = {};
+  let masterHatChanged = false, slaveHatChanged = false, latChanged = false;
+  if (masterHats  !== (loaded.master_hats     ?? '')) { payload['i2c_servo_hats.master_hats']     = masterHats;  masterHatChanged = true; }
+  if (slaveHats   !== (loaded.slave_hats      ?? '')) { payload['i2c_servo_hats.slave_hats']      = slaveHats;   slaveHatChanged  = true; }
+  if (slaveMotor  !== (loaded.slave_motor_hat ?? '')) { payload['i2c_servo_hats.slave_motor_hat'] = slaveMotor;  slaveHatChanged  = true; }
+  if (latMs       !== (loaded.body_uart_lat_ms ?? 25)) { payload['choreo.body_servo_uart_lat']    = latSec;      latChanged       = true; }
+
+  if (!masterHatChanged && !slaveHatChanged && !latChanged) {
+    toast('No changes to save', 'info');
+    if (status) { status.textContent = 'No changes'; status.className = 'settings-status'; }
+    return;
+  }
+
+  // Build the confirm prompt around the actual changes
+  const consequences = [];
+  if (masterHatChanged) consequences.push('• Master reboot required (servo HAT count change)');
+  if (slaveHatChanged)  consequences.push('• Slave service will auto-restart');
+  if (latChanged && !masterHatChanged && !slaveHatChanged) consequences.push('• UART latency applied live (no reboot)');
+  const msg = 'Save hardware config?\n\n' + consequences.join('\n');
+  if (!confirm(msg)) return;
+
   if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-  const data = await api('/settings/config', 'POST', {
-    'i2c_servo_hats.master_hats':    masterHats,
-    'i2c_servo_hats.slave_hats':     slaveHats,
-    'i2c_servo_hats.slave_motor_hat': slaveMotor,
-    'choreo.body_servo_uart_lat':    latSec,
-  });
+  const data = await api('/settings/config', 'POST', payload);
   if (data?.status === 'ok') {
-    toast('Hardware config saved — UART latency hot-swapped · HAT changes: Master reboot required, Slave auto-restarting', 'ok');
-    if (status) { status.textContent = 'Saved ✓ (UART latency live · HAT: Master reboot · Slave restarting)'; status.className = 'settings-status ok'; }
+    // Refresh snapshot so subsequent saves diff against the new state
+    if (latChanged)        loaded.body_uart_lat_ms = latMs;
+    if (masterHatChanged)  loaded.master_hats      = masterHats;
+    if (slaveHatChanged)   { loaded.slave_hats = slaveHats; loaded.slave_motor_hat = slaveMotor; }
+    _hardwareLoaded = loaded;
+
+    // Toast tailored to what actually happened
+    let msgOk;
+    if (masterHatChanged && slaveHatChanged)      msgOk = 'Saved — Master reboot required · Slave restarting';
+    else if (masterHatChanged)                    msgOk = 'Saved — Master reboot required';
+    else if (slaveHatChanged)                     msgOk = 'Saved — Slave auto-restarting';
+    else                                          msgOk = `Saved — UART latency hot-swapped to ${latMs} ms (no reboot)`;
+    toast(msgOk, 'ok');
+    if (status) { status.textContent = '✓ ' + msgOk; status.className = 'settings-status ok'; }
   } else {
     toast('Error saving hardware config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }

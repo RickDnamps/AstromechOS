@@ -443,17 +443,26 @@ def set_config():
                 _write_key(section, key, str(value))
             updated.append(dotkey)
 
-    # Slave HAT keys go to slave.cfg (not local.cfg) and trigger a Slave restart
-    slave_hat_updates = {k.split('.', 1)[1]: data[k] for k in updated if k in _SLAVE_HAT_KEYS}
+    # Slave HAT keys go to slave.cfg (not local.cfg) and trigger a Slave
+    # restart — but ONLY if the new values genuinely differ from what the
+    # Slave already has. Defends against clients that POST the whole hardware
+    # form even when the user only edited an unrelated field (the JS frontend
+    # now diffs before sending, but other callers — Android, scripts, future
+    # code — should not trigger a needless Slave restart either).
+    slave_hat_updates = {k.split('.', 1)[1]: str(data[k]) for k in updated if k in _SLAVE_HAT_KEYS}
     if slave_hat_updates:
-        # Merge with existing slave.cfg values so we don't wipe unrelated keys
         scfg = _read_slave_cfg()
-        merged = {
+        current = {
             'slave_hats':      scfg.get('i2c_servo_hats', 'slave_hats',      fallback='0x41'),
             'slave_motor_hat': scfg.get('i2c_servo_hats', 'slave_motor_hat', fallback='0x40'),
         }
-        merged.update(slave_hat_updates)
-        _sync_slave_hat_cfg(**merged)
+        actually_changed = {k: v for k, v in slave_hat_updates.items() if current.get(k) != v}
+        if actually_changed:
+            merged = {**current, **actually_changed}
+            _sync_slave_hat_cfg(**merged)
+            log.info("Slave HAT updates applied: %s", actually_changed)
+        else:
+            log.info("Slave HAT keys submitted but values unchanged — skipping SCP+restart")
 
     if 'audio.channels' in updated:
         try:
