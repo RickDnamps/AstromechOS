@@ -20,18 +20,22 @@
       {
         "servo": "Servo_S12",
         "action": "open",
-        "duration": 3,
         "group": "arms",
         "t": 0.6000000000000001,
-        "servo_label": "ARMS1_Deploy"
+        "servo_label": "ARMS1_Deploy",
+        "panel_duration": 3.0,
+        "arm_duration": 3.0,
+        "delay": 0.5
       },
       {
         "servo": "Servo_S12",
         "action": "close",
-        "duration": 3,
         "group": "arms",
         "t": 7.5,
-        "servo_label": "ARMS1_Deploy"
+        "servo_label": "ARMS1_Deploy",
+        "panel_duration": 3.0,
+        "arm_duration": 3.0,
+        "delay": 0.5
       }
     ],
     "audio": [
