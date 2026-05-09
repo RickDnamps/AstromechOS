@@ -1767,6 +1767,25 @@
             <label class="settings-label">Body servo UART latency (ms)</label>
             <input type="number" id="body-uart-lat-input" class="settings-input" min="0" max="200" step="1" placeholder="25">
           </div>
+
+          <!-- UART RTT calibration tool — measures heartbeat round-trip and
+               proposes a tuned body_servo_uart_lat based on the median latency.
+               Requires the system to be running idle (no choreo) for a clean reading. -->
+          <div class="settings-row admin-only" style="flex-direction:column;align-items:stretch;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="settings-label" style="margin:0">UART RTT calibration</span>
+              <span id="uart-rtt-fit" style="font-family:var(--font-data);font-size:0.85em;color:var(--text-dim)">— idle —</span>
+            </div>
+            <div id="uart-rtt-stats" style="font-family:var(--font-data);font-size:0.78em;color:var(--text-dim);line-height:1.5">
+              Click MEASURE to sample the last 40 seconds of heartbeat round-trips.
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <button class="btn" onclick="measureUartRtt()">MEASURE</button>
+              <button class="btn btn-primary" id="uart-rtt-apply-btn" onclick="applyUartRttRecommendation()" disabled>APPLY RECOMMENDATION</button>
+            </div>
+          </div>
+          <p class="settings-note admin-only">Run with no choreography active for a clean reading. Recommendation = median RTT ÷ 2 (one-way hop), clamped to 5–50 ms.</p>
+
           <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
           <div class="settings-status" id="hardware-config-status"></div>
           <div class="settings-divider"></div>

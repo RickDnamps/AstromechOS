@@ -5474,6 +5474,72 @@ async function systemRollback() {
   if (d) toast('Rollback in progress — Slave will reboot', 'ok');
 }
 
+// Latest recommendation cached for the APPLY button
+let _uartRttRecommendation = null;
+
+async function measureUartRtt() {
+  const stats = el('uart-rtt-stats');
+  const fit   = el('uart-rtt-fit');
+  const btn   = el('uart-rtt-apply-btn');
+  if (stats) stats.textContent = 'Measuring…';
+  if (fit)   { fit.textContent = '…'; fit.style.color = 'var(--text-dim)'; }
+  if (btn)   btn.disabled = true;
+
+  const data = await api('/diagnostics/uart_rtt');
+  if (!data || data.count === 0) {
+    if (stats) stats.textContent = data?.error || 'No samples yet — wait ~40s after Master start.';
+    return;
+  }
+
+  // Stats line
+  if (stats) {
+    stats.innerHTML = (
+      `<b>${data.count}</b> samples · ` +
+      `min <b>${data.min_ms}</b> · ` +
+      `avg <b>${data.avg_ms}</b> · ` +
+      `p50 <b>${data.p50_ms}</b> · ` +
+      `p95 <b>${data.p95_ms}</b> ms<br>` +
+      `current: <b>${data.current_body_uart_lat_ms} ms</b>  ·  ` +
+      `recommended: <b style="color:var(--accent)">${data.recommended_body_uart_lat_ms} ms</b>`
+    );
+  }
+
+  // Fit indicator: how close is the configured value to the recommendation?
+  _uartRttRecommendation = data.recommended_body_uart_lat_ms;
+  const cur = data.current_body_uart_lat_ms;
+  const rec = _uartRttRecommendation;
+  const drift = Math.abs(cur - rec);
+  if (fit) {
+    if (drift <= 5) {
+      fit.textContent = '● well tuned';
+      fit.style.color = 'var(--ok, #00cc66)';
+    } else if (drift <= 15) {
+      fit.textContent = '● slight drift';
+      fit.style.color = 'var(--warn, #ff8800)';
+    } else {
+      fit.textContent = '● off — apply suggested';
+      fit.style.color = 'var(--err, #ff2244)';
+    }
+  }
+  if (btn) btn.disabled = (rec == null) || (cur === rec);
+}
+
+function applyUartRttRecommendation() {
+  if (_uartRttRecommendation == null) return;
+  const inp = el('body-uart-lat-input');
+  if (!inp) return;
+  inp.value = _uartRttRecommendation;
+  toast(`UART latency set to ${_uartRttRecommendation} ms — click SAVE HARDWARE CONFIG to persist`, 'ok');
+  // Re-render the fit indicator now that input matches recommendation
+  const fit = el('uart-rtt-fit');
+  if (fit) {
+    fit.textContent = '● ready to save';
+    fit.style.color = 'var(--ok, #00cc66)';
+  }
+  const btn = el('uart-rtt-apply-btn');
+  if (btn) btn.disabled = true;
+}
+
 async function saveHardwareConfig() {
   const masterHats   = (el('master-hats-input')?.value     || '').trim();
   const slaveHats    = (el('slave-hats-input')?.value      || '').trim();
