@@ -465,16 +465,19 @@ def set_config():
     # Hot-swap choreo timing parameters so the user does not need to reboot
     # the Master to see the new latency values applied. Takes effect at the
     # next play() / next loop iteration.
-    if 'choreo.body_servo_uart_lat' in updated and reg.choreo:
-        try:
-            reg.choreo.set_body_uart_lat(float(data['choreo.body_servo_uart_lat']))
-        except Exception as e:
-            log.warning("Hot-swap body_servo_uart_lat failed: %s", e)
-    if 'choreo.audio_startup_lat' in updated and reg.choreo:
-        try:
-            reg.choreo.set_audio_startup_lat(float(data['choreo.audio_startup_lat']))
-        except Exception as e:
-            log.warning("Hot-swap audio_startup_lat failed: %s", e)
+    if ('choreo.body_servo_uart_lat' in updated
+            or 'choreo.audio_startup_lat' in updated):
+        import master.registry as reg
+        if 'choreo.body_servo_uart_lat' in updated and reg.choreo:
+            try:
+                reg.choreo.set_body_uart_lat(float(data['choreo.body_servo_uart_lat']))
+            except Exception as e:
+                log.warning("Hot-swap body_servo_uart_lat failed: %s", e)
+        if 'choreo.audio_startup_lat' in updated and reg.choreo:
+            try:
+                reg.choreo.set_audio_startup_lat(float(data['choreo.audio_startup_lat']))
+            except Exception as e:
+                log.warning("Hot-swap audio_startup_lat failed: %s", e)
 
     return jsonify({'status': 'ok', 'updated': updated})
 
