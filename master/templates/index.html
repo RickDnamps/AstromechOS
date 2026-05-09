@@ -747,54 +747,6 @@
     <!-- ── Body ──────────────────────────────────────────────────── -->
     <div class="chor-body">
 
-      <!-- LEFT PANEL: photorealistic Digital Twin — mirrors the active lights track -->
-      <div class="chor-left-panel" id="chor-monitor">
-        <div class="chor-monitors">
-          <div class="chor-monitor-title">LIVE MONITOR</div>
-
-          <!-- FRONT VIEW — FLD TOP / FLD BOT + PSI -->
-          <div class="dome-side">
-            <div class="dome-side-label">▼ FRONT VIEW</div>
-            <div class="dome-shape" style="padding:10px 12px 8px">
-              <div class="front-inner">
-                <div class="fld-stack">
-                  <div>
-                    <div class="panel-label" style="color:#00ffea">FLD TOP</div>
-                    <div class="logic-display" id="chor-fld-top"></div>
-                  </div>
-                  <div>
-                    <div class="panel-label" style="color:#00aaff">FLD BOT</div>
-                    <div class="logic-display" id="chor-fld-bot"></div>
-                  </div>
-                </div>
-                <div class="psi-wrap">
-                  <div class="panel-label">PSI</div>
-                  <div class="psi-circle" id="chor-psi-front"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- REAR VIEW — RLD + PSI -->
-          <div class="dome-side">
-            <div class="dome-side-label">▼ REAR VIEW</div>
-            <div class="dome-shape" style="padding:10px 12px 8px">
-              <div class="rear-inner">
-                <div>
-                  <div class="panel-label" style="color:#ff8800">RLD</div>
-                  <div class="logic-display" id="chor-rld"></div>
-                </div>
-                <div class="psi-wrap">
-                  <div class="panel-label">PSI</div>
-                  <div class="psi-circle" id="chor-psi-rear" style="animation-delay:.6s"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /chor-monitors -->
-      </div><!-- /chor-left-panel -->
-
       <!-- Tracks body: labels + timeline scroll in a shared vertical-scroll wrapper -->
       <div class="chor-tracks-body" id="chor-tracks-body">
 
@@ -898,6 +850,55 @@
       <span class="chor-footer-time" id="chor-timecode">00:00.000</span>
       <span class="chor-footer-sep">/</span>
       <span class="chor-footer-dur" id="chor-duration">—</span>
+    </div>
+
+    <!-- ── LIVE MONITOR — moved below the timeline so the timeline gets
+         full horizontal width. FRONT and REAR views sit side-by-side. ─ -->
+    <div class="chor-monitor-bottom" id="chor-monitor">
+      <div class="chor-monitor-bottom-title">LIVE MONITOR</div>
+      <div class="chor-monitor-bottom-grid">
+
+        <!-- FRONT VIEW — FLD TOP / FLD BOT + PSI -->
+        <div class="dome-side">
+          <div class="dome-side-label">▼ FRONT VIEW</div>
+          <div class="dome-shape" style="padding:8px 10px">
+            <div class="front-inner">
+              <div class="fld-stack">
+                <div>
+                  <div class="panel-label" style="color:#00ffea">FLD TOP</div>
+                  <div class="logic-display" id="chor-fld-top"></div>
+                </div>
+                <div>
+                  <div class="panel-label" style="color:#00aaff">FLD BOT</div>
+                  <div class="logic-display" id="chor-fld-bot"></div>
+                </div>
+              </div>
+              <div class="psi-wrap">
+                <div class="panel-label">PSI</div>
+                <div class="psi-circle" id="chor-psi-front"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- REAR VIEW — RLD + PSI -->
+        <div class="dome-side">
+          <div class="dome-side-label">▼ REAR VIEW</div>
+          <div class="dome-shape" style="padding:8px 10px">
+            <div class="rear-inner">
+              <div>
+                <div class="panel-label" style="color:#ff8800">RLD</div>
+                <div class="logic-display" id="chor-rld"></div>
+              </div>
+              <div class="psi-wrap">
+                <div class="panel-label">PSI</div>
+                <div class="psi-circle" id="chor-psi-rear" style="animation-delay:.6s"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
     </div>
 
   </div><!-- /chor-layout -->

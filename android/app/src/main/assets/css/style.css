@@ -3829,14 +3829,42 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   overflow: hidden;
 }
 
-/* ── Left Panel ───────────────────────────────────────────────── */
-.chor-left-panel {
-  width: 200px;
+/* ── Live monitor (BOTTOM bar — replaces the old left panel) ────
+   Sits below chor-footer. Two dome views side-by-side so the
+   timeline above gets full horizontal width. */
+.chor-monitor-bottom {
   flex-shrink: 0;
-  border-right: 1px solid rgba(var(--blue-rgb),.1);
+  border-top: 1px solid rgba(var(--blue-rgb),.15);
+  background: rgba(var(--blue-rgb),.02);
+  padding: 6px 10px 10px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: 4px;
+}
+.chor-monitor-bottom-title {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: rgba(var(--blue-rgb),.45);
+  text-transform: uppercase;
+}
+.chor-monitor-bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+/* Compact a bit so the bar stays unobtrusive */
+.chor-monitor-bottom .dome-side          { width: 100%; align-items: center; }
+.chor-monitor-bottom .dome-side-label    { font-size: 9px; margin-bottom: 2px; }
+.chor-monitor-bottom .front-inner,
+.chor-monitor-bottom .rear-inner         { gap: 8px; justify-content: center; }
+.chor-monitor-bottom .logic-display      { transform: scale(0.85); transform-origin: center; }
+.chor-monitor-bottom .psi-circle         { width: 26px; height: 26px; }
+
+/* Legacy left panel — kept for back-compat with any old reference,
+   but no longer rendered. */
+.chor-left-panel {
+  display: none;
 }
 
 /* Top half — Live Monitors */
