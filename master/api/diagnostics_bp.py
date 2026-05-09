@@ -124,19 +124,24 @@ def diag_uart_rtt():
     H:OK reply from the Slave. Stats are computed over a rolling window
     of the last 200 samples (≈40 seconds).
 
-    Recommendation rule (one-way hop ≈ RTT/2):
-      - body_servo_uart_lat ≈ p95_ms / 2  (covers worst-case nominal cases)
-    Provided in 'recommended_body_uart_lat_ms' for convenience.
+    Recommendation rule:
+      The pyserial read loops on both sides use a 100ms timeout, which
+      dominates the high-percentile RTT samples (when an ACK arrives just
+      after a poll cycle, detection waits up to 100ms). The MEDIAN is the
+      best estimator of steady-state physical latency.
+        body_servo_uart_lat ≈ p50_ms / 2
+      Clamped to [5..50]ms and rounded to the nearest 5ms for sane UX.
     """
     if not reg.uart:
         return jsonify({'error': 'UART not initialized'}), 503
 
     stats = reg.uart.get_rtt_stats()
     recommendation = None
-    if stats['p95_ms'] is not None:
-        # One-way hop ≈ RTT/2; round to nearest 5ms for sane configurator UX
-        one_way = stats['p95_ms'] / 2.0
-        recommendation = max(5, int(round(one_way / 5.0) * 5))
+    if stats['p50_ms'] is not None:
+        # Use median to discount the 100ms read-timeout outliers; one-way
+        # hop ≈ RTT/2; clamp+round to a stable, easy-to-reason-about value.
+        one_way = stats['p50_ms'] / 2.0
+        recommendation = max(5, min(50, int(round(one_way / 5.0) * 5)))
 
     return jsonify({
         **stats,
