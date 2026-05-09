@@ -3826,6 +3826,12 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .chor-body {
   display: flex;
   flex: 1;
+  /* min-height:0 is critical — the default flex item min-height is `auto`
+     which means it won't shrink below its content size. With many tracks
+     the body would grow past the viewport and push the footer + live
+     monitor off-screen. min-height:0 lets the body shrink so the inner
+     scroll wrapper handles the overflow instead. */
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -3852,7 +3858,10 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   justify-content: center;
   align-items: flex-start;
   gap: 24px;
-  flex-wrap: wrap;
+  /* nowrap → FRONT and REAR always stay on the same row, even on narrow
+     viewports. The whole monitor strip is sized to its content via the
+     parent's flex-shrink:0 so the timeline absorbs any size pressure. */
+  flex-wrap: nowrap;
 }
 /* Compact a bit so the bar stays unobtrusive */
 .chor-monitor-bottom .dome-side          { align-items: center; }
