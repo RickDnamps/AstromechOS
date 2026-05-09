@@ -689,13 +689,21 @@ class ChoreoPlayer:
                         panel     = getattr(self, '_arm_panel_map', {}).get(servo)
                         arm_delay = _ARM_PANEL_DELAY
 
+                    # Per-segment durations + override delay (timeline inspector)
+                    # take precedence over the legacy single `duration` field
+                    # and the global Settings → Arms `delay`. Each can be 0
+                    # (instant snap to calibrated angle).
+                    _panel_dur_raw = ev.get('panel_duration')
+                    _arm_dur_raw   = ev.get('arm_duration')
+                    _delay_raw     = ev.get('delay')
+                    panel_dur = float(_panel_dur_raw) if _panel_dur_raw is not None else dur_s
+                    arm_dur   = float(_arm_dur_raw)   if _arm_dur_raw   is not None else dur_s
+                    if _delay_raw is not None:
+                        arm_delay = max(0.0, float(_delay_raw))
+
                     if panel:
-                        # Resolve calibrated angles when slewing on a duration.
-                        # Each segment (panel and arm) takes dur_s — the second
-                        # one starts after the first finishes plus arm_delay
-                        # so the panel is fully out of the way before the arm
-                        # extends (open) or the panel closes (close).
-                        if dur_s > 0:
+                        # Resolve calibrated angles for any segment that will slew.
+                        if panel_dur > 0 or arm_dur > 0:
                             try:
                                 from master.api.servo_bp import _read_panels_cfg, _panel_angle
                                 _cfg = _read_panels_cfg()
@@ -709,23 +717,23 @@ class ChoreoPlayer:
                             _panel_a = _arm_a = None
 
                         if action == 'open':
-                            # Step 1: panel opens (slew on dur_s if requested)
-                            if dur_s > 0 and _panel_a is not None:
-                                self._launch_servo_slew(self._body_servo, panel, _panel_a, dur_s, easing)
+                            # Step 1: panel opens (slew on panel_dur if requested)
+                            if panel_dur > 0 and _panel_a is not None:
+                                self._launch_servo_slew(self._body_servo, panel, _panel_a, panel_dur, easing)
                             else:
                                 try:
                                     self._body_servo.open(panel)
                                 except Exception:
                                     log.exception("Arm panel open failed: %s", panel)
-                            # Step 2: after the panel finishes opening + arm_delay, extend the arm
+                            # Step 2: after the panel finishes opening + delay, extend the arm
                             arm_servo  = servo
                             arm_driver = self._body_servo
                             stop_flag = self._stop_flag
-                            _arm_dur_s   = dur_s
-                            _arm_easing  = easing
-                            _arm_target  = _arm_a
+                            _ad   = arm_dur
+                            _ae   = easing
+                            _at   = _arm_a
                             def _delayed_arm_open(drv=arm_driver, s=arm_servo, flag=stop_flag,
-                                                  d=_arm_dur_s, ease=_arm_easing, ta=_arm_target):
+                                                  d=_ad, ease=_ae, ta=_at):
                                 if flag.is_set():
                                     return
                                 if d > 0 and ta is not None:
@@ -735,28 +743,28 @@ class ChoreoPlayer:
                                         drv.open(s)
                                     except Exception:
                                         log.exception("Delayed arm open failed: %s", s)
-                            wait = (dur_s + arm_delay) if dur_s > 0 else arm_delay
+                            wait = (panel_dur + arm_delay) if panel_dur > 0 else arm_delay
                             t = threading.Timer(wait, _delayed_arm_open)
                             t.daemon = True
                             self._track_arm_timer(t)
                             t.start()
                             return
                         elif action == 'close':
-                            # Step 1: arm retracts (slew on dur_s if requested)
-                            if dur_s > 0 and _arm_a is not None:
-                                self._launch_servo_slew(self._body_servo, servo, _arm_a, dur_s, easing)
+                            # Step 1: arm retracts (slew on arm_dur if requested)
+                            if arm_dur > 0 and _arm_a is not None:
+                                self._launch_servo_slew(self._body_servo, servo, _arm_a, arm_dur, easing)
                             else:
                                 try:
                                     self._body_servo.close(servo)
                                 except Exception:
                                     log.exception("Arm close failed: %s", servo)
-                            # Step 2: after the arm finishes retracting + arm_delay, close the panel
+                            # Step 2: after the arm finishes retracting + delay, close the panel
                             stop_flag = self._stop_flag
-                            _panel_dur_s   = dur_s
-                            _panel_easing  = easing
-                            _panel_target  = _panel_a
+                            _pd   = panel_dur
+                            _pe   = easing
+                            _pt   = _panel_a
                             def _delayed_panel_close(drv=self._body_servo, s=panel, flag=stop_flag,
-                                                     d=_panel_dur_s, ease=_panel_easing, ta=_panel_target):
+                                                     d=_pd, ease=_pe, ta=_pt):
                                 if flag.is_set():
                                     return
                                 if d > 0 and ta is not None:
@@ -766,7 +774,7 @@ class ChoreoPlayer:
                                         drv.close(s)
                                     except Exception:
                                         log.exception("Delayed panel close failed: %s", s)
-                            wait = (dur_s + arm_delay) if dur_s > 0 else arm_delay
+                            wait = (arm_dur + arm_delay) if arm_dur > 0 else arm_delay
                             t = threading.Timer(wait, _delayed_panel_close)
                             t.daemon = True
                             self._track_arm_timer(t)

@@ -6073,11 +6073,29 @@ const choreoEditor = (() => {
     { track:'dome_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'dome', duration:1   } },
     { track:'body_servos', label:'OPEN',   tpl:{ servo:'', action:'open',  group:'body', duration:1   } },
     { track:'body_servos', label:'CLOSE',  tpl:{ servo:'', action:'close', group:'body', duration:1   } },
-    { track:'arm_servos',  label:'OPEN',   tpl:{ arm:1, action:'open',  group:'arms', duration:1   } },
-    { track:'arm_servos',  label:'CLOSE',  tpl:{ arm:1, action:'close', group:'arms', duration:1   } },
+    { track:'arm_servos',  label:'OPEN',   tpl:{ arm:1, action:'open',  group:'arms', panel_duration:1.0, delay:0.5, arm_duration:1.0 } },
+    { track:'arm_servos',  label:'CLOSE',  tpl:{ arm:1, action:'close', group:'arms', panel_duration:1.0, delay:0.5, arm_duration:1.0 } },
     { track:'propulsion', label:'DRIVE',  tpl:{ left:0.5, right:0.5,                 duration:3   } },
     { track:'propulsion', label:'STOP',   tpl:{ left:0,   right:0,                   duration:0.5 } },
   ];
+
+  // ── Arm block helpers ──────────────────────────────────────────────
+  // Total wall-clock span = panel motion + delay + arm motion.
+  // Falls back to the legacy single `duration` field for old .chor files
+  // that pre-date the per-segment fields.
+  function _armBlockTotalDur(item) {
+    const legacy = parseFloat(item.duration);
+    const panel  = parseFloat(item.panel_duration);
+    const delay  = parseFloat(item.delay);
+    const arm    = parseFloat(item.arm_duration);
+    if (!isNaN(panel) || !isNaN(delay) || !isNaN(arm)) {
+      const p = isNaN(panel) ? (isNaN(legacy) ? 1.0 : legacy) : panel;
+      const d = isNaN(delay) ? 0.5 : delay;
+      const a = isNaN(arm)   ? (isNaN(legacy) ? 1.0 : legacy) : arm;
+      return Math.max(0.1, p + d + a);
+    }
+    return isNaN(legacy) ? 2.5 : Math.max(0.1, legacy);
+  }
 
   // ── Snap helper ──────────────────────────────────────────────────
   function _snap(t) {
@@ -6514,7 +6532,12 @@ const choreoEditor = (() => {
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
     const isAudioTrack = track === 'audio';
-    const dur = item.duration || (isAudioTrack ? 5.0 : 2.0);
+    // Arm blocks span panel_duration + delay + arm_duration on the timeline,
+    // matching the actual wall-clock motion. Falls back to legacy `duration`
+    // for old .chor files.
+    const dur = (track === 'arm_servos')
+      ? _armBlockTotalDur(item)
+      : (item.duration || (isAudioTrack ? 5.0 : 2.0));
     const isAudioLocked = isAudioTrack && item.duration > 0;
     block.style.left    = _px(t)   + 'px';
     block.style.width   = _px(dur) + 'px';
@@ -7117,6 +7140,29 @@ const choreoEditor = (() => {
 
     } else if (track === 'arm_servos') {
       const count = armsConfig._count;
+      const isOpen = item.action !== 'close';
+
+      // Migrate legacy `duration` → per-segment fields on first inspect so the
+      // user always sees the granular controls and never sees both the old
+      // and new fields side by side.
+      if (item.panel_duration === undefined && item.delay === undefined && item.arm_duration === undefined) {
+        const legacy = parseFloat(item.duration);
+        const seed   = isNaN(legacy) ? 1.0 : Math.max(0.1, legacy);
+        item.panel_duration = seed;
+        item.arm_duration   = seed;
+        item.delay          = 0.5;
+        delete item.duration;
+        _dirty = true;
+      }
+
+      const seqHint = isOpen
+        ? `Sequence: <b>panel opens</b> → wait <b>delay</b> → <b>arm extends</b>`
+        : `Sequence: <b>arm retracts</b> → wait <b>delay</b> → <b>panel closes</b>`;
+      html += `<div style="background:#0a1a0a;border:1px solid #2da05a;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#88ddaa;line-height:1.5">
+        ${seqHint}<br>
+        Total: <b>${_armBlockTotalDur(item).toFixed(2)} s</b>
+      </div>`;
+
       if (item.arm !== undefined) {
         // New format — arm slot picker
         if (count === 0) {
@@ -7136,9 +7182,11 @@ const choreoEditor = (() => {
             return [i + 1, i + 1 <= count ? lbl : `${lbl} ⚠️ not configured`];
           })
         );
-        if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
         html += selectRow('ARM SLOT', 'arm', armOpts);
         html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
+        html += numRow('PANEL DURATION (s)', 'panel_duration', { min: 0.1, step: 0.1 });
+        html += numRow('DELAY (s)',          'delay',          { min: 0.0, step: 0.1 });
+        html += numRow('ARM DURATION (s)',   'arm_duration',   { min: 0.1, step: 0.1 });
       } else {
         // Legacy format — servo ID stored directly
         html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
@@ -7152,9 +7200,11 @@ const choreoEditor = (() => {
               return [i + 1, lbl];
             }))
           : { 1: 'Arm 1' };
-        if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.1 });
         html += selectRow('ARM SLOT', 'arm', armOpts);
         html += selectRow('ACTION', 'action', { open:'OPEN', close:'CLOSE' });
+        html += numRow('PANEL DURATION (s)', 'panel_duration', { min: 0.1, step: 0.1 });
+        html += numRow('DELAY (s)',          'delay',          { min: 0.0, step: 0.1 });
+        html += numRow('ARM DURATION (s)',   'arm_duration',   { min: 0.1, step: 0.1 });
       }
 
     } else if (track === 'dome_servos' || track === 'body_servos') {
@@ -7815,6 +7865,12 @@ const choreoEditor = (() => {
       if (block) {
         if (field === 't')        block.style.left  = _px(item.t)        + 'px';
         if (field === 'duration') block.style.width = _px(item.duration) + 'px';
+        // Arm block width depends on the three component fields — recompute
+        // when any of them changes so the visual span on the timeline always
+        // matches the actual wall-clock motion.
+        if (track === 'arm_servos' && (field === 'panel_duration' || field === 'delay' || field === 'arm_duration')) {
+          block.style.width = _px(_armBlockTotalDur(item)) + 'px';
+        }
         const labelEl = block.querySelector('span');
         if (labelEl) labelEl.textContent = _blockLabel(track, item);
       }
