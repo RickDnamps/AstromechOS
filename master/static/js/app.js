@@ -5492,6 +5492,48 @@ async function systemRollback() {
 // Latest recommendation cached for the APPLY button
 let _uartRttRecommendation = null;
 
+// Persists the body UART latency value currently in the input field.
+// Called by APPLY & SAVE and by the input blur/Enter handlers.
+// Backend hot-swaps the running ChoreoPlayer — no reboot required.
+async function saveBodyUartLat() {
+  const inp = el('body-uart-lat-input');
+  if (!inp) return false;
+  const ms = parseInt(inp.value);
+  if (isNaN(ms) || ms < 0 || ms > 200) {
+    toast('UART latency must be 0-200 ms', 'error');
+    return false;
+  }
+  // Skip the round-trip if the value is already what we have on file
+  if (_hardwareLoaded && _hardwareLoaded.body_uart_lat_ms === ms) return true;
+  const sec = (ms / 1000).toFixed(3);
+  const data = await api('/settings/config', 'POST', {'choreo.body_servo_uart_lat': sec});
+  if (data?.status === 'ok') {
+    if (_hardwareLoaded) _hardwareLoaded.body_uart_lat_ms = ms;
+    // Brief 'saved' indicator next to the input
+    const ind = el('body-uart-lat-saved');
+    if (ind) {
+      ind.style.opacity = '1';
+      setTimeout(() => { ind.style.opacity = '0'; }, 1500);
+    }
+    return true;
+  }
+  toast('Failed to save UART latency', 'error');
+  return false;
+}
+
+// Hook input → auto-save on blur or Enter so a manually-typed value persists
+// without needing a separate button. Idempotent listener registration.
+function _wireBodyUartLatAutoSave() {
+  const inp = el('body-uart-lat-input');
+  if (!inp || inp.dataset.autosaveWired) return;
+  inp.addEventListener('blur', saveBodyUartLat);
+  inp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); inp.blur(); }
+  });
+  inp.dataset.autosaveWired = '1';
+}
+document.addEventListener('DOMContentLoaded', _wireBodyUartLatAutoSave);
+
 async function measureUartRtt() {
   const stats = el('uart-rtt-stats');
   const fit   = el('uart-rtt-fit');
@@ -5539,16 +5581,18 @@ async function measureUartRtt() {
   if (btn) btn.disabled = (rec == null) || (cur === rec);
 }
 
-function applyUartRttRecommendation() {
+async function applyUartRttRecommendation() {
   if (_uartRttRecommendation == null) return;
   const inp = el('body-uart-lat-input');
   if (!inp) return;
   inp.value = _uartRttRecommendation;
-  toast(`UART latency set to ${_uartRttRecommendation} ms — click SAVE HARDWARE CONFIG to persist`, 'ok');
-  // Re-render the fit indicator now that input matches recommendation
+  // Persist + hot-swap immediately — single click flow for calibration
+  const ok = await saveBodyUartLat();
+  if (!ok) return;
+  toast(`UART latency = ${_uartRttRecommendation} ms (hot-swapped, no reboot)`, 'ok');
   const fit = el('uart-rtt-fit');
   if (fit) {
-    fit.textContent = '● ready to save';
+    fit.textContent = '● applied';
     fit.style.color = 'var(--ok, #00cc66)';
   }
   const btn = el('uart-rtt-apply-btn');
@@ -5556,55 +5600,44 @@ function applyUartRttRecommendation() {
 }
 
 async function saveHardwareConfig() {
+  // HAT-only save. Body UART latency has its own live save (auto-save on
+  // blur, or APPLY & SAVE button) and is intentionally NOT bundled here.
   const masterHats   = (el('master-hats-input')?.value     || '').trim();
   const slaveHats    = (el('slave-hats-input')?.value      || '').trim();
   const slaveMotor   = (el('slave-motor-hat-input')?.value || '').trim();
-  const latMs        = parseInt(el('body-uart-lat-input')?.value) || 25;
-  const latSec       = (latMs / 1000).toFixed(3);
   const status = el('hardware-config-status');
   if (!masterHats || !slaveHats || !slaveMotor) { toast('HAT addresses are required', 'error'); return; }
 
-  // Compute diff vs the snapshot taken at load time. We send only the
-  // fields the user actually changed — avoids triggering a Slave restart
-  // when only UART latency was tweaked, and avoids the misleading
-  // "Master reboot required" toast on a UART-only save.
+  // Diff against the snapshot taken at load time so we send only what
+  // genuinely changed.
   const loaded = _hardwareLoaded || {};
   const payload = {};
-  let masterHatChanged = false, slaveHatChanged = false, latChanged = false;
+  let masterHatChanged = false, slaveHatChanged = false;
   if (masterHats  !== (loaded.master_hats     ?? '')) { payload['i2c_servo_hats.master_hats']     = masterHats;  masterHatChanged = true; }
   if (slaveHats   !== (loaded.slave_hats      ?? '')) { payload['i2c_servo_hats.slave_hats']      = slaveHats;   slaveHatChanged  = true; }
   if (slaveMotor  !== (loaded.slave_motor_hat ?? '')) { payload['i2c_servo_hats.slave_motor_hat'] = slaveMotor;  slaveHatChanged  = true; }
-  if (latMs       !== (loaded.body_uart_lat_ms ?? 25)) { payload['choreo.body_servo_uart_lat']    = latSec;      latChanged       = true; }
 
-  if (!masterHatChanged && !slaveHatChanged && !latChanged) {
+  if (!masterHatChanged && !slaveHatChanged) {
     toast('No changes to save', 'info');
     if (status) { status.textContent = 'No changes'; status.className = 'settings-status'; }
     return;
   }
 
-  // Build the confirm prompt around the actual changes
   const consequences = [];
   if (masterHatChanged) consequences.push('• Master reboot required (servo HAT count change)');
   if (slaveHatChanged)  consequences.push('• Slave service will auto-restart');
-  if (latChanged && !masterHatChanged && !slaveHatChanged) consequences.push('• UART latency applied live (no reboot)');
-  const msg = 'Save hardware config?\n\n' + consequences.join('\n');
-  if (!confirm(msg)) return;
+  if (!confirm('Save hardware config?\n\n' + consequences.join('\n'))) return;
 
   if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
   const data = await api('/settings/config', 'POST', payload);
   if (data?.status === 'ok') {
-    // Refresh snapshot so subsequent saves diff against the new state
-    if (latChanged)        loaded.body_uart_lat_ms = latMs;
-    if (masterHatChanged)  loaded.master_hats      = masterHats;
-    if (slaveHatChanged)   { loaded.slave_hats = slaveHats; loaded.slave_motor_hat = slaveMotor; }
+    if (masterHatChanged) loaded.master_hats = masterHats;
+    if (slaveHatChanged)  { loaded.slave_hats = slaveHats; loaded.slave_motor_hat = slaveMotor; }
     _hardwareLoaded = loaded;
-
-    // Toast tailored to what actually happened
     let msgOk;
-    if (masterHatChanged && slaveHatChanged)      msgOk = 'Saved — Master reboot required · Slave restarting';
-    else if (masterHatChanged)                    msgOk = 'Saved — Master reboot required';
-    else if (slaveHatChanged)                     msgOk = 'Saved — Slave auto-restarting';
-    else                                          msgOk = `Saved — UART latency hot-swapped to ${latMs} ms (no reboot)`;
+    if (masterHatChanged && slaveHatChanged) msgOk = 'Saved — Master reboot required · Slave restarting';
+    else if (masterHatChanged)               msgOk = 'Saved — Master reboot required';
+    else                                     msgOk = 'Saved — Slave auto-restarting';
     toast(msgOk, 'ok');
     if (status) { status.textContent = '✓ ' + msgOk; status.className = 'settings-status ok'; }
   } else {
