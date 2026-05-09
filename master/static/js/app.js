@@ -6259,16 +6259,26 @@ const choreoEditor = (() => {
     if (slot) { slot.innerHTML = ''; slot.appendChild(banner); }
   }
 
-  // Dynamic timeline: latest event end + 2s buffer (dome duration is in ms)
+  // Effective wall-clock duration of an event, normalised to seconds.
+  // Used by total-duration math, layer cascade, and block visual width so
+  // every track speaks the same units regardless of how its duration is
+  // stored (dome → ms, arm_servos → 3 component fields, others → seconds).
+  function _eventEffectiveDuration(track, ev) {
+    if (!ev) return 0;
+    if (track === 'dome')        return (ev.duration || 0) / 1000;
+    if (track === 'arm_servos')  return _armBlockTotalDur(ev);
+    return ev.duration || 0;
+  }
+
+  // Dynamic timeline: latest event end + 2s buffer
   function _calcTotalDuration() {
     // Visual duration — canvas + ruler sizing (2s padding for editing comfort)
     if (!_chor) return 10.0;
     let max = 0;
     for (const [track, events] of Object.entries(_chor.tracks || {})) {
       for (const ev of (events || [])) {
-        const t   = ev.t || 0;
-        const dur = (track === 'dome') ? ((ev.duration || 0) / 1000) : (ev.duration || 0);
-        if (t + dur > max) max = t + dur;
+        const end = (ev.t || 0) + _eventEffectiveDuration(track, ev);
+        if (end > max) max = end;
       }
     }
     return Math.max(max + 2.0, 5.0);
@@ -6280,17 +6290,21 @@ const choreoEditor = (() => {
     let max = 0;
     for (const [track, events] of Object.entries(_chor.tracks || {})) {
       for (const ev of (events || [])) {
-        const t   = ev.t || 0;
-        const dur = (track === 'dome') ? ((ev.duration || 0) / 1000) : (ev.duration || 0);
-        if (t + dur > max) max = t + dur;
+        const end = (ev.t || 0) + _eventEffectiveDuration(track, ev);
+        if (end > max) max = end;
       }
     }
     return Math.max(max + 0.1, 1.0);
   }
 
-  // Update ruler + canvas width + duration display without full re-render
+  // Update ruler + canvas width + duration display.
+  // If _pxPerSec changes (timeline auto-extended/shrunk via fit-to-screen
+  // because an event was added, moved, resized or deleted), every existing
+  // block on every track is now positioned at the wrong x. We re-render
+  // all tracks in that case so they stay aligned with the ruler.
   function _refreshLayout() {
     if (!_chor) return;
+    const oldPps = _pxPerSec;
     _fitToScreen();
     const durVisual   = _calcTotalDuration();
     const durPlayback = _calcPlaybackDuration();
@@ -6300,6 +6314,10 @@ const choreoEditor = (() => {
     _drawWaveform();
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(durPlayback);
+    if (Math.abs(_pxPerSec - oldPps) > 0.01) {
+      ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
+      _renderMarkers();
+    }
   }
 
   // Fit pxPerSec so that total duration exactly fills the scroll-wrap width.
@@ -6493,7 +6511,7 @@ const choreoEditor = (() => {
     const layerEnds = [];   // layerEnds[i] = end time of last block in layer i
     return items.map(item => {
       const t   = item.t || 0;
-      const dur = item.duration || 2.0;
+      const dur = _eventEffectiveDuration(track, item) || 2.0;
       const end = t + dur;
       let layer = layerEnds.findIndex(e => e <= t);
       if (layer === -1) layer = layerEnds.length;
@@ -6532,12 +6550,12 @@ const choreoEditor = (() => {
     if (item.mode) block.dataset.mode = item.mode;
     const t   = item.t        || 0;
     const isAudioTrack = track === 'audio';
-    // Arm blocks span panel_duration + delay + arm_duration on the timeline,
-    // matching the actual wall-clock motion. Falls back to legacy `duration`
-    // for old .chor files.
-    const dur = (track === 'arm_servos')
-      ? _armBlockTotalDur(item)
-      : (item.duration || (isAudioTrack ? 5.0 : 2.0));
+    // Visual block width = effective wall-clock duration in seconds.
+    // _eventEffectiveDuration handles dome (ms) + arm_servos (3 fields) +
+    // legacy fallback in one place. Audio gets a 5s default for empty blocks
+    // so the user can drop on an empty waveform; everything else gets 2s.
+    let dur = _eventEffectiveDuration(track, item);
+    if (!dur) dur = isAudioTrack ? 5.0 : 2.0;
     const isAudioLocked = isAudioTrack && item.duration > 0;
     block.style.left    = _px(t)   + 'px';
     block.style.width   = _px(dur) + 'px';
