@@ -299,6 +299,40 @@ class ChoreoPlayer:
         with self._status_lock:
             self._status.update({'playing': False, 't_now': 0.0})
 
+    def _launch_servo_slew(self, driver, name: str, target_angle: float,
+                           dur_s: float, easing: str) -> None:
+        """Spawn a daemon thread that lerps `name` from its current position
+        to `target_angle` over `dur_s` seconds with the given easing.
+
+        Used both by the single-servo dispatch and by the all_dome / all_body
+        bulk paths when the choreo block carries an explicit duration.
+        Each step writes the next interpolated angle with speed=10 (instant
+        per step) so the choreo loop is the sole authority on motion timing.
+        Respects _stop_flag — exits within one step on E-STOP.
+        """
+        start_a = float(self._servo_pos.get(name, 20.0))
+        self._servo_pos[name] = target_angle
+        stop_flag = self._stop_flag
+
+        def _slew(drv=driver, n=name, a0=start_a, a1=target_angle,
+                  dur=dur_s, ease=easing, flag=stop_flag):
+            steps = max(3, int(dur * 25))   # ~40ms per step at 25 steps/s
+            step_dur = dur / steps
+            for i in range(steps + 1):
+                if flag.is_set():
+                    return
+                prog = _ease(i / steps, ease)
+                a    = a0 + (a1 - a0) * prog
+                try:
+                    drv.open(n, angle_deg=a, speed=10)
+                except Exception:
+                    pass
+                if i < steps and flag.wait(step_dur):
+                    return
+
+        threading.Thread(target=_slew, daemon=True,
+                         name=f'choreo-slew-{name}').start()
+
     def _track_arm_timer(self, timer: threading.Timer) -> None:
         """Register a Timer so stop() can cancel it. Auto-cleans completed timers."""
         with self._arm_timers_lock:
@@ -704,36 +738,59 @@ class ChoreoPlayer:
                 if not driver:
                     return
 
-                # Bulk dispatch — no slewing
+                # Bulk dispatch.
+                # If dur_s > 0 → slew every targeted servo over dur_s in
+                # parallel, each landing on its calibrated open/close angle
+                # at the same wall-clock moment. If dur_s == 0 → fire the
+                # legacy fast path (open_all / per-servo open with the
+                # calibrated speed parameter).
                 if is_all_dome and self._dome_servo:
-                    if action == 'open':
-                        self._dome_servo.open_all()
+                    if dur_s > 0:
+                        from master.api.servo_bp import (
+                            _read_panels_cfg, _panel_angle, DOME_SERVOS,
+                        )
+                        _cfg = _read_panels_cfg()
+                        _dir = 'open' if action == 'open' else 'close'
+                        for _name in DOME_SERVOS:
+                            _a = float(_panel_angle(_name, _dir, _cfg))
+                            self._launch_servo_slew(self._dome_servo, _name, _a, dur_s, easing)
                     else:
-                        self._dome_servo.close_all()
+                        if action == 'open':
+                            self._dome_servo.open_all()
+                        else:
+                            self._dome_servo.close_all()
                     return
                 if is_all_body:
                     if self._body_servo:
                         from master.api.servo_bp import (
                             _read_panels_cfg, _read_arms_cfg,
-                            _arm_servo_set, _launch_arm_sequences, BODY_SERVOS,
+                            _arm_servo_set, _launch_arm_sequences,
+                            _panel_angle, BODY_SERVOS,
                         )
                         cfg_panels = _read_panels_cfg()
                         arms_cfg   = _read_arms_cfg()
                         arm_set    = _arm_servo_set()
+                        _dir = 'open' if action == 'open' else 'close'
                         for _name in BODY_SERVOS:
                             if _name in arm_set:
                                 continue
-                            _panel = cfg_panels['panels'].get(_name, {})
-                            _angle = _panel.get('open' if action == 'open' else 'close',
-                                                110 if action == 'open' else 20)
-                            _speed = _panel.get('speed', 10)
-                            try:
-                                if action == 'open':
-                                    self._body_servo.open(_name, _angle, _speed)
-                                else:
-                                    self._body_servo.close(_name, _angle, _speed)
-                            except Exception:
-                                log.exception("all_body %s failed: %s", action, _name)
+                            if dur_s > 0:
+                                _a = float(_panel_angle(_name, _dir, cfg_panels))
+                                self._launch_servo_slew(self._body_servo, _name, _a, dur_s, easing)
+                            else:
+                                _panel = cfg_panels['panels'].get(_name, {})
+                                _angle = _panel.get(_dir, 110 if action == 'open' else 20)
+                                _speed = _panel.get('speed', 10)
+                                try:
+                                    if action == 'open':
+                                        self._body_servo.open(_name, _angle, _speed)
+                                    else:
+                                        self._body_servo.close(_name, _angle, _speed)
+                                except Exception:
+                                    log.exception("all_body %s failed: %s", action, _name)
+                        # Arm sequences keep their own panel→delay→arm logic.
+                        # The bulk duration does not apply to them — they
+                        # always run at their calibrated speed.
                         _launch_arm_sequences(arms_cfg, cfg_panels, action)
                     return
 
@@ -761,31 +818,7 @@ class ChoreoPlayer:
 
                 # Duration-based slewing — runs in daemon thread, does not block event loop
                 if dur_s > 0 and angle is not None:
-                    start_a = float(self._servo_pos.get(servo, 20.0))
-                    self._servo_pos[servo] = angle
-                    stop_flag = self._stop_flag
-
-                    def _slew(drv, name, a0, a1, dur, ease, flag=stop_flag):
-                        steps = max(3, int(dur * 25))   # ~40ms per step at 25 steps/s
-                        step_dur = dur / steps
-                        for i in range(steps + 1):
-                            if flag.is_set():
-                                return
-                            prog = _ease(i / steps, ease)
-                            a    = a0 + (a1 - a0) * prog
-                            try:
-                                drv.open(name, angle_deg=a, speed=10)
-                            except Exception:
-                                pass
-                            if i < steps and flag.wait(step_dur):
-                                # flag.wait returns True if the event was set during the wait
-                                return
-
-                    threading.Thread(
-                        target=_slew,
-                        args=(driver, servo, start_a, angle, dur_s, easing),
-                        daemon=True,
-                    ).start()
+                    self._launch_servo_slew(driver, servo, angle, dur_s, easing)
                     return
 
                 # Instant dispatch (no duration or no explicit angle)
