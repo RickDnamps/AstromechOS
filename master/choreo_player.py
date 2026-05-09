@@ -218,6 +218,26 @@ class ChoreoPlayer:
     def is_playing(self) -> bool:
         return bool(self._thread and self._thread.is_alive())
 
+    def set_body_uart_lat(self, seconds: float) -> None:
+        """Hot-update the body servo UART compensation. The next play() (or
+        next loop iteration of an active sequence) rebuilds its event queue
+        with the new value, so a config change takes effect without a Master
+        reboot."""
+        try:
+            self._body_uart_lat = max(0.0, min(0.5, float(seconds)))
+            log.info("ChoreoPlayer: body_uart_lat hot-updated to %.3fs", self._body_uart_lat)
+        except (TypeError, ValueError):
+            log.warning("set_body_uart_lat: invalid value %r", seconds)
+
+    def set_audio_startup_lat(self, seconds: float) -> None:
+        """Hot-update the audio startup compensation (mpg123 cold-start).
+        Same mechanism as set_body_uart_lat."""
+        try:
+            self._audio_startup_lat = max(0.0, min(0.5, float(seconds)))
+            log.info("ChoreoPlayer: audio_startup_lat hot-updated to %.3fs", self._audio_startup_lat)
+        except (TypeError, ValueError):
+            log.warning("set_audio_startup_lat: invalid value %r", seconds)
+
     def get_status(self) -> dict:
         with self._status_lock:
             return dict(self._status)

@@ -5557,8 +5557,8 @@ async function saveHardwareConfig() {
     'choreo.body_servo_uart_lat':    latSec,
   });
   if (data?.status === 'ok') {
-    toast('Hardware config saved — Master HAT changes need a reboot; Slave restarting…', 'ok');
-    if (status) { status.textContent = 'Saved ✓ (Master: reboot required · Slave: restarting)'; status.className = 'settings-status ok'; }
+    toast('Hardware config saved — UART latency hot-swapped · HAT changes: Master reboot required, Slave auto-restarting', 'ok');
+    if (status) { status.textContent = 'Saved ✓ (UART latency live · HAT: Master reboot · Slave restarting)'; status.className = 'settings-status ok'; }
   } else {
     toast('Error saving hardware config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
