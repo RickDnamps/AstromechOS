@@ -41,6 +41,7 @@ import configparser
 import serial
 import sys
 import os
+from collections import deque
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from shared.uart_protocol import build_msg, parse_msg, HEARTBEAT_INTERVAL_MS
@@ -68,6 +69,14 @@ class UARTController:
         # without missing ACKs). Fed by the internal H callback registered
         # in start().
         self._last_hb_ack_t: float | None = None
+
+        # Round-trip time histogram: every heartbeat is timestamped on send,
+        # paired with its ACK on receive, and the delta is appended here.
+        # Useful for empirically tuning body_servo_uart_lat — the floor of
+        # the UART hop is RTT/2. 200 samples × 200ms = 40s rolling window.
+        self._last_hb_send_t: float | None = None
+        self._rtt_samples: deque[float]   = deque(maxlen=200)
+        self._rtt_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -99,7 +108,15 @@ class UARTController:
 
     def _note_hb_ack(self, value: str) -> None:
         """Internal — records every H:OK / H:* reply from the Slave."""
-        self._last_hb_ack_t = time.monotonic()
+        now = time.monotonic()
+        self._last_hb_ack_t = now
+        if self._last_hb_send_t is not None:
+            rtt = now - self._last_hb_send_t
+            # Discard pathological samples (>500ms) — they probably indicate
+            # a missed ACK paired with a later send, which would skew stats.
+            if 0.0 < rtt < 0.5:
+                with self._rtt_lock:
+                    self._rtt_samples.append(rtt)
 
     def stop(self) -> None:
         self._running = False
@@ -137,6 +154,35 @@ class UARTController:
             return None
         return int((time.monotonic() - self._last_hb_ack_t) * 1000)
 
+    def get_rtt_stats(self) -> dict:
+        """Returns RTT statistics over the rolling sample window.
+
+        All times are in milliseconds. Returns count=0 with None values when
+        no samples have been collected yet. Useful for tuning
+        body_servo_uart_lat — set it to (avg_ms / 2) as a starting point
+        and adjust based on physical observation.
+        """
+        with self._rtt_lock:
+            samples = sorted(self._rtt_samples)
+        n = len(samples)
+        if n == 0:
+            return {
+                'count': 0, 'min_ms': None, 'avg_ms': None, 'max_ms': None,
+                'p50_ms': None, 'p95_ms': None, 'p99_ms': None,
+            }
+        def _pctile(p: float) -> float:
+            idx = max(0, min(n - 1, int(round(p * (n - 1)))))
+            return round(samples[idx] * 1000, 2)
+        return {
+            'count':  n,
+            'min_ms': round(samples[0]  * 1000, 2),
+            'avg_ms': round(sum(samples) / n * 1000, 2),
+            'max_ms': round(samples[-1] * 1000, 2),
+            'p50_ms': _pctile(0.50),
+            'p95_ms': _pctile(0.95),
+            'p99_ms': _pctile(0.99),
+        }
+
     # ------------------------------------------------------------------
     # Threads internes
     # ------------------------------------------------------------------
@@ -144,6 +190,7 @@ class UARTController:
     def _heartbeat_loop(self) -> None:
         while self._running:
             start = time.monotonic()
+            self._last_hb_send_t = start
             ok = self.send('H', '1')
             if not ok:
                 log.warning("Failed to send heartbeat")

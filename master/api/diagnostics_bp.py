@@ -114,3 +114,35 @@ def diag_ping_slave():
     except Exception as e:
         ms = round((time.monotonic() - t0) * 1000)
         return jsonify({'ok': False, 'ms': ms, 'error': str(e)})
+
+
+@diagnostics_bp.get('/diagnostics/uart_rtt')
+def diag_uart_rtt():
+    """UART round-trip stats for tuning body_servo_uart_lat.
+
+    The heartbeat loop fires every 200ms and pairs each H send with its
+    H:OK reply from the Slave. Stats are computed over a rolling window
+    of the last 200 samples (≈40 seconds).
+
+    Recommendation rule (one-way hop ≈ RTT/2):
+      - body_servo_uart_lat ≈ p95_ms / 2  (covers worst-case nominal cases)
+    Provided in 'recommended_body_uart_lat_ms' for convenience.
+    """
+    if not reg.uart:
+        return jsonify({'error': 'UART not initialized'}), 503
+
+    stats = reg.uart.get_rtt_stats()
+    recommendation = None
+    if stats['p95_ms'] is not None:
+        # One-way hop ≈ RTT/2; round to nearest 5ms for sane configurator UX
+        one_way = stats['p95_ms'] / 2.0
+        recommendation = max(5, int(round(one_way / 5.0) * 5))
+
+    return jsonify({
+        **stats,
+        'window_s': 40,
+        'recommended_body_uart_lat_ms': recommendation,
+        'current_body_uart_lat_ms': int(round(
+            (reg.choreo._body_uart_lat * 1000) if reg.choreo else 25
+        )),
+    })
