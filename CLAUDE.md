@@ -227,25 +227,65 @@ SSH     artoo / deetoo
 | 4++++++++ | Topbar clean · Cockpit pills HB/UART/BT · pill SLAVE · E-STOP red overlay · STATUS button toujours à jour | ✅ |
 | 4+++++++++ | Cockpit SERVICES diagnostic : Dome/Body Servo HATs · Motor HAT I2C probe · RP2040 Screen health | ✅ |
 | 4++++++++++ | Slave Motor HAT addr configurable UI · SHUTDOWN UART cmd · system buttons 2×3 grid (Reboot/Shutdown × Master/Slave/Both) | ✅ |
+| 4+++++++++++ | Rebrand R2D2→AstromechOS · dossier Pi `/home/artoo/astromechos` · services `astromech-*` · cache SW versionné par commit | ✅ |
+| 4++++++++++++ | VESC safety helper unifié (`master/vesc_safety.py`) · slave boot banner + auto-resync VCFG/VINV · paired-side CAN liveness · telemetry key fix curr→current | ✅ |
+| 4+++++++++++++ | E-STOP freeze · Reset stow lent (slew=3) · ChoreoPlayer event-driven scheduler · arm Timers respectent stop_flag · loop reset complet · /choreo/play locked | ✅ |
+| 4++++++++++++++ | Heartbeat ACK age tracking · UART buffer keep-trailing 256B · /status local.cfg cache TTL · StatusPoller in-flight · heartbeat visibility-aware | ✅ |
+| 4+++++++++++++++ | UART RTT histogramme + `/diagnostics/uart_rtt` + bouton MEASURE/APPLY dans Settings · hot-swap `body_servo_uart_lat` (no reboot) | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
-**E-STOP :** toggle ARMED/TRIPPED → coupe PCA9685 Master+Slave (`_ready=False`). Bouton UI + overlay rouge pulsant sur tout l'écran. Syncé depuis `/status` → survit à un reload de page.
+**E-STOP :** **freeze pur** — coupe propulsion+dôme+choreo, **aucun mouvement servo** (bras/panneaux gardent leur position). Reset = stow lent à `_SAFE_SLEW_SPEED=3` réutilisant la séquence Choreo arm→delay→panel.
+**VESC safety :** `master/vesc_safety.py` source unique. `is_drive_safe()` utilisé par motion_bp / bt_controller / choreo_player (None telem = block sauf bench mode). `block_reason()` retourne tokens stables (`vesc_l_offline`, `vesc_r_stale`, `vesc_l_fault`).
+**Slave reboot resync :** Slave envoie `BOOT:READY:CRC` à `uart.start()`. Master register `BOOT` callback → re-push `VCFG:scale` + `VINV:L/R`. Pas de drift de config après reboot Slave.
+**Paired-side CAN liveness :** si VESC2 (CAN ID 2) silencieux N reads consécutifs, Slave set `_can_lost=True` → `drive()` refuse + envoie synthetic `TR:fault=99` (CAN_LOST) → safety gate Master trip immédiatement (pas d'attente staleness 2s).
 **Joystick :** throttle 60 req/s · **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
 **Caméra :** MJPEG proxy last-connect-wins · `astromech-camera.service` Restart=always + watchdog `/dev/videoN` dans `scripts/camera-start.sh`. (`bd memories camera` pour détails)
+**Service worker cache :** `astromech-<commit>` injecté dynamiquement par Flask `/static/sw.js` → cache invalidé à chaque deploy.
+**Heartbeat UI :** désactivé quand tab hidden (visibilitychange) — AppWatchdog cut motion proprement, plus d'incertitude liée au throttling browser.
 
 **Backlog :** `bd list --status=open`
 
 ---
 
+## 🔬 UART RTT Calibration
+
+**Endpoint :** `GET /diagnostics/uart_rtt` — stats sur fenêtre glissante 200 samples (~40s)
+```json
+{
+  "count": 162, "min_ms": 10, "avg_ms": 48, "max_ms": 110,
+  "p50_ms": 45, "p95_ms": 108, "p99_ms": 109,
+  "current_body_uart_lat_ms": 15,
+  "recommended_body_uart_lat_ms": 25,
+  "window_s": 40
+}
+```
+
+**Algo recommandation :** `p50_ms / 2` (one-way hop), arrondi à 5ms près, clampé `[5..50]ms`.
+**Pourquoi p50 et pas p95 :** `pyserial.read(timeout=0.1s)` domine les samples high-percentile → p95 sur-estime. p50 reflète la latence physique steady-state.
+
+**UI :** Settings → System → Hardware → bouton **MEASURE** + indicateur de fit (vert/orange/rouge selon écart current vs recommended) + bouton **APPLY RECOMMENDATION** (copie dans le slider · l'utilisateur clique SAVE pour persister).
+
+**Conditions de mesure :** robot idle (pas de choreo en cours, sinon SRV traffic pollue les samples heartbeat).
+
+**Hot-swap :** `body_servo_uart_lat` et `audio_startup_lat` sont **hot-swappables** — `ChoreoPlayer.set_body_uart_lat()` / `set_audio_startup_lat()` appelés depuis `settings_bp.set_config()`. La nouvelle valeur prend effet à `play()` suivant (ou prochaine itération de loop). Pas de reboot Master requis.
+
+⚠️ **Master HAT addresses** (servos dôme) : reste reboot-required car `DOME_SERVOS` est calculé une fois à l'import du module.
+
+---
+
 ## 💡 ChoreoPlayer — Gotchas
 
-**File :** `master/choreo_player.py` — TICK=50ms
+**File :** `master/choreo_player.py` — TICK=50ms (upper bound; scheduler is event-driven)
+**Scheduler :** `wait(min(TICK, next_event_dt))` — events fire <1ms après leur timestamp authored, pas demi-tick de jitter.
 **Audio multichannel :** jusqu'à 12 tracks simultanés. Si slots pleins → preempt le plus ancien.
-**Drive blocks :** `vesc.drive(left,right)` discret aux timestamps. Pas de software ramping — VESC firmware gère accélération. `0,0` = stop explicite.
-**Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat`=25ms.
-**Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails → `GET /choreo/status` retourne `abort_reason`.
-**Loop :** `play(chor, loop=True)` → reset `t_start` + `ev_idx` en fin de séquence dans `_run()`.
+**Audio offset :** `choreo.audio_startup_lat` (default 50ms) — events audio shiftés EN AVANT pour compenser cold-start mpg123.
+**Drive blocks :** `vesc.drive(left,right)` discret aux timestamps. Pas de software ramping — VESC firmware gère accélération. `0,0` = stop explicite. **Gate de sécurité** : `_dispatch` propulsion vérifie `is_drive_safe()` avant d'envoyer — abort sequence avec `block_reason()` si VESC unsafe.
+**Servo interp :** dome (I2C) = easing+slew. Body (UART) avancé de `body_servo_uart_lat` (default 25ms, **hot-swappable** via Settings).
+**Abort :** `cells×3.5V` min · 80°C · 30A · 3 UART fails · `is_drive_safe()` → `GET /choreo/status` retourne `abort_reason`.
+**Loop :** `play(chor, loop=True)` → reset complet via `_reset_loop_state()` : audio_timers cancelled + slots cleared + `_drive_fail_count` reset + `_servo_pos` cleared + `_arm_panel_map` re-read + events queue rebuilt. Spin guard `wait(max(TICK, 0.01))` avant ré-entrée pour éviter 100% CPU sur séquence vide.
+**Stop semantics :** `stop()` cancel TOUS les arm Timers trackés (`_arm_timers` list + `_arm_timers_lock`). Slew threads check `_stop_flag.wait(step_dur)` au lieu de `time.sleep` → exit dans le step suivant au lieu de continuer jusqu'à la fin.
+**Lock /choreo/play :** module-level `_play_lock` autour de la séquence stop→reset→play empêche deux requêtes simultanées de démarrer deux `_run` loops sur les mêmes drivers.
 
 **Arm blocks (track `arm_servos`) :**
 Format JSON : `{"arm": 1, "action": "open", "duration": 1, "group": "arms"}` — slot number, PAS servo ID.
