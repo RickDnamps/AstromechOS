@@ -528,7 +528,7 @@ def system_estop_reset():
         # Lazy import to avoid a circular dependency between the two blueprints.
         from master.api.servo_bp import (
             _read_arms_cfg, _read_panels_cfg, _arm_servo_set,
-            _panel_angle, BODY_SERVOS,
+            _panel_angle, BODY_SERVOS, DOME_SERVOS,
         )
 
         panels_cfg = _read_panels_cfg()
@@ -598,17 +598,18 @@ def system_estop_reset():
                 bt.join(timeout=5.0)
 
         # ── Step 4: dome servos in parallel ──
+        # NOTE: dome_servo_driver does NOT export a module-level SERVO_MAP —
+        # the mapping is an instance attribute (_servo_map) computed from the
+        # configured HAT addresses. Use DOME_SERVOS from servo_bp instead
+        # (same source of truth as the rest of the UI).
         if reg.dome_servo:
-            try:
-                from master.drivers.dome_servo_driver import SERVO_MAP as _DOME_MAP
-                dome_names = list(_DOME_MAP.keys())
-            except Exception:
-                dome_names = []
             dome_threads = []
-            for name in dome_names:
+            for name in DOME_SERVOS:
                 def _close_dome(n=name):
                     try:
-                        reg.dome_servo.close(n, speed=_SAFE_SLEW_SPEED)
+                        reg.dome_servo.close(n,
+                                             _panel_angle(n, 'close', panels_cfg),
+                                             _SAFE_SLEW_SPEED)
                     except Exception:
                         log.exception("Safe-home: dome close failed: %s", n)
                 dt = threading.Thread(target=_close_dome, name=f'safehome-dome-{name}',
