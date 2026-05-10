@@ -3826,6 +3826,17 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .chor-body {
   display: flex;
   flex: 1;
+  /* min-height:0 is critical for the flex chain. Default flex item
+     min-height is `auto` which means the item will NOT shrink below
+     its content size. With many tracks (or tall lanes), chor-body's
+     content (.chor-tracks-body) grows past the viewport, chor-body
+     follows, and the footer gets pushed off-screen — but worse, the
+     inner overflow-y:auto on .chor-tracks-body never fires because the
+     overflow is happening one level up (on chor-body). min-height:0
+     lets chor-body honour its `flex:1` height bound, the inner scroll
+     engages, and the sticky ruler/labels-spacer stay pinned at the top
+     of the tracks area while the lanes scroll underneath. */
+  min-height: 0;
   overflow: hidden;
 }
 
