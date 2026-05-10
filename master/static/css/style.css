@@ -3996,6 +3996,14 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  /* align-items:flex-start (instead of the default `stretch`) lets the
+     labels column AND the scroll-wrap take their NATURAL content height.
+     With stretch, both are forced to tracks-body's box height, so tall
+     lanes (e.g. dome_servos with 5 overlapping blocks → 122px tall lane)
+     overflow their parent box invisibly and never trigger the parent's
+     overflow-y:auto scroll. Result: lower lanes (body_servos, propulsion…)
+     get hidden because the user can't scroll down to them. */
+  align-items: flex-start;
 }
 .chor-tracks-body::-webkit-scrollbar { width: 4px; }
 .chor-tracks-body::-webkit-scrollbar-track { background: transparent; }
