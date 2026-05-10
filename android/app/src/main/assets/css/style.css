@@ -4055,7 +4055,16 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 /* ── Scrollable timeline ──────────────────────────────────────── */
 .chor-scroll-wrap {
   flex: 1;
-  overflow-x: hidden;
+  /* overflow-x:clip (NOT hidden) — `hidden` on one axis silently coerces
+     `visible` on the other axis to `auto`, which would turn this element
+     into its OWN scroll container. The sticky ruler/label-spacer would
+     then pin to scroll-wrap (which doesn't actually scroll because we
+     align-items:flex-start its parent), so the user would never see the
+     ruler stay fixed when scrolling tracks-body. `clip` clips horizontal
+     overflow without establishing a scroll context, so the inner content
+     can extend vertically and tracks-body remains the single scroll
+     container — its sticky ruler/spacer pin correctly. */
+  overflow-x: clip;
   overflow-y: visible;
   position: relative;
 }
