@@ -95,9 +95,13 @@ def bt_config():
 
 @bt_bp.post('/estop_reset')
 def bt_estop_reset():
-    """Re-arms after BT E-Stop — resets the estop_active flag to False."""
-    reg.estop_active = False
-    return jsonify({'status': 'ok'})
+    """Re-arm after a BT-button E-Stop. Delegates to /system/estop_reset
+    via internal call so we get the full stow sequence (unfreeze servos,
+    safe-home stow at _SAFE_SLEW_SPEED) instead of just flipping the
+    flag. The flag-only version left frozen servos in the air and no
+    panel close — exactly the bug the system route was built to avoid."""
+    from master.api.status_bp import system_estop_reset
+    return system_estop_reset()
 
 
 # ── BT Pairing ────────────────────────────────────────────────────

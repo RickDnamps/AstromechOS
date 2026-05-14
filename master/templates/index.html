@@ -377,18 +377,22 @@
 
           <!-- HUD overlays -->
           <!-- Speed arc — top-left -->
+          <!-- Theme-aware HUD: arc track uses rgba(var(--blue-rgb), .12) and
+               the moving arc starts in the theme's --blue accent. JS swaps
+               to var(--amber) / var(--red) as speed crosses thresholds. -->
           <div class="cam-hud-speed">
             <svg width="74" height="42" viewBox="0 0 74 42">
               <path d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="rgba(0,170,255,0.12)" stroke-width="4" stroke-linecap="round"/>
-              <path id="cam-speed-arc" d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="#00aaff" stroke-width="4" stroke-linecap="round" stroke-dasharray="101" stroke-dashoffset="101"/>
+              <path id="cam-speed-arc" d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="var(--blue, #00aaff)" stroke-width="4" stroke-linecap="round" stroke-dasharray="101" stroke-dashoffset="101"/>
             </svg>
             <span id="cam-speed-val" class="cam-speed-val">0%</span>
           </div>
 
-          <!-- Direction arrow — center -->
+          <!-- Direction arrow — center. Uses var(--cyan-rgb) so themes
+               can recolor; falls back to the original rgba if unset. -->
           <div id="cam-dir-wrap" class="cam-dir-wrap" style="opacity:0">
             <svg width="36" height="36" viewBox="0 0 36 36">
-              <polygon id="cam-dir-poly" points="18,3 30,28 18,22 6,28" fill="rgba(0,255,200,0.75)" stroke="none"/>
+              <polygon id="cam-dir-poly" points="18,3 30,28 18,22 6,28" fill="rgba(var(--cyan-rgb, 0 255 200), 0.75)" stroke="none"/>
             </svg>
           </div>
 

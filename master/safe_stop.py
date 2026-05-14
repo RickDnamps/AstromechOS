@@ -222,12 +222,15 @@ def stop_dome(dome=None, uart=None) -> None:
 # ------------------------------------------------------------------
 
 def _send_drive(vesc, uart, left: float, right: float) -> None:
+    # Narrow catch: serial / runtime errors from the driver are recoverable
+    # (next ramp step retries), but a true programming bug shouldn't be
+    # silently swallowed. SerialException covers USB port disappearance.
     try:
         if vesc:
             vesc.drive(left, right)
         elif uart:
             uart.send('M', f'{left:.3f},{right:.3f}')
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         log.error("SafeStop _send_drive: %s", e)
 
 
@@ -237,5 +240,5 @@ def _send_dome(dome, uart, speed: float) -> None:
             dome.turn(speed)
         elif uart:
             uart.send('D', f'{speed:.3f}')
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         log.error("SafeStop _send_dome: %s", e)

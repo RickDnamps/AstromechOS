@@ -192,6 +192,37 @@ def get_fw_version_can(ser, can_id: int) -> dict | None:
         return None
 
 
+def _parse_get_values(payload) -> dict | None:
+    """Parse a COMM_GET_VALUES reply payload into a dict.
+
+    Shared by get_values_direct() and get_values_can() — they used to
+    duplicate this 15-line struct.unpack_from sequence verbatim. Any
+    future change to the VESC firmware layout had to be applied to both
+    sites with the risk of one diverging silently.
+    """
+    if payload is None or len(payload) < _MIN_GET_VALUES_PAYLOAD_LEN or payload[0] != COMM_GET_VALUES:
+        return None
+    p = 1
+    temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
+    p += 2   # temp_motor
+    curr_m   = struct.unpack_from('>i', payload, p)[0] / 100.0; p += 4
+    p += 4   # curr_in
+    p += 8   # id, iq
+    duty     = struct.unpack_from('>h', payload, p)[0] / 1000.0; p += 2
+    rpm      = struct.unpack_from('>i', payload, p)[0];          p += 4
+    v_in     = struct.unpack_from('>H', payload, p)[0] / 10.0;   p += 2
+    p += 24  # amp_hours×2 (8B) + watt_hours×2 (8B) + tachometer×2 (8B)
+    fault    = payload[p] if p < len(payload) else 0
+    return {
+        'v_in':    round(v_in, 2),
+        'temp':    round(temp_fet, 1),
+        'current': round(curr_m, 2),
+        'rpm':     int(rpm),
+        'duty':    round(duty, 3),
+        'fault':   int(fault),
+    }
+
+
 def get_values_direct(ser) -> dict | None:
     """
     Reads MC_VALUES from the USB-connected VESC (no CAN forwarding).
@@ -205,28 +236,7 @@ def get_values_direct(ser) -> dict | None:
         raw = ser.read(ser.in_waiting or 100)
         if not raw:
             return None
-        payload = _extract_payload(raw)
-        if payload is None or len(payload) < _MIN_GET_VALUES_PAYLOAD_LEN or payload[0] != COMM_GET_VALUES:
-            return None
-        p = 1
-        temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
-        p += 2   # temp_motor
-        curr_m   = struct.unpack_from('>i', payload, p)[0] / 100.0; p += 4
-        p += 4   # curr_in
-        p += 8   # id, iq
-        duty     = struct.unpack_from('>h', payload, p)[0] / 1000.0; p += 2
-        rpm      = struct.unpack_from('>i', payload, p)[0];           p += 4
-        v_in     = struct.unpack_from('>H', payload, p)[0] / 10.0;    p += 2
-        p += 24  # amp_hours×2 (8B) + watt_hours×2 (8B) + tachometer×2 (8B)
-        fault    = payload[p] if p < len(payload) else 0
-        return {
-            'v_in':    round(v_in, 2),
-            'temp':    round(temp_fet, 1),
-            'current': round(curr_m, 2),
-            'rpm':     int(rpm),
-            'duty':    round(duty, 3),
-            'fault':   int(fault),
-        }
+        return _parse_get_values(_extract_payload(raw))
     except Exception as e:
         log.debug(f"get_values_direct: {e}")
         return None
@@ -246,29 +256,7 @@ def get_values_can(ser, can_id: int) -> dict | None:
         raw = ser.read(ser.in_waiting or 100)
         if not raw:
             return None
-
-        payload = _extract_payload(raw)
-        if payload is None or len(payload) < _MIN_GET_VALUES_PAYLOAD_LEN or payload[0] != COMM_GET_VALUES:
-            return None
-        p = 1
-        temp_fet = struct.unpack_from('>H', payload, p)[0] / 10.0;  p += 2
-        p += 2   # temp_motor
-        curr_m   = struct.unpack_from('>i', payload, p)[0] / 100.0; p += 4
-        p += 4   # curr_in
-        p += 8   # id, iq
-        duty     = struct.unpack_from('>h', payload, p)[0] / 1000.0; p += 2
-        rpm      = struct.unpack_from('>i', payload, p)[0];          p += 4
-        v_in     = struct.unpack_from('>H', payload, p)[0] / 10.0;   p += 2
-        p += 24  # amp_hours×2 (8B) + watt_hours×2 (8B) + tachometer×2 (8B)
-        fault    = payload[p] if p < len(payload) else 0
-        return {
-            'v_in':    round(v_in, 2),
-            'temp':    round(temp_fet, 1),
-            'current': round(curr_m, 2),
-            'rpm':     int(rpm),
-            'duty':    round(duty, 3),
-            'fault':   int(fault),
-        }
+        return _parse_get_values(_extract_payload(raw))
     except Exception as e:
         log.debug(f"get_values_can CAN ID {can_id}: {e}")
         return None

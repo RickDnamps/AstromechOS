@@ -28,24 +28,33 @@
 #  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
 # ============================================================
 """
-Blueprint API Motion — Phase 4.
-Controls propulsion (VESC) and the dome motor.
+Flask blueprint — Motion API.
+
+Controls propulsion (VESCs) and dome rotation. Every motion command
+passes through the safety chain:
+  - E-STOP gate          (reg.estop_active)
+  - Stow-in-progress gate (reg.stow_in_progress, set during estop_reset)
+  - Safety-ramp gate     (safe_stop._drive_ramp_active / _dome_ramp_active)
+  - Child Lock gate      (reg.lock_mode == 2)
+  - VESC safety gate     (vesc_safety.is_drive_safe — drive only)
+  - Kids speed cap       (reg.kids_speed_limit when lock_mode == 1)
+  - Watchdog feed        (motion_watchdog.feed_drive/dome)
 
 Propulsion endpoints:
-  POST /motion/drive        {"left": 0.5, "right": 0.5}
-  POST /motion/arcade       {"throttle": 0.5, "steering": 0.0}
-  POST /motion/stop
-  GET  /motion/state
+  POST /motion/drive    {"left": float, "right": float}    differential
+  POST /motion/arcade   {"throttle": float, "steering": float} normalised
+  POST /motion/stop                                          explicit stop
+  GET  /motion/state                                         current state
 
 Dome endpoints:
-  POST /motion/dome/turn    {"speed": 0.3}
-  POST /motion/dome/stop
-  POST /motion/dome/random  {"enabled": true}
-  GET  /motion/dome/state
+  POST /motion/dome/turn    {"speed": float}    [-1, 1] turn speed
+  POST /motion/dome/stop                         explicit dome stop
+  POST /motion/dome/random  {"enabled": bool}    random dome mode
+  GET  /motion/dome/state                        current dome state
 
-Safety: every motion command feeds the MotionWatchdog.
-If no command is received for 800ms while the robot is moving
-→ automatic stop (controller connection lost).
+Watchdog: if no /motion/drive or /motion/dome/turn is received for 800 ms
+while the robot is in motion, MotionWatchdog launches the anti-tip
+safety ramp via safe_stop. The ramp is uncancellable (B-2/B-12).
 """
 
 import math

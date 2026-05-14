@@ -1226,16 +1226,27 @@ class VirtualJoystick {
     if (this._valYId) { const v = el(this._valYId); if (v) v.textContent = '0.00'; }
   }
 
-  /** Déplace le knob visuellement depuis une source externe (manette BT).
-   *  x, y ∈ [-1, 1].  Ne déclenche PAS onMove ni de requête HTTP. */
+  /** Move the knob visually from an external source (BT gamepad / web
+   *  joystick mirror). x, y ∈ [-1, 1]. Does NOT fire onMove or any HTTP
+   *  request — the caller already POSTed the motion separately. */
   setExternal(x, y) {
-    if (this.active) return;   // joystick tactile prioritaire
+    if (this.active) return;   // touch joystick has priority
     const maxR = this.ring.offsetWidth / 2;
     const kx   = x * maxR;
     const ky   = y * maxR;
     this.knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
     if (this._valXId) { const v = el(this._valXId); if (v) v.textContent = x.toFixed(2); }
     if (this._valYId) { const v = el(this._valYId); if (v) v.textContent = y.toFixed(2); }
+    // Drive HUD mirror — without this the speed arc + direction arrow
+    // stayed at 0 while a BT gamepad was actively driving the robot,
+    // making the HUD silently lie. Only the LEFT joystick drives the
+    // HUD (right is dome rotation — separate). Probe `this.ring.id` to
+    // decide.
+    if (this.ring && this.ring.id === 'js-left-ring' && typeof _updateDriveHUD === 'function') {
+      // jsLeft onMove maps (x, y) → (throttle=-y, steering=x*0.55)
+      // Mirror the same mapping here so the HUD shows the same values.
+      _updateDriveHUD(-y, x * 0.55);
+    }
   }
 }
 
