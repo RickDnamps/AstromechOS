@@ -146,6 +146,23 @@ class VescDriver(BaseDriver):
         """
         Opens the single USB serial port to VESC ID 1.
         uart : UARTListener — optional, enables telemetry forwarding to Master.
+
+        Returns True if the driver is alive — either connected NOW, or
+        running its reconnect loop ready to pick the VESC up as soon as
+        it appears. Returns False only on hard initialisation errors
+        (e.g. pyserial missing).
+
+        Previously: if the initial port-open failed (VESC USB not yet
+        enumerated by the kernel, brief power glitch during boot, etc.),
+        setup() returned False, the telem thread was never started, and
+        the built-in 2s reconnect loop never ran. Propulsion stayed
+        disabled until the next slave reboot — even after the VESC USB
+        was plugged in and powered. Bug reported 2026-05-14.
+
+        Fix: always start the telem thread. The reconnect loop runs
+        every 2s when _ready=False and brings the driver online as soon
+        as a port responds. drive() gates on _ready internally so safety
+        is preserved during the degraded window.
         """
         self._uart = uart
         try:
@@ -161,18 +178,22 @@ class VescDriver(BaseDriver):
                 except _serial.SerialException:
                     continue
 
-            if not opened:
-                log.error(f"VescDriver: no VESC found on ports {self._ports}")
-                return False
+            if opened:
+                self._ready = True
+                log.info(
+                    f"VescDriver ready: port={self._port}  "
+                    f"USB_ID={VESC_ID_USB}  CAN_ID={VESC_ID_CAN}  "
+                    f"max_erpm={self._max_erpm}"
+                )
+            else:
+                self._ready = False
+                log.warning(
+                    "VescDriver: no VESC found on ports %s at startup — "
+                    "telem loop will keep retrying every 2s",
+                    self._ports,
+                )
 
-            self._ready = True
-            log.info(
-                f"VescDriver ready: port={self._port}  "
-                f"USB_ID={VESC_ID_USB}  CAN_ID={VESC_ID_CAN}  "
-                f"max_erpm={self._max_erpm}"
-            )
-
-            # Start telemetry loop
+            # Start telemetry / reconnect loop unconditionally.
             self._running = True
             self._telem_thread = threading.Thread(
                 target=self._telem_loop, name='vesc-telem', daemon=True

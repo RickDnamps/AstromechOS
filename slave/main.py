@@ -208,15 +208,29 @@ def main() -> None:
     vesc = None
     servo = None
     vesc = VescDriver(ports=_vesc_ports)
+    # setup() now returns True even when no VESC was reachable at boot —
+    # the driver's telem thread keeps retrying every 2s. Register UART
+    # callbacks unconditionally so commands can flow as soon as the VESC
+    # appears (drive() gates on _ready internally so nothing leaks to
+    # hardware during the degraded window). Display indicator reflects
+    # the CURRENT connection state, not the post-recovery state.
     if vesc.setup(uart=uart):
         uart.register_callback('M',       vesc.handle_uart)
         uart.register_callback('VCFG',    vesc.handle_config_uart)
         uart.register_callback('VINV',    vesc.handle_invert_uart)
         uart.register_callback('CANSCAN', vesc.handle_can_scan_uart)
-        display.boot_ok('VESC_G')
-        display.boot_ok('VESC_D')
+        if vesc.is_ready():
+            display.boot_ok('VESC_G')
+            display.boot_ok('VESC_D')
+        else:
+            log.warning(
+                "VescDriver setup OK but no VESC connected — reconnect "
+                "loop running, will pick up the VESC as soon as it appears"
+            )
+            display.boot_fail('VESC_G')
+            display.boot_fail('VESC_D')
     else:
-        log.warning("VescDriver unavailable — propulsion disabled")
+        log.error("VescDriver setup HARD-FAILED — propulsion permanently disabled")
         display.boot_fail('VESC_G')
         display.boot_fail('VESC_D')
 
