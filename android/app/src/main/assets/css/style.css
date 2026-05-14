@@ -437,6 +437,23 @@ body::after {
   height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
   overflow: hidden;
 }
+
+/* Choreo tab — viewport-bound flex column so the inner timeline can
+   actually scroll. Without this, #tab-choreo inherits only
+   `display:block` (no defined height), .chor-layout's `height:100%`
+   degrades to `auto`, and the entire flex chain below has no upper
+   bound — overflow-y:auto on .chor-tracks-body never fires because
+   the lanes simply grow past the viewport and get silently clipped
+   by `body { overflow:hidden }`. Symptom: stacking many blocks
+   (e.g. 5+ overlapping dome_servos events) pushes arm_servos and
+   propulsion lanes below the visible area with no scrollbar to
+   reach them. */
+#tab-choreo.active {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--topbar-h) - var(--tabbar-h));
+  overflow: hidden;
+}
 #tab-editor.active #editor-panel-sequence,
 #tab-editor.active #editor-panel-light {
   flex: 1;
@@ -3713,7 +3730,13 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .chor-layout {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* flex:1 + min-height:0 — fills the remaining height of #tab-choreo
+     (a flex column with bounded calc(100vh - …) height) while leaving
+     room for the optional #chor-audio-banner sibling when it shows.
+     `height:100%` would ignore the banner's space in a flex column
+     and push the footer/lower lanes off the viewport. */
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
