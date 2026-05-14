@@ -7,6 +7,7 @@ import configparser
 import json
 import logging
 import os
+import re
 import threading
 import time
 
@@ -91,11 +92,54 @@ def _auto_emoji(name: str) -> str:
     return '🎬'
 
 
-def _choreo_path(name: str) -> str:
-    safe = os.path.basename(name).replace('..', '')
-    if not safe.endswith('.chor'):
-        safe += '.chor'
-    return os.path.join(_CHOREO_DIR, safe)
+# Strict allowlist for user-supplied choreo names: letters, digits, and a
+# small set of separators. Excludes path separators (`/`, `\`), traversal
+# sequences (`..`), wildcards, and any non-ASCII / control characters.
+_CHOREO_NAME_RE = re.compile(r'^[A-Za-z0-9_.\- ]+$')
+
+
+def _safe_choreo_path(name):
+    """Validate a user-supplied choreo name and resolve it to an absolute
+    path inside ``_CHOREO_DIR``.
+
+    Returns ``(path, None)`` on success, or ``(None, (response, code))``
+    where ``response`` is a Flask JSON 400 error — callers can do::
+
+        path, err = _safe_choreo_path(name)
+        if err:
+            return err
+
+    Layers of defense:
+      1. Reject non-strings, empty / whitespace-only input.
+      2. Strict regex allowlist (``[A-Za-z0-9_.- ]``) — blocks path
+         separators, traversal, wildcards, NUL bytes, etc.
+      3. Reject the ``__`` prefix reserved for internal sentinels
+         (e.g. ``__preview__.chor``) so users can't shadow them.
+      4. Reject the literal ``.`` and ``..`` names.
+      5. Resolve via ``os.path.realpath`` and verify the result is
+         contained in ``_CHOREO_DIR`` — defense-in-depth against
+         symlink shenanigans or locale-quirk edge cases.
+    """
+    if not isinstance(name, str):
+        return None, (jsonify({'error': 'invalid name (not a string)'}), 400)
+    raw = name.strip()
+    if not raw:
+        return None, (jsonify({'error': 'invalid name (empty)'}), 400)
+    if raw.endswith('.chor'):
+        raw = raw[:-5]
+    if raw in ('.', '..') or raw.startswith('__'):
+        return None, (jsonify({'error': 'invalid name (reserved)'}), 400)
+    if not _CHOREO_NAME_RE.match(raw):
+        return None, (jsonify(
+            {'error': 'invalid name (allowed chars: A-Z a-z 0-9 _ . - space)'}
+        ), 400)
+    candidate = os.path.realpath(os.path.join(_CHOREO_DIR, raw + '.chor'))
+    base      = os.path.realpath(_CHOREO_DIR)
+    # Containment check: candidate must equal base (impossible since we
+    # appended .chor) or live strictly inside it.
+    if not (candidate == base or candidate.startswith(base + os.sep)):
+        return None, (jsonify({'error': 'invalid name (escape attempt)'}), 400)
+    return candidate, None
 
 
 @choreo_bp.get('/choreo/list')
@@ -212,7 +256,9 @@ def set_choreo_category():
     category = data.get('category', '').strip()
     if not name or not category:
         return jsonify({'error': 'name and category required'}), 400
-    path = _choreo_path(name)
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
     with open(path, encoding='utf-8') as f:
@@ -230,7 +276,9 @@ def set_choreo_emoji():
     emoji = data.get('emoji', '').strip()
     if not name:
         return jsonify({'error': 'name required'}), 400
-    path = _choreo_path(name)
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
     with open(path, encoding='utf-8') as f:
@@ -248,7 +296,9 @@ def set_choreo_label():
     label = data.get('label', '').strip()
     if not name:
         return jsonify({'error': 'name required'}), 400
-    path = _choreo_path(name)
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
     with open(path, encoding='utf-8') as f:
@@ -269,8 +319,12 @@ def choreo_rename():
         return jsonify({'error': 'old_name and new_name required'}), 400
     if old_name == new_name:
         return jsonify({'status': 'ok', 'name': new_name})
-    old_path = _choreo_path(old_name)
-    new_path = _choreo_path(new_name)
+    old_path, err = _safe_choreo_path(old_name)
+    if err:
+        return err
+    new_path, err = _safe_choreo_path(new_name)
+    if err:
+        return err
     if not os.path.exists(old_path):
         return jsonify({'error': 'not found'}), 404
     if os.path.exists(new_path):
@@ -290,10 +344,12 @@ def choreo_load():
     name = request.args.get('name', '')
     if not name:
         return jsonify({'error': 'name required'}), 400
-    path = _choreo_path(name)
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         chor = json.load(f)
     # Migrate legacy audio2 track → unified audio track with ch=1
     tracks = chor.get('tracks', {})
@@ -313,9 +369,12 @@ def choreo_save():
     if not chor or 'meta' not in chor:
         return jsonify({'error': 'invalid chor'}), 400
     name = chor['meta'].get('name', 'untitled')
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     os.makedirs(_CHOREO_DIR, exist_ok=True)
-    with open(_choreo_path(name), 'w') as f:
-        json.dump(chor, f, indent=2)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(chor, f, indent=2, ensure_ascii=False)
     log.info(f"Choreo saved: {name}")
     return jsonify({'status': 'ok', 'name': name})
 
@@ -323,7 +382,9 @@ def choreo_save():
 @choreo_bp.delete('/choreo/<name>')
 def choreo_delete(name: str):
     """Delete a choreography file by name."""
-    path = _choreo_path(name)
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
     try:
@@ -395,10 +456,12 @@ def choreo_play():
     name = data.get('name', '')
     if not name:
         return jsonify({'error': 'name required'}), 400
-    path = _choreo_path(name)
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': f'choreography not found: {name}'}), 404
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         chor = json.load(f)
 
     # Coalesce concurrent play requests: a second request waits for the first
@@ -445,10 +508,14 @@ def choreo_export_scr():
         return jsonify({'error': 'choreo player not available'}), 503
     data = request.get_json(silent=True) or {}
     name = data.get('name', '')
-    path = _choreo_path(name)
+    if not name:
+        return jsonify({'error': 'name required'}), 400
+    path, err = _safe_choreo_path(name)
+    if err:
+        return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         chor = json.load(f)
     scr = reg.choreo.export_scr(chor)
     return jsonify({'status': 'ok', 'name': name, 'scr': scr})
