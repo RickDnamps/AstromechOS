@@ -1012,18 +1012,75 @@ class VirtualJoystick {
     this.x = 0;
     this.y = 0;
     this._keepAlive = null;  // timer keep-alive watchdog Master
+    // Pointer Events ID tracked per-joystick. Mouse and touch both produce
+    // pointer events; setPointerCapture binds subsequent move/up/cancel
+    // events to THIS joystick's ring even if the pointer leaves the ring
+    // (fixes the "drag out of window, release outside, joystick stays
+    // active forever" runaway-drive bug). Tracking the id per-instance also
+    // disambiguates multi-touch: two fingers (one on each joystick) each
+    // get their own pointerId and won't cross-contaminate.
+    this._pointerId = null;
     this._bind();
   }
 
   _bind() {
     const r = this.ring;
-    r.addEventListener('touchstart',  e => { e.preventDefault(); this._start(e.touches[0]); }, { passive: false });
-    r.addEventListener('touchmove',   e => { e.preventDefault(); this._move(e.touches[0]); },  { passive: false });
-    r.addEventListener('touchend',    () => this._release());
-    r.addEventListener('touchcancel', () => this._release());
-    r.addEventListener('mousedown',   e => this._start(e));
-    document.addEventListener('mousemove', e => { if (this.active) this._move(e); });
-    document.addEventListener('mouseup',   () => { if (this.active) this._release(); });
+    // Pointer Events unify mouse + touch + pen with consistent pointerId
+    // tracking. The two key safety features used here:
+    //   1. setPointerCapture(id) — subsequent move/up/cancel events are
+    //      delivered to THIS element regardless of where the pointer
+    //      physically is. Lets us release the joystick correctly even when
+    //      the user drags out of the browser window and releases outside.
+    //   2. pointercancel + lostpointercapture — fire when the browser
+    //      aborts the gesture (tab switch, modal interrupt, OS event), so
+    //      we get a guaranteed cleanup path that mouseup never provided.
+    r.addEventListener('pointerdown',         e => this._onPointerDown(e));
+    r.addEventListener('pointermove',         e => this._onPointerMove(e));
+    r.addEventListener('pointerup',           e => this._onPointerUp(e));
+    r.addEventListener('pointercancel',       e => this._onPointerUp(e));
+    r.addEventListener('lostpointercapture',  e => this._onPointerUp(e));
+    // touchmove on the ring needs preventDefault to stop the browser from
+    // hijacking the gesture for scroll/zoom on tablets. Pointer Events
+    // don't auto-prevent page gestures — we still need this.
+    r.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  }
+
+  _onPointerDown(e) {
+    // Refuse a second pointer if we're already capturing one. Prevents a
+    // mouse click while a touch is held from stealing the joystick.
+    if (this._pointerId !== null) return;
+    // Block all input during E-STOP — F-2. The overlay is pointer-events:
+    // none (cosmetic), so without this check the user could grab the knob
+    // visually while the server refuses the resulting POSTs (network spam +
+    // confusing UX). Also exit early when this is the propulsion joystick
+    // and lockMgr has drive locked, mirroring the onMove guard.
+    if (typeof _estopTripped !== 'undefined' && _estopTripped) return;
+    this._pointerId = e.pointerId;
+    try { this.ring.setPointerCapture(e.pointerId); } catch {}
+    this._start(e);
+  }
+
+  _onPointerMove(e) {
+    if (e.pointerId !== this._pointerId) return;
+    this._move(e);
+  }
+
+  _onPointerUp(e) {
+    if (e.pointerId !== this._pointerId) return;
+    this._pointerId = null;
+    try { this.ring.releasePointerCapture(e.pointerId); } catch {}
+    this._release();
+  }
+
+  // Forced release — called by E-STOP, window.blur, visibilitychange. Snaps
+  // the knob back to center, stops the keep-alive interval, and fires the
+  // onStop callback (which posts /motion/stop or /motion/dome/stop).
+  forceRelease() {
+    if (this._pointerId !== null) {
+      try { this.ring.releasePointerCapture(this._pointerId); } catch {}
+      this._pointerId = null;
+    }
+    if (this.active) this._release();
   }
 
   _start(ptr) {
@@ -2071,11 +2128,28 @@ function _updateDriveHUD(throttle, steering) {
 let _estopTripped = false;
 
 function _setEstopUI(tripped) {
+  const wasTripped = _estopTripped;
   _estopTripped = tripped;
   const btn     = el('estop-toggle-btn');
   const txt     = el('estop-toggle-text');
   const overlay = el('estop-overlay');
   if (overlay) overlay.classList.toggle('active', tripped);
+  // Force-release both joysticks on the True transition. The overlay is
+  // pointer-events:none (cosmetic only), so without this the user's finger
+  // stays "held" on the knob — the server-side gate (B-1) refuses the
+  // POSTs but the visual knob stays deflected and the keep-alive interval
+  // keeps trying. Snapping the knob back to centre and clearing _pointerId
+  // gives an immediate visual confirmation that drive is cut.
+  if (tripped && !wasTripped) {
+    if (typeof jsLeft !== 'undefined' && jsLeft.forceRelease) jsLeft.forceRelease();
+    if (typeof jsRight !== 'undefined' && jsRight.forceRelease) jsRight.forceRelease();
+    // Clear keyboard state too — a held W key would otherwise resume drive
+    // as soon as estop_reset fires. Mirrors the window.blur cleanup below.
+    if (typeof _keys !== 'undefined') {
+      for (const k of Object.keys(_keys)) delete _keys[k];
+      if (typeof _updateKbdUI === 'function') _updateKbdUI();
+    }
+  }
   if (!btn) return;
   if (tripped) {
     btn.classList.replace('estop-armed', 'estop-tripped');
@@ -2087,6 +2161,23 @@ function _setEstopUI(tripped) {
     btn.querySelector('.estop-icon').innerHTML = '&#9632;';
   }
 }
+
+// Window blur / visibilitychange — release joysticks and clear key state
+// when this browser window loses focus or becomes hidden. Without this,
+// a user holding the joystick (or W key) who Alt-Tabs to another window
+// never gets pointerup / keyup (those events go to the new focused
+// window). The joystick's keep-alive interval would keep re-sending the
+// last deflection, and the AppWatchdog wouldn't trip if the heartbeat
+// already shut off cleanly via the existing visibilitychange path.
+window.addEventListener('blur', () => {
+  if (typeof jsLeft !== 'undefined' && jsLeft.forceRelease) jsLeft.forceRelease();
+  if (typeof jsRight !== 'undefined' && jsRight.forceRelease) jsRight.forceRelease();
+  if (typeof _keys !== 'undefined') {
+    for (const k of Object.keys(_keys)) delete _keys[k];
+    if (typeof _updateKbdUI === 'function') _updateKbdUI();
+    if (typeof _handleKeys === 'function') _handleKeys();
+  }
+});
 
 function toggleEstop() {
   if (_estopTripped) { estopReset(); } else { emergencyStop(); }
@@ -2140,6 +2231,10 @@ let _leftActive = false;
 const jsLeft = new VirtualJoystick(
   'js-left-ring', 'js-left-knob',
   (x, y) => {
+    // Defense-in-depth E-STOP gate — pointerdown already refuses to start
+    // when _estopTripped, but a poll-based E-STOP that fires AFTER the user
+    // started dragging would otherwise let onMove continue spamming.
+    if (_estopTripped) return;
     if (lockMgr.isDriveLocked()) return;   // Child Lock : joystick gauche bloqué
     if (!_vescDriveSafe) return;           // VESC offline/fault
     _leftActive = true;
@@ -2164,6 +2259,7 @@ let _domeActive = false;
 const jsRight = new VirtualJoystick(
   'js-right-ring', 'js-right-knob',
   (x, y) => {
+    if (_estopTripped) return;
     const DEADZONE = 0.06;
     const vx = el('js-right-x'); if (vx) vx.textContent = x.toFixed(2);
     const vy = el('js-right-y'); if (vy) vy.textContent = y.toFixed(2);
@@ -2223,9 +2319,19 @@ function _updateKbdUI() {
 }
 
 let _domeKeyWasActive = false;
+let _propKeyWasActive = false;
 
 function _handleKeys() {
   if (_leftActive) return; // joystick takes priority
+  // F-2: refuse keyboard motion during E-STOP. Mirrors the joystick onMove
+  // gate — without this, holding W while the user clicks the on-screen
+  // E-STOP would keep posting /motion/arcade (server refuses 403 'estop'
+  // but we still spam logs + network).
+  if (_estopTripped) {
+    if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
+    if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
+    return;
+  }
 
   // Propulsion — WASD only
   const fwd   = _keys['KeyW'];
@@ -2234,11 +2340,13 @@ function _handleKeys() {
   const right = _keys['KeyD'];
 
   if (fwd || back || left || right) {
+    _propKeyWasActive = true;
     const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
     const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
     api('/motion/arcade', 'POST', { throttle, steering });
     _updateDriveHUD(throttle, steering);
-  } else {
+  } else if (_propKeyWasActive) {
+    _propKeyWasActive = false;
     driveStop();
     _updateDriveHUD(0, 0);
   }
