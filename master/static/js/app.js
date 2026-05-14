@@ -7477,9 +7477,20 @@ const choreoEditor = (() => {
         });
       }
     });
+
+    // Skip the redraw if the overflow set hasn't changed since the last
+    // call. Most edits don't shift events into/out of overflow — the old
+    // code unconditionally re-rendered the entire audio track + re-fitted
+    // the layout, so a single arrow-key nudge on a `t` field triggered 3-4
+    // full audio-track DOM rebuilds (caller render + validate render +
+    // setProp render for derivative fields). For a sequence with 50 audio
+    // events this was noticeable UI jank.
+    const oldOverflow = _audioOverflowIdxs;
+    const sameOverflow = oldOverflow && oldOverflow.size === overflow.size &&
+      [...overflow].every(i => oldOverflow.has(i));
     _audioOverflowIdxs = overflow;
 
-    // Update banner
+    // Update banner (cheap, always run — the text reflects `peak`)
     const banner = document.getElementById('chor-audio-banner');
     if (banner) {
       if (peak > _audioChannelsConfig) {
@@ -7491,9 +7502,12 @@ const choreoEditor = (() => {
       }
     }
 
-    // Trigger redraw so overflow badges appear on blocks
-    _renderTrack('audio');
-    _refreshLayout();
+    // Trigger redraw so overflow badges appear on blocks — but only if the
+    // overflow set actually changed.
+    if (!sameOverflow) {
+      _renderTrack('audio');
+      _refreshLayout();
+    }
   }
 
   function _drawEasingPreview(name) {
