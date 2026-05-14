@@ -1159,7 +1159,14 @@ class VirtualJoystick {
     // Keep-alive : renvoie la position courante toutes les 200ms pendant que
     // le joystick est tenu immobile — alimente le MotionWatchdog côté Master.
     this._keepAlive = setInterval(() => {
-      if (this.active) this.onMove(this.x, this.y);
+      if (!this.active) return;
+      // F-13: skip keep-alive when at center (or within tiny deadzone).
+      // The keep-alive's job is to refresh MotionWatchdog so a held
+      // joystick keeps moving the robot — but when (x, y) ≈ (0, 0) the
+      // robot is already commanded to stop and there's nothing to keep
+      // alive. Re-firing onMove(0, 0) at 5 Hz was pure log + network spam.
+      if (Math.abs(this.x) + Math.abs(this.y) < 0.02) return;
+      this.onMove(this.x, this.y);
     }, 200);
   }
 
@@ -1855,13 +1862,37 @@ const _chorMon = (() => {
   };
 })();
 
+// F-14: persist the speed slider in localStorage so page reload doesn't
+// reset to 60% mid-session. The slider is intentionally per-client
+// (different clients can drive at different scales — useful when a
+// parent + child are each on their own tablet). Server-side persistence
+// would force a single global value and break that use case.
+const _SPEED_LS_KEY = 'astromech-speed-limit';
+
 function setSpeed(val) {
-  _speedLimit = val / 100;
-  el('speed-val').textContent = val + '%';
-  // update slider gradient
+  const v = Math.max(10, Math.min(100, parseInt(val, 10) || 60));
+  _speedLimit = v / 100;
+  const valEl = el('speed-val');
+  if (valEl) valEl.textContent = v + '%';
   const slider = el('speed-slider');
-  if (slider) slider.style.setProperty('--val', val + '%');
+  if (slider) {
+    slider.style.setProperty('--val', v + '%');
+    if (slider.value !== String(v)) slider.value = v;
+  }
+  try { localStorage.setItem(_SPEED_LS_KEY, String(v)); } catch {}
 }
+
+// Restore the saved slider value on page load — runs after #speed-slider
+// exists in the DOM so we can update the visual too.
+(function _restoreSpeedSlider() {
+  try {
+    const saved = parseInt(localStorage.getItem(_SPEED_LS_KEY), 10);
+    if (Number.isFinite(saved) && saved >= 10 && saved <= 100) {
+      // Defer to next tick so #speed-slider has been parsed.
+      setTimeout(() => setSpeed(saved), 0);
+    }
+  } catch {}
+})();
 
 function driveStop()       { api('/motion/stop',      'POST'); }
 function domeStop()        { api('/motion/dome/stop', 'POST'); }
@@ -2047,7 +2078,19 @@ async function _takeCameraStream() {
   try {
     const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
       .then(r => r.json()).catch(() => null);
-    if (!r) return;
+    if (!r) {
+      // F-16: surface camera service failure to the user. Without this,
+      // the green grid cam-bg stayed on forever with no indication that
+      // /camera/take returned null (Flask camera blueprint down, service
+      // not running, etc.). Re-use the cam-taken overlay shell but show
+      // a different message so the user can distinguish "another client
+      // stole it" from "camera service offline".
+      const taken = el('cam-taken');
+      const txt   = taken ? taken.querySelector('.cam-taken-text') : null;
+      if (txt)   txt.textContent = 'CAMERA OFFLINE — retry?';
+      if (taken) taken.style.display = 'flex';
+      return;
+    }
     _camToken   = r.token;
     _camErrored = false;
 
@@ -2059,7 +2102,13 @@ async function _takeCameraStream() {
     // Detect mjpg_streamer going away (service restart / camera unplug)
     img.onerror = () => { _camErrored = true; };
 
-    if (taken) taken.style.display = 'none';
+    if (taken) {
+      // Reset the overlay text back to its default in case a previous
+      // failure left "CAMERA OFFLINE" on it.
+      const txt = taken.querySelector('.cam-taken-text');
+      if (txt) txt.textContent = 'STREAM TAKEN';
+      taken.style.display = 'none';
+    }
     img.src = _camBase() + `/camera/stream?t=${_camToken}&_=${Date.now()}`;
     img.style.display = 'block';
     if (bg) bg.style.display = 'none';
@@ -2181,7 +2230,30 @@ function _initCamVisibilityHandler() {
 // Arc length for "M6 40 A32 32 0 0 1 68 40" semicircle ≈ π × 32 ≈ 100.5
 const _CAM_ARC_LEN = 101;
 
+// F-12: requestAnimationFrame batching for the drive HUD. _updateDriveHUD
+// was called at joystick onMove frequency (60 Hz) and on every WASD
+// keyboard event. Each call mutated strokeDashoffset + stroke + opacity +
+// transform, each of which can trigger a style recalc on low-end Android
+// tablets — visible jank during sustained drive. Now: callers stash the
+// latest (throttle, steering) into _hudPending and a single rAF schedules
+// the actual DOM writes, capped at 60 Hz no matter how fast we're called.
+let _hudPending = null;
+let _hudRafId   = 0;
+let _hudArcColorThreshold = 0;  // cache last arc color band to skip redundant writes
+
 function _updateDriveHUD(throttle, steering) {
+  _hudPending = { throttle, steering };
+  if (_hudRafId) return;
+  _hudRafId = requestAnimationFrame(_flushDriveHUD);
+}
+
+function _flushDriveHUD() {
+  _hudRafId = 0;
+  const data = _hudPending;
+  _hudPending = null;
+  if (!data) return;
+  const { throttle, steering } = data;
+
   // Speed arc
   const speed = Math.min(1, Math.abs(throttle));
   const arc   = el('cam-speed-arc');
@@ -2189,22 +2261,35 @@ function _updateDriveHUD(throttle, steering) {
   if (arc) arc.style.strokeDashoffset = _CAM_ARC_LEN * (1 - speed);
   if (val) val.textContent = Math.round(speed * 100) + '%';
 
-  // Color arc green→orange→red with speed
-  if (arc) arc.style.stroke = speed < 0.5 ? '#00aaff' : speed < 0.8 ? '#ff8800' : '#ff2244';
+  // Color arc green→orange→red with speed. Skip the write when we're in
+  // the same band — every assignment triggers a style recalc even when
+  // the value is identical. F-11 theme awareness: use CSS vars when
+  // available, fall back to hard-coded hex for very old themes.
+  if (arc) {
+    const band = speed < 0.5 ? 0 : speed < 0.8 ? 1 : 2;
+    if (band !== _hudArcColorThreshold) {
+      _hudArcColorThreshold = band;
+      arc.style.stroke = ['var(--blue, #00aaff)', 'var(--amber, #ff8800)', 'var(--red, #ff2244)'][band];
+    }
+  }
 
   // Direction arrow
   const wrap = el('cam-dir-wrap');
   const poly = el('cam-dir-poly');
   if (!wrap) return;
   const mag = Math.sqrt(throttle * throttle + steering * steering * 0.3);
-  wrap.style.opacity = mag > 0.05 ? Math.min(1, mag * 2).toFixed(2) : '0';
-  if (mag > 0.05 && poly) {
-    // atan2: 0=up, positive=clockwise
-    const angleDeg = Math.atan2(steering, throttle) * (180 / Math.PI);
-    // Our arrow points up = forward = throttle > 0
-    // Rotate: forward(throttle=1,steer=0) → 0°, right(steer=1) → +90°
-    const rot = angleDeg;
-    wrap.style.transform = `translate(-50%,-50%) rotate(${rot}deg)`;
+  if (mag > 0.05) {
+    wrap.style.opacity = Math.min(1, mag * 2).toFixed(2);
+    if (poly) {
+      // atan2: 0=up, positive=clockwise
+      const angleDeg = Math.atan2(steering, throttle) * (180 / Math.PI);
+      wrap.style.transform = `translate(-50%,-50%) rotate(${angleDeg}deg)`;
+    }
+  } else {
+    wrap.style.opacity = '0';
+    // F-19: reset the rotation when hiding so we don't flash at the old
+    // angle for one frame when motion resumes.
+    wrap.style.transform = 'translate(-50%,-50%) rotate(0deg)';
   }
 }
 
@@ -2314,7 +2399,18 @@ function estopReset() {
 let _vescDriveSafe = true;
 
 function _applyVescSafetyLock(safe, lOk, rOk) {
+  const wasSafe = _vescDriveSafe;
   _vescDriveSafe = safe;
+  // F-15: also apply a visual cue on the propulsion joystick ring so the
+  // user sees the drive is disabled, not just the banner. Toggling the
+  // vesc-blocked class is cheap and lets CSS handle the styling (dim +
+  // strike-through outline). Force-release the joystick on the
+  // True→False transition so a holding finger drops immediately.
+  const ring = el('js-left-ring');
+  if (ring) ring.classList.toggle('vesc-blocked', !safe);
+  if (wasSafe && !safe) {
+    if (typeof jsLeft !== 'undefined' && jsLeft.forceRelease) jsLeft.forceRelease();
+  }
   const banner = el('vesc-safety-banner');
   const msg    = el('vesc-safety-msg');
   if (!banner) return;
@@ -2440,11 +2536,19 @@ function _handleKeys() {
   const right = _keys['KeyD'];
 
   if (fwd || back || left || right) {
-    _propKeyWasActive = true;
-    const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
-    const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
-    _postMotion('/motion/arcade', { throttle, steering });
-    _updateDriveHUD(throttle, steering);
+    // F-15: refuse WASD propulsion when VESC safety blocks the drive.
+    // Without this, holding W with an offline VESC kept POSTing arcade
+    // calls (server refuses 503 but client spammed). Stop any in-flight
+    // motion first so a release-of-W doesn't fire an extra driveStop.
+    if (!_vescDriveSafe || lockMgr.isDriveLocked()) {
+      if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
+    } else {
+      _propKeyWasActive = true;
+      const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
+      const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
+      _postMotion('/motion/arcade', { throttle, steering });
+      _updateDriveHUD(throttle, steering);
+    }
   } else if (_propKeyWasActive) {
     _propKeyWasActive = false;
     driveStop();

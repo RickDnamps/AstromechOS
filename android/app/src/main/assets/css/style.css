@@ -692,6 +692,31 @@ body[data-lock-mode="2"] #js-left-ring::after {
   text-shadow: 0 0 8px rgba(255, 0, 0, 0.8);
 }
 
+/* F-15: visual indicator when VESC safety blocks the drive. Same pattern
+   as Child Lock above but with the amber/warn palette so the user can
+   tell the difference at a glance: red = locked (intentional), amber =
+   hardware safety (recoverable). Applied dynamically via JS class. */
+#js-left-ring.vesc-blocked {
+  opacity: 0.35;
+  pointer-events: none;
+}
+#js-left-ring.vesc-blocked::after {
+  content: 'VESC OFFLINE';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 170, 0, 0.45);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 9px;
+  font-family: var(--font);
+  letter-spacing: 2px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 2px solid rgba(255, 200, 60, 0.7);
+  text-shadow: 0 0 8px rgba(255, 140, 0, 0.7);
+}
+
 /* Bottom bar — 3-column grid so E-STOP is always perfectly centered */
 .drive-bottom-bar {
   flex-shrink: 0;
