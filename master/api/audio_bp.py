@@ -111,7 +111,9 @@ def _get_sound_duration_ms(sound: str, fallback_ms: int = 60000) -> int:
     try:
         size = os.path.getsize(path)
         return int(size * 8 / 128) + 800   # 128 kbps + 800ms buffer
-    except Exception:
+    except OSError:
+        # File disappeared between exists() and getsize() — fall back. Don't
+        # swallow other exceptions (e.g. permission errors → real bug).
         return fallback_ms
 
 
@@ -170,18 +172,39 @@ _INDEX_FILE = os.path.join(
     os.path.dirname(__file__), '..', '..', 'slave', 'sounds', 'sounds_index.json'
 )
 
-# Index loaded once at startup
+# Index cache, invalidated by mtime check on each access (B-8).
+# Previously loaded ONCE and never refreshed, so an external edit
+# (slave-side modification, SSH-edited JSON, sync-back from slave)
+# would leave Flask serving stale data forever. Now we stat the file
+# and reload when mtime moves forward — cheap (~5µs per call) compared
+# to JSON parsing.
 _INDEX_CACHE: dict = {}
+_INDEX_MTIME: float = 0.0
 
 
 def _get_index() -> dict:
-    global _INDEX_CACHE
-    if not _INDEX_CACHE:
+    """Returns the sounds index. Auto-refreshes when the on-disk file
+    has been modified since the last read.
+
+    B-12: narrow exception clauses — OSError for file-not-found /
+    permission, JSONDecodeError for malformed JSON. Anything else
+    propagates so a real bug surfaces in journalctl instead of
+    silently degrading to an empty index."""
+    global _INDEX_CACHE, _INDEX_MTIME
+    try:
+        mtime = os.path.getmtime(_INDEX_FILE)
+    except OSError:
+        # File missing — keep whatever we have cached (possibly empty).
+        return _INDEX_CACHE
+    if mtime > _INDEX_MTIME or not _INDEX_CACHE:
         try:
             with open(_INDEX_FILE, encoding='utf-8') as f:
                 _INDEX_CACHE = json.load(f)
-        except Exception:
-            _INDEX_CACHE = {}
+            _INDEX_MTIME = mtime
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning('_get_index: failed to reload — %s', e)
+            if not _INDEX_CACHE:
+                _INDEX_CACHE = {}
     return _INDEX_CACHE
 
 
@@ -398,8 +421,15 @@ def upload_sound():
             sounds.sort()
         Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
         with _audio_state_lock:
-            global _INDEX_CACHE
+            global _INDEX_CACHE, _INDEX_MTIME
             _INDEX_CACHE = index  # refresh in-memory cache
+            # Bump mtime tracker so _get_index() doesn't immediately
+            # reload from disk and read what we just wrote (no-op but
+            # wasteful).
+            try:
+                _INDEX_MTIME = os.path.getmtime(_INDEX_FILE)
+            except OSError:
+                pass
 
     # Sync to slave via SFTP — OUTSIDE the upload lock (B-9: SFTP can
     # take 5-30s on WiFi for a large MP3; holding _upload_lock blocked
@@ -435,8 +465,12 @@ def create_category():
         cats[name] = []
         Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
         with _audio_state_lock:
-            global _INDEX_CACHE
+            global _INDEX_CACHE, _INDEX_MTIME
             _INDEX_CACHE = index
+            try:
+                _INDEX_MTIME = os.path.getmtime(_INDEX_FILE)
+            except OSError:
+                pass
 
     # Sync index to slave OUTSIDE the upload lock (B-9: SFTP can block
     # for seconds on WiFi). Daemon thread — failure logged, doesn't

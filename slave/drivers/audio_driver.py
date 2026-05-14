@@ -99,7 +99,13 @@ class AudioDriver(BaseDriver):
         self._channels = channels
         self._procs: list[subprocess.Popen | None] = [None] * channels
         self._lock = threading.Lock()
-        self._launch_q: queue.Queue = queue.Queue()
+        # B-11: bound the launch queue. A stuck worker (mpg123 hang on a
+        # broken audio device) combined with a tight UART loop (e.g. choreo
+        # player firing audio events at 50ms tick) could otherwise grow the
+        # queue without limit and exhaust RAM. With maxsize=64, a put on a
+        # full queue drops the OLDEST request (FIFO) — appropriate for
+        # audio: stale queued sounds aren't worth playing minutes late.
+        self._launch_q: queue.Queue = queue.Queue(maxsize=64)
         self._ready = False
 
     # ------------------------------------------------------------------
@@ -260,9 +266,31 @@ class AudioDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def _launch(self, path: str, channel: int = 0, volume: int = 100) -> None:
-        """Enqueues a play request. Returns immediately — Popen happens in worker thread."""
+        """Enqueues a play request. Returns immediately — Popen happens in worker thread.
+
+        B-11: queue is bounded (maxsize=64). When full, drop the OLDEST
+        pending request so a fresh sound can still be queued — stale audio
+        requests aren't worth playing seconds-to-minutes late. Logs a
+        warning so the operator notices accumulating backpressure (worker
+        hang on a broken audio device, etc.)."""
         scale = int(max(0, min(100, volume)) / 100 * 32768)
-        self._launch_q.put((channel, path, scale))
+        try:
+            self._launch_q.put_nowait((channel, path, scale))
+        except queue.Full:
+            try:
+                dropped = self._launch_q.get_nowait()
+                log.warning(
+                    "Audio queue full — dropped oldest: ch%d %s",
+                    dropped[0], os.path.basename(dropped[1]),
+                )
+            except queue.Empty:
+                pass
+            # Try once more — should succeed now.
+            try:
+                self._launch_q.put_nowait((channel, path, scale))
+            except queue.Full:
+                log.error("Audio queue still full after drop — request lost")
+                return
         log.info("Audio ch%d vol%d%% queued: %s", channel, volume, os.path.basename(path))
 
     def _launch_worker(self) -> None:
