@@ -397,8 +397,15 @@ def choreo_delete(name: str):
 
 _BODY_PANELS = [f'Servo_S{i}' for i in range(12)]   # S0–S11 — body panels only (arms excluded)
 
-# How long to wait (seconds) for servos to physically reach closed position
-_SERVO_RESET_DELAY = 1.5
+# Safety buffer after every close-dispatch thread has joined. The arm/body
+# UART path is non-blocking (the driver send() returns once the bytes hit
+# the wire) so when the threads finish, the Slave may still be processing
+# the SRV queue. The dome path joins fully (close() blocks on the I2C
+# ramp), so this buffer mostly covers the body/arm UART tail.
+_SERVO_RESET_TAIL = 0.4
+# Per-thread join timeout — a single stuck servo cannot hold the choreo
+# play request open indefinitely.
+_SERVO_RESET_JOIN_TIMEOUT = 3.0
 
 
 def _get_arm_servos() -> list:
@@ -415,37 +422,84 @@ def _get_arm_servos() -> list:
 
 
 def _reset_servos():
-    """Close arms + body panels (S0–S11) + dome panels before starting a new choreo."""
+    """Close arms + body panels (S0–S11) + dome panels in parallel before
+    starting a new choreo.
+
+    Why parallel? The OLD sequential implementation took ~7s on a typical
+    install:
+      - arm closes (UART): ~10 × 30ms                =  300ms
+      - body closes (UART): ~12 × 30ms               =  360ms
+      - dome closes (I2C blocking ramp): 11 × 500ms  = 5500ms
+      - hard sleep buffer:                            = 1500ms
+                                                       ≈ 7660ms
+
+    Parallelizing brings dome ramps from sequential (5500ms) to
+    concurrent (≈700ms — longest single ramp). Body/arm UART sends
+    still serialize at the wire, but Python no longer waits between
+    them. Total ≈2s — about 5s saved every time the user starts a
+    new choreo while one is already playing.
+
+    The dome driver protects its per-servo PWM writes with its own
+    _lock, so spawning a thread per servo is safe. Body driver
+    send() is also thread-safe (UARTController has an internal lock).
+    """
     from master.api.servo_bp import (
         _read_panels_cfg, _panel_angle, _panel_speed, DOME_SERVOS
     )
-    panels_cfg  = _read_panels_cfg()
-    arm_servos  = _get_arm_servos()
+    panels_cfg = _read_panels_cfg()
+    arm_servos = _get_arm_servos()
 
-    # Close arm servos first (arms must retract before body panels move)
-    for name in arm_servos:
+    def _close_body(name, angle, speed):
+        try:
+            if reg.servo:
+                reg.servo.close(name, angle, speed)
+            elif reg.uart:
+                reg.uart.send('SRV', f'{name},{angle},{speed}')
+        except Exception:
+            log.exception("reset_servos: body close failed: %s", name)
+
+    def _close_dome(name, angle, speed):
+        try:
+            reg.dome_servo.close(name, angle, speed)
+        except Exception:
+            log.exception("reset_servos: dome close failed: %s", name)
+
+    threads = []
+    # Arm servos + body panels share the UART path on the Slave — fast send,
+    # then Slave processes them serially. Spawning threads doesn't speed up
+    # the UART wire but keeps the dispatch pipeline non-blocking from this
+    # function's caller perspective.
+    for name in arm_servos + _BODY_PANELS:
         angle = _panel_angle(name, 'close', panels_cfg)
         speed = _panel_speed(name, panels_cfg)
-        if reg.servo:
-            reg.servo.close(name, angle, speed)
-        elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle},{speed}')
+        t = threading.Thread(
+            target=_close_body, args=(name, angle, speed),
+            daemon=True, name=f'reset-{name}',
+        )
+        t.start()
+        threads.append(t)
 
-    # Close body panels S0–S11 (arms excluded)
-    for name in _BODY_PANELS:
-        angle = _panel_angle(name, 'close', panels_cfg)
-        speed = _panel_speed(name, panels_cfg)
-        if reg.servo:
-            reg.servo.close(name, angle, speed)
-        elif reg.uart:
-            reg.uart.send('SRV', f'{name},{angle},{speed}')
-
-    # Close all dome panels
+    # Dome servos run blocking I2C ramps on the Master — true parallelism
+    # here saves the most time. Each dome thread holds its own per-servo
+    # lock inside the driver, so they don't serialize against each other.
     if reg.dome_servo:
         for name in DOME_SERVOS:
             angle = _panel_angle(name, 'close', panels_cfg)
             speed = _panel_speed(name, panels_cfg)
-            reg.dome_servo.close(name, angle, speed)
+            t = threading.Thread(
+                target=_close_dome, args=(name, angle, speed),
+                daemon=True, name=f'reset-{name}',
+            )
+            t.start()
+            threads.append(t)
+
+    # Wait for every dispatch to finish — but cap per-thread so one stuck
+    # servo can't pin the play request indefinitely.
+    for t in threads:
+        t.join(timeout=_SERVO_RESET_JOIN_TIMEOUT)
+        if t.is_alive():
+            log.warning("reset_servos: thread %s exceeded %.1fs join timeout",
+                        t.name, _SERVO_RESET_JOIN_TIMEOUT)
 
 
 @choreo_bp.post('/choreo/play')
@@ -474,10 +528,14 @@ def choreo_play():
             log.info("Choreo already playing — stopping and resetting servos before starting '%s'", name)
             reg.choreo.stop()
             try:
-                _reset_servos()
+                _reset_servos()  # parallel dispatch — joins internally per thread
             except Exception:
                 log.exception("Servo reset failed — continuing with choreo start anyway")
-            time.sleep(_SERVO_RESET_DELAY)
+            # Short tail buffer — the dome joins fully but the body/arm UART
+            # queue on the Slave may still be draining when our threads
+            # returned. Keep this tight so we don't undo the parallelization
+            # gains. Was 1.5s on top of the old ~6s sequential reset.
+            time.sleep(_SERVO_RESET_TAIL)
 
         loop = bool(data.get('loop', False))
         ok = reg.choreo.play(chor, loop=loop)
