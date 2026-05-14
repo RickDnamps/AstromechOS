@@ -7132,13 +7132,18 @@ const choreoEditor = (() => {
         for (const [grp, names] of Object.entries(options)) {
           opts += `<optgroup label="${escapeHtml(grp.toUpperCase())}">`;
           for (const n of names)
-            opts += `<option value="${escapeHtml(n)}"${n === current ? ' selected' : ''}>${escapeHtml(n)}</option>`;
+            opts += `<option value="${escapeHtml(n)}"${String(n) === String(current) ? ' selected' : ''}>${escapeHtml(n)}</option>`;
           opts += '</optgroup>';
         }
       } else {
         opts += `<option value="">—</option>`;
         for (const [val, label] of Object.entries(options))
-          opts += `<option value="${escapeHtml(val)}"${val === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+          // String(val)===String(current) — Object.entries always yields
+          // string keys but `current` (item.ch, item.arm…) is a Number after
+          // _setProp parses numeric fields. '0' === 0 is false → the option
+          // matching item.ch=0 wasn't getting `selected`, so opening the
+          // inspector on a CH 0 audio block showed CH 1 as the active choice.
+          opts += `<option value="${escapeHtml(val)}"${String(val) === String(current) ? ' selected' : ''}>${escapeHtml(label)}</option>`;
       }
       return `<div class="chor-prop-row-full">
         <span class="chor-prop-key">${key}</span>
