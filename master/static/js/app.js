@@ -6117,6 +6117,19 @@ const choreoEditor = (() => {
   // Populated at init from /teeces/animations (T-codes) + /light/list (.lseq files)
   let _lightModes    = { t1:'Random', t6:'Leia Message', t3:'Alarm', t13:'Disco', t20:'Off' };
 
+  // Inspector banner styles — single source of truth, theme-aware via CSS
+  // variables. Previously every banner div hand-coded a hex palette
+  // (#3a0010, #ff6688, #ffaa44, #44aaff, #88ddaa…), so the inspector
+  // stayed R2-D2 dark-red/amber/blue regardless of the active theme.
+  // Border colours use var(--red/amber/blue/green) which all themes
+  // override; backgrounds use rgba() of the same hue so they tint
+  // correctly with the theme without going opaque.
+  const _BNR_BASE = 'padding:6px 8px;margin-bottom:6px;font-size:10px;line-height:1.5;border-radius:3px;border:1px solid';
+  const _BNR_ERR  = `${_BNR_BASE} var(--red);background:rgba(255,34,68,.12);color:var(--status-err)`;
+  const _BNR_WARN = `${_BNR_BASE} var(--amber);background:rgba(255,179,0,.10);color:var(--status-warn)`;
+  const _BNR_INFO = `${_BNR_BASE} rgba(var(--blue-rgb),.55);background:rgba(var(--blue-rgb),.10);color:rgba(var(--blue-rgb),.85)`;
+  const _BNR_OK   = `${_BNR_BASE} var(--green);background:rgba(0,204,102,.10);color:var(--status-ok)`;
+
   // Block palette templates — one entry per draggable chip
   const _PALETTE = [
     { track:'audio', label:'PLAY',  tpl:{ action:'play', file:'', volume:85, duration:5, ch:0 } },
@@ -6827,6 +6840,15 @@ const choreoEditor = (() => {
 
   function _deleteBlock(track, idx) {
     if (!_chor || !_chor.tracks[track] || _chor.tracks[track][idx] == null) return;
+    // Inform the user when a delete happens during playback — the Pi is
+    // playing from the SAVED file on disk, not the in-memory _chor. So
+    // the visual block disappears here but the event still fires on the
+    // robot. Without this hint, users were confused why a block they
+    // "just deleted" still produced sound / motion. _pollTimer is the
+    // internal proxy for "playing" — same as the public isPlaying().
+    if (_pollTimer !== null) {
+      toast('Block removed from editor — current playback continues from the saved file. Stop and Play to apply.', 'warn');
+    }
     _chor.tracks[track].splice(idx, 1);
     _dirty = true; _selected = null;
     _clearInspectorTitle();
@@ -7199,11 +7221,11 @@ const choreoEditor = (() => {
       // Audio issue banner
       const audioIssueKey = `audio:${idx}`;
       if (_audioIssues[audioIssueKey] === 'error') {
-        html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+        html += `<div style="${_BNR_ERR}">
           ❌ <b>${escapeHtml(item.file || '')}</b> — file not found on slave.<br>Select a replacement below.
         </div>`;
       } else if (_audioIssues[audioIssueKey] === 'warn') {
-        html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+        html += `<div style="${_BNR_WARN}">
           ⚠️ Unknown RANDOM category: <b>${escapeHtml(item.file?.slice(7) || '')}</b>
         </div>`;
       }
@@ -7293,7 +7315,7 @@ const choreoEditor = (() => {
       const seqHint = isOpen
         ? `Sequence: <b>panel opens</b> → wait <b>delay</b> → <b>arm extends</b>`
         : `Sequence: <b>arm retracts</b> → wait <b>delay</b> → <b>panel closes</b>`;
-      html += `<div style="background:#0a1a0a;border:1px solid #2da05a;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#88ddaa;line-height:1.5">
+      html += `<div style="${_BNR_OK}">
         ${seqHint}<br>
         Total: <b>${_armBlockTotalDur(item).toFixed(2)} s</b>
       </div>`;
@@ -7301,11 +7323,11 @@ const choreoEditor = (() => {
       if (item.arm !== undefined) {
         // New format — arm slot picker
         if (count === 0) {
-          html += `<div style="background:#1a1000;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+          html += `<div style="${_BNR_WARN}">
             ⚠️ No arms configured — go to <b>Settings → Arms</b> to assign arm servos.
           </div>`;
         } else if (item.arm < 1 || item.arm > count) {
-          html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+          html += `<div style="${_BNR_ERR}">
             ❌ <b>Arm ${item.arm}</b> is not configured — only ${count} arm(s) in Settings.<br>
             Change arm slot below and save to fix.
           </div>`;
@@ -7324,7 +7346,7 @@ const choreoEditor = (() => {
         html += numRow('ARM DURATION (s)',   'arm_duration',   { min: 0.1, step: 0.1 });
       } else {
         // Legacy format — servo ID stored directly
-        html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+        html += `<div style="${_BNR_WARN}">
           ⚠️ Legacy event — uses servo ID directly (<b>${escapeHtml(item.servo_label || item.servo || '?')}</b>).<br>
           Select an arm slot below and save to migrate to the new format.
         </div>`;
@@ -7357,7 +7379,7 @@ const choreoEditor = (() => {
       const sid = item.servo || '';
       const isSpecial = _SERVO_SPECIAL.has(sid);
       if (isSpecial) {
-        html += `<div style="background:#0a1a2a;border:1px solid #0066aa;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#44aaff;line-height:1.5">
+        html += `<div style="${_BNR_INFO}">
           ℹ️ Group command — controls <b>${sid === 'all' ? 'all servos' : sid === 'all_dome' ? 'all dome servos' : 'all body servos'}</b> at once.
         </div>`;
       } else {
@@ -7366,12 +7388,12 @@ const choreoEditor = (() => {
         const isUnknown   = sid && !configLabel;
         const isMismatch  = configLabel && storedLabel && configLabel !== storedLabel;
         if (isUnknown) {
-          html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
+          html += `<div style="${_BNR_ERR}">
             ❌ <b>${escapeHtml(storedLabel || sid)}</b> — servo ID not found in config.<br>
             Select the correct servo below and save.
           </div>`;
         } else if (isMismatch) {
-          html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
+          html += `<div style="${_BNR_WARN}">
             ⚠️ Stored as <b>${escapeHtml(storedLabel)}</b><br>
             Current config: <b>${escapeHtml(configLabel)}</b><br>
             Select the correct servo below and save to confirm.

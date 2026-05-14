@@ -444,7 +444,20 @@ def choreo_delete(name: str):
             return jsonify({'error': str(e)}), 500
 
 
-_BODY_PANELS = [f'Servo_S{i}' for i in range(12)]   # S0–S11 — body panels only (arms excluded)
+# Body panels for the choreo→choreo reset path. Derive from the actual
+# slave body HAT count via servo_bp.BODY_SERVOS so multi-HAT installs
+# (Servo_S0..S31 etc.) get every panel closed on transition, not just
+# the first 12. Arms are filtered out at runtime in _reset_servos.
+# Lazy resolution because servo_bp is imported into the dispatch path
+# below — calling it once here keeps the constant accurate after a
+# slave_hats config change + Master reboot.
+def _all_body_panels():
+    try:
+        from master.api.servo_bp import BODY_SERVOS
+        return list(BODY_SERVOS)
+    except ImportError:
+        # Single-HAT fallback — matches the pre-multi-HAT install layout.
+        return [f'Servo_S{i}' for i in range(16)]
 
 # Safety buffer after every close-dispatch thread has joined. The arm/body
 # UART path is non-blocking (the driver send() returns once the bytes hit
@@ -518,7 +531,12 @@ def _reset_servos():
     # then Slave processes them serially. Spawning threads doesn't speed up
     # the UART wire but keeps the dispatch pipeline non-blocking from this
     # function's caller perspective.
-    for name in arm_servos + _BODY_PANELS:
+    body_panels = _all_body_panels()
+    # Filter arms out of the body sweep — they're handled by the arm
+    # close branch below and we don't want to send two SRV commands to
+    # the same servo (it sees an open then a close, racing the panel).
+    body_panels = [s for s in body_panels if s not in arm_servos]
+    for name in arm_servos + body_panels:
         angle = _panel_angle(name, 'close', panels_cfg)
         speed = _panel_speed(name, panels_cfg)
         t = threading.Thread(

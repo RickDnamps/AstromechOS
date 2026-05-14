@@ -14,6 +14,11 @@ log = logging.getLogger(__name__)
 
 TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
 
+# Servo slew step rate (steps per second). 25 → ~40ms per step. Bigger
+# numbers = smoother motion at higher I2C/UART cost; smaller = visible
+# stepping. 25 is the sweet spot tested on the Pi 4B + PCA9685 stack.
+_SLEW_RATE_HZ = 25
+
 from shared.paths import DOME_ANGLES as _DOME_ANGLES_PATH, SLAVE_ANGLES as _BODY_ANGLES_PATH, LOCAL_CFG as _LOCAL_CFG
 
 # Module-level imports of helper modules previously re-imported inside the
@@ -261,14 +266,21 @@ class ChoreoPlayer:
         """
         if name in _SERVO_SPECIAL:
             return name
+        # ImportError fallbacks: single PCA9685 HAT = 16 channels each side.
+        # The previous range(11) hard-coded the OLD dome HAT population
+        # (11 panels used) and silently broke multi-HAT installs whose
+        # driver imports failed for any reason. range(16) reflects the
+        # actual channel count of one HAT; multi-HAT installs only hit
+        # this path if their drivers fail to import (rare), and the
+        # caller falls through to label resolution anyway.
         try:
             from master.drivers.dome_servo_driver import SERVO_MAP as _DOME_MAP
         except ImportError:
-            _DOME_MAP = {f'Servo_M{i}': i for i in range(11)}
+            _DOME_MAP = {f'Servo_M{i}': i for i in range(16)}
         try:
             from slave.drivers.body_servo_driver import SERVO_MAP as _BODY_MAP
         except ImportError:
-            _BODY_MAP = {f'Servo_S{i}': i for i in range(11)}
+            _BODY_MAP = {f'Servo_S{i}': i for i in range(16)}
         if name in _DOME_MAP or name in _BODY_MAP:
             return name
         resolved = self._label_map.get(_normalise_label(name))
@@ -390,8 +402,14 @@ class ChoreoPlayer:
         stop_flag = self._stop_flag
 
         def _slew(drv=driver, n=name, a0=start_a, a1=target_angle,
-                  dur=dur_s, ease=easing, flag=stop_flag):
-            steps = max(3, int(dur * 25))   # ~40ms per step at 25 steps/s
+                  dur=dur_s, ease=easing, flag=stop_flag, rate=_SLEW_RATE_HZ):
+            # `max(3, …)` guarantees at least 3 intermediate frames even for
+            # very short slews — without it a 0.05s ramp would collapse to
+            # a single jump. _SLEW_RATE_HZ is the steps-per-second target;
+            # adjusted at module level (default 25 = ~40ms per step, smooth
+            # enough for the human eye on a Pi 4B without flooding the I2C
+            # bus or UART pipe).
+            steps = max(3, int(dur * rate))
             step_dur = dur / steps
             for i in range(steps + 1):
                 if flag.is_set():
@@ -409,7 +427,17 @@ class ChoreoPlayer:
                          name=f'choreo-slew-{name}').start()
 
     def _track_arm_timer(self, timer: threading.Timer) -> None:
-        """Register a Timer so stop() can cancel it. Auto-cleans completed timers."""
+        """Register a Timer so stop() can cancel it.
+
+        Cleanup semantics (corrected from previous misleading comment):
+        - On insert, drops Timers that are no longer alive — i.e. already
+          fired AND completed their callback. Pending Timers stay in the
+          list since `is_alive()` returns True for them.
+        - The list is fully cleared by stop() and by _reset_loop_state at
+          loop boundaries, so unbounded growth is impossible. For a long
+          non-looping sequence with hundreds of arm events, the list peaks
+          around event count then is purged on completion / stop.
+        """
         with self._arm_timers_lock:
             self._arm_timers = [t for t in self._arm_timers if t.is_alive()]
             self._arm_timers.append(timer)
@@ -1145,6 +1173,7 @@ class ChoreoPlayer:
             f"# Exported from {name}.chor — {date.today()}",
             "# WARNING: dome interpolation and servo easing not preserved in .scr format",
             "# Parallel tracks have been collapsed to sequential execution",
+            "# Arm panel→delay→arm sequence collapsed to single arm,<slot>,<action> command",
         ]
 
         _LIGHT_SCR = {
@@ -1160,17 +1189,15 @@ class ChoreoPlayer:
 
         # Build flat event list (no latency shift for .scr — it's sequential)
         events = []
+        # Audio: unified track with `ch` (0=primary, 1=secondary).
+        # ch=1 → emit sound2,… (legacy audio2 syntax in .scr) so older
+        # .scr players keep working; ch=0 stays as sound,…
         for ev in tracks.get('audio', []):
+            ch_suffix = '2' if ev.get('ch') == 1 else ''
             if ev.get('action') == 'play':
-                events.append((ev['t'], f"sound,{ev['file']}"))
+                events.append((ev['t'], f"sound{ch_suffix},{ev['file']}"))
             elif ev.get('action') == 'stop':
-                events.append((ev['t'], 'audio,stop'))
-
-        for ev in tracks.get('audio2', []):
-            if ev.get('action') == 'play':
-                events.append((ev['t'], f"sound2,{ev['file']}"))
-            elif ev.get('action') == 'stop':
-                events.append((ev['t'], 'audio2,stop'))
+                events.append((ev['t'], f"audio{ch_suffix},stop"))
 
         for ev in tracks.get('lights', []):
             mode = ev.get('mode', 'random')
@@ -1183,6 +1210,32 @@ class ChoreoPlayer:
             # Dome keyframes → discrete turn commands (best effort)
             events.append((ev['t'], 'dome,turn,0.3'))
 
+        # All three new servo tracks → flat `servo,<id>,<action>` lines.
+        # The previous export pulled from a `servos` track that was removed
+        # by the 2026-05-09 migration, so .scr exports of any post-migration
+        # choreo dropped every servo event silently.
+        for ev in tracks.get('dome_servos', []):
+            servo  = ev.get('servo', 'all_dome')
+            action = ev.get('action', 'open')
+            events.append((ev['t'], f"servo,{servo},{action}"))
+
+        for ev in tracks.get('body_servos', []):
+            servo  = ev.get('servo', 'all_body')
+            action = ev.get('action', 'open')
+            events.append((ev['t'], f"servo,{servo},{action}"))
+
+        # Arm blocks reference an arm slot index, not a hardware ID, and
+        # the panel→delay→arm sequence is implicit. .scr can't reproduce
+        # the sequence faithfully — emit a single arm,<slot>,<action> line
+        # and document the limitation in the header.
+        for ev in tracks.get('arm_servos', []):
+            arm    = ev.get('arm', 1)
+            action = ev.get('action', 'open')
+            events.append((ev['t'], f"arm,{arm},{action}"))
+
+        # Backward-compat: pre-migration files saved before 2026-05-09 may
+        # still have the legacy `servos` track if they were never opened
+        # via /choreo/load (which migrates them). Honour it for safety.
         for ev in tracks.get('servos', []):
             servo  = ev.get('servo', 'all')
             action = ev.get('action', 'open')
