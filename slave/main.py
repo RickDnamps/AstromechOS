@@ -220,19 +220,19 @@ def main() -> None:
         uart.register_callback('VINV',    vesc.handle_invert_uart)
         uart.register_callback('CANSCAN', vesc.handle_can_scan_uart)
         if vesc.is_ready():
-            display.boot_ok('VESC_G')
-            display.boot_ok('VESC_D')
+            display.boot_ok('VESC_L')
+            display.boot_ok('VESC_R')
         else:
             log.warning(
                 "VescDriver setup OK but no VESC connected — reconnect "
                 "loop running, will pick up the VESC as soon as it appears"
             )
-            display.boot_fail('VESC_G')
-            display.boot_fail('VESC_D')
+            display.boot_fail('VESC_L')
+            display.boot_fail('VESC_R')
     else:
         log.error("VescDriver setup HARD-FAILED — propulsion permanently disabled")
-        display.boot_fail('VESC_G')
-        display.boot_fail('VESC_D')
+        display.boot_fail('VESC_L')
+        display.boot_fail('VESC_R')
 
     display.boot_fail('DOME')     # not connected Phase 1
     display.boot_fail('BT_CTRL')  # optional Phase 4

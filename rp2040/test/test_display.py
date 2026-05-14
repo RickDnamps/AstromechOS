@@ -51,8 +51,8 @@ tft.init()
 
 items = {
     'UART':   'pending',
-    'VESC_G': 'pending',
-    'VESC_D': 'pending',
+    'VESC_L': 'pending',
+    'VESC_R': 'pending',
     'DOME':   'pending',
     'SERVOS': 'pending',
     'AUDIO':  'pending',
@@ -84,8 +84,8 @@ time.sleep(PAUSE)
 
 # 5 — Tout OK (anneau vert)
 print("5/7 Tout OK — anneau vert BOOT COMPLETE")
-items['VESC_G'] = 'ok'
-items['VESC_D'] = 'ok'
+items['VESC_L'] = 'ok'
+items['VESC_R'] = 'ok'
 items['DOME']   = 'ok'
 items['SERVOS'] = 'ok'
 disp.draw_boot_progress(tft, items)
@@ -93,7 +93,7 @@ time.sleep(PAUSE)
 
 # 6 — VESC LEFT en erreur (anneau rouge)
 print("6/7 VESC LEFT ERROR — anneau rouge")
-items['VESC_G'] = 'fail'
+items['VESC_L'] = 'fail'
 disp.draw_boot_progress(tft, items)
 time.sleep(PAUSE * 2)
 
@@ -101,8 +101,8 @@ time.sleep(PAUSE * 2)
 print("7/7 Pi4B MASTER OFFLINE — reste sur cet ecran")
 items = {
     'UART':   'fail',
-    'VESC_G': 'pending',
-    'VESC_D': 'pending',
+    'VESC_L': 'pending',
+    'VESC_R': 'pending',
     'DOME':   'pending',
     'SERVOS': 'pending',
     'AUDIO':  'pending',

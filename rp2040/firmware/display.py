@@ -82,8 +82,10 @@ ERROR_MESSAGES = {
 
 BOOT_LABELS = {
     'UART':    'Pi4B MASTER',
-    'VESC_G':  'VESC LEFT',
-    'VESC_D':  'VESC RIGHT',
+    # Renamed from legacy French keys VESC_G/VESC_D (Gauche/Droite).
+    # Display values were already in English — only the keys were stale.
+    'VESC_L':  'VESC LEFT',
+    'VESC_R':  'VESC RIGHT',
     'DOME':    'DOME MOTOR',
     'SERVOS':  'SERVOS BODY',
     'AUDIO':   'AUDIO',
