@@ -2994,19 +2994,47 @@ class AudioBoard {
       ? data.categories
       : Object.entries(data.categories).map(([name, count]) => ({ name, count }));
 
-    wrap.innerHTML = cats.map(({ name, count }) => {
+    // F-1 + F-2 fix: build DOM with createElement instead of innerHTML +
+    // inline onclick. The category name comes from the server-side index
+    // file which the admin can write to via /audio/category/create — a
+    // future regex change there could otherwise let a name like
+    // `x'); alert(1); //` break out of the onclick attribute. createElement
+    // + .dataset + addEventListener never parses the value as HTML or JS
+    // so the XSS vector is structurally impossible.
+    wrap.replaceChildren();   // clear any previous content
+    cats.forEach(({ name, count }) => {
       const color = this._CAT_COLORS[name] || '#00aaff';
       const label = this._CAT_LABELS[name] || name.charAt(0).toUpperCase() + name.slice(1);
       const icon  = this._ICONS[name] || '🔊';
-      return `
-        <div class="category-pill" id="cat-pill-${name}"
-             onclick="audioBoard.selectCategory('${name}')"
-             style="--cat-color:${color}">
-          <span class="cat-icon">${icon}</span>
-          <span class="cat-label">${label}</span>
-          <span class="cat-count">${count}</span>
-        </div>`;
-    }).join('');
+
+      const div = document.createElement('div');
+      div.className   = 'category-pill';
+      div.id          = `cat-pill-${name}`;   // safe: regex-gated server-side
+      div.dataset.cat = name;
+      div.style.setProperty('--cat-color', color);
+      // .textContent on these spans escapes automatically — no XSS surface.
+      const iconEl  = document.createElement('span');
+      iconEl.className  = 'cat-icon';
+      iconEl.textContent = icon;
+      const labelEl = document.createElement('span');
+      labelEl.className  = 'cat-label';
+      labelEl.textContent = label;
+      const countEl = document.createElement('span');
+      countEl.className  = 'cat-count';
+      countEl.textContent = count;
+      div.append(iconEl, labelEl, countEl);
+      wrap.appendChild(div);
+    });
+
+    // Single delegated click handler on the wrap — idempotent via a flag
+    // so we don't stack listeners on every loadCategories() call.
+    if (!wrap.dataset.wired) {
+      wrap.addEventListener('click', e => {
+        const pill = e.target.closest('.category-pill[data-cat]');
+        if (pill) this.selectCategory(pill.dataset.cat);
+      });
+      wrap.dataset.wired = '1';
+    }
 
     // Sélectionner la première catégorie par défaut
     if (cats.length > 0) this.selectCategory(cats[0].name);
@@ -3041,30 +3069,46 @@ class AudioBoard {
 
     const data = await api(`/audio/sounds?category=${cat}`);
 
+    // F-1 fix: build sound buttons via createElement + dataset so a sound
+    // name containing ' or < cannot break out of an inline onclick or
+    // attribute. escapeHtml didn't cover ' which would have terminated
+    // the JS string literal `onclick="audioBoard.play('...')"`. Single
+    // delegated click handler on the grid handles play + random.
+    grid.replaceChildren();
+
+    const mkRandomBtn = () => {
+      const btn = document.createElement('button');
+      btn.className = 'sound-btn sound-btn-random';
+      btn.dataset.random = cat;
+      btn.title = `Random sound from ${label}`;
+      btn.textContent = data && data.sounds && data.sounds.length > 0
+        ? '🎲 RANDOM'
+        : `🎲 RANDOM ${label}`;
+      return btn;
+    };
+
+    grid.appendChild(mkRandomBtn());
+
     if (data && data.sounds && data.sounds.length > 0) {
-      // Bouton RANDOM en premier
-      const randomBtn = `
-        <button class="sound-btn sound-btn-random"
-                onclick="audioBoard.playRandom('${cat}')"
-                title="Random sound from ${label}">
-          🎲 RANDOM
-        </button>`;
+      data.sounds.forEach(s => {
+        const btn = document.createElement('button');
+        btn.className = 'sound-btn';
+        btn.dataset.sound = s;
+        btn.title = s;
+        btn.textContent = this._formatSound(s);
+        grid.appendChild(btn);
+      });
+    }
 
-      const soundBtns = data.sounds.map(s => {
-        const display = this._formatSound(s);
-        return `<button class="sound-btn"
-                  onclick="audioBoard.play('${escapeHtml(s)}')"
-                  title="${escapeHtml(s)}">
-                  ${escapeHtml(display)}
-                </button>`;
-      }).join('');
-
-      grid.innerHTML = randomBtn + soundBtns;
-    } else {
-      grid.innerHTML = `
-        <button class="sound-btn sound-btn-random" onclick="audioBoard.playRandom('${cat}')">
-          🎲 RANDOM ${label}
-        </button>`;
+    // Delegated click handler — idempotent (wired once per page lifetime).
+    if (!grid.dataset.wired) {
+      grid.addEventListener('click', e => {
+        const btn = e.target.closest('button[data-sound], button[data-random]');
+        if (!btn) return;
+        if (btn.dataset.sound)  this.play(btn.dataset.sound);
+        if (btn.dataset.random) this.playRandom(btn.dataset.random);
+      });
+      grid.dataset.wired = '1';
     }
   }
 

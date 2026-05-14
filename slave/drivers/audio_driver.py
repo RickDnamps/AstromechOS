@@ -63,6 +63,35 @@ _SOUNDS_DIR  = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'so
 _INDEX_FILE  = os.path.join(_SOUNDS_DIR, 'sounds_index.json')
 
 
+def _reap(proc, label: str = '') -> None:
+    """Terminate + wait an mpg123 subprocess to avoid zombie processes.
+
+    B-5: proc.terminate() only sends SIGTERM; the OS keeps the
+    <defunct> entry in the process table until the parent calls wait().
+    Without this reaper a long-running slave accumulates zombies on
+    every preemption / stop(). 0.5s SIGTERM grace then SIGKILL — mpg123
+    normally exits in <50ms when interrupted, so the timeout almost
+    never fires."""
+    try:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=0.5)
+            except subprocess.TimeoutExpired:
+                log.warning("mpg123 %s did not exit on SIGTERM — killing", label)
+                proc.kill()
+                try:
+                    proc.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    log.error("mpg123 %s did not respond to SIGKILL", label)
+        else:
+            # Already exited but the parent never wait()'d — drain the
+            # zombie now. wait() on a finished process returns immediately.
+            proc.wait(timeout=0.1)
+    except (OSError, subprocess.SubprocessError) as e:
+        log.warning("Audio reap %s: %s", label, e)
+
+
 class AudioDriver(BaseDriver):
     def __init__(self, sounds_dir: str = _SOUNDS_DIR, channels: int = 6):
         self._sounds_dir = os.path.abspath(sounds_dir)
@@ -155,8 +184,11 @@ class AudioDriver(BaseDriver):
             for ch in channels:
                 if 0 <= ch < len(self._procs):
                     proc = self._procs[ch]
-                    if proc and proc.poll() is None:
-                        proc.terminate()
+                    if proc:
+                        # B-5: reap (terminate + wait) instead of fire-and-forget
+                        # terminate. Same zombie risk applies here as in the
+                        # launch path on preemption.
+                        _reap(proc, label=f'stop-ch{ch}')
                         log.debug("Sound stopped (ch%d)", ch)
                     self._procs[ch] = None
 
@@ -245,7 +277,14 @@ class AudioDriver(BaseDriver):
             with self._lock:
                 proc = self._procs[channel] if 0 <= channel < len(self._procs) else None
                 if proc and proc.poll() is None:
-                    proc.terminate()
+                    # B-5: reap the previous process — terminate() only sends
+                    # SIGTERM and does NOT wait for the child to exit. Without
+                    # the wait the OS keeps the process table entry as a
+                    # <defunct> zombie until astromech-slave exits. Over a
+                    # long choreo (or just repeated UI triggers) zombies
+                    # accumulate. wait(timeout=0.5) gives mpg123 a chance to
+                    # exit gracefully; kill() + wait() forces it if needed.
+                    _reap(proc, label=f'ch{channel}')
                 try:
                     new_proc = subprocess.Popen(
                         ['mpg123', '-q', '-f', str(scale), path],
