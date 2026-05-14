@@ -48,11 +48,12 @@ If no command is received for 800ms while the robot is moving
 → automatic stop (controller connection lost).
 """
 
+import math
 import time
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.motion_watchdog import motion_watchdog
-from master.safe_stop import cancel_ramp
+from master.safe_stop import cancel_ramp, is_drive_ramp_active, is_dome_ramp_active
 from master.vesc_safety import is_drive_safe, block_reason
 
 motion_bp = Blueprint('motion', __name__, url_prefix='/motion')
@@ -62,6 +63,58 @@ def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
     return max(lo, min(hi, val))
 
 
+def _safe_float(val, default: float = 0.0) -> float:
+    """Parse a JSON-body float, rejecting NaN / Inf / non-numeric.
+
+    Without this, `float('NaN')` returns nan, _clamp(nan) returns nan,
+    and the slave receives M:nan,nan → set_rpm_direct(int(nan*50000))
+    raises ValueError inside the UART callback, potentially killing
+    the listener thread or producing log spam at 60 Hz.
+    """
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(f) or math.isinf(f):
+        return default
+    return f
+
+
+def _drive_gate():
+    """Centralised refuse-motion check for the propulsion endpoints.
+
+    Returns a Flask response tuple to short-circuit with, or None if
+    motion is allowed. Order matters — estop is the most severe so it
+    short-circuits first.
+    """
+    if reg.estop_active:
+        return jsonify({'status': 'blocked', 'reason': 'estop'}), 403
+    if getattr(reg, 'stow_in_progress', False):
+        return jsonify({'status': 'blocked', 'reason': 'stow_in_progress'}), 503
+    if is_drive_ramp_active():
+        return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
+    if reg.lock_mode == 2:
+        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
+    if not is_drive_safe():
+        return jsonify({'status': 'blocked', 'reason': block_reason() or 'vesc_unsafe'}), 503
+    return None
+
+
+def _dome_gate():
+    """Same as _drive_gate but for dome rotation. Skips the VESC safety
+    check (dome motor is independent of propulsion VESCs) and uses the
+    dome-specific safety ramp flag."""
+    if reg.estop_active:
+        return jsonify({'status': 'blocked', 'reason': 'estop'}), 403
+    if getattr(reg, 'stow_in_progress', False):
+        return jsonify({'status': 'blocked', 'reason': 'stow_in_progress'}), 503
+    if is_dome_ramp_active():
+        return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
+    if reg.lock_mode == 2:
+        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
+    return None
+
+
 # ------------------------------------------------------------------
 # Propulsion
 # ------------------------------------------------------------------
@@ -69,15 +122,14 @@ def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
 @motion_bp.post('/drive')
 def drive():
     """Differential drive. Body: {"left": float, "right": float}"""
-    if reg.lock_mode == 2:
-        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
-    if not is_drive_safe():
-        return jsonify({'status': 'blocked', 'reason': block_reason() or 'vesc_unsafe'}), 503
+    blocked = _drive_gate()
+    if blocked is not None:
+        return blocked
 
     body  = request.get_json(silent=True) or {}
     reg.web_last_drive_t = time.time()
-    left  = _clamp(float(body.get('left',  0.0)))
-    right = _clamp(float(body.get('right', 0.0)))
+    left  = _clamp(_safe_float(body.get('left',  0.0)))
+    right = _clamp(_safe_float(body.get('right', 0.0)))
 
     cancel_ramp()                             # cancel any ongoing ramp-down
     motion_watchdog.feed_drive(left, right)   # feed the watchdog
@@ -92,15 +144,14 @@ def drive():
 @motion_bp.post('/arcade')
 def arcade():
     """Arcade drive. Body: {"throttle": float, "steering": float}"""
-    if reg.lock_mode == 2:
-        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
-    if not is_drive_safe():
-        return jsonify({'status': 'blocked', 'reason': block_reason() or 'vesc_unsafe'}), 503
+    blocked = _drive_gate()
+    if blocked is not None:
+        return blocked
 
     body     = request.get_json(silent=True) or {}
     reg.web_last_drive_t = time.time()
-    throttle = _clamp(float(body.get('throttle', 0.0)))
-    steering = _clamp(float(body.get('steering', 0.0)))
+    throttle = _clamp(_safe_float(body.get('throttle', 0.0)))
+    steering = _clamp(_safe_float(body.get('steering', 0.0)))
 
     left  = _clamp(throttle + steering)
     right = _clamp(throttle - steering)
@@ -139,9 +190,13 @@ def motion_state():
 @motion_bp.post('/dome/turn')
 def dome_turn():
     """Dome rotation. Body: {"speed": float}"""
+    blocked = _dome_gate()
+    if blocked is not None:
+        return blocked
+
     body  = request.get_json(silent=True) or {}
     reg.web_last_dome_t = time.time()
-    speed = _clamp(float(body.get('speed', 0.0)))
+    speed = _clamp(_safe_float(body.get('speed', 0.0)))
 
     motion_watchdog.feed_dome(speed)          # feed the watchdog
 

@@ -138,12 +138,29 @@ class MotionWatchdog:
             self._drive_active = False
         log.warning("MotionWatchdog: command timeout — gradual propulsion stop")
         stop_drive()   # ramp proportional to current speed
+        # Clear BT controller keep-alive state — without this, the BT
+        # _drive_keepalive_loop (running at 3 Hz with the last joystick
+        # value cached in _last_drive) keeps calling _do_drive(L, R) after
+        # our cut, which calls cancel_ramp() AND motion_watchdog.feed_drive()
+        # — re-arming the watchdog and resuming the drive we just cut.
+        # The keep-alive thread already gates on estop/lock/vesc_unsafe, but
+        # none of those fire on a WiFi outage that triggered THIS watchdog.
+        try:
+            if reg.bt_ctrl:
+                reg.bt_ctrl.clear_drive_state()
+        except Exception:
+            log.exception("MotionWatchdog: failed to clear BT drive state")
 
     def _stop_dome(self) -> None:
         with self._lock:
             self._dome_active = False
         log.warning("MotionWatchdog: command timeout — gradual dome stop")
         stop_dome()
+        try:
+            if reg.bt_ctrl:
+                reg.bt_ctrl.clear_dome_state()
+        except Exception:
+            log.exception("MotionWatchdog: failed to clear BT dome state")
 
 
 # Singleton global

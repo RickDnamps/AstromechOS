@@ -66,11 +66,53 @@ DEADZONE     = 0.08   # below this → immediate stop
 _cancel_drive = threading.Event()
 _cancel_dome  = threading.Event()
 
+# True while a safety ramp is actively running. Set by stop_drive /
+# stop_dome BEFORE the ramp thread starts, cleared by the ramp thread on
+# completion. Two separate events so a drive ramp completing first cannot
+# prematurely re-open the gate for a still-running dome ramp (or vice
+# versa). cancel_ramp() becomes a NO-OP while either is set; callers
+# (motion_bp, bt_controller, choreo_player) also refuse the matching
+# motion command so a stale /motion/drive can't abort the anti-tip ramp.
+# The ramp is short (≤400ms) — worth holding the gate that long to
+# guarantee the 30kg+ R2 chassis decelerates without tipping.
+_drive_ramp_active = threading.Event()
+_dome_ramp_active  = threading.Event()
+
 
 def cancel_ramp():
-    """Cancel any ongoing ramp — called when the app sends a new command."""
+    """Cancel any ongoing ramp.
+
+    NO-OP while EITHER a drive or dome safety ramp is active (watchdog
+    or E-STOP triggered). Without this guard, a stale /motion/drive
+    arriving during the 400ms anti-tip ramp would set _cancel_drive,
+    the ramp thread would exit early without sending the final M:0,0,
+    and the robot would keep rolling at the last commanded speed.
+    """
+    if _drive_ramp_active.is_set() or _dome_ramp_active.is_set():
+        log.debug("cancel_ramp(): no-op — safety ramp in progress")
+        return
     _cancel_drive.set()
     _cancel_dome.set()
+
+
+def is_drive_ramp_active() -> bool:
+    """True iff a drive (propulsion) safety ramp is currently running."""
+    return _drive_ramp_active.is_set()
+
+
+def is_dome_ramp_active() -> bool:
+    """True iff a dome safety ramp is currently running."""
+    return _dome_ramp_active.is_set()
+
+
+def is_safety_ramp_active() -> bool:
+    """True iff ANY safety ramp (drive or dome) is currently running.
+
+    Read by callers that want to refuse any motion (e.g. choreo player
+    abort path). For finer gating, use is_drive_ramp_active() /
+    is_dome_ramp_active().
+    """
+    return _drive_ramp_active.is_set() or _dome_ramp_active.is_set()
 
 
 def stop_drive(vesc=None, uart=None) -> None:
@@ -94,28 +136,39 @@ def stop_drive(vesc=None, uart=None) -> None:
         return
 
     _cancel_drive.clear()
+    # Set the safety-ramp gate BEFORE the thread starts so any concurrent
+    # /motion/drive arriving in the gap between this line and the thread
+    # entering its loop is still refused. Cleared in the thread's finally.
+    _drive_ramp_active.set()
     duration_ms = int(max_speed * RAMP_MAX_MS)
     steps       = max(3, duration_ms // RAMP_STEP_MS)
     interval    = duration_ms / 1000.0 / steps
 
     log.warning(
-        "SafeStop drive: %.2f,%.2f → 0 in %dms (%d steps)",
+        "SafeStop drive: %.2f,%.2f → 0 in %dms (%d steps) — safety ramp active",
         left, right, duration_ms, steps
     )
 
     def _ramp():
-        for i in range(1, steps + 1):
-            if _cancel_drive.is_set():
-                log.info("SafeStop drive: ramp cancelled (new command received)")
-                return
-            factor = 1.0 - (i / steps)   # 1.0 → 0.0
-            l = left  * factor
-            r = right * factor
-            _send_drive(v, u, l, r)
-            time.sleep(interval)
-        # Final guaranteed stop
-        _send_drive(v, u, 0.0, 0.0)
-        log.info("SafeStop drive: gradual stop complete")
+        try:
+            for i in range(1, steps + 1):
+                # cancel_ramp() is gated on _drive_ramp_active so it cannot
+                # set _cancel_drive while we're running. This branch only
+                # fires if something explicitly bypasses the gate (e.g. test
+                # code) — keep it as a defensive exit.
+                if _cancel_drive.is_set():
+                    log.info("SafeStop drive: ramp cancelled (defensive)")
+                    return
+                factor = 1.0 - (i / steps)   # 1.0 → 0.0
+                l = left  * factor
+                r = right * factor
+                _send_drive(v, u, l, r)
+                time.sleep(interval)
+            # Final guaranteed stop
+            _send_drive(v, u, 0.0, 0.0)
+            log.info("SafeStop drive: gradual stop complete")
+        finally:
+            _drive_ramp_active.clear()
 
     threading.Thread(target=_ramp, daemon=True, name="safe-stop-drive").start()
 
@@ -134,19 +187,24 @@ def stop_dome(dome=None, uart=None) -> None:
         return
 
     _cancel_dome.clear()
+    _dome_ramp_active.set()
     duration_ms = int(abs(speed) * RAMP_MAX_MS)
     steps       = max(3, duration_ms // RAMP_STEP_MS)
     interval    = duration_ms / 1000.0 / steps
 
-    log.warning("SafeStop dome: %.2f → 0 in %dms", speed, duration_ms)
+    log.warning("SafeStop dome: %.2f → 0 in %dms — safety ramp active", speed, duration_ms)
 
     def _ramp():
-        for i in range(1, steps + 1):
-            if _cancel_dome.is_set():
-                return
-            _send_dome(d, u, speed * (1.0 - i / steps))
-            time.sleep(interval)
-        _send_dome(d, u, 0.0)
+        try:
+            for i in range(1, steps + 1):
+                if _cancel_dome.is_set():
+                    log.info("SafeStop dome: ramp cancelled (defensive)")
+                    return
+                _send_dome(d, u, speed * (1.0 - i / steps))
+                time.sleep(interval)
+            _send_dome(d, u, 0.0)
+        finally:
+            _dome_ramp_active.clear()
 
     threading.Thread(target=_ramp, daemon=True, name="safe-stop-dome").start()
 

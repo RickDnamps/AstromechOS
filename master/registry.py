@@ -90,6 +90,13 @@ bt_ctrl: 'BTControllerDriver | None' = None
 # Reset to False by /system/estop_reset and /bt/estop_reset
 estop_active: bool = False
 
+# Stow in progress — True between /system/estop_reset firing and the
+# slow-stow sequence (_safe_home) completing. Drive/dome/choreo APIs
+# refuse motion commands during this window so a stale /motion/drive
+# (from a holding-down joystick that resumed after E-STOP reset) cannot
+# resume motion while servos are still slewing to safe positions.
+stow_in_progress: bool = False
+
 # Timestamp of last drive/dome command from web/Android (priority over BT gamepad)
 web_last_drive_t: float = 0.0
 web_last_dome_t:  float = 0.0

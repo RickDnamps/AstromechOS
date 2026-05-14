@@ -610,9 +610,30 @@ class BTControllerDriver:
         from master.vesc_safety import is_drive_safe
         return not is_drive_safe()
 
+    def clear_drive_state(self) -> None:
+        """Reset keep-alive drive tracking. Called by MotionWatchdog after
+        cutting drive so the next keep-alive tick won't re-fire the stale
+        last command. Public API — called externally with no lock since
+        the assignment is atomic in CPython and the keep-alive loop reads
+        _drive_active first (defensive check at line 375)."""
+        self._drive_active = False
+        self._last_drive   = (0.0, 0.0)
+
+    def clear_dome_state(self) -> None:
+        """Same as clear_drive_state but for dome rotation."""
+        self._dome_active = False
+        self._last_dome   = 0.0
+
     def _do_drive(self, left: float, right: float, reg) -> None:
         from master.motion_watchdog import motion_watchdog
-        from master.safe_stop import cancel_ramp
+        from master.safe_stop import cancel_ramp, is_drive_ramp_active
+        # Refuse to send drive commands while the anti-tip safety ramp is
+        # in progress. The user joystick may resume immediately AFTER the
+        # ramp completes (≤400ms) — that's the design intent. The gate
+        # also prevents the keep-alive thread from re-feeding the watchdog
+        # mid-ramp (which would re-arm it and resume the cut drive).
+        if is_drive_ramp_active() or getattr(reg, 'stow_in_progress', False):
+            return
         cancel_ramp()
         motion_watchdog.feed_drive(left, right)
         if reg.vesc:
@@ -630,6 +651,9 @@ class BTControllerDriver:
 
     def _do_dome(self, speed: float, reg) -> None:
         from master.motion_watchdog import motion_watchdog
+        from master.safe_stop import is_dome_ramp_active
+        if is_dome_ramp_active() or getattr(reg, 'stow_in_progress', False):
+            return
         if abs(speed) > 0.01:
             motion_watchdog.feed_dome(speed)
             if reg.dome:

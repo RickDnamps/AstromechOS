@@ -524,6 +524,14 @@ def system_estop_reset():
         except Exception:
             pass
 
+    # stow_in_progress gates /motion/drive, /motion/arcade and
+    # /motion/dome/turn so a stale joystick request arriving immediately
+    # after estop_reset (or a user mashing the joystick during the
+    # stow sequence) cannot resume motion while servos are still slewing
+    # to safe positions. Cleared in the finally below so the gate
+    # always re-opens even if a step raises.
+    reg.stow_in_progress = True
+
     def _safe_home():
         # Lazy import to avoid a circular dependency between the two blueprints.
         from master.api.servo_bp import (
@@ -619,5 +627,16 @@ def system_estop_reset():
             for dt in dome_threads:
                 dt.join(timeout=5.0)
 
-    threading.Thread(target=_safe_home, name='safehome', daemon=True).start()
+    def _safe_home_runner():
+        """Wrapper around _safe_home that ALWAYS clears stow_in_progress on
+        exit — even if _safe_home raises. Without the try/finally, an
+        unexpected exception (e.g. servo driver disconnect during stow)
+        would leave the gate set forever, refusing all subsequent motion."""
+        try:
+            _safe_home()
+        finally:
+            reg.stow_in_progress = False
+            log.info("Safe-home complete — motion gate re-opened")
+
+    threading.Thread(target=_safe_home_runner, name='safehome', daemon=True).start()
     return jsonify({'status': 'reset'})
