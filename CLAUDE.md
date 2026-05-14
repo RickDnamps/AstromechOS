@@ -233,6 +233,8 @@ SSH     artoo / deetoo
 | 4+++++++++++++++++ | E-STOP servo freeze pattern (driver `_frozen` flag + UART `FREEZE:1/0`) · UI `emergencyStop()` ne race plus close_all contre le freeze · Reset E-STOP utilise `DOME_SERVOS` (fix ImportError silencieux) | ✅ |
 | 4++++++++++++++ | Heartbeat ACK age tracking · UART buffer keep-trailing 256B · /status local.cfg cache TTL · StatusPoller in-flight · heartbeat visibility-aware | ✅ |
 | 4+++++++++++++++ | UART RTT histogramme + `/diagnostics/uart_rtt` + bouton MEASURE/APPLY dans Settings · hot-swap `body_servo_uart_lat` (no reboot) | ✅ |
+| 4++++++++++++++++ | Choreo full audit (2026-05-13, 33 items): scroll fix · path traversal · XSS escape · atomic .chor write · audio race lock · parallel servo reset (14× faster) · newChor schema · listener leaks · 11 patterns. Commits `31886ff..d38cf0f` | ✅ |
+| 4+++++++++++++++++ | Drive full audit (2026-05-14, 44 items): estop_active gate · uncancellable safety ramp · BT keep-alive clear · Pointer Events joystick · multi-touch pointerId · NaN guard · vesc_safety atomic snapshot · CAN recovery hysteresis · stow_in_progress gate · arcade ratio normalize · kids cap server-side · HUD rAF batching · 17 patterns. Commits `98c7e16..ceb0d96` | ✅ |
 | 5 | Caméra USB stream ✅ · caméra permanente commandée · suivi personne AI | 📋 |
 
 **Watchdogs :** app 600ms · drive 800ms · slave UART 500ms → coupe VESCs
@@ -246,7 +248,18 @@ SSH     artoo / deetoo
 **VESC safety :** `master/vesc_safety.py` source unique. `is_drive_safe()` utilisé par motion_bp / bt_controller / choreo_player (None telem = block sauf bench mode). `block_reason()` retourne tokens stables (`vesc_l_offline`, `vesc_r_stale`, `vesc_l_fault`).
 **Slave reboot resync :** Slave envoie `BOOT:READY:CRC` à `uart.start()`. Master register `BOOT` callback → re-push `VCFG:scale` + `VINV:L/R`. Pas de drift de config après reboot Slave.
 **Paired-side CAN liveness :** si VESC2 (CAN ID 2) silencieux N reads consécutifs, Slave set `_can_lost=True` → `drive()` refuse + envoie synthetic `TR:fault=99` (CAN_LOST) → safety gate Master trip immédiatement (pas d'attente staleness 2s).
-**Joystick :** throttle 60 req/s · **WASD** = propulsion · **Arrow keys** = dome rotation (séparés).
+**Joystick :** throttle 60 req/s · **WASD** = propulsion · **Arrow keys** = dome rotation (séparés). Built on Pointer Events + `setPointerCapture(pointerId)` so drag-out-of-window can't strand the keep-alive at full deflection; per-joystick `_pointerId` disambiguates multi-touch (one finger per ring). `window.blur` force-releases both + clears `_keys{}`. `_postMotion()` single-in-flight slot prevents stale arcade POSTs landing after `driveStop`.
+
+**Lock modes (3-tier) :**
+- **Mode 0 — Normal** : full drive at user speed slider.
+- **Mode 1 — Kids Mode** : drive enabled, capped at `kids_speed_limit` (default 0.5). Dome + sounds free.
+- **Mode 2 — Child Lock** : drive blocked. Dome + sounds + lights **intentionally still free** — hand the tablet to a young child so they can play with sounds/dome/lights without risking the 30kg+ chassis. The right joystick has no lock check by design (audit F-8 reclassed as non-bug 2026-05-14).
+- Kids cap applied server-side in `motion_bp._kids_cap()` so web/Android/BT paths all enforce it (was BT-only before audit).
+
+**Drive safety chain (every motion endpoint):**
+`/motion/drive`, `/motion/arcade`, `/motion/dome/turn` pass through `_drive_gate()`/`_dome_gate()` in `motion_bp.py` which checks (in order): `reg.estop_active` → 403 · `reg.stow_in_progress` → 503 · `safe_stop.is_drive_ramp_active()` / `is_dome_ramp_active()` → 503 · `reg.lock_mode == 2` → 403 · `vesc_safety.is_drive_safe()` (drive only) → 503 · then `_kids_cap()` → watchdog feed → driver. Input parsed via `_safe_float()` (rejects NaN/Inf/non-numeric → 0.0).
+
+**Safety ramp (anti-tip) :** `safe_stop.stop_drive()/stop_dome()` set `_drive_ramp_active`/`_dome_ramp_active` events BEFORE the ramp thread starts. `cancel_ramp()` is a no-op while either is set. New /motion/drive POSTs and BT `_do_drive` calls are refused during the ramp (≤400ms) so a stale joystick command can't abort the anti-tip deceleration. The ramp itself is intentional (NOT a hard cut — hard cut would tip the 30kg robot forward).
 **Caméra :** MJPEG proxy last-connect-wins · `astromech-camera.service` Restart=always + watchdog `/dev/videoN` dans `scripts/camera-start.sh`. (`bd memories camera` pour détails)
 **Service worker cache :** `astromech-<commit>` injecté dynamiquement par Flask `/static/sw.js` → cache invalidé à chaque deploy.
 **Heartbeat UI :** désactivé quand tab hidden (visibilitychange) — AppWatchdog cut motion proprement, plus d'incertitude liée au throttling browser.
