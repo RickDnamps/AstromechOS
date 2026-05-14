@@ -16,6 +16,50 @@ TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
 
 from shared.paths import DOME_ANGLES as _DOME_ANGLES_PATH, SLAVE_ANGLES as _BODY_ANGLES_PATH, LOCAL_CFG as _LOCAL_CFG
 
+# Module-level imports of helper modules previously re-imported inside the
+# dispatch hot loop on every event. None of these modules touches Flask
+# request state at import time, so resolving them once at startup is safe;
+# the dispatch loop just references the module-level names.
+#
+# `except ImportError` (not `except Exception`) — per project rule
+# feedback_silent_import_swallow.md: a broad catch around imports masks
+# typos and refactor bugs. ImportError narrows the catch to genuine
+# "module/symbol unavailable" cases, and falls back to safe defaults so
+# the player keeps running (degraded) instead of crashing.
+try:
+    from master.api.servo_bp import (
+        _read_panels_cfg     as _servo_read_panels_cfg,
+        _read_arms_cfg       as _servo_read_arms_cfg,
+        _arm_servo_set       as _servo_arm_set,
+        _launch_arm_sequences as _servo_launch_arms,
+        _panel_angle         as _servo_panel_angle,
+        BODY_SERVOS          as _SERVO_BODY,
+        DOME_SERVOS          as _SERVO_DOME,
+    )
+    _SERVO_HELPERS_OK = True
+except ImportError:
+    log.exception(
+        "servo_bp helpers unavailable — choreo bulk/duration paths "
+        "will fall back to instant dispatch (calibrated speed)"
+    )
+    _servo_read_panels_cfg = _servo_read_arms_cfg = None
+    _servo_arm_set         = _servo_launch_arms   = _servo_panel_angle = None
+    _SERVO_BODY: list      = []
+    _SERVO_DOME: list      = []
+    _SERVO_HELPERS_OK      = False
+
+try:
+    from master.vesc_safety import is_drive_safe as _vesc_is_drive_safe, block_reason as _vesc_block_reason
+    _VESC_SAFETY_OK = True
+except ImportError:
+    log.exception(
+        "master.vesc_safety unavailable — choreo propulsion will be "
+        "REFUSED for safety (no telemetry-gated drive)"
+    )
+    def _vesc_is_drive_safe() -> bool: return False
+    def _vesc_block_reason()  -> str:  return 'vesc_safety_unavailable'
+    _VESC_SAFETY_OK = False
+
 _SERVO_SPECIAL = ('all', 'all_dome', 'all_body')
 
 # Delay between body panel open and arm extension (and between arm close and panel close)
@@ -119,10 +163,19 @@ class ChoreoPlayer:
             if cfg is not None else 0.05
         )
 
-        # Audio slot scheduler
-        self._audio_channels: int = (
+        # Audio slot scheduler. Clamp to [1, 12]: 0 from a corrupted config
+        # would silently drop every audio event (empty slot list → no slot
+        # ever assigned), and >12 wastes memory + exceeds mpg123 practical
+        # polyphony on a Pi 4B.
+        _raw_channels = (
             cfg.getint('audio', 'audio_channels', fallback=6) if cfg is not None else 6
         )
+        self._audio_channels: int = max(1, min(12, _raw_channels))
+        if self._audio_channels != _raw_channels:
+            log.warning(
+                "audio_channels=%s out of [1..12] — clamped to %s",
+                _raw_channels, self._audio_channels,
+            )
         self._audio_slots: list[dict | None]             = [None] * self._audio_channels
         self._audio_timers: list[threading.Timer | None] = [None] * self._audio_channels
 
@@ -294,7 +347,13 @@ class ChoreoPlayer:
                 except Exception:
                     pass
             self._arm_timers.clear()
-        if self._thread:
+        # Guard against self-join: if a future code path inside the dispatch
+        # thread ever calls stop() (e.g. a safety hook that wants to abort
+        # the very sequence it's executing), `Thread.join()` from the thread
+        # itself raises `RuntimeError: cannot join current thread`. Skip the
+        # join in that case — the dispatch loop already sees _stop_flag and
+        # will exit on its own at the next event boundary.
+        if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2.0)
         with self._status_lock:
             self._status.update({'playing': False, 't_now': 0.0})
@@ -703,13 +762,12 @@ class ChoreoPlayer:
 
                     if panel:
                         # Resolve calibrated angles for any segment that will slew.
-                        if panel_dur > 0 or arm_dur > 0:
+                        if (panel_dur > 0 or arm_dur > 0) and _SERVO_HELPERS_OK:
                             try:
-                                from master.api.servo_bp import _read_panels_cfg, _panel_angle
-                                _cfg = _read_panels_cfg()
+                                _cfg = _servo_read_panels_cfg()
                                 _direction = 'open' if action == 'open' else 'close'
-                                _panel_a   = float(_panel_angle(panel, _direction, _cfg))
-                                _arm_a     = float(_panel_angle(servo, _direction, _cfg))
+                                _panel_a   = float(_servo_panel_angle(panel, _direction, _cfg))
+                                _arm_a     = float(_servo_panel_angle(servo, _direction, _cfg))
                             except Exception:
                                 log.exception("Arm slew angle resolution failed — falling back to instant")
                                 _panel_a = _arm_a = None
@@ -797,37 +855,32 @@ class ChoreoPlayer:
                 # legacy fast path (open_all / per-servo open with the
                 # calibrated speed parameter).
                 if is_all_dome and self._dome_servo:
-                    if dur_s > 0:
-                        from master.api.servo_bp import (
-                            _read_panels_cfg, _panel_angle, DOME_SERVOS,
-                        )
-                        _cfg = _read_panels_cfg()
+                    if dur_s > 0 and _SERVO_HELPERS_OK:
+                        _cfg = _servo_read_panels_cfg()
                         _dir = 'open' if action == 'open' else 'close'
-                        for _name in DOME_SERVOS:
-                            _a = float(_panel_angle(_name, _dir, _cfg))
+                        for _name in _SERVO_DOME:
+                            _a = float(_servo_panel_angle(_name, _dir, _cfg))
                             self._launch_servo_slew(self._dome_servo, _name, _a, dur_s, easing)
                     else:
+                        # Fast path: legacy fire-and-forget per-servo calibrated speed.
+                        # Also the fallback if _SERVO_HELPERS_OK is False — better to
+                        # do something at instant speed than refuse the block entirely.
                         if action == 'open':
                             self._dome_servo.open_all()
                         else:
                             self._dome_servo.close_all()
                     return
                 if is_all_body:
-                    if self._body_servo:
-                        from master.api.servo_bp import (
-                            _read_panels_cfg, _read_arms_cfg,
-                            _arm_servo_set, _launch_arm_sequences,
-                            _panel_angle, BODY_SERVOS,
-                        )
-                        cfg_panels = _read_panels_cfg()
-                        arms_cfg   = _read_arms_cfg()
-                        arm_set    = _arm_servo_set()
+                    if self._body_servo and _SERVO_HELPERS_OK:
+                        cfg_panels = _servo_read_panels_cfg()
+                        arms_cfg   = _servo_read_arms_cfg()
+                        arm_set    = _servo_arm_set()
                         _dir = 'open' if action == 'open' else 'close'
-                        for _name in BODY_SERVOS:
+                        for _name in _SERVO_BODY:
                             if _name in arm_set:
                                 continue
                             if dur_s > 0:
-                                _a = float(_panel_angle(_name, _dir, cfg_panels))
+                                _a = float(_servo_panel_angle(_name, _dir, cfg_panels))
                                 self._launch_servo_slew(self._body_servo, _name, _a, dur_s, easing)
                             else:
                                 _panel = cfg_panels['panels'].get(_name, {})
@@ -857,7 +910,7 @@ class ChoreoPlayer:
                         # drop a separate `arm_servos` block per arm with
                         # PANEL DURATION / DELAY / ARM DURATION set explicitly
                         # (those are honoured per-block).
-                        _launch_arm_sequences(arms_cfg, cfg_panels, action)
+                        _servo_launch_arms(arms_cfg, cfg_panels, action)
                     return
 
                 # Resolve target angle.
@@ -870,12 +923,11 @@ class ChoreoPlayer:
                 #   - no target and no duration → instant dispatch (uses speed)
                 if target is not None:
                     angle = max(10.0, min(170.0, float(target)))
-                elif dur_s > 0:
+                elif dur_s > 0 and _SERVO_HELPERS_OK:
                     try:
-                        from master.api.servo_bp import _read_panels_cfg, _panel_angle
-                        _panels_cfg = _read_panels_cfg()
+                        _panels_cfg = _servo_read_panels_cfg()
                         _direction  = 'open' if action == 'open' else 'close'
-                        angle = float(_panel_angle(servo, _direction, _panels_cfg))
+                        angle = float(_servo_panel_angle(servo, _direction, _panels_cfg))
                     except Exception:
                         log.exception("Failed to resolve calibrated angle for %s — falling back to instant dispatch", servo)
                         angle = None
@@ -905,9 +957,8 @@ class ChoreoPlayer:
                 else:
                     # VESC safety gate: refuse propulsion if either side is offline,
                     # stale, or faulted (bench mode bypasses the check).
-                    from master.vesc_safety import is_drive_safe, block_reason
-                    if not is_drive_safe():
-                        reason = block_reason() or 'vesc_unsafe'
+                    if not _vesc_is_drive_safe():
+                        reason = _vesc_block_reason() or 'vesc_unsafe'
                         log.error(
                             f"ChoreoPlayer: propulsion blocked ({reason}) — ABORT "
                             f"[{self._status.get('name')}]"
@@ -931,8 +982,15 @@ class ChoreoPlayer:
                             self._abort_reason = 'uart_loss'
                             self._stop_flag.set()
 
-        except Exception as e:
-            log.error(f"Choreo dispatch error [{ev.get('track')} t={ev.get('t')}]: {e}")
+        except Exception:
+            # log.exception preserves the full traceback — invaluable when a
+            # programming bug slips through the dispatch hot path. log.error
+            # (the previous behaviour) discarded the stack and left only the
+            # message, making post-mortem debugging much harder.
+            log.exception(
+                "Choreo dispatch error [%s t=%s]",
+                ev.get('track'), ev.get('t'),
+            )
 
     def _check_telem(self) -> None:
         """Read telemetry and abort if any threshold is exceeded."""
@@ -947,6 +1005,7 @@ class ChoreoPlayer:
 
         self._last_telem = telem
 
+        healthy_sides = 0
         for side in ('L', 'R'):
             data = telem.get(side)
             if data is None:
@@ -982,6 +1041,22 @@ class ChoreoPlayer:
                 self._abort_reason = 'overcurrent'
                 self._stop_flag.set()
                 return
+
+            healthy_sides += 1
+
+        # If at least one side reported fresh, in-threshold telemetry, the
+        # UART pipe is alive and the VESCs are reachable. Clear any transient
+        # drive-fail count so old `vesc.drive()` write failures don't
+        # accumulate over a long sequence and trip the 3-strike abort hours
+        # later on an unrelated blip. Without this reset, a counter of 2
+        # left over from a t=10s glitch will abort the choreo on the very
+        # next failure at t=120s.
+        if healthy_sides > 0 and self._drive_fail_count > 0:
+            log.debug(
+                "ChoreoPlayer: telem healthy — clearing drive_fail_count (was %d)",
+                self._drive_fail_count,
+            )
+            self._drive_fail_count = 0
 
     def _safe_stop_all(self) -> None:
         # NOTE: self._audio is UARTController — use send(), NEVER .stop() (that closes serial)
