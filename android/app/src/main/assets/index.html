@@ -880,11 +880,14 @@
           <div class="chor-props-title" style="border:none;margin-bottom:4px">EASING</div>
           <canvas id="chor-easing-canvas" width="184" height="70"
             style="width:100%;border:1px solid var(--border);border-radius:3px;background:var(--bg3)"></canvas>
+          <!-- Easing buttons use data-easing instead of inline onclick — the
+               wiring lives in choreoEditor.init()'s globals-bind block so it
+               survives tab switches without leaking listeners (CSP-friendly). -->
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
-            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('linear')">LINEAR</button>
-            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-in')">EASE IN</button>
-            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-out')">EASE OUT</button>
-            <button class="chor-ease-btn" onclick="choreoEditor.setEasing('ease-in-out')">IN-OUT</button>
+            <button type="button" class="chor-ease-btn" data-easing="linear">LINEAR</button>
+            <button type="button" class="chor-ease-btn" data-easing="ease-in">EASE IN</button>
+            <button type="button" class="chor-ease-btn" data-easing="ease-out">EASE OUT</button>
+            <button type="button" class="chor-ease-btn" data-easing="ease-in-out">IN-OUT</button>
           </div>
         </div>
 

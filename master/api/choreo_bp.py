@@ -1,7 +1,20 @@
 """
-Blueprint Flask — Choreography API
-Routes: /choreo/play, /choreo/stop, /choreo/status,
-        /choreo/list, /choreo/load, /choreo/save, /choreo/export_scr
+Flask blueprint — Choreography API.
+
+Routes:
+  /choreo/list          GET    enumerate saved choreographies + metadata
+  /choreo/load          GET    fetch a single .chor (with on-disk migration)
+  /choreo/save          POST   write/overwrite a .chor (atomic, locked)
+  /choreo/delete        DELETE remove a .chor (admin only via global guard)
+  /choreo/rename        POST   rename a .chor (atomic, locked)
+  /choreo/set-category  POST   meta.category mutation
+  /choreo/set-emoji     POST   meta.emoji mutation
+  /choreo/set-label     POST   meta.label mutation
+  /choreo/categories    GET/POST  ordered list of user categories
+  /choreo/play          POST   start the player (handles stop+reset+play)
+  /choreo/stop          POST   stop the player
+  /choreo/status        GET    current playback state + telemetry
+  /choreo/export_scr    POST   convert to legacy .scr sequential format
 """
 import configparser
 import json

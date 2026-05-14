@@ -6323,12 +6323,20 @@ const choreoEditor = (() => {
 
     const banner = document.createElement('div');
     banner.id = 'chor-vesc-banner';
+    // Theme-aware now \u2014 was hard-coded #3a0010 / #2a1a00 dark-red/amber
+    // palettes regardless of active theme. Same pattern as _BNR_ERR/WARN
+    // but with the wider banner layout (justify-content:space-between).
+    const _common = 'padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center;border:1px solid';
     banner.style.cssText = invertMismatch
-      ? 'background:#3a0010;border:1px solid #ff2244;color:#ff6688;padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center'
-      : 'background:#2a1a00;border:1px solid #ff8800;color:#ffaa44;padding:6px 10px;margin:4px 0;font-size:11px;border-radius:3px;display:flex;justify-content:space-between;align-items:center';
+      ? `${_common} var(--red);background:rgba(255,34,68,.12);color:var(--status-err)`
+      : `${_common} var(--amber);background:rgba(255,179,0,.10);color:var(--status-warn)`;
     banner.innerHTML =
       `<span>${lines.join(' &nbsp;|&nbsp; ')}</span>` +
-      `<button onclick="this.parentElement.remove()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px">\u2715</button>`;
+      `<button type="button" class="chor-banner-close" style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;padding:0 4px">\u2715</button>`;
+    // addEventListener instead of inline onclick=... \u2014 CSP-compatible and
+    // consistent with the rest of the modern app (toast/cockpit/etc.).
+    banner.querySelector('.chor-banner-close')
+      .addEventListener('click', () => banner.remove());
 
     const slot = document.getElementById('chor-banner-slot');
     if (slot) { slot.innerHTML = ''; slot.appendChild(banner); }
@@ -6822,12 +6830,18 @@ const choreoEditor = (() => {
     const c = _TRACK_COLOR[track] || '#00ccff';
     el.innerHTML =
       `<div style="display:flex;align-items:center;justify-content:space-between">
-         <span style="font-size:11px;letter-spacing:2px;color:rgba(0,170,255,.4);font-weight:normal">${track.toUpperCase()} :</span>
-         <button onclick="choreoEditor._deleteSelected()"
-           style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0;line-height:1"
+         <span style="font-size:11px;letter-spacing:2px;color:rgba(var(--blue-rgb),.4);font-weight:normal">${escapeHtml(track.toUpperCase())} :</span>
+         <button type="button" class="chor-inspector-delete-btn"
+           style="background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;padding:0;line-height:1"
            title="Delete block">✕</button>
        </div>
        <div style="font-size:10px;color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:1.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${escapeHtml(label)}</div>`;
+    // addEventListener instead of inline onclick — CSP-friendly + the
+    // closure correctly references the CURRENT choreoEditor instance even
+    // if the public API is ever re-exported. Also escapes track name in
+    // case it's ever a user-controlled value (defense in depth).
+    const delBtn = el.querySelector('.chor-inspector-delete-btn');
+    if (delBtn) delBtn.addEventListener('click', () => choreoEditor._deleteSelected());
   }
 
   function _clearInspectorTitle() {
@@ -7740,6 +7754,12 @@ const choreoEditor = (() => {
             e.preventDefault();
             _deleteBlock(_selected.track, _selected.idx);
           }
+        });
+
+        // Easing preset buttons — wired via data-easing attribute instead
+        // of inline onclick handlers in the template (CSP-friendly).
+        document.querySelectorAll('.chor-ease-btn[data-easing]').forEach(btn => {
+          btn.addEventListener('click', () => choreoEditor.setEasing(btn.dataset.easing));
         });
 
         _globalsWired = true;
