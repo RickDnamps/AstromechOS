@@ -889,8 +889,15 @@ function switchTab(tabId) {
   // Stop VESC fast poll when leaving settings/vesc panel
   if (tabId !== 'settings') _stopVescTabPoll();
 
-  // Reset choreo session unlock when leaving the choreo tab
-  if (tabId !== 'choreo') { _choreoUnlocked = false; choreoEditor._stopPolling(); }
+  // Reset choreo session unlock when leaving the choreo tab. Also pause
+  // the _chorMon rAF loop — its dot animations don't auto-pause on
+  // display:none (only on browser-tab hidden), so without this they'd
+  // keep burning Pi CPU while the user is on Drive/Audio/etc.
+  if (tabId !== 'choreo') {
+    _choreoUnlocked = false;
+    choreoEditor._stopPolling();
+    if (typeof _chorMon !== 'undefined' && _chorMon.pause) _chorMon.pause();
+  }
 
   if (tabId === 'choreo') choreoEditor.init();
 }
@@ -1645,7 +1652,15 @@ const _chorMon = (() => {
     },
   };
 
+  // _active gates the rAF loop. rAF is auto-paused by browsers when the
+  // *browser* tab is hidden, but not when this SPA's #tab-choreo container
+  // simply has display:none — so before this gate the dot animations kept
+  // burning CPU on the Pi 4B even when the user was on Drive/Audio/etc.
+  // pause() flips _active=false; the next _loop call sees it and skips
+  // scheduling the next frame. resume() flips it back and re-arms _loop.
+  let _active = false;
   function _loop() {
+    if (!_active) return;
     _tick++;
     if(_mode==='short'){if(_tick-_lastShort>=3){_modes.short(_tick);_lastShort=_tick;}}
     else{(_modes[_mode]||_modes.off)(_tick);}
@@ -1654,7 +1669,11 @@ const _chorMon = (() => {
 
   return {
     init() {
-      if(_running) return;
+      if(_running) {
+        // Already initialised; just resume the rAF loop if it had been paused.
+        if (!_active) { _active = true; requestAnimationFrame(_loop); }
+        return;
+      }
       Object.entries(CFG).forEach(([id,c])=>{
         const e=document.getElementById(id); if(!e||e.querySelector('.sim-dot'))return;
         for(let r=0;r<c.rows;r++){
@@ -1663,7 +1682,15 @@ const _chorMon = (() => {
           e.appendChild(row);
         }
       });
-      _running=true; _loop();
+      _running=true; _active=true; _loop();
+    },
+    pause() {
+      _active = false;
+    },
+    resume() {
+      if (!_running || _active) return;
+      _active = true;
+      requestAnimationFrame(_loop);
     },
     setModeNum(num){ this.setMode(MODE_MAP[num]||'random'); },
     setMode(key) {
