@@ -178,6 +178,16 @@ class ChoreoPlayer:
             )
         self._audio_slots: list[dict | None]             = [None] * self._audio_channels
         self._audio_timers: list[threading.Timer | None] = [None] * self._audio_channels
+        # Guards every read/write of _audio_slots and _audio_timers. Without
+        # this lock the player thread (running _assign_audio_slot inside
+        # _dispatch) races against Timer callback threads (running
+        # _release_slot when an audio block's duration elapses): the Timer
+        # can null out slot[i] while the dispatcher is mid-iteration over
+        # the same array deciding which slot to evict, producing
+        # inconsistent eviction decisions or a double-free of one slot.
+        # Use RLock so _assign_audio_slot can call _release_slot without
+        # dropping the lock between the eviction decision and the release.
+        self._audio_lock = threading.RLock()
 
         self._audio      = audio
         self._teeces     = teeces
@@ -325,8 +335,14 @@ class ChoreoPlayer:
         self._abort_reason     = None
         self._last_telem       = None
         self._last_telem_check = 0.0
-        self._audio_slots  = [None] * self._audio_channels
-        self._audio_timers = [None] * self._audio_channels
+        # Reset slot state before launching the player thread. No other
+        # thread can touch the lists yet (the dispatcher hasn't started,
+        # any Timers from a previous play() were cancelled by stop()), but
+        # take the lock anyway for consistency and to keep the invariant
+        # "_audio_slots/_timers are only mutated under _audio_lock".
+        with self._audio_lock:
+            self._audio_slots  = [None] * self._audio_channels
+            self._audio_timers = [None] * self._audio_channels
         self._stop_flag.clear()
         self._thread = threading.Thread(
             target=self._run, args=(chor,),
@@ -405,15 +421,21 @@ class ChoreoPlayer:
         timers leak across iterations and produce surprising behaviour
         (slots freed mid-playback, drift between iterations, etc.).
         """
-        # Cancel any pending audio-slot release timers and clear slots
-        for i, t in enumerate(self._audio_timers):
-            if t is not None:
-                try:
-                    t.cancel()
-                except Exception:
-                    pass
-                self._audio_timers[i] = None
-        self._audio_slots = [None] * self._audio_channels
+        # Cancel any pending audio-slot release timers and clear slots.
+        # Hold _audio_lock so a Timer that's mid-callback (already past the
+        # is_alive check, about to write _audio_slots[i] = None) can't race
+        # against our clear. Timer.cancel() is safe to call under the lock
+        # — it's atomic and doesn't reacquire any lock the Timer thread
+        # might hold.
+        with self._audio_lock:
+            for i, t in enumerate(self._audio_timers):
+                if t is not None:
+                    try:
+                        t.cancel()
+                    except Exception:
+                        pass
+                    self._audio_timers[i] = None
+            self._audio_slots = [None] * self._audio_channels
         # Cancel any pending arm Timers from the previous iteration
         with self._arm_timers_lock:
             for t in self._arm_timers:
@@ -586,42 +608,64 @@ class ChoreoPlayer:
             })
 
     def _release_slot(self, i: int) -> None:
-        """Cancel the release timer and mark slot i as free."""
-        if 0 <= i < len(self._audio_timers) and self._audio_timers[i]:
-            self._audio_timers[i].cancel()
-            self._audio_timers[i] = None
-        if 0 <= i < len(self._audio_slots):
-            self._audio_slots[i] = None
+        """Cancel the release timer and mark slot i as free.
+
+        Called from two thread contexts:
+          - The player thread (in _dispatch audio stop, in _assign_audio_slot
+            during eviction, in _reset_loop_state).
+          - Timer callback threads — `threading.Timer(duration,
+            self._release_slot, args=(slot,))`.
+        Both paths must take _audio_lock. RLock allows the player-thread
+        callers to nest this inside their own `with self._audio_lock`
+        without deadlocking.
+        """
+        with self._audio_lock:
+            if 0 <= i < len(self._audio_timers) and self._audio_timers[i]:
+                try:
+                    self._audio_timers[i].cancel()
+                except Exception:
+                    pass
+                self._audio_timers[i] = None
+            if 0 <= i < len(self._audio_slots):
+                self._audio_slots[i] = None
 
     def _assign_audio_slot(self, priority: str) -> int | None:
         """
         Return a free slot index, evicting the best candidate if all slots are busy.
         Eviction order: low (oldest first) → normal (oldest first) → never high.
         Returns None if all slots are high-priority (new sound is dropped).
+
+        Holds _audio_lock for the entire decision-and-eviction so a Timer
+        callback can't race in and free a slot between the "all slots are
+        busy" check and the eviction selection. Returns under the lock for
+        the same reason — the caller is expected to immediately write
+        _audio_slots[returned_idx] = new entry under the same lock (see
+        _dispatch audio play path).
         """
-        # 1. Free slot
-        for i, s in enumerate(self._audio_slots):
-            if s is None:
-                return i
-        # 2. Evict by priority
-        for evict_pri in ('low', 'normal'):
-            candidates = [
-                (i, s) for i, s in enumerate(self._audio_slots)
-                if s is not None and s['priority'] == evict_pri
-            ]
-            if candidates:
-                i, _ = min(candidates, key=lambda x: x[1]['started_at'])
-                cmd = 'S' if i == 0 else f'S{i + 1}'
-                if self._audio:
-                    self._audio.send(cmd, 'STOP')
-                self._release_slot(i)
-                return i
-        # 3. All high — drop
-        log.warning(
-            "ChoreoPlayer: all %d audio slots are High-priority — sound dropped",
-            self._audio_channels,
-        )
-        return None
+        with self._audio_lock:
+            # 1. Free slot
+            for i, s in enumerate(self._audio_slots):
+                if s is None:
+                    return i
+            # 2. Evict by priority
+            for evict_pri in ('low', 'normal'):
+                candidates = [
+                    (i, s) for i, s in enumerate(self._audio_slots)
+                    if s is not None and s['priority'] == evict_pri
+                ]
+                if candidates:
+                    i, _ = min(candidates, key=lambda x: x[1]['started_at'])
+                    cmd = 'S' if i == 0 else f'S{i + 1}'
+                    if self._audio:
+                        self._audio.send(cmd, 'STOP')
+                    self._release_slot(i)   # re-entrant — RLock allows this
+                    return i
+            # 3. All high — drop
+            log.warning(
+                "ChoreoPlayer: all %d audio slots are High-priority — sound dropped",
+                self._audio_channels,
+            )
+            return None
 
     def _dispatch(self, ev: dict) -> None:
         try:
@@ -632,36 +676,45 @@ class ChoreoPlayer:
                     return
                 if ev['action'] == 'play':
                     priority = ev.get('priority', 'normal').lower()
-                    slot = self._assign_audio_slot(priority)
-                    if slot is None:
-                        return  # all slots High — sound dropped
-                    cmd = 'S' if slot == 0 else f'S{slot + 1}'
-                    volume = ev.get('volume')
-                    file_val = ev.get('file', '')
-                    if volume is not None:
-                        file_val = f"{file_val}:{int(volume)}"
-                    self._audio.send(cmd, file_val)
-                    duration = ev.get('duration')
-                    self._audio_slots[slot] = {
-                        'sound':      ev.get('file', ''),
-                        'started_at': time.monotonic(),
-                        'priority':   priority,
-                        'duration':   duration,
-                    }
-                    if duration:
-                        t = threading.Timer(float(duration), self._release_slot, args=(slot,))
-                        t.daemon = True
-                        self._audio_timers[slot] = t
-                        t.start()
+                    # Hold _audio_lock across the slot assignment AND the
+                    # follow-up writes (slot entry + Timer registration).
+                    # Without this, a Timer fired between _assign_audio_slot
+                    # returning and the slot/timer writes could free our
+                    # freshly-assigned slot before we finish populating it.
+                    with self._audio_lock:
+                        slot = self._assign_audio_slot(priority)
+                        if slot is None:
+                            return  # all slots High — sound dropped
+                        cmd = 'S' if slot == 0 else f'S{slot + 1}'
+                        volume = ev.get('volume')
+                        file_val = ev.get('file', '')
+                        if volume is not None:
+                            file_val = f"{file_val}:{int(volume)}"
+                        self._audio.send(cmd, file_val)
+                        duration = ev.get('duration')
+                        self._audio_slots[slot] = {
+                            'sound':      ev.get('file', ''),
+                            'started_at': time.monotonic(),
+                            'priority':   priority,
+                            'duration':   duration,
+                        }
+                        if duration:
+                            t = threading.Timer(float(duration), self._release_slot, args=(slot,))
+                            t.daemon = True
+                            self._audio_timers[slot] = t
+                            t.start()
                 elif ev['action'] == 'stop':
                     file_to_stop = ev.get('file')
-                    for i, s in enumerate(self._audio_slots):
-                        if s is None:
-                            continue
-                        if file_to_stop is None or s['sound'] == file_to_stop:
-                            cmd = 'S' if i == 0 else f'S{i + 1}'
-                            self._audio.send(cmd, 'STOP')
-                            self._release_slot(i)
+                    # Iterate + release under one lock so concurrent Timer
+                    # firings don't shift the slot contents mid-loop.
+                    with self._audio_lock:
+                        for i, s in enumerate(self._audio_slots):
+                            if s is None:
+                                continue
+                            if file_to_stop is None or s['sound'] == file_to_stop:
+                                cmd = 'S' if i == 0 else f'S{i + 1}'
+                                self._audio.send(cmd, 'STOP')
+                                self._release_slot(i)
 
             elif track == 'dome':
                 if not self._dome_motor:

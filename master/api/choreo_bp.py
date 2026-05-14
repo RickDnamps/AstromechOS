@@ -22,6 +22,41 @@ choreo_bp = Blueprint('choreo', __name__)
 # fighting over the same drivers.
 _play_lock = threading.Lock()
 
+# Serialize EVERY .chor filesystem mutation (save, set-category, set-emoji,
+# set-label, rename, delete). Multiple Flask worker threads serving these
+# endpoints concurrently would race on the same file:
+#   - Two saves to the same name: undefined contents (interleaved bytes
+#     before the OS flushes either).
+#   - A save racing a delete: half-written file orphaned on disk.
+#   - A rename racing a set-label: meta update overwrites the rename's
+#     new file, or vice versa, losing one of the changes.
+# A single global Lock keeps the implementation simple. Per-file locks
+# would scale better but are overkill at the volume the dashboard sees
+# (dozens of saves/day on a single-user system).
+_chor_file_lock = threading.Lock()
+
+
+def _atomic_write_chor(path: str, chor: dict) -> None:
+    """Atomically replace a .chor file. tmpfile + os.replace ensures that a
+    crash mid-write leaves the original file intact instead of producing a
+    truncated/corrupted .chor.
+
+    Caller MUST hold _chor_file_lock so two concurrent writers can't both
+    create the same .tmp path and one's replace overwrites the other's data.
+    """
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(chor, f, indent=2, ensure_ascii=False)
+        # Force buffered writes to disk before the rename — without this,
+        # a power loss between os.replace returning and the OS flushing
+        # the inode table can still leave an empty file.
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass  # not all filesystems / pseudo-files support fsync
+    os.replace(tmp, path)
+
 from shared.paths import LOCAL_CFG as _LOCAL_CFG
 
 _CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
@@ -259,13 +294,13 @@ def set_choreo_category():
     path, err = _safe_choreo_path(name)
     if err:
         return err
-    if not os.path.exists(path):
-        return jsonify({'error': 'not found'}), 404
-    with open(path, encoding='utf-8') as f:
-        chor = json.load(f)
-    chor.setdefault('meta', {})['category'] = category
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(chor, f, indent=2, ensure_ascii=False)
+    with _chor_file_lock:
+        if not os.path.exists(path):
+            return jsonify({'error': 'not found'}), 404
+        with open(path, encoding='utf-8') as f:
+            chor = json.load(f)
+        chor.setdefault('meta', {})['category'] = category
+        _atomic_write_chor(path, chor)
     return jsonify({'status': 'ok'})
 
 
@@ -279,13 +314,13 @@ def set_choreo_emoji():
     path, err = _safe_choreo_path(name)
     if err:
         return err
-    if not os.path.exists(path):
-        return jsonify({'error': 'not found'}), 404
-    with open(path, encoding='utf-8') as f:
-        chor = json.load(f)
-    chor.setdefault('meta', {})['emoji'] = emoji  # empty string = revert to auto
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(chor, f, indent=2, ensure_ascii=False)
+    with _chor_file_lock:
+        if not os.path.exists(path):
+            return jsonify({'error': 'not found'}), 404
+        with open(path, encoding='utf-8') as f:
+            chor = json.load(f)
+        chor.setdefault('meta', {})['emoji'] = emoji  # empty string = revert to auto
+        _atomic_write_chor(path, chor)
     return jsonify({'status': 'ok'})
 
 
@@ -299,13 +334,13 @@ def set_choreo_label():
     path, err = _safe_choreo_path(name)
     if err:
         return err
-    if not os.path.exists(path):
-        return jsonify({'error': 'not found'}), 404
-    with open(path, encoding='utf-8') as f:
-        chor = json.load(f)
-    chor.setdefault('meta', {})['label'] = label  # empty string = revert to filename
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(chor, f, indent=2, ensure_ascii=False)
+    with _chor_file_lock:
+        if not os.path.exists(path):
+            return jsonify({'error': 'not found'}), 404
+        with open(path, encoding='utf-8') as f:
+            chor = json.load(f)
+        chor.setdefault('meta', {})['label'] = label  # empty string = revert to filename
+        _atomic_write_chor(path, chor)
     return jsonify({'status': 'ok'})
 
 
@@ -325,16 +360,16 @@ def choreo_rename():
     new_path, err = _safe_choreo_path(new_name)
     if err:
         return err
-    if not os.path.exists(old_path):
-        return jsonify({'error': 'not found'}), 404
-    if os.path.exists(new_path):
-        return jsonify({'error': f'"{new_name}" already exists'}), 409
-    with open(old_path, encoding='utf-8') as f:
-        chor = json.load(f)
-    chor.setdefault('meta', {})['name'] = new_name
-    with open(new_path, 'w', encoding='utf-8') as f:
-        json.dump(chor, f, indent=2, ensure_ascii=False)
-    os.remove(old_path)
+    with _chor_file_lock:
+        if not os.path.exists(old_path):
+            return jsonify({'error': 'not found'}), 404
+        if os.path.exists(new_path):
+            return jsonify({'error': f'"{new_name}" already exists'}), 409
+        with open(old_path, encoding='utf-8') as f:
+            chor = json.load(f)
+        chor.setdefault('meta', {})['name'] = new_name
+        _atomic_write_chor(new_path, chor)
+        os.remove(old_path)
     log.info(f"Choreo renamed: {old_name} → {new_name}")
     return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
 
@@ -373,8 +408,8 @@ def choreo_save():
     if err:
         return err
     os.makedirs(_CHOREO_DIR, exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        json.dump(chor, f, indent=2, ensure_ascii=False)
+    with _chor_file_lock:
+        _atomic_write_chor(path, chor)
     log.info(f"Choreo saved: {name}")
     return jsonify({'status': 'ok', 'name': name})
 
@@ -385,14 +420,15 @@ def choreo_delete(name: str):
     path, err = _safe_choreo_path(name)
     if err:
         return err
-    if not os.path.exists(path):
-        return jsonify({'error': 'not found'}), 404
-    try:
-        os.remove(path)
-        log.info(f"Choreo deleted: {name}")
-        return jsonify({'status': 'ok', 'name': name})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    with _chor_file_lock:
+        if not os.path.exists(path):
+            return jsonify({'error': 'not found'}), 404
+        try:
+            os.remove(path)
+            log.info(f"Choreo deleted: {name}")
+            return jsonify({'status': 'ok', 'name': name})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
 
 _BODY_PANELS = [f'Servo_S{i}' for i in range(12)]   # S0–S11 — body panels only (arms excluded)

@@ -6059,7 +6059,16 @@ const choreoEditor = (() => {
   let _pollTimer   = null;
   let _dirty       = false;
   let _existsOnDisk = false;  // true only after an explicit admin Save or loading an existing file
-  let _lanesWired  = false;
+  let _lanesWired   = false;
+  let _paletteWired = false;
+  // _globalsWired covers page-level listeners that should be installed once
+  // for the lifetime of the page, NOT once per Choreo tab switch:
+  //   - ResizeObserver on #chor-scroll
+  //   - document keydown for Delete/Backspace
+  // Before the guard, switching to the Choreo tab 10 times added 10 copies
+  // of each, so a single Delete press deleted 10 blocks. The lanes are
+  // separately guarded by _lanesWired and the palette by _paletteWired.
+  let _globalsWired = false;
   // _busy = an in-flight /choreo/play, /choreo/save or /choreo/stop request.
   // Prevents double-fires from rapid clicks and serializes save↔play so a
   // concurrent save can't race against the server-side play (which reads
@@ -6376,8 +6385,15 @@ const choreoEditor = (() => {
   function _stopMonitor()  { /* _chorMon rAF loop continues — driven by timeline */ }
 
   // Populate the block palette and attach dragstart handlers
-  // Wire the Ultratime source buttons (one per track, already in HTML)
+  // Wire the Ultratime source buttons (one per track, already in HTML).
+  // Idempotent: callable on every Choreo tab switch but only attaches the
+  // dragstart/dragend listeners on the FIRST call. Before the _paletteWired
+  // guard, N tab switches stacked N copies of the dragstart handler on each
+  // .chor-src-btn — so a single drag created N ghost elements and N
+  // dataTransfer.setData calls (last one wins, but cost was real).
   function _initPalette() {
+    if (_paletteWired) return;
+    _paletteWired = true;
     document.querySelectorAll('.chor-src-btn').forEach(btn => {
       // Build a colour-matched drag ghost image
       btn.addEventListener('dragstart', e => {
@@ -7631,24 +7647,35 @@ const choreoEditor = (() => {
     async init() {
       _startMonitor();
       _syncSnapUI();
-      _initPalette();
-      _addDropToLanes();
+      _initPalette();          // guarded internally by _paletteWired below
+      _addDropToLanes();       // already guarded by _lanesWired
 
-      // Re-render on container resize so liquid fill stays accurate
-      const scrollWrap = document.getElementById('chor-scroll');
-      if (scrollWrap && window.ResizeObserver) {
-        new ResizeObserver(() => { if (_chor) _refreshLayout(); }).observe(scrollWrap);
-      }
-
-      // Delete/Backspace removes the selected block (skip when typing in an input)
-      document.addEventListener('keydown', e => {
-        if (!_selected) return;
-        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-          e.preventDefault();
-          _deleteBlock(_selected.track, _selected.idx);
+      // Re-render on container resize so liquid fill stays accurate.
+      // ResizeObserver was previously re-created on every tab switch (one
+      // observer per init() call) → 10 switches = 10 observers all firing
+      // _refreshLayout for every resize. The guard makes it run once for
+      // the lifetime of the page.
+      if (!_globalsWired) {
+        const scrollWrap = document.getElementById('chor-scroll');
+        if (scrollWrap && window.ResizeObserver) {
+          new ResizeObserver(() => { if (_chor) _refreshLayout(); }).observe(scrollWrap);
         }
-      });
+
+        // Delete/Backspace removes the selected block (skip when typing in an input).
+        // Same leak as the ResizeObserver before the guard — N tab switches
+        // produced N keydown handlers, so a single Delete press deleted N
+        // blocks in succession.
+        document.addEventListener('keydown', e => {
+          if (!_selected) return;
+          if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            _deleteBlock(_selected.track, _selected.idx);
+          }
+        });
+
+        _globalsWired = true;
+      }
 
       // Pre-fetch dropdown data — wait for ALL before re-rendering so arm labels are fresh
       Promise.all([
@@ -7835,7 +7862,17 @@ const choreoEditor = (() => {
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'AstromechOS' },
-        tracks: { audio:[], lights:[], dome:[], servos:[], propulsion:[], markers:[] }
+        // Track schema MUST match what _renderAllTracks / _validateServoRefs /
+        // the drop handler all expect. The legacy `servos:[]` field was
+        // replaced by the dome/body/arm trio in the 2026-05-09 migration;
+        // creating a new choreo with the old shape made every subsequent
+        // load() re-run the migration AND mangled brand-new files since
+        // load() deletes `tracks.servos` after migrating it.
+        tracks: {
+          audio: [],         lights: [],        dome: [],
+          dome_servos: [],   body_servos: [],   arm_servos: [],
+          propulsion: [],    markers: [],
+        },
       };
       _dirty = true; _existsOnDisk = false; _renderAllTracks();
       const sel = document.getElementById('chor-select');
