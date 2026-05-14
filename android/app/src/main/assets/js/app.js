@@ -6412,7 +6412,19 @@ const choreoEditor = (() => {
     if (containerW <= 0) return;
     const dur = _calcTotalDuration();
     if (dur <= 0) return;
-    _pxPerSec = Math.max(5, (containerW / dur) * _zoomFactor);
+    // Floor at 0.5 px/s — was 5 px/s, which broke fit-to-screen for any
+    // sequence longer than ~140s on a typical 700px container:
+    //   max(5, 700/152) = max(5, 4.6) = 5 forced → canvas wants 152*5 =
+    //   760px > container 700px → last ~12s (60px) clipped by
+    //   overflow-x:clip on .chor-scroll-wrap. The OFF lights block on
+    //   disco.chor (t=150..152s) and similar end-of-sequence events fell
+    //   entirely past the visible edge.
+    //
+    // 0.5 px/s allows fit for sequences up to ~1400s in a 700px container.
+    // Below that floor the canvas would have zero usable resolution; users
+    // who genuinely need longer sequences can ZOOM IN (_zoomFactor > 1)
+    // to inspect specific regions.
+    _pxPerSec = Math.max(0.5, (containerW / dur) * _zoomFactor);
   }
 
   // Always returns the scroll-wrap client width — content is always fit-to-screen.
