@@ -2957,15 +2957,27 @@ class AudioBoard {
     this._timedSound    = '';
     this._startTime     = 0;
     this._totalMs       = 0;
-    this._repeat        = false;
-    this._autoRandom    = false;
+    // F-3: persist repeat / auto-random in localStorage so a page reload
+    // doesn't surprise the operator by silently dropping their preference
+    // mid-playback. Per-client (each tablet/browser has its own state).
+    this._LS_KEY = 'astromech-audio-modes';
+    const saved = this._loadModes();
+    this._repeat        = !!saved.repeat;
+    this._autoRandom    = !!saved.autoRandom;
+    // F-5: capture the SPECIFIC sound name the user was hearing when they
+    // toggled repeat. Without this, a multi-client scenario (another
+    // tablet plays a different sound mid-repeat-cycle) caused the
+    // repeat-on-end to replay the OTHER client's sound — _timedSound
+    // tracked the latest sound regardless of source.
+    this._repeatTarget  = null;
     this._userStopped   = false;
     this._lastRandomCat = null;
     this._fullIndex     = {};
     this._ICONS = {
       alarm:'🚨', happy:'😄', hum:'🎵', misc:'🎲', proc:'⚙️', quote:'💬',
-      razz:'🤪', sad:'😢', sent:'🤔', ooh:'😲', whistle:'🎶', scream:'😱',
-      special:'⭐', sent:'🗣️'
+      razz:'🤪', sad:'😢', ooh:'😲', whistle:'🎶', scream:'😱',
+      special:'⭐', sent:'🗣️',   // removed duplicate `sent:'🤔'` — the
+                                   // 🤔 was dead code, last write wins
     };
     this._CAT_COLORS = {
       alarm:'#ff2244',  happy:'#ffcc00',  hum:'#00aaff',  misc:'#aa44ff',
@@ -2988,6 +3000,12 @@ class AudioBoard {
   }
 
   async loadCategories() {
+    // F-3: sync the visual toggle state from the persisted modes on each
+    // category-load (covers page reload, tab switch back, BT
+    // reconnect). Cheap, idempotent — just toggles a class.
+    el('now-playing-repeat')?.classList.toggle('active', this._repeat);
+    el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
+
     const [data, indexData] = await Promise.all([
       api('/audio/categories'),
       api('/audio/index'),
@@ -3139,16 +3157,47 @@ class AudioBoard {
 
   toggleRepeat() {
     this._repeat = !this._repeat;
-    if (this._repeat) this._autoRandom = false;
+    if (this._repeat) {
+      this._autoRandom = false;
+      // F-5: snapshot the CURRENT sound at the moment Repeat was enabled.
+      // setPlaying(false) on track-end will replay THIS sound regardless
+      // of what _timedSound has become in the meantime (another client,
+      // background poll, etc.).
+      this._repeatTarget = this._timedSound || this._lastRandomCat || null;
+    } else {
+      this._repeatTarget = null;
+    }
+    this._saveModes();
     el('now-playing-repeat')?.classList.toggle('active', this._repeat);
     el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
   }
 
   toggleAutoRandom() {
     this._autoRandom = !this._autoRandom;
-    if (this._autoRandom) this._repeat = false;
+    if (this._autoRandom) {
+      this._repeat = false;
+      this._repeatTarget = null;
+    }
+    this._saveModes();
     el('now-playing-repeat')?.classList.toggle('active', this._repeat);
     el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
+  }
+
+  // F-3 persistence helpers — localStorage round-trip with defensive
+  // try/catch in case storage is disabled (private browsing, iframe).
+  _loadModes() {
+    try {
+      const raw = localStorage.getItem(this._LS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  }
+
+  _saveModes() {
+    try {
+      localStorage.setItem(this._LS_KEY, JSON.stringify({
+        repeat: this._repeat, autoRandom: this._autoRandom,
+      }));
+    } catch {}
   }
 
   playNext() {
@@ -3234,7 +3283,11 @@ class AudioBoard {
     if (active && (!wasPlaying || !sameSong)) {
       this._startTimer(name);
     } else if (!active) {
-      const soundToRepeat = this._timedSound;
+      // F-5: use the SNAPSHOT captured at toggleRepeat time, not the
+      // live _timedSound (which may have shifted to another client's
+      // sound). Falls back to _timedSound for legacy callers who
+      // didn't go through toggleRepeat.
+      const soundToRepeat = this._repeatTarget || this._timedSound;
       this._stopTimer();
       if (wasPlaying && !this._userStopped) {
         if (this._repeat) {
@@ -3271,14 +3324,30 @@ class AudioBoard {
     if (!input) return;
     const name = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
     if (!name) { this._uploadStatus('Enter a category name', 'error'); return; }
-    const d = await api('/audio/category/create', 'POST', { name });
-    if (d?.ok) {
-      input.value = '';
-      toast(`Category "${name}" created`, 'ok');
-      await this.loadCategories();
-      this.selectCategory(name);
-    } else {
-      this._uploadStatus(d?.error || 'Failed to create category', 'error');
+    // F-6: bypass shared api() helper here so we can read the server's
+    // error body on 4xx/5xx. api() returns null on non-2xx, which hid
+    // the server's actual error message — duplicate-name 409, invalid
+    // characters 400 etc. all displayed as the generic "Failed to
+    // create category". Now we fetch directly and parse the JSON body
+    // regardless of status code.
+    try {
+      const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+      const res  = await fetch(base + '/audio/category/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const d = await res.json().catch(() => null);
+      if (res.ok && d?.ok) {
+        input.value = '';
+        toast(`Category "${name}" created`, 'ok');
+        await this.loadCategories();
+        this.selectCategory(name);
+      } else {
+        this._uploadStatus(d?.error || `HTTP ${res.status}`, 'error');
+      }
+    } catch (e) {
+      this._uploadStatus(`Network error: ${e.message || e}`, 'error');
     }
   }
 
@@ -3307,21 +3376,72 @@ class AudioBoard {
     const cat = this._currentCat;
     if (!cat) { this._uploadStatus('Select a category first', 'error'); return; }
 
-    this._uploadStatus(`Uploading ${files.length} file(s)…`, 'info');
-    let ok = 0, fail = 0;
-    for (const file of files) {
+    // F-8: client-side gate — fail fast on obviously-bad inputs so the
+    // user doesn't wait for the server round-trip to learn that their
+    // 200MB file was rejected.
+    const MAX_SIZE = 10 * 1024 * 1024;   // 10 MB — typical R2 sound is <500KB
+    const skipped = [];   // {name, reason}
+    const queued  = [];
+    for (const f of files) {
+      if (f.size > MAX_SIZE) {
+        skipped.push({ name: f.name, reason: `too large (${(f.size/1024/1024).toFixed(1)}MB > 10MB)` });
+        continue;
+      }
+      // f.type can be empty on Windows file drag — accept that case
+      // but reject explicit non-audio mime types.
+      if (f.type && !f.type.startsWith('audio/')) {
+        skipped.push({ name: f.name, reason: `not audio (mime: ${f.type})` });
+        continue;
+      }
+      queued.push(f);
+    }
+
+    if (!queued.length) {
+      this._uploadStatus(
+        `All ${files.length} file(s) rejected — see console`, 'error');
+      console.warn('Upload rejected:', skipped);
+      return;
+    }
+
+    this._uploadStatus(`Uploading ${queued.length} file(s)…`, 'info');
+    let ok = 0;
+    const failed = [];   // F-7: keep per-file reason
+    for (const file of queued) {
       const form = new FormData();
       form.append('file', file);
       form.append('category', cat);
       try {
         const res = await fetch((window.R2D2_API_BASE || '') + '/audio/upload', { method: 'POST', body: form });
-        const d = await res.json();
-        if (d && d.ok) ok++; else { fail++; console.warn('Upload failed:', d?.error); }
-      } catch (e) { fail++; }
+        let d = null;
+        try { d = await res.json(); } catch {}
+        if (res.ok && d && d.ok) {
+          ok++;
+        } else {
+          failed.push({
+            name:   file.name,
+            reason: (d && d.error) || `HTTP ${res.status}`,
+          });
+        }
+      } catch (e) {
+        failed.push({ name: file.name, reason: `network: ${e.message || e}` });
+      }
     }
-    if (ok)   this._uploadStatus(`✓ ${ok} file(s) uploaded to ${cat.toUpperCase()}`, 'ok');
-    if (fail) this._uploadStatus(`✗ ${fail} file(s) failed`, 'error');
-    if (ok)   await this.selectCategory(cat);  // refresh grid
+    if (ok) {
+      this._uploadStatus(`✓ ${ok} file(s) uploaded to ${cat.toUpperCase()}`, 'ok');
+    }
+    if (failed.length || skipped.length) {
+      // F-7: detailed list goes to console for debugging; the toast +
+      // status banner show the count + first-failure reason inline.
+      const all = [...skipped, ...failed];
+      console.warn('Upload failures:', all);
+      const first = all[0];
+      const more  = all.length > 1 ? ` (+ ${all.length - 1} more — see console)` : '';
+      this._uploadStatus(
+        `✗ ${all.length} failed: ${first.name} — ${first.reason}${more}`,
+        'error'
+      );
+    }
+    if (ok) await this.selectCategory(cat);  // refresh grid
   }
 
   _uploadStatus(msg, type) {
