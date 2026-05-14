@@ -340,10 +340,18 @@ class VescDriver(BaseDriver):
         consecutive None responses to detect a lost connection.
         """
         import serial as _serial
-        _FAIL_THRESHOLD = 5   # consecutive Nones before declaring disconnected (~1s)
-        _fail_left  = 0          # left VESC (USB) consecutive failures → triggers reconnect
-        _fail_right = 0          # right VESC (CAN) consecutive failures → warning only
-        _right_warned = False    # suppress repeated right-VESC log spam
+        _FAIL_THRESHOLD     = 5   # consecutive Nones before declaring disconnected (~1s)
+        # Hysteresis for clearing _can_lost: require this many CONSECUTIVE
+        # successful right-VESC reads before re-enabling drive. Without it,
+        # one lucky read during a flickering CAN bus would unlock drive for
+        # one tick (and the false window can sneak a stale drive command
+        # through). 3 reads ≈ 600ms at 200ms telem interval — short enough
+        # for legit recovery, long enough to filter flicker.
+        _RECOVER_THRESHOLD  = 3
+        _fail_left      = 0      # left VESC (USB) consecutive failures → triggers reconnect
+        _fail_right     = 0      # right VESC (CAN) consecutive failures → warning only
+        _right_recover  = 0      # right VESC (CAN) consecutive successes → clears _can_lost
+        _right_warned   = False  # suppress repeated right-VESC log spam
 
         while self._running:
             # --- Reconnect if not ready ---
@@ -362,10 +370,11 @@ class VescDriver(BaseDriver):
                                     pass
                             self._serial = ser
                             self._port   = port
-                        self._ready   = True
-                        _fail_left    = 0
-                        _fail_right   = 0
-                        _right_warned = False
+                        self._ready    = True
+                        _fail_left     = 0
+                        _fail_right    = 0
+                        _right_recover = 0
+                        _right_warned  = False
                         self._can_lost = False
                         opened = True
                         log.info(f"VescDriver reconnected on {port}")
@@ -406,6 +415,7 @@ class VescDriver(BaseDriver):
                 _fail_left = 0
                 if vr is None:
                     _fail_right += 1
+                    _right_recover = 0   # reset recovery streak on any failure
                     if _fail_right >= _FAIL_THRESHOLD and not self._can_lost:
                         log.error(
                             "VescDriver: right VESC (CAN ID %d) lost — stopping motors and "
@@ -415,11 +425,26 @@ class VescDriver(BaseDriver):
                         self._can_lost = True
                         self._stop_motors()
                 else:
-                    if self._can_lost:
-                        log.info("VescDriver: right VESC (CAN ID %d) recovered", VESC_ID_CAN)
-                    _fail_right = 0
-                    _right_warned = False
-                    self._can_lost = False
+                    # Recovery hysteresis: require N consecutive successful reads
+                    # before clearing _can_lost. A single lucky read during a
+                    # genuinely-flickering CAN link would otherwise unlock drive
+                    # for one tick, only to relock 3 reads later — and during
+                    # the False window a stale drive command can sneak through
+                    # the Master safety gate. Hold the lockout until the link
+                    # has been stable for at least _RECOVER_THRESHOLD ticks.
+                    _right_recover += 1
+                    if self._can_lost and _right_recover >= _RECOVER_THRESHOLD:
+                        log.info(
+                            "VescDriver: right VESC (CAN ID %d) recovered after %d stable reads",
+                            VESC_ID_CAN, _right_recover,
+                        )
+                        self._can_lost = False
+                        _fail_right = 0
+                        _right_warned = False
+                    elif not self._can_lost:
+                        # Steady state — no can_lost, no need to count
+                        _fail_right = 0
+                        _right_warned = False
                 if self._uart:
                     self._uart.send('TL',
                         f"{vl['v_in']}:{vl['temp']}:{vl['current']}"
