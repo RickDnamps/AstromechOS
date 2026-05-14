@@ -6410,7 +6410,18 @@ const choreoEditor = (() => {
         const scroll = document.getElementById('chor-scroll');
         const scrollLeft = scroll ? scroll.scrollLeft : 0;
         const rect = lane.getBoundingClientRect();
-        const t = _snap(_sec(Math.max(0, e.clientX - rect.left + scrollLeft)));
+        const rawT = _sec(Math.max(0, e.clientX - rect.left + scrollLeft));
+        // Clamp t to a sane upper bound — without this, a drag that overshoots
+        // past the canvas (browser auto-scroll, oversensitive trackpad) can
+        // land at t=300s on a 10s timeline; _fitToScreen() then shrinks the
+        // px/sec to fit, leaving every existing block as a sliver. Use the
+        // current playback duration plus 10s grace, with a 20s floor for new
+        // sequences. The inspector still lets the user enter any t manually.
+        const maxT = Math.max(20, _calcPlaybackDuration() + 10);
+        let t = _snap(Math.min(rawT, maxT));
+        if (rawT > maxT) {
+          toast(`Drop clamped to ${maxT.toFixed(1)}s — edit START in inspector for later events`, 'warn');
+        }
         const newItem = { ...tpl, t };
         if (!_chor.tracks[track]) _chor.tracks[track] = [];
         _chor.tracks[track].push(newItem);
@@ -7588,6 +7599,16 @@ const choreoEditor = (() => {
           if (r && r.sounds) _audioScanned = r.sounds;
         }).catch(() => {}),
         api('/audio/index').then(r => { if (r && r.categories) _audioIndex = r.categories; }),
+        // Audio channel count drives _validateAudioOverflow's polyphony cap.
+        // Without this, the validator uses the module-default of 6 until the
+        // user visits Settings — which means a config of 1, 2, 12 etc. produces
+        // wrong overflow warnings (false positives below 6, missed overflows
+        // above 6). Fetch once at init so the cap is always correct here.
+        api('/settings').then(r => {
+          if (r && r.audio && typeof r.audio.channels === 'number') {
+            _audioChannelsConfig = r.audio.channels;
+          }
+        }).catch(() => {}),
         // Reset servo list on each init to avoid accumulation across tab switches
         api('/servo/body/list').then(r => { if (r && r.servos) _servoList = [...new Set([..._servoList, ...r.servos])]; }),
         api('/servo/dome/list').then(r => { if (r && r.servos) _servoList = [...new Set([..._servoList, ...r.servos])]; }),
@@ -7661,6 +7682,14 @@ const choreoEditor = (() => {
         const r = await api('/servo/settings');
         if (r && r.panels) _servoSettings = r.panels;
       }
+      // Ensure armsConfig is loaded before rendering arm_servos blocks.
+      // init()'s Promise.all fires armsConfig.load() concurrently, but if the
+      // user clicks a choreography in the dropdown before the Promise.all
+      // resolves, arm blocks render with armsConfig._count=0 (showing every
+      // arm as "❌ not configured") until the Promise.all completes and
+      // triggers a re-render. The flicker confuses users and the intermediate
+      // state can briefly mark blocks as legacy.
+      await armsConfig.load();
       // Migrate legacy label-based servo refs → hardware IDs
       const _migrateResult = _migrateLegacyServoRefs();
       if (_migrateResult) {
@@ -7873,7 +7902,29 @@ const choreoEditor = (() => {
     _setProp(track, idx, field, rawVal) {
       const item = (_chor.tracks[track] || [])[idx];
       if (!item) return;
-      const num = parseFloat(rawVal); item[field] = isNaN(num) ? rawVal : num; _dirty = true;
+      // Branch by field semantics: most inspector inputs are numeric, but a
+      // handful are deliberately strings (audio file path, lights text, mode
+      // selectors, servo IDs, easing names…). The previous blanket
+      // `parseFloat(rawVal); isNaN(num) ? rawVal : num` silently coerced
+      // anything that happened to look like a number — typing "1234" in the
+      // LCD text box became the literal Number 1234, which then broke
+      // `String(item.text).slice(0,20)` downstream and confused the chor
+      // monitor's text rendering.
+      // `target` is dual-typed: lights uses it as a string ('fhp', 'rhp'…),
+      // dome/body/arm_servos with action='degree' uses it as a number.
+      const isStringField =
+        field === 'text'     || field === 'file'      || field === 'mode'    ||
+        field === 'display'  || field === 'sequence'  || field === 'effect'  ||
+        field === 'priority' || field === 'easing'    || field === 'servo'   ||
+        field === 'action'   || field === 'group'     ||
+        (field === 'target' && track === 'lights');
+      if (isStringField) {
+        item[field] = String(rawVal);
+      } else {
+        const num = parseFloat(rawVal);
+        item[field] = isNaN(num) ? rawVal : num;
+      }
+      _dirty = true;
       // Dome overlap guard — clamp t and duration to prevent overlapping commands
       if (track === 'dome') {
         if (field === 'duration') item.duration = _domeClampDur(idx, item.duration);
