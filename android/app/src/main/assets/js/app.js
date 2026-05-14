@@ -6182,8 +6182,21 @@ function _initIconPicker() {
 }
 
 function _applyLocationLabels(master, slave) {
-  _masterLocation = master || 'Dome';
-  _slaveLocation  = slave  || 'Body';
+  const newMaster = master || 'Dome';
+  const newSlave  = slave  || 'Body';
+  // EARLY EXIT if neither value has changed since last apply. StatusPoller
+  // fires this every 2 seconds with the cached server values. The old
+  // unconditional path called renderCalibration() each time, which
+  // does container.innerHTML='' on the Calibration page — destroying every
+  // <input> element 2× per second. Result: user could never finish typing
+  // a new servo label, and the card visibly flickered (.card:hover glow
+  // toggling as the card vanished and reappeared under the cursor).
+  // Reported by user 2026-05-14 — bug introduced with multi-HAT
+  // auto-detection refactor that added the renderCalibration() call here.
+  if (newMaster === _masterLocation && newSlave === _slaveLocation) return;
+
+  _masterLocation = newMaster;
+  _slaveLocation  = newSlave;
   const mu = _masterLocation.toUpperCase();
   const su = _slaveLocation.toUpperCase();
   const joyLbl = el('joystick-master-label');
@@ -6199,7 +6212,7 @@ function _applyLocationLabels(master, slave) {
   if (mInput && !mInput.matches(':focus')) mInput.value = _masterLocation;
   const sInput = el('slave-location-input');
   if (sInput && !sInput.matches(':focus')) sInput.value = _slaveLocation;
-  // Re-render calibration headers
+  // Re-render calibration headers (only runs when locations actually changed)
   renderCalibration();
 }
 

@@ -79,6 +79,28 @@ else
 fi
 
 # ──────────────────────────────────────────────
+# 0b. Backup user-customised servo angles
+# ──────────────────────────────────────────────
+# These two files contain per-robot calibration — open/close angles,
+# speed, and the user's custom labels (arm names, panel names, etc.).
+# Both files USED to be tracked in git, so a 'git pull' could restore
+# them to the default labels and wipe a user's customisations (incident
+# 2026-05-14: git reset --hard during repo recovery wiped Arm1/Arm2
+# labels). They're now untracked, but we still backup as a safety net
+# in case anything else (rsync --delete, a future regression) overwrites
+# them. Restored AFTER git pull below.
+ANGLES_BACKUP="/home/artoo/angles_backup"
+step "0b/7" "Backup servo angle calibrations"
+mkdir -p "$ANGLES_BACKUP"
+if [ -f "$REPO/master/config/dome_angles.json" ]; then
+    cp -p "$REPO/master/config/dome_angles.json" "$ANGLES_BACKUP/dome_angles.json"
+fi
+if [ -f "$REPO/slave/config/servo_angles.json" ]; then
+    cp -p "$REPO/slave/config/servo_angles.json" "$ANGLES_BACKUP/servo_angles.json"
+fi
+ok "Angle calibrations backed up → $ANGLES_BACKUP"
+
+# ──────────────────────────────────────────────
 # 1. Git pull
 # ──────────────────────────────────────────────
 step "1/7" "Git pull"
@@ -115,6 +137,21 @@ if [ -d "$SEQUENCES_BACKUP" ]; then
     fi
 else
     ok "No backup to restore"
+fi
+
+# Restore angle calibrations only if the live files are MISSING (git was
+# never supposed to ship them, but a reset --hard from a stale checkout
+# can still wipe them). NEVER overwrite the live files — the operator's
+# in-UI edits between deploys must win over the backup.
+if [ -d "$ANGLES_BACKUP" ]; then
+    if [ -f "$ANGLES_BACKUP/dome_angles.json" ] && [ ! -f "$REPO/master/config/dome_angles.json" ]; then
+        cp -p "$ANGLES_BACKUP/dome_angles.json" "$REPO/master/config/dome_angles.json"
+        warn "Restored dome_angles.json from backup (was missing)"
+    fi
+    if [ -f "$ANGLES_BACKUP/servo_angles.json" ] && [ ! -f "$REPO/slave/config/servo_angles.json" ]; then
+        cp -p "$ANGLES_BACKUP/servo_angles.json" "$REPO/slave/config/servo_angles.json"
+        warn "Restored servo_angles.json from backup (was missing)"
+    fi
 fi
 
 # ──────────────────────────────────────────────
