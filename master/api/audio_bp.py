@@ -105,24 +105,72 @@ _CATEGORY_NAME_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 
 # B-14: duration cache. _get_sound_duration_ms is called on every /play
 # AND on every choreo audio block dispatch. Re-stat-ing the file each time
-# is fine for 317 files but the math is wrong (128 kbps assumed CBR — real
-# R2-D2 sounds are 192 kbps VBR, so the old estimate ran ~30% LONG).
-# Cache by (path, mtime) so a re-encoded file invalidates automatically.
+# is fine for 317 files but the math has to use the FILE'S OWN bitrate —
+# the user uses a mix of 128/192/320 kbps sounds, so a single hard-coded
+# assumption is ~30-70% off for the wrong bitrate. Cache by (path, mtime)
+# so a re-encoded file invalidates automatically.
+#
+# 2026-05-14 user-reported bug: birthday.mp3 is 320 kbps CBR (39s real
+# duration), our 192 kbps assumption estimated 67s, the UI kept showing
+# 'playing' for 28 extra seconds after mpg123 actually finished.
 _DURATION_CACHE: dict = {}   # {path: (mtime, ms)}
 
 
+# MPEG1 Layer III bitrate table (kbps). bitrate_idx 0 = free, 15 = invalid.
+_MPEG1_L3_BITRATES = [0, 32, 40, 48, 56, 64, 80, 96, 112,
+                       128, 160, 192, 224, 256, 320, 0]
+# MPEG2 / MPEG2.5 Layer III (low-sample-rate variants — rare for R2 sounds).
+_MPEG2_L3_BITRATES = [0, 8, 16, 24, 32, 40, 48, 56, 64,
+                       80, 96, 112, 128, 144, 160, 0]
+
+
+def _parse_mp3_bitrate(path: str) -> int | None:
+    """Read the first MPEG frame header and return the bitrate in kbps.
+    Returns None if the file doesn't look like a valid MP3 (no MPEG sync
+    found within the first 64 KB after any ID3v2 tag). CBR-accurate;
+    Xing/VBRI VBR headers fall through to per-frame bitrate which is OK
+    for the user's R2 sound library (mostly CBR exports)."""
+    try:
+        with open(path, 'rb') as f:
+            head = f.read(10)
+            if len(head) < 10:
+                return None
+            # Skip ID3v2 tag if present (28-bit synchsafe size).
+            if head[:3] == b'ID3':
+                size = ((head[6] & 0x7F) << 21) | ((head[7] & 0x7F) << 14) \
+                     | ((head[8] & 0x7F) << 7)  | (head[9] & 0x7F)
+                f.seek(10 + size)
+            else:
+                f.seek(0)
+            # Scan for MPEG frame sync (0xFFE or 0xFFF) in next 64 KB.
+            buf = f.read(65536)
+            for i in range(len(buf) - 4):
+                if buf[i] == 0xFF and (buf[i + 1] & 0xE0) == 0xE0:
+                    b1, b2 = buf[i + 1], buf[i + 2]
+                    mpeg_ver    = (b1 >> 3) & 0x03   # 0=2.5, 2=2, 3=1
+                    layer       = (b1 >> 1) & 0x03   # 1=III, 2=II, 3=I
+                    bitrate_idx = (b2 >> 4) & 0x0F
+                    if layer != 1 or bitrate_idx in (0, 15):
+                        continue   # not Layer III or bad bitrate index
+                    table = _MPEG1_L3_BITRATES if mpeg_ver == 3 else _MPEG2_L3_BITRATES
+                    return table[bitrate_idx]
+            return None
+    except OSError:
+        return None
+
+
 def _estimate_duration_ms(path: str, fallback_ms: int = 60000) -> int:
-    """File-size-based duration estimate (no decode). 192 kbps is the
-    typical R2 sound bitrate — closer to ground truth than the previous
-    128 kbps assumption. Off by ±20% on VBR but acceptable for the
-    audio_playing flag's lifetime (the UI just uses this to decide when
-    to clear the 'now playing' badge)."""
+    """File-size-based duration estimate using the FILE'S OWN bitrate
+    parsed from the first MPEG frame header. Falls back to 192 kbps
+    if header parsing fails (e.g. non-MP3 file with .mp3 extension).
+    +500ms tail for the mpg123 cold-start latency on the slave."""
     try:
         size = os.path.getsize(path)
-        # 192 kbps = 24 KB/s. +500ms for the mpg123 cold-start tail.
-        return int(size * 8 / 192) + 500
     except OSError:
         return fallback_ms
+    bitrate_kbps = _parse_mp3_bitrate(path) or 192
+    # bytes * 8 bits / bitrate_kbps → seconds, ×1000 → ms.
+    return int(size * 8 / bitrate_kbps) + 500
 
 
 def _get_sound_duration_ms(sound: str, fallback_ms: int = 60000) -> int:
