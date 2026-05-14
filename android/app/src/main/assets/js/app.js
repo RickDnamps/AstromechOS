@@ -6573,7 +6573,7 @@ const choreoEditor = (() => {
       : issueLevel === 'warn'
       ? `<span class="chor-issue-badge warn" title="${track === 'audio' ? 'Unknown RANDOM category' : 'Servo label changed since creation — verify intent'}">⚠️</span>`
       : '';
-    block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${_blockLabel(track, item)}</span>
+    block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(_blockLabel(track, item))}</span>
                        ${issueBadge}
                        ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
     _attachBlockEvents(block, track, idx);
@@ -6734,7 +6734,7 @@ const choreoEditor = (() => {
            style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:13px;padding:0;line-height:1"
            title="Delete block">✕</button>
        </div>
-       <div style="font-size:10px;color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:1.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${label}</div>`;
+       <div style="font-size:10px;color:${c};text-shadow:0 0 8px ${c}55;letter-spacing:1.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${escapeHtml(label)}</div>`;
   }
 
   function _clearInspectorTitle() {
@@ -7045,15 +7045,15 @@ const choreoEditor = (() => {
       let opts = '';
       if (grouped) {
         for (const [grp, names] of Object.entries(options)) {
-          opts += `<optgroup label="${grp.toUpperCase()}">`;
+          opts += `<optgroup label="${escapeHtml(grp.toUpperCase())}">`;
           for (const n of names)
-            opts += `<option value="${n}"${n === current ? ' selected' : ''}>${n}</option>`;
+            opts += `<option value="${escapeHtml(n)}"${n === current ? ' selected' : ''}>${escapeHtml(n)}</option>`;
           opts += '</optgroup>';
         }
       } else {
         opts += `<option value="">—</option>`;
         for (const [val, label] of Object.entries(options))
-          opts += `<option value="${val}"${val === current ? ' selected' : ''}>${label}</option>`;
+          opts += `<option value="${escapeHtml(val)}"${val === current ? ' selected' : ''}>${escapeHtml(label)}</option>`;
       }
       return `<div class="chor-prop-row-full">
         <span class="chor-prop-key">${key}</span>
@@ -7068,7 +7068,7 @@ const choreoEditor = (() => {
       const val = item[field] !== undefined ? String(item[field]) : '';
       return `<div class="chor-prop-row-full">
         <span class="chor-prop-key">${key}</span>
-        <input class="chor-prop-input" type="text" value="${val.replace(/"/g,'&quot;')}" maxlength="${maxLen}" style="width:100%;box-sizing:border-box"
+        <input class="chor-prop-input" type="text" value="${escapeHtml(val)}" maxlength="${maxLen}" style="width:100%;box-sizing:border-box"
           oninput="choreoEditor._setProp('${track}',${idx},'${field}',this.value)">
       </div>`;
     }
@@ -7083,11 +7083,11 @@ const choreoEditor = (() => {
       const audioIssueKey = `audio:${idx}`;
       if (_audioIssues[audioIssueKey] === 'error') {
         html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
-          ❌ <b>${item.file}</b> — file not found on slave.<br>Select a replacement below.
+          ❌ <b>${escapeHtml(item.file || '')}</b> — file not found on slave.<br>Select a replacement below.
         </div>`;
       } else if (_audioIssues[audioIssueKey] === 'warn') {
         html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
-          ⚠️ Unknown RANDOM category: <b>${item.file?.slice(7)}</b>
+          ⚠️ Unknown RANDOM category: <b>${escapeHtml(item.file?.slice(7) || '')}</b>
         </div>`;
       }
 
@@ -7140,7 +7140,7 @@ const choreoEditor = (() => {
         });
       } else if (item.mode === 'text') {
         const preview = (item.text || '...').slice(0, 20);
-        html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em"><span style="font-size:13px">💬</span><span style="opacity:.7;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${preview}</span></div>`;
+        html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 8px 2px;color:#00ffea;font-size:10px;letter-spacing:.08em"><span style="font-size:13px">💬</span><span style="opacity:.7;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${escapeHtml(preview)}</span></div>`;
         html += selectRow('DISPLAY', 'display', {
           fld_top:'FLD Top', fld_bottom:'FLD Bottom',
           fld_both:'FLD Top+Bottom', rld:'RLD', all:'ALL'
@@ -7208,7 +7208,7 @@ const choreoEditor = (() => {
       } else {
         // Legacy format — servo ID stored directly
         html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
-          ⚠️ Legacy event — uses servo ID directly (<b>${item.servo_label || item.servo || '?'}</b>).<br>
+          ⚠️ Legacy event — uses servo ID directly (<b>${escapeHtml(item.servo_label || item.servo || '?')}</b>).<br>
           Select an arm slot below and save to migrate to the new format.
         </div>`;
         const armOpts = count > 0
@@ -7250,13 +7250,13 @@ const choreoEditor = (() => {
         const isMismatch  = configLabel && storedLabel && configLabel !== storedLabel;
         if (isUnknown) {
           html += `<div style="background:#3a0010;border:1px solid #ff2244;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ff6688;line-height:1.5">
-            ❌ <b>${storedLabel || sid}</b> — servo ID not found in config.<br>
+            ❌ <b>${escapeHtml(storedLabel || sid)}</b> — servo ID not found in config.<br>
             Select the correct servo below and save.
           </div>`;
         } else if (isMismatch) {
           html += `<div style="background:#2a1a00;border:1px solid #ff8800;border-radius:3px;padding:6px 8px;margin-bottom:6px;font-size:10px;color:#ffaa44;line-height:1.5">
-            ⚠️ Stored as <b>${storedLabel}</b><br>
-            Current config: <b>${configLabel}</b><br>
+            ⚠️ Stored as <b>${escapeHtml(storedLabel)}</b><br>
+            Current config: <b>${escapeHtml(configLabel)}</b><br>
             Select the correct servo below and save to confirm.
           </div>`;
         }
