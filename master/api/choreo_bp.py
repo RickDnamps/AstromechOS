@@ -384,16 +384,29 @@ def choreo_load():
         return err
     if not os.path.exists(path):
         return jsonify({'error': 'not found'}), 404
-    with open(path, encoding='utf-8') as f:
-        chor = json.load(f)
-    # Migrate legacy audio2 track → unified audio track with ch=1
-    tracks = chor.get('tracks', {})
-    audio2 = tracks.pop('audio2', [])
-    if audio2:
-        audio = tracks.setdefault('audio', [])
-        for ev in audio2:
-            audio.append({**ev, 'ch': 1})
-        tracks['audio'].sort(key=lambda e: e.get('t', 0))
+    with _chor_file_lock:
+        with open(path, encoding='utf-8') as f:
+            chor = json.load(f)
+        # Migrate legacy audio2 track → unified audio track with ch=1.
+        # Persist the migrated file back to disk so the next load doesn't
+        # re-run the migration. Was previously stateless: every load
+        # re-merged audio2 in memory but never wrote back, so the same
+        # legacy file kept paying the migration cost forever AND the
+        # client-side migration in app.js also re-ran on every load
+        # (setting _dirty=true before load() finished resetting it,
+        # confusing the save-on-play heuristic).
+        tracks = chor.get('tracks', {})
+        audio2 = tracks.pop('audio2', [])
+        if audio2:
+            audio = tracks.setdefault('audio', [])
+            for ev in audio2:
+                audio.append({**ev, 'ch': 1})
+            tracks['audio'].sort(key=lambda e: e.get('t', 0))
+            try:
+                _atomic_write_chor(path, chor)
+                log.info("Migrated legacy audio2 track on disk: %s", name)
+            except Exception:
+                log.exception("Failed to persist audio2 migration for %s — will retry next load", name)
     return jsonify(chor)
 
 
