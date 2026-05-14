@@ -669,7 +669,20 @@ class LockManager {
 
     api('/lock/set', 'POST', { mode });
 
-    const msgs  = ['Normal mode restored', 'Kids Mode — speed limited', 'Child Lock — movement blocked'];
+    // Three-tier lock model — design intent confirmed 2026-05-14:
+    //   Mode 0 = Normal — full drive at user speed slider
+    //   Mode 1 = Kids Mode — drive enabled but capped at kids_speed_limit
+    //                        (kid drives the robot, slow & safe)
+    //   Mode 2 = Child Lock — DRIVE blocked, dome/sounds/lights still free
+    //                        (hand the tablet to a kid: they can play with
+    //                        sounds/dome/lights without risking propulsion)
+    // The toast wording must reflect what's still ALLOWED in each mode so
+    // the operator doesn't think Child Lock is a kill switch.
+    const msgs  = [
+      'Normal mode restored',
+      'Kids Mode — drive at limited speed, dome + sounds OK',
+      'Child Lock — drive blocked, dome + sounds + lights still OK',
+    ];
     const types = ['ok', 'warn', 'error'];
     toast(msgs[mode], types[mode]);
   }
