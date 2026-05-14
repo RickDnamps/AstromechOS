@@ -119,6 +119,15 @@ class VescDriver:
         self._right = 0.0
         return self._uart.send('M', '0.000,0.000')
 
+    def last_command(self) -> tuple:
+        """Returns the last (left, right) sent to the VESC, in [-1, 1].
+
+        Public alternative to safe_stop reaching into _left / _right
+        private attributes (B-19). Used by the watchdog ramp to size
+        the deceleration proportional to current speed.
+        """
+        return (float(self._left), float(self._right))
+
     def arcade_drive(self, throttle: float, steering: float) -> bool:
         """
         Arcade → differential conversion.

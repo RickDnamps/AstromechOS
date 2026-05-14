@@ -124,9 +124,17 @@ def stop_drive(vesc=None, uart=None) -> None:
     v = vesc or reg.vesc
     u = uart or reg.uart
 
-    # Read current speed from the driver if available
-    left  = getattr(v, '_left',  0.0) if v else 0.0
-    right = getattr(v, '_right', 0.0) if v else 0.0
+    # Read current speed from the driver via its public last_command() method
+    # (B-19). Fallback to private _left/_right then (0.0, 0.0) if the driver
+    # doesn't expose either — e.g. a mock VescDriver in tests or a
+    # not-yet-initialised driver during early boot. The fallback to 0.0
+    # means "treat as already-stopped" → skips the ramp and just sends
+    # M:0,0 once, which is the safe default.
+    if v and hasattr(v, 'last_command'):
+        left, right = v.last_command()
+    else:
+        left  = getattr(v, '_left',  0.0) if v else 0.0
+        right = getattr(v, '_right', 0.0) if v else 0.0
 
     max_speed = max(abs(left), abs(right))
 

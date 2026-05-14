@@ -119,6 +119,19 @@ def _dome_gate():
 # Propulsion
 # ------------------------------------------------------------------
 
+def _kids_cap(left: float, right: float) -> tuple:
+    """Apply Kids Mode speed cap (B-25). When lock_mode==1, scale both
+    sides by kids_speed_limit so the kid drives the robot slowly. This
+    was previously only enforced on the BT controller path —
+    /motion/drive and /motion/arcade ran at full speed regardless of
+    Kids mode, which contradicted the three-tier lock model documented
+    on lockMgr._applyMode."""
+    if getattr(reg, 'lock_mode', 0) == 1:
+        cap = float(getattr(reg, 'kids_speed_limit', 0.5))
+        return left * cap, right * cap
+    return left, right
+
+
 @motion_bp.post('/drive')
 def drive():
     """Differential drive. Body: {"left": float, "right": float}"""
@@ -130,6 +143,8 @@ def drive():
     reg.web_last_drive_t = time.time()
     left  = _clamp(_safe_float(body.get('left',  0.0)))
     right = _clamp(_safe_float(body.get('right', 0.0)))
+
+    left, right = _kids_cap(left, right)
 
     cancel_ramp()                             # cancel any ongoing ramp-down
     motion_watchdog.feed_drive(left, right)   # feed the watchdog
@@ -153,16 +168,30 @@ def arcade():
     throttle = _clamp(_safe_float(body.get('throttle', 0.0)))
     steering = _clamp(_safe_float(body.get('steering', 0.0)))
 
-    left  = _clamp(throttle + steering)
-    right = _clamp(throttle - steering)
+    # B-20: normalize left/right ratio when the unclamped sum exceeds 1.
+    # Old `_clamp(throttle + steering)` truncated the larger side and
+    # left the smaller untouched — at the edges the robot pivoted harder
+    # than the user asked for. Mirror what VescDriver.arcade_drive does:
+    # divide both by max(abs, 1) so the ratio between sides is preserved.
+    raw_l = throttle + steering
+    raw_r = throttle - steering
+    max_v = max(abs(raw_l), abs(raw_r), 1.0)
+    left  = raw_l / max_v
+    right = raw_r / max_v
+
+    left, right = _kids_cap(left, right)
+
     cancel_ramp()
     motion_watchdog.feed_drive(left, right)
 
     if reg.vesc:
-        reg.vesc.arcade_drive(throttle, steering)
+        # Pass the already-normalised+capped left/right directly so the
+        # driver doesn't re-derive them from throttle/steering and we keep
+        # a single ratio + cap pipeline.
+        reg.vesc.drive(left, right)
     elif reg.uart:
         reg.uart.send('M', f'{left:.3f},{right:.3f}')
-    return jsonify({'status': 'ok', 'throttle': throttle, 'steering': steering})
+    return jsonify({'status': 'ok', 'throttle': throttle, 'steering': steering, 'left': left, 'right': right})
 
 
 @motion_bp.post('/stop')
