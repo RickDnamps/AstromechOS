@@ -532,10 +532,16 @@ body[data-lock-mode="2"] .drive-lock-btn:hover { box-shadow: 0 0 12px rgba(220,5
 .vesc-safety-banner {
   display: flex; align-items: center; justify-content: center; gap: 8px;
   background: rgba(220,50,50,0.15); border: 1px solid var(--red);
-  border-radius: 6px; padding: 8px 14px; margin: 0 0 6px 0;
+  border-radius: 6px; padding: 6px 14px; margin: 6px 12px 0;
   color: var(--red); font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
   text-align: center;
   animation: vesc-banner-pulse 2s ease-in-out infinite;
+  /* flex-shrink:0 so the banner keeps its natural height when shown
+     inside .drive-wrapper. drive-main absorbs the height reduction
+     instead of letting the bottom bar (E-STOP etc.) get pushed off
+     screen — was a real bug before moving the banner inside the
+     wrapper (reported 2026-05-14). */
+  flex-shrink: 0;
 }
 .vesc-safety-icon { font-size: 16px; }
 @keyframes vesc-banner-pulse {
