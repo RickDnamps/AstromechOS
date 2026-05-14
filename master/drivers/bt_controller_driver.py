@@ -371,21 +371,42 @@ class BTControllerDriver:
                     continue
                 if self._is_vesc_unsafe(reg):
                     continue
+                # Snapshot drive + dome state under the instance lock. Without
+                # this, the keep-alive could see `_drive_active=True` from an
+                # earlier write while `_last_drive` still held the PREVIOUS
+                # tick's value — atomic tuple-assignment in CPython prevents
+                # tearing but not the cross-field ordering. With the lock,
+                # writers always update active+last atomically together.
+                with self._lock:
+                    drive_active = self._drive_active
+                    last_drive   = self._last_drive
+                    dome_active  = self._dome_active
+                    last_dome    = self._last_dome
                 # Keep-alive for propulsion
-                if self._drive_active:
-                    left, right = self._last_drive
+                if drive_active:
+                    left, right = last_drive
                     if abs(left) > 0.01 or abs(right) > 0.01:
                         _ka_count += 1
                         if _ka_count % 10 == 1:  # log every ~3s (10 × 300ms)
                             log.info("BT keepalive #%d: drive=(%.3f, %.3f)", _ka_count, left, right)
                         self._do_drive(left, right, reg)
+                        # B-11: Sustained active drive counts as "input still
+                        # happening" — bump _last_input_t so the inactivity
+                        # watchdog doesn't cut motion mid-drive when evdev
+                        # stops firing events (user holding the stick at a
+                        # constant position generates no EV_ABS deltas).
+                        self._last_input_t = time.time()
                 # Keep-alive for dome
-                if self._dome_active:
-                    spd = self._last_dome
+                if dome_active:
+                    spd = last_dome
                     if abs(spd) > 0.01:
                         self._do_dome(spd, reg)
-            except Exception as e:
-                log.warning("keepalive error: %s", e)
+                        self._last_input_t = time.time()
+            except (AttributeError, OSError) as e:
+                # Narrow catch — known transient errors (driver hot-swap,
+                # serial port gone) shouldn't kill the thread. Let unexpected
+                # exceptions propagate so a real bug is visible.
+                log.warning("keepalive transient error: %s", e)
 
     # ------------------------------------------------------------------
     # Axes
@@ -477,14 +498,22 @@ class BTControllerDriver:
         left     = max(-1.0, min(1.0, throttle + steering))
         right    = max(-1.0, min(1.0, throttle - steering))
 
+        # Update _last_drive + _drive_active together under the lock so the
+        # keep-alive thread cannot see a mismatched (active=True, last=stale)
+        # pair. The actual _do_drive/_do_stop calls happen OUTSIDE the lock
+        # to avoid holding it during a UART round-trip.
         if abs(left) > 0.01 or abs(right) > 0.01:
-            self._last_drive = (left, right)
+            with self._lock:
+                self._last_drive   = (left, right)
+                self._drive_active = True
             self._do_drive(left, right, reg)
-            self._drive_active = True
-        elif self._drive_active:
-            self._last_drive = (0.0, 0.0)
-            self._do_stop(reg)
-            self._drive_active = False
+        else:
+            was_active = self._drive_active
+            with self._lock:
+                self._last_drive   = (0.0, 0.0)
+                self._drive_active = False
+            if was_active:
+                self._do_stop(reg)
 
     def _send_dome(self, val: float, reg) -> None:
         if getattr(reg, 'estop_active', False):
@@ -493,13 +522,17 @@ class BTControllerDriver:
         if time.time() - getattr(reg, 'web_last_dome_t', 0) < 0.5:
             return
         if abs(val) > 0.01:
-            self._last_dome = val * 0.85
+            with self._lock:
+                self._last_dome   = val * 0.85
+                self._dome_active = True
             self._do_dome(val * 0.85, reg)
-            self._dome_active = True
-        elif self._dome_active:
-            self._last_dome = 0.0
-            self._do_dome(0.0, reg)
-            self._dome_active = False
+        else:
+            was_active = self._dome_active
+            with self._lock:
+                self._last_dome   = 0.0
+                self._dome_active = False
+            if was_active:
+                self._do_dome(0.0, reg)
 
     # ------------------------------------------------------------------
     # Buttons
@@ -613,16 +646,19 @@ class BTControllerDriver:
     def clear_drive_state(self) -> None:
         """Reset keep-alive drive tracking. Called by MotionWatchdog after
         cutting drive so the next keep-alive tick won't re-fire the stale
-        last command. Public API — called externally with no lock since
-        the assignment is atomic in CPython and the keep-alive loop reads
-        _drive_active first (defensive check at line 375)."""
-        self._drive_active = False
-        self._last_drive   = (0.0, 0.0)
+        last command. Uses the instance lock for consistency with
+        _send_drive / _stop_motion (B-10) — the keep-alive snapshots
+        both fields under the same lock and would otherwise see a torn
+        (active=True, last=(0,0)) state."""
+        with self._lock:
+            self._drive_active = False
+            self._last_drive   = (0.0, 0.0)
 
     def clear_dome_state(self) -> None:
         """Same as clear_drive_state but for dome rotation."""
-        self._dome_active = False
-        self._last_dome   = 0.0
+        with self._lock:
+            self._dome_active = False
+            self._last_dome   = 0.0
 
     def _do_drive(self, left: float, right: float, reg) -> None:
         from master.motion_watchdog import motion_watchdog
@@ -668,16 +704,31 @@ class BTControllerDriver:
                 reg.uart.send('D', '0.000')
 
     def _stop_motion(self) -> None:
+        # Narrow catch: registry import or driver call may fail transiently
+        # (Slave reboot, USB unplug). Bare `except Exception` previously
+        # swallowed every error including real bugs — per project rule
+        # feedback_silent_import_swallow, catch ImportError for the import
+        # and OSError/AttributeError for the driver calls. Anything else
+        # propagates so it shows up in journalctl.
         try:
             import master.registry as reg
+        except ImportError:
+            log.exception("_stop_motion: registry unavailable")
+            return
+        try:
             if self._drive_active:
                 self._do_stop(reg)
             if self._dome_active:
                 self._do_dome(0.0, reg)
-        except Exception:
-            pass
-        self._drive_active = False
-        self._dome_active  = False
+        except (AttributeError, OSError) as e:
+            log.warning("_stop_motion: driver call failed: %s", e)
+        # Clear state under the lock (B-10) so the keep-alive thread cannot
+        # observe a torn (drive_active=True, but motion just stopped) state.
+        with self._lock:
+            self._drive_active = False
+            self._dome_active  = False
+            self._last_drive   = (0.0, 0.0)
+            self._last_dome    = 0.0
 
     # ------------------------------------------------------------------
     # Inactivity watchdog

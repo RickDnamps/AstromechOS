@@ -287,13 +287,28 @@ def check_multi_esc(ser, can_id: int) -> bool | None:
     return None
 
 
-def set_rpm_direct(ser, erpm: int) -> None:
+# All writers return bool — True if the bytes hit the wire, False if the
+# port raised (typically SerialException: port disappeared mid-call). The
+# previous fire-and-forget pattern let those exceptions propagate out of
+# drive() and kill the UART listener thread on the slave (B-15). Callers
+# (vesc_driver.drive, _stop_motors) can now log + degrade gracefully.
+
+def _safe_write(ser, pkt: bytes, label: str) -> bool:
+    try:
+        ser.write(pkt)
+        return True
+    except Exception as e:
+        log.warning("%s write failed: %s", label, e)
+        return False
+
+
+def set_rpm_direct(ser, erpm: int) -> bool:
     """Sends COMM_SET_RPM directly to the USB-connected VESC."""
     pkt = _build_packet(bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm)))
-    ser.write(pkt)
+    return _safe_write(ser, pkt, 'set_rpm_direct')
 
 
-def set_duty_direct(ser, duty: float) -> None:
+def set_duty_direct(ser, duty: float) -> bool:
     """
     Sends COMM_SET_DUTY directly to the USB-connected VESC.
     duty: -1.0 to +1.0 (mapped to -100000 to +100000 per VESC protocol).
@@ -301,17 +316,17 @@ def set_duty_direct(ser, duty: float) -> None:
     """
     val = int(duty * 100000)
     pkt = _build_packet(bytes([COMM_SET_DUTY]) + struct.pack('>i', val))
-    ser.write(pkt)
+    return _safe_write(ser, pkt, 'set_duty_direct')
 
 
-def set_duty_can(ser, can_id: int, duty: float) -> None:
+def set_duty_can(ser, can_id: int, duty: float) -> bool:
     """Sends COMM_SET_DUTY to a VESC via CAN forwarding."""
     val = int(duty * 100000)
     inner = bytes([COMM_SET_DUTY]) + struct.pack('>i', val)
-    ser.write(_can_forward_packet(can_id, inner))
+    return _safe_write(ser, _can_forward_packet(can_id, inner), 'set_duty_can')
 
 
-def set_rpm_can(ser, can_id: int, erpm: int) -> None:
+def set_rpm_can(ser, can_id: int, erpm: int) -> bool:
     """
     Sends a SetRPM (ERPM) command to a VESC via CAN forwarding.
     VESC 1 relays the inner payload to can_id over the CAN bus.
@@ -323,7 +338,7 @@ def set_rpm_can(ser, can_id: int, erpm: int) -> None:
     """
     inner = bytes([COMM_SET_RPM]) + struct.pack('>i', int(erpm))
     pkt = _can_forward_packet(can_id, inner)
-    ser.write(pkt)
+    return _safe_write(ser, pkt, 'set_rpm_can')
 
 
 

@@ -205,15 +205,20 @@ def _cpu_temp() -> float | None:
 
 
 def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
-    """True = drive allowed for this VESC side.
-    bench_mode ON  → None telem = allow (no VESC hardware).
-    bench_mode OFF → None telem = block (full safety check).
-    Stale (>max_age s) or fault ≠ 0 always blocks."""
-    bench = bool(getattr(reg, 'vesc_bench_mode', False))
+    """True = drive allowed for this VESC side. UI-layer convenience wrapper
+    around vesc_safety._side_ok — the previous standalone implementation
+    diverged from vesc_safety's stricter "None telem always unsafe" rule
+    (B-13: UI status pill and the drive gate disagreed about which side
+    was offline). Now both paths share one source of truth.
+
+    Bench mode still bypasses entirely — the UI keeps green pills so the
+    dev can see the bench mode is doing what they asked for."""
+    if bool(getattr(reg, 'vesc_bench_mode', False)):
+        return True
     if telem is None:
-        return bench
+        return False
     if _time.time() - telem.get('ts', 0) > max_age:
-        return bench  # bench mode bypasses stale check too
+        return False
     return telem.get('fault', 0) == 0
 
 

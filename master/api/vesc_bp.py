@@ -40,6 +40,7 @@ Endpoints:
 
 import configparser
 import os
+import threading
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.config.config_loader import write_cfg_atomic
@@ -47,16 +48,27 @@ from master.config.config_loader import write_cfg_atomic
 from shared.paths import LOCAL_CFG as _LOCAL_CFG
 
 
+# Serialize every read-modify-write of local.cfg [vesc]. Two concurrent
+# POSTs (e.g. settings UI batched save: /vesc/config + /vesc/invert
+# firing within the same Flask worker pool tick) would otherwise each
+# read the on-disk state, mutate their own copy, and the second write
+# would clobber the first. The lock holds for the brief duration of
+# read+modify+atomic-write — typically <5ms — well below any user-
+# perceptible latency.
+_cfg_lock = threading.Lock()
+
+
 def _save_vesc_cfg(**kwargs) -> None:
-    """Persist one or more keys to local.cfg [vesc]."""
-    cfg = configparser.ConfigParser()
-    if os.path.exists(_LOCAL_CFG):
-        cfg.read(_LOCAL_CFG)
-    if not cfg.has_section('vesc'):
-        cfg.add_section('vesc')
-    for k, v in kwargs.items():
-        cfg.set('vesc', k, str(v))
-    write_cfg_atomic(cfg, _LOCAL_CFG)
+    """Persist one or more keys to local.cfg [vesc] under _cfg_lock."""
+    with _cfg_lock:
+        cfg = configparser.ConfigParser()
+        if os.path.exists(_LOCAL_CFG):
+            cfg.read(_LOCAL_CFG)
+        if not cfg.has_section('vesc'):
+            cfg.add_section('vesc')
+        for k, v in kwargs.items():
+            cfg.set('vesc', k, str(v))
+        write_cfg_atomic(cfg, _LOCAL_CFG)
 
 vesc_bp = Blueprint('vesc', __name__, url_prefix='/vesc')
 
