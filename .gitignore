@@ -20,6 +20,17 @@ slave/config/servo_angles.json
 .clone/
 .superpowers/
 
+# AI agent context files — used locally by Claude Code / Codex / other
+# assistants for project context. NOT pushed: they leak the development
+# workflow + AI co-authorship into the public repo.
+CLAUDE.md
+AGENTS.md
+
+# Beads issue tracker — local development state, not part of the
+# shippable code. The .beads/ directory contains dolt-backed issue
+# history, hooks, and config that only matter to the dev environment.
+.beads/
+
 # Captures d'écran et images locales
 feedbacks/
 image/
