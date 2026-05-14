@@ -492,6 +492,41 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
   }
 }
 
+// F-6: single-in-flight slot for /motion/arcade and /motion/drive POSTs.
+// The joystick onMove fires at 60Hz; on a slow network these can stack up
+// in the browser's HTTP/1.1 queue and arrive out of order on the Pi. Worse,
+// a `driveStop` POST issued on release can land BEFORE the last few stale
+// arcade commands — the robot keeps moving after the joystick is released.
+//
+// This helper aborts the previous in-flight motion request as soon as a
+// new one starts. driveStop / domeStop use regular api() (NOT this helper)
+// so the release POST is never aborted and always reaches the server.
+let _motionAbort = null;
+async function _postMotion(endpoint, body, timeoutMs = 3000) {
+  if (_motionAbort) { try { _motionAbort.abort(); } catch {} }
+  const ctrl = new AbortController();
+  _motionAbort = ctrl;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+    const url  = base + endpoint;
+    const res  = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) { console.warn(`API POST ${endpoint}: HTTP ${res.status}`); return null; }
+    return await res.json();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.error(`API POST ${endpoint}:`, e);
+    return null;
+  } finally {
+    clearTimeout(timer);
+    if (_motionAbort === ctrl) _motionAbort = null;
+  }
+}
+
 // ================================================================
 // Toast Manager
 // ================================================================
@@ -651,14 +686,18 @@ class LockManager {
     const dlabel = el('drive-lock-label');
     if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][mode];
 
-    // Timer Kids Mode
+    // F-7: always clear an existing Kids timer BEFORE deciding what to do.
+    // Re-entering mode 1 without this would leave the previous timer alive,
+    // and it could fire later setting _kidsTimedOut=true to a now-irrelevant
+    // mode. Same for transitioning Kids→Child without going through Normal.
+    if (this._kidsTimer) { clearTimeout(this._kidsTimer); this._kidsTimer = null; }
+
     if (mode === 1) {
       this._prevSpeed    = Math.round(_speedLimit * 100);
       this._kidsTimedOut = false;
       this._applyKidsSpeed();
       this._kidsTimer = setTimeout(() => { this._kidsTimedOut = true; }, this._KIDS_TIMEOUT);
     } else {
-      clearTimeout(this._kidsTimer);
       this._kidsTimedOut = false;
       if (mode === 0 && prev !== 0 && this._prevSpeed !== null) {
         const s = el('speed-slider');
@@ -697,13 +736,30 @@ class LockManager {
 
   syncFromStatus(lockMode) {
     if (lockMode !== undefined && lockMode !== this._mode) {
+      const prev = this._mode;
       this._mode = lockMode;
       document.body.dataset.lockMode = lockMode;
       const label = el('lock-mode-label');
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
       const dlabel = el('drive-lock-label');
       if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][lockMode];
-      if (lockMode === 1) this._applyKidsSpeed();
+      // F-5: mirror _applyMode's cleanup for the Kids timer + prev speed.
+      // Without this, an external lock-mode change (another tab, BT controller
+      // toggle) would leave a dangling _kidsTimer and never restore the user's
+      // pre-Kids speed slider. _applyMode is NOT called here on purpose —
+      // syncFromStatus reflects the server's already-applied state, so we
+      // skip the api('/lock/set') POST and the toast.
+      if (this._kidsTimer) { clearTimeout(this._kidsTimer); this._kidsTimer = null; }
+      this._kidsTimedOut = false;
+      if (lockMode === 1) {
+        this._prevSpeed = Math.round(_speedLimit * 100);
+        this._applyKidsSpeed();
+        this._kidsTimer = setTimeout(() => { this._kidsTimedOut = true; }, this._KIDS_TIMEOUT);
+      } else if (lockMode === 0 && prev !== 0 && this._prevSpeed !== null) {
+        const s = el('speed-slider');
+        if (s) { s.value = this._prevSpeed; setSpeed(this._prevSpeed); }
+        this._prevSpeed = null;
+      }
     }
   }
 }
@@ -1976,29 +2032,43 @@ function _camBase() {
     ? window.R2D2_API_BASE : '';
 }
 
+// F-10: prevent overlapping POST /camera/take calls. The function is
+// fired from multiple paths (button click, visibility resume, poll
+// recovery, img.onerror cascade) and the network round-trip is ~50-200ms.
+// Without this guard, two near-simultaneous take requests both succeed,
+// the SECOND token overrides the first, the first img.src=…&t=<old> 404s
+// immediately → onerror → another _takeCameraStream → cascade. Single
+// in-flight slot eliminates the cascade.
+let _camTakeInFlight = false;
 async function _takeCameraStream() {
   if (!_camEnabled) return;
-  const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
-    .then(r => r.json()).catch(() => null);
-  if (!r) return;
-  _camToken   = r.token;
-  _camErrored = false;
+  if (_camTakeInFlight) return;
+  _camTakeInFlight = true;
+  try {
+    const r = await fetch(_camBase() + '/camera/take', { method: 'POST' })
+      .then(r => r.json()).catch(() => null);
+    if (!r) return;
+    _camToken   = r.token;
+    _camErrored = false;
 
-  const img   = el('cam-stream');
-  const bg    = el('cam-bg');
-  const taken = el('cam-taken');
-  if (!img) return;
+    const img   = el('cam-stream');
+    const bg    = el('cam-bg');
+    const taken = el('cam-taken');
+    if (!img) return;
 
-  // Detect mjpg_streamer going away (service restart / camera unplug)
-  img.onerror = () => { _camErrored = true; };
+    // Detect mjpg_streamer going away (service restart / camera unplug)
+    img.onerror = () => { _camErrored = true; };
 
-  if (taken) taken.style.display = 'none';
-  img.src = _camBase() + `/camera/stream?t=${_camToken}&_=${Date.now()}`;
-  img.style.display = 'block';
-  if (bg) bg.style.display = 'none';
+    if (taken) taken.style.display = 'none';
+    img.src = _camBase() + `/camera/stream?t=${_camToken}&_=${Date.now()}`;
+    img.style.display = 'block';
+    if (bg) bg.style.display = 'none';
 
-  _startCamPoll();
-  _startCamRefresh();
+    _startCamPoll();
+    _startCamRefresh();
+  } finally {
+    _camTakeInFlight = false;
+  }
 }
 
 function _startCamPoll() {
@@ -2192,7 +2262,15 @@ window.addEventListener('blur', () => {
   }
 });
 
+// F-9: serialize E-STOP / RESET button so rapid clicks (or a click during
+// the network round-trip of the previous action) cannot fire two stop or
+// two reset sequences. _estopBusy stays True from the moment the button
+// is pressed until either the request resolves or a short cooldown
+// elapses (300ms) — whichever comes later.
+let _estopBusy = false;
+
 function toggleEstop() {
+  if (_estopBusy) return;
   if (_estopTripped) { estopReset(); } else { emergencyStop(); }
 }
 
@@ -2203,16 +2281,24 @@ function emergencyStop() {
   // /servo/{dome,body}/close_all from here would race the freeze and let
   // panels return to the closed position, which is exactly the bug we're
   // avoiding — Reset E-STOP is what stows the robot at a safe slew rate.
+  // F-9: flip _estopTripped + _estopBusy IMMEDIATELY so a click landing
+  // during the await on the four POSTs cannot re-fire emergencyStop().
+  _estopBusy = true;
+  _setEstopUI(true);
   driveStop();
   domeStop();
   api('/audio/stop', 'POST');
   api('/system/estop', 'POST');
   toast('EMERGENCY STOP — frozen in place', 'error');
   audioBoard.setPlaying(false);
-  _setEstopUI(true);
+  setTimeout(() => { _estopBusy = false; }, 300);
 }
 
 function estopReset() {
+  // F-9: same serialization for reset. Don't flip _estopTripped here —
+  // wait for server confirmation. _estopBusy prevents double-fire during
+  // the round-trip.
+  _estopBusy = true;
   api('/system/estop_reset', 'POST').then(r => {
     if (r && r.status === 'reset') {
       toast('E-STOP RESET — servos re-armed', 'ok');
@@ -2220,7 +2306,8 @@ function estopReset() {
     } else {
       toast('Reset failed', 'error');
     }
-  }).catch(() => toast('Reset failed', 'error'));
+  }).catch(() => toast('Reset failed', 'error'))
+    .finally(() => { _estopBusy = false; });
 }
 
 // Left joystick — Propulsion (arcade drive)
@@ -2253,7 +2340,7 @@ const jsLeft = new VirtualJoystick(
     _leftActive = true;
     const throttle = -y * _speedLimit;
     const steering =  x * _speedLimit * 0.55;
-    api('/motion/arcade', 'POST', { throttle, steering });
+    _postMotion('/motion/arcade', { throttle, steering });
     _updateDriveHUD(throttle, steering);
     const t = el('js-left-t'); if (t) t.textContent = throttle.toFixed(2);
     const s = el('js-left-s'); if (s) s.textContent = steering.toFixed(2);
@@ -2277,7 +2364,7 @@ const jsRight = new VirtualJoystick(
     const vx = el('js-right-x'); if (vx) vx.textContent = x.toFixed(2);
     const vy = el('js-right-y'); if (vy) vy.textContent = y.toFixed(2);
     if (Math.abs(x) > DEADZONE) {
-      api('/motion/dome/turn', 'POST', { speed: x * 0.85 });
+      _postMotion('/motion/dome/turn', { speed: x * 0.85 });
       _domeActive = true;
     } else if (_domeActive) {
       domeStop();
@@ -2356,7 +2443,7 @@ function _handleKeys() {
     _propKeyWasActive = true;
     const throttle = (fwd ? 1 : back  ? -1 : 0) * _speedLimit;
     const steering = (right ? 1 : left ? -1 : 0) * _speedLimit * 0.5;
-    api('/motion/arcade', 'POST', { throttle, steering });
+    _postMotion('/motion/arcade', { throttle, steering });
     _updateDriveHUD(throttle, steering);
   } else if (_propKeyWasActive) {
     _propKeyWasActive = false;
@@ -2370,7 +2457,7 @@ function _handleKeys() {
   const domeR = _keys['ArrowRight'];
   if (domeL || domeR) {
     _domeKeyWasActive = true;
-    api('/motion/dome/turn', 'POST', { speed: domeR ? 0.4 : -0.4 });
+    _postMotion('/motion/dome/turn', { speed: domeR ? 0.4 : -0.4 });
   } else if (_domeKeyWasActive) {
     _domeKeyWasActive = false;
     domeStop();
@@ -3460,7 +3547,7 @@ const vescTest = {
     L *= this._SPEED;
     R *= this._SPEED;
 
-    api('/motion/drive', 'POST', { left: L, right: R });
+    _postMotion('/motion/drive', { left: L, right: R });
     this._updateBars(L, R);
     this._setStatus('DRIVING', 'ok');
   },
@@ -4146,7 +4233,7 @@ class BTController {
       if (now - this._lastDriveMs >= this._DRIVE_HZ) {
         this._lastDriveMs = now;
         if (Math.abs(t) > 0.01 || Math.abs(s) > 0.01) {
-          api('/motion/arcade', 'POST', { throttle: t, steering: s });
+          _postMotion('/motion/arcade', { throttle: t, steering: s });
           this._driveActive = true;
         } else if (this._driveActive) {
           api('/motion/stop', 'POST');
@@ -4168,7 +4255,7 @@ class BTController {
     if (now - this._lastDomeMs >= this._DOME_HZ) {
       this._lastDomeMs = now;
       if (Math.abs(dRaw) > dz) {
-        api('/motion/dome/turn', 'POST', { speed: dRaw * 0.85 });
+        _postMotion('/motion/dome/turn', { speed: dRaw * 0.85 });
         this._domeActive = true;
       } else if (this._domeActive) {
         api('/motion/dome/stop', 'POST');
