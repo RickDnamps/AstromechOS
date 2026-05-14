@@ -502,17 +502,38 @@ class ToastManager {
     this._timer = null;
   }
 
-  show(msg, type = 'info') {
+  // action = { label: 'UNDO', onClick: () => {} } — adds a clickable button
+  // to the toast and extends the auto-dismiss to 5s. Click dismisses the
+  // toast and runs onClick(). Null/undefined action = plain toast.
+  show(msg, type = 'info', action = null) {
     const t = this._el;
-    t.textContent = msg;
+    if (action && action.label) {
+      const safeLbl = String(action.label)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      t.innerHTML = `<span class="toast-msg"></span>` +
+        `<button type="button" class="toast-action" style="margin-left:10px;padding:2px 9px;` +
+        `background:rgba(0,200,255,.18);border:1px solid var(--blue);border-radius:3px;` +
+        `color:var(--blue);cursor:pointer;font-family:var(--font-data);font-size:10px;` +
+        `letter-spacing:1.2px;text-transform:uppercase">${safeLbl}</button>`;
+      t.querySelector('.toast-msg').textContent = msg;
+      const btn = t.querySelector('.toast-action');
+      btn.addEventListener('click', () => {
+        try { action.onClick(); } finally {
+          clearTimeout(this._timer);
+          t.classList.remove('show');
+        }
+      });
+    } else {
+      t.textContent = msg;
+    }
     t.className = `toast toast-${type} show`;
     clearTimeout(this._timer);
-    this._timer = setTimeout(() => t.classList.remove('show'), 3000);
+    this._timer = setTimeout(() => t.classList.remove('show'), action ? 5000 : 3000);
   }
 }
 
 const toastMgr = new ToastManager();
-function toast(msg, type = 'info') { toastMgr.show(msg, type); }
+function toast(msg, type = 'info', action = null) { toastMgr.show(msg, type, action); }
 
 // ================================================================
 // Tab Navigation
@@ -6039,6 +6060,11 @@ const choreoEditor = (() => {
   let _dirty       = false;
   let _existsOnDisk = false;  // true only after an explicit admin Save or loading an existing file
   let _lanesWired  = false;
+  // _busy = an in-flight /choreo/play, /choreo/save or /choreo/stop request.
+  // Prevents double-fires from rapid clicks and serializes save↔play so a
+  // concurrent save can't race against the server-side play (which reads
+  // the .chor file off disk).
+  let _busy        = false;
   let _lastTelem   = null;
   let _lastLightsEvT = -1;  // tracks active lights event start time — avoids re-triggering setText every poll
   let _audioOverflowIdxs = new Set();  // indices of audio events that will be dropped
@@ -6770,6 +6796,34 @@ const choreoEditor = (() => {
     if (track === 'audio') _validateAudioOverflow();
   }
 
+  // Soft-delete with 5s UNDO toast — used for drag-out-of-lane deletion
+  // since that gesture is irreversible and easy to trigger by accident
+  // (especially on tablets). Snapshots the item BEFORE splicing so the
+  // restore is exact, including the original index position.
+  function _softDeleteWithUndo(track, idx) {
+    if (!_chor || !_chor.tracks[track] || _chor.tracks[track][idx] == null) return;
+    const snapshot = _chor.tracks[track][idx];
+    const label = _blockLabel(track, snapshot);
+    _deleteBlock(track, idx);
+    toast(`Deleted: ${label}`, 'warn', {
+      label: 'UNDO',
+      onClick: () => {
+        if (!_chor) return;
+        if (!_chor.tracks[track]) _chor.tracks[track] = [];
+        _chor.tracks[track].push(snapshot);
+        _chor.tracks[track].sort((a, b) => (a.t || 0) - (b.t || 0));
+        _dirty = true;
+        _renderTrack(track);
+        _refreshLayout();
+        if (track === 'audio') _validateAudioOverflow();
+        // Re-select the restored block so the user sees it pop back.
+        const newIdx = _chor.tracks[track].indexOf(snapshot);
+        if (newIdx >= 0 && track !== 'dome') _selectBlock(track, newIdx);
+        toast('Restored', 'ok');
+      },
+    });
+  }
+
   function _renderDomeLane(keyframes) {
     const lane = _lane('dome');
     if (!lane) return;
@@ -6985,8 +7039,12 @@ const choreoEditor = (() => {
       document.removeEventListener('mouseup', onUp);
       if (scroll) {
         const r = scroll.getBoundingClientRect();
+        // Soft-delete with UNDO when dragged out of the timeline area.
+        // The old code called _deleteBlock directly with no recovery — on a
+        // tablet or oversensitive trackpad this destroys work silently.
+        // Snapshot the item, splice, and show a 5s undo toast.
         if (e2.clientY < r.top || e2.clientY > r.bottom) {
-          _deleteBlock(track, idx);
+          _softDeleteWithUndo(track, idx);
           return;
         }
       }
@@ -7636,11 +7694,23 @@ const choreoEditor = (() => {
 
       const names = await api('/choreo/list');
       const sel   = document.getElementById('chor-select');
-      if (!sel || !names) return;
-      sel.innerHTML = '<option value="">— select choreography —</option>' +
-        _chorSelectOptions(names);
-      if (_chor && _chor.meta && _chor.meta.name) sel.value = _chor.meta.name;
-      sel.onchange = () => this.load(sel.value);
+      if (sel && names) {
+        sel.innerHTML = '<option value="">— select choreography —</option>' +
+          _chorSelectOptions(names);
+        if (_chor && _chor.meta && _chor.meta.name) sel.value = _chor.meta.name;
+        sel.onchange = () => this.load(sel.value);
+      }
+      // F-10: if a choreo is currently playing on the Pi (tab was opened
+      // during playback, OR user switched away then back), resume polling
+      // so the playhead/timecode/telem are live again. Previously the tab
+      // switch at app.js:872 cleared _pollTimer and init() never restarted
+      // it, leaving the UI frozen until the user clicked Play or Stop.
+      try {
+        const status = await api('/choreo/status');
+        if (status && status.playing) {
+          _startPolling();
+        }
+      } catch {}
     },
 
     async load(name) {
@@ -7775,41 +7845,72 @@ const choreoEditor = (() => {
 
     async play() {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
-      let playName = _chor.meta.name;
-      const isAdmin = document.body.classList.contains('admin-unlocked');
-      if (_existsOnDisk && !_dirty) {
-        // No changes — play the saved file as-is
-      } else if (_existsOnDisk && _dirty && isAdmin) {
-        // Admin modified an existing file — auto-sync to disk before playing
-        await this.save({ requireAuth: false });
-      } else {
-        // Non-admin with unsaved edits, OR new choreo never saved — use invisible temp file
-        const preview = { ..._chor, meta: { ..._chor.meta, name: '__preview__' } };
-        await api('/choreo/save', 'POST', { chor: preview });
-        playName = '__preview__';
-      }
-      const result = await api('/choreo/play', 'POST', { name: playName });
-      if (result) {
-        if (playName === '__preview__' && isAdmin) {
-          toast(`Preview playing — press Save to keep this choreography`, 'warn');
+      // _busy guard: serializes play/save/stop so a double-click on PLAY
+      // (or PLAY while a save is in flight) can't race the server. The
+      // server-side _play_lock catches concurrent /choreo/play requests
+      // too, but a 503 from there is ugly UX — better to short-circuit
+      // here and tell the user "still working".
+      if (_busy) { toast('Still working — wait a moment', 'warn'); return; }
+      _busy = true;
+      try {
+        let playName = _chor.meta.name;
+        const isAdmin = document.body.classList.contains('admin-unlocked');
+        if (_existsOnDisk && !_dirty) {
+          // No changes — play the saved file as-is
+        } else if (_existsOnDisk && _dirty && isAdmin) {
+          // Admin modified an existing file — auto-sync to disk before playing
+          await this._save({ requireAuth: false });
         } else {
-          toast(`Playing: ${_chor.meta.name}`, 'ok');
+          // Non-admin with unsaved edits, OR new choreo never saved — use invisible temp file
+          const preview = { ..._chor, meta: { ..._chor.meta, name: '__preview__' } };
+          await api('/choreo/save', 'POST', { chor: preview });
+          playName = '__preview__';
         }
-        _startPolling();
+        const result = await api('/choreo/play', 'POST', { name: playName });
+        if (result) {
+          if (playName === '__preview__' && isAdmin) {
+            toast(`Preview playing — press Save to keep this choreography`, 'warn');
+          } else {
+            toast(`Playing: ${_chor.meta.name}`, 'ok');
+          }
+          _startPolling();
+        }
+      } finally {
+        _busy = false;
       }
     },
 
     async stop() {
-      await api('/choreo/stop', 'POST');
-      _stopPolling(); _updateAlarms(null);
-      const ph = document.getElementById('chor-playhead'); if (ph) ph.style.left = '0px';
-      const tc = document.getElementById('chor-timecode'); if (tc) tc.textContent = '00:00.000';
-      _updateTelem(null);
-      _chorMon.setMode('random');
-      toast('Choreo stopped', 'ok');
+      if (_busy) { toast('Still working — wait a moment', 'warn'); return; }
+      _busy = true;
+      try {
+        await api('/choreo/stop', 'POST');
+        _stopPolling(); _updateAlarms(null);
+        const ph = document.getElementById('chor-playhead'); if (ph) ph.style.left = '0px';
+        const tc = document.getElementById('chor-timecode'); if (tc) tc.textContent = '00:00.000';
+        _updateTelem(null);
+        _chorMon.setMode('random');
+        toast('Choreo stopped', 'ok');
+      } finally {
+        _busy = false;
+      }
     },
 
-    async save({ requireAuth = true } = {}) {
+    // Public save(): guards with _busy. Internal _save() bypasses the guard
+    // because it's called from play() which already holds _busy=true; calling
+    // the public save() from there would dead-lock the toast at "still
+    // working" and skip the save.
+    async save(opts = {}) {
+      if (_busy) { toast('Still working — wait a moment', 'warn'); return; }
+      _busy = true;
+      try {
+        await this._save(opts);
+      } finally {
+        _busy = false;
+      }
+    },
+
+    async _save({ requireAuth = true } = {}) {
       if (requireAuth && !adminGuard.unlocked && !_choreoUnlocked) {
         adminGuard.showModal(null, () => choreoEditor.save());
         return;
