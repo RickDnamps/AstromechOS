@@ -1033,7 +1033,15 @@ class BatteryGauge {
 
   update(voltage) {
     this._lastV = voltage;
-    if (!voltage || voltage < 1) return;
+    // No voltage available → empty the arcs + show '--V' so a VESC
+    // disconnect doesn't leave the last reading on screen.
+    if (!voltage || voltage < 1) {
+      if (this._arc)     { this._arc.style.strokeDashoffset = this._TOTAL; this._arc.style.stroke = 'var(--text-dim)'; }
+      if (this._text)    { this._text.textContent = '--V';   this._text.style.fill  = 'var(--text-dim)'; }
+      if (this._arcMini) { this._arcMini.style.strokeDashoffset = this._MINI; this._arcMini.style.stroke = 'var(--text-dim)'; }
+      if (this._pct)     { this._pct.textContent  = '--V';   this._pct.style.color  = 'var(--text-dim)'; }
+      return;
+    }
     const pct   = Math.max(0, Math.min(1, (voltage - this._MIN_V) / (this._MAX_V - this._MIN_V)));
     const color = this.voltToColor(voltage);
 
@@ -5237,17 +5245,27 @@ class StatusPoller {
     // Robot icon — update header icon wrap + highlight selected picker btn
     if (data.robot_icon !== undefined) _applyRobotIcon(data.robot_icon);
 
-    // Battery gauge
-    if (data.battery_voltage) batteryGauge.update(data.battery_voltage);
+    // Battery gauge — also clear on null so a disconnected VESC drops
+    // the arc back to grey instead of holding the last reading.
+    if (data.battery_voltage != null) batteryGauge.update(data.battery_voltage);
+    else                              batteryGauge.update(null);
 
-    // Drive tab VESC stats (voltage + VESC temp)
+    // Drive tab VESC stats (voltage + VESC temp). Show '--' on null so a
+    // VESC disconnect immediately reflects in the top bar instead of the
+    // user staring at the last-good reading thinking the VESC is still up.
     const sv = el('drive-stat-v');
     const st = el('drive-stat-t');
-    if (sv && data.battery_voltage != null)
-      sv.textContent = data.battery_voltage.toFixed(1) + 'V';
-    if (st && data.vesc_temp != null) {
-      st.textContent = data.vesc_temp.toFixed(0) + '°C';
-      st.style.color = data.vesc_temp < 50 ? 'var(--text-dim)' : data.vesc_temp < 70 ? 'var(--orange)' : 'var(--red)';
+    if (sv) sv.textContent = data.battery_voltage != null
+      ? data.battery_voltage.toFixed(1) + 'V'
+      : '--V';
+    if (st) {
+      if (data.vesc_temp != null) {
+        st.textContent = data.vesc_temp.toFixed(0) + '°C';
+        st.style.color = data.vesc_temp < 50 ? 'var(--text-dim)' : data.vesc_temp < 70 ? 'var(--orange)' : 'var(--red)';
+      } else {
+        st.textContent = '--°C';
+        st.style.color = 'var(--text-dim)';
+      }
     }
 
     // Temperature

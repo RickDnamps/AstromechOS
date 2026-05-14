@@ -222,6 +222,28 @@ def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
     return telem.get('fault', 0) == 0
 
 
+def _fresh_telem(side: str, max_age: float = 2.0) -> dict | None:
+    """Return reg.vesc_telem[side] if fresh, else None.
+
+    Reported by user 2026-05-14: unplugging the Left VESC kept showing
+    battery + temperature values in the top bar and cockpit Status panel
+    even though the side was correctly flagged offline elsewhere. Cause:
+    the per-side stat fields (`battery_voltage`, `vesc_temp`,
+    `vesc_l_temp` etc.) read reg.vesc_telem[...] directly without a
+    timestamp check, so the LAST received frame from before the
+    disconnect was served forever. This helper centralises the
+    staleness guard so every display path sees a consistent "telem
+    expired → None" view, matching the existing _vesc_side_ok gate
+    used for the drive safety check.
+    """
+    telem = reg.vesc_telem.get(side)
+    if telem is None:
+        return None
+    if _time.time() - telem.get('ts', 0) > max_age:
+        return None
+    return telem
+
+
 @status_bp.get('/status')
 def get_status():
     """Full AstromechOS system state."""
@@ -244,16 +266,21 @@ def get_status():
         'heartbeat_ok': heartbeat_ok,   # App ↔ Master
         'uart_ready':   uart_ready,     # Master ↔ Slave UART
         'app_hb_age_ms': app_watchdog.last_hb_age_ms,
+        # Aggregate stats over BOTH sides — but skip stale frames so a
+        # disconnected VESC stops contributing voltage/temp values after
+        # the 2s staleness threshold. Was previously serving the last
+        # received frame indefinitely (visible bug 2026-05-14 — Left VESC
+        # unplugged, top bar still showed battery + temp values).
         'battery_voltage':  next(
-            (t['v_in'] for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
+            (t['v_in'] for t in [_fresh_telem('L'), _fresh_telem('R')]
              if t and t.get('v_in')), None
         ),
         'vesc_temp': max(
-            (t['temp'] for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
+            (t['temp'] for t in [_fresh_telem('L'), _fresh_telem('R')]
              if t and t.get('temp') is not None), default=None
         ),
         'vesc_duty': max(
-            (abs(t['duty']) for t in [reg.vesc_telem.get('L'), reg.vesc_telem.get('R')]
+            (abs(t['duty']) for t in [_fresh_telem('L'), _fresh_telem('R')]
              if t and t.get('duty') is not None), default=None
         ),
         'teeces_ready':     bool(reg.teeces     and reg.teeces.is_ready()),
@@ -285,14 +312,16 @@ def get_status():
         'motor_hat_health':  (reg.slave_uart_health or {}).get('motor_hat_health'),
         'display_ready':     (reg.slave_uart_health or {}).get('display_ready'),
         'display_port':      (reg.slave_uart_health or {}).get('display_port'),
-        'vesc_l_temp':       (reg.vesc_telem.get('L') or {}).get('temp'),
-        'vesc_r_temp':       (reg.vesc_telem.get('R') or {}).get('temp'),
-        'vesc_l_curr':       (reg.vesc_telem.get('L') or {}).get('current'),
-        'vesc_r_curr':       (reg.vesc_telem.get('R') or {}).get('current'),
-        'vesc_l_duty':       (reg.vesc_telem.get('L') or {}).get('duty'),
-        'vesc_r_duty':       (reg.vesc_telem.get('R') or {}).get('duty'),
-        'vesc_l_rpm':        (reg.vesc_telem.get('L') or {}).get('rpm'),
-        'vesc_r_rpm':        (reg.vesc_telem.get('R') or {}).get('rpm'),
+        # Per-side stats — also gated by staleness so a disconnected
+        # side returns None (UI shows '--') instead of the last frame.
+        'vesc_l_temp':       (_fresh_telem('L') or {}).get('temp'),
+        'vesc_r_temp':       (_fresh_telem('R') or {}).get('temp'),
+        'vesc_l_curr':       (_fresh_telem('L') or {}).get('current'),
+        'vesc_r_curr':       (_fresh_telem('R') or {}).get('current'),
+        'vesc_l_duty':       (_fresh_telem('L') or {}).get('duty'),
+        'vesc_r_duty':       (_fresh_telem('R') or {}).get('duty'),
+        'vesc_l_rpm':        (_fresh_telem('L') or {}).get('rpm'),
+        'vesc_r_rpm':        (_fresh_telem('R') or {}).get('rpm'),
         'battery_cells':     _battery_cells(),
         'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
         'slave_host':        _slave_host(),
