@@ -386,14 +386,29 @@ class VescDriver(BaseDriver):
                 continue
 
             # --- Normal telemetry read ---
+            # Split into two separate lock acquisitions so a drive() call
+            # arriving at 60 Hz can interleave between the direct read and
+            # the CAN read. Old single-lock block held _lock for ~120ms
+            # (60ms time.sleep inside each get_values_* call), making drive
+            # frames pile up in the UART listener queue and risking
+            # slave-watchdog timeout (500ms) under heavy telem traffic.
+            # Worst case now: drive waits ~60-70ms for one of the two reads
+            # to finish — half the old contention.
+            vl = vr = None
             try:
                 with self._lock:
                     vl = get_values_direct(self._serial)
-                    vr = get_values_can(self._serial, VESC_ID_CAN)
             except Exception as e:
-                log.warning(f"VescDriver: serial exception — forcing reconnect: {e}")
-                vl = vr = None
+                log.warning(f"VescDriver: serial exception (direct read) — forcing reconnect: {e}")
                 _fail_left = _FAIL_THRESHOLD   # trigger reconnect immediately
+            else:
+                # Release the lock between reads — drive() can interleave here.
+                try:
+                    with self._lock:
+                        vr = get_values_can(self._serial, VESC_ID_CAN)
+                except Exception as e:
+                    log.warning(f"VescDriver: serial exception (CAN read): {e}")
+                    vr = None
 
             if vl is None:
                 _fail_left += 1
