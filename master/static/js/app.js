@@ -2952,6 +2952,7 @@ renderCalibration();
 class AudioBoard {
   constructor() {
     this._currentCat    = null;
+    this._selectEpoch   = 0;   // F-18: monotonic counter for selectCategory races
     this._playing       = false;
     this._tickInterval  = null;
     this._timedSound    = '';
@@ -3010,7 +3011,10 @@ class AudioBoard {
       api('/audio/categories'),
       api('/audio/index'),
     ]);
-    if (indexData?.categories) this._fullIndex = indexData.categories;
+    if (indexData?.categories) {
+      this._fullIndex = indexData.categories;
+      this._sound2cat = null;   // F-11: invalidate reverse-index cache
+    }
     if (!data || !data.categories) return;
     const wrap = el('audio-categories');
     if (!wrap) return;
@@ -3068,7 +3072,18 @@ class AudioBoard {
   }
 
   async selectCategory(cat) {
+    // F-18: epoch token. Rapid double-click on two different category
+    // pills can race: fetch A in flight, click B → fetch B in flight, A
+    // resolves first → grid fills with A while pill B is active. Bump
+    // the epoch on entry, compare on resolve, bail if stale.
+    const epoch = ++this._selectEpoch;
     this._currentCat = cat;
+
+    // F-16: reset the sound filter when changing category — searching in
+    // 'happy' shouldn't silently hide everything when the user jumps to
+    // 'angry'.
+    const filterInp = el('audio-sounds-filter');
+    if (filterInp) filterInp.value = '';
 
     // Marquer la pill active
     document.querySelectorAll('.category-pill').forEach(p => p.classList.remove('active'));
@@ -3094,6 +3109,9 @@ class AudioBoard {
     this.showUploadZone(adminGuard?.unlocked === true);
 
     const data = await api(`/audio/sounds?category=${cat}`);
+    // F-18: bail if user clicked another category while this fetch was
+    // in flight — would otherwise overwrite the more-recent selection.
+    if (epoch !== this._selectEpoch) return;
 
     // F-1 fix: build sound buttons via createElement + dataset so a sound
     // name containing ' or < cannot break out of an inline onclick or
@@ -3138,9 +3156,27 @@ class AudioBoard {
     }
   }
 
+  // F-16: live filter for the sound grid. Hides buttons whose data-sound
+  // doesn't contain the query (case-insensitive substring). RANDOM button
+  // always stays visible.
+  filterSounds(query) {
+    const q = (query || '').trim().toLowerCase();
+    const grid = el('audio-sounds-grid');
+    if (!grid) return;
+    grid.querySelectorAll('button[data-sound]').forEach(btn => {
+      const match = !q || btn.dataset.sound.toLowerCase().includes(q);
+      btn.style.display = match ? '' : 'none';
+    });
+  }
+
   play(sound) {
+    // F-10: only flip the playing state when the server actually accepts.
+    // Old `if (d && d.ok !== false)` treated server 404 (api() returns
+    // null → d is null) as success because `undefined !== false` is
+    // true → UI showed 'playing' for 60s while NOTHING was playing.
+    // Now check for the server's `{status:'ok', sound}` shape explicitly.
     api('/audio/play', 'POST', { sound }).then(d => {
-      if (d && d.ok !== false) this.setPlaying(true, sound);
+      if (d && d.status === 'ok') this.setPlaying(true, sound);
     });
   }
 
@@ -3148,7 +3184,8 @@ class AudioBoard {
     const c = cat || this._currentCat || 'happy';
     this._lastRandomCat = c;
     api('/audio/random', 'POST', { category: c }).then(d => {
-      if (d) {
+      // F-10: same check — only flip UI when server confirmed.
+      if (d && d.status === 'ok') {
         const label = this._CAT_LABELS[c] || c;
         this.setPlaying(true, `🎲 ${label}`);
       }
@@ -3212,10 +3249,17 @@ class AudioBoard {
   }
 
   _getCatForSound(sound) {
-    for (const [cat, sounds] of Object.entries(this._fullIndex)) {
-      if (sounds.includes(sound)) return cat;
+    // F-11: lazy-built reverse index. Old code did O(N×M) scan on every
+    // /status poll (every 2s) — fine for 317 sounds but wasteful. Map
+    // built once per loadCategories() call (and invalidated by setting
+    // _sound2cat = null in loadCategories).
+    if (!this._sound2cat) {
+      this._sound2cat = new Map();
+      for (const [cat, sounds] of Object.entries(this._fullIndex || {})) {
+        for (const s of sounds) this._sound2cat.set(s, cat);
+      }
     }
-    return null;
+    return this._sound2cat.get(sound) || null;
   }
 
   _fmtTime(ms) {
@@ -3239,13 +3283,30 @@ class AudioBoard {
     this._timedSound = sound;
     this._totalMs = 0;
 
-    // Fetch real MP3 duration via Audio element (specific files only, not RANDOM)
+    // F-13: abort the PREVIOUS metadata-fetch before starting a new one.
+    // Rapid clicks (e.g. browsing sounds) used to fire 50+ parallel
+    // <audio> elements, each downloading Content-Length bytes via range
+    // request — wasteful and slow on the Pi network. Now we keep a single
+    // _metadataAudio reference and clear it before reuse.
+    if (this._metadataAudio) {
+      try {
+        this._metadataAudio.removeAttribute('src');
+        this._metadataAudio.load();   // forces the browser to abort the request
+      } catch {}
+      this._metadataAudio = null;
+    }
+
+    // Fetch real MP3 duration via Audio element (specific files only, not RANDOM).
+    // encodeURIComponent in case a future name allows URL-special chars.
     if (sound && !sound.startsWith('🎲')) {
-      const a = new Audio(`/audio/file/${sound}`);
+      const a = new Audio(`/audio/file/${encodeURIComponent(sound)}`);
+      this._metadataAudio = a;
       a.addEventListener('loadedmetadata', () => {
         if (this._timedSound === sound && isFinite(a.duration))
           this._totalMs = a.duration * 1000;
-      });
+      }, { once: true });
+      a.addEventListener('error', () => {}, { once: true });   // F-13: silence 404 noise
+      a.preload = 'metadata';
       a.load();
     }
 
@@ -3259,6 +3320,12 @@ class AudioBoard {
         timeEl.textContent = `${elapsed} / ${total}`;
       }
       if (fill && this._totalMs > 0) {
+        // F-12: duration known → switch from indeterminate sliding bar
+        // to actual progress, and remove the animation class.
+        if (fill.classList.contains('indeterminate')) {
+          fill.classList.remove('indeterminate');
+          fill.style.transform = '';
+        }
         fill.style.width = `${Math.min(100, (elapsedMs / this._totalMs) * 100)}%`;
       }
     }, 500);
@@ -3278,7 +3345,23 @@ class AudioBoard {
       const cat = this._getCatForSound(name);
       if (cat) displayName = `${this._ICONS[cat] || '🔊'} ${name}`;
     }
-    if (text) text.textContent = displayName;
+    if (text) {
+      text.textContent = displayName;
+      // F-15: long filenames get ellipsized by `now-playing-text` CSS
+      // (overflow:hidden; text-overflow:ellipsis). Set title so the user
+      // can hover to see the full name.
+      text.title = active ? displayName : '';
+    }
+
+    // F-12: progress bar — when total duration is unknown (random sound
+    // or metadata not yet loaded), show an indeterminate sliding bar
+    // instead of the static 0% fill that looks identical to "just
+    // started" then jumps abruptly when metadata arrives.
+    const fillElForState = el('now-playing-progress-fill');
+    if (fillElForState) {
+      fillElForState.classList.toggle('indeterminate',
+        active && this._totalMs <= 0);
+    }
 
     if (active && (!wasPlaying || !sameSong)) {
       this._startTimer(name);

@@ -1558,6 +1558,20 @@ body[data-lock-mode="2"] #js-left-ring::after {
   transition: width 0.5s linear;
 }
 
+/* F-12: indeterminate state when duration is unknown (random sound or
+   metadata not yet fetched). A sliding bar tells the user 'something is
+   playing, just don't know how long' instead of the static 0% fill
+   that looks identical to 'just started'. */
+.now-playing-progress-fill.indeterminate {
+  width: 30%;
+  animation: now-playing-indet 1.4s ease-in-out infinite;
+  transition: none;   /* override the 0.5s width transition during animation */
+}
+@keyframes now-playing-indet {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(333%); }
+}
+
 .audio-quick-btns {
   display: flex;
   gap: 8px;

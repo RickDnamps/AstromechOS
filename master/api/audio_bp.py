@@ -103,18 +103,56 @@ _SOUND_NAME_RE = re.compile(r'^[A-Za-z0-9_]{1,80}$')
 _CATEGORY_NAME_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 
 
-def _get_sound_duration_ms(sound: str, fallback_ms: int = 60000) -> int:
-    """Estimate MP3 duration from file size (assumes ~128 kbps CBR). Returns ms."""
-    path = os.path.join(_SOUNDS_DIR, sound + '.mp3')
-    if not os.path.isfile(path):
-        return fallback_ms
+# B-14: duration cache. _get_sound_duration_ms is called on every /play
+# AND on every choreo audio block dispatch. Re-stat-ing the file each time
+# is fine for 317 files but the math is wrong (128 kbps assumed CBR — real
+# R2-D2 sounds are 192 kbps VBR, so the old estimate ran ~30% LONG).
+# Cache by (path, mtime) so a re-encoded file invalidates automatically.
+_DURATION_CACHE: dict = {}   # {path: (mtime, ms)}
+
+
+def _estimate_duration_ms(path: str, fallback_ms: int = 60000) -> int:
+    """File-size-based duration estimate (no decode). 192 kbps is the
+    typical R2 sound bitrate — closer to ground truth than the previous
+    128 kbps assumption. Off by ±20% on VBR but acceptable for the
+    audio_playing flag's lifetime (the UI just uses this to decide when
+    to clear the 'now playing' badge)."""
     try:
         size = os.path.getsize(path)
-        return int(size * 8 / 128) + 800   # 128 kbps + 800ms buffer
+        # 192 kbps = 24 KB/s. +500ms for the mpg123 cold-start tail.
+        return int(size * 8 / 192) + 500
     except OSError:
-        # File disappeared between exists() and getsize() — fall back. Don't
-        # swallow other exceptions (e.g. permission errors → real bug).
         return fallback_ms
+
+
+def _get_sound_duration_ms(sound: str, fallback_ms: int = 60000) -> int:
+    """Returns the cached duration in ms, refreshing on file mtime change."""
+    path = os.path.join(_SOUNDS_DIR, sound + '.mp3')
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return fallback_ms
+    cached = _DURATION_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    dur_ms = _estimate_duration_ms(path, fallback_ms)
+    _DURATION_CACHE[path] = (mtime, dur_ms)
+    return dur_ms
+
+
+def _category_avg_duration_ms(category: str, fallback_ms: int = 8000) -> int:
+    """Average duration of all sounds in a category. Used by /audio/random
+    when the master can't predict which file the slave will pick — old
+    code hard-coded 60s, which made auto-random rate-limited to ~1 sound
+    per minute for short clips (F-4 of the audit). Now we estimate from
+    the category's actual content. Fallback 8s ≈ typical R2 quote length."""
+    sounds = _get_index().get('categories', {}).get(category, [])
+    if not sounds:
+        return fallback_ms
+    durations = [_get_sound_duration_ms(s, fallback_ms) for s in sounds]
+    if not durations:
+        return fallback_ms
+    return sum(durations) // len(durations)
 
 
 def _schedule_audio_reset(duration_ms: int) -> None:
@@ -277,18 +315,35 @@ def play_random():
         reg.uart.send('S', f'RANDOM:{category}')
     reg.audio_playing = True
     reg.audio_current = f'🎲 {category}'
-    _schedule_audio_reset(60000)  # random duration unknown — 60s max
+    # B-14 / F-4: use the category's average duration instead of the
+    # 60s default — auto-random UI was rate-limited to one sound per
+    # minute for short categories because audio_playing stayed True for
+    # the whole 60s even when the actual mpg123 sound ended in 3s.
+    _schedule_audio_reset(_category_avg_duration_ms(category) + 500)
     return jsonify({'status': 'ok', 'category': category})
+
+
+# B-16: scan cache. Path(_SOUNDS_DIR).glob() walks the dir every call —
+# fine for 317 files but the choreo editor opens this on every Choreo tab
+# switch, and the call rate adds up. Cache by SOUNDS_DIR mtime.
+_SCAN_CACHE: dict = {'mtime': 0.0, 'files': []}
 
 
 @audio_bp.get('/scan')
 def scan_sounds():
     """Scan slave/sounds/ for all .mp3 files on disk — authoritative list regardless of index."""
     try:
-        files = sorted(p.stem for p in Path(_SOUNDS_DIR).glob('*.mp3') if p.is_file())
-        return jsonify({'sounds': files, 'count': len(files)})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        dir_mtime = os.path.getmtime(_SOUNDS_DIR)
+    except OSError:
+        return jsonify({'sounds': [], 'count': 0})
+    if _SCAN_CACHE['mtime'] != dir_mtime:
+        try:
+            files = sorted(p.stem for p in Path(_SOUNDS_DIR).glob('*.mp3') if p.is_file())
+            _SCAN_CACHE['mtime'] = dir_mtime
+            _SCAN_CACHE['files'] = files
+        except OSError as e:
+            return jsonify({'error': str(e)}), 500
+    return jsonify({'sounds': _SCAN_CACHE['files'], 'count': len(_SCAN_CACHE['files'])})
 
 
 @audio_bp.get('/file/<sound>')

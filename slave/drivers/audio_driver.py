@@ -107,6 +107,13 @@ class AudioDriver(BaseDriver):
         # audio: stale queued sounds aren't worth playing minutes late.
         self._launch_q: queue.Queue = queue.Queue(maxsize=64)
         self._ready = False
+        # B-15: last-played-per-category for the no-repeat rule in
+        # play_random(). {category: last_filename}.
+        self._last_random: dict[str, str] = {}
+        # B-17: amixer availability probe. Set in setup() — None until
+        # probed. Used by set_volume() to skip the subprocess call when
+        # ALSA isn't usable, avoiding silent failures.
+        self._amixer_ok: bool | None = None
 
     # ------------------------------------------------------------------
     # BaseDriver
@@ -123,9 +130,26 @@ class AudioDriver(BaseDriver):
             total = sum(len(v) for v in self._index.values())
             log.info(f"AudioDriver ready — {total} sounds in {len(self._index)} categories")
             self._ready = True
+            # B-17: probe amixer availability ONCE at setup so set_volume()
+            # can fail fast instead of paying the subprocess overhead on
+            # every call when ALSA is unusable (no audio HAT, jack via BT
+            # speaker, etc.).
+            try:
+                r = subprocess.run(
+                    ['amixer', '-c', '0', 'cget', 'numid=1'],
+                    capture_output=True, timeout=2,
+                )
+                self._amixer_ok = (r.returncode == 0)
+                if self._amixer_ok:
+                    log.info("AudioDriver: amixer card 0 numid=1 OK")
+                else:
+                    log.warning("AudioDriver: amixer probe failed — volume control disabled")
+            except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+                self._amixer_ok = False
+                log.warning("AudioDriver: amixer unavailable (%s) — volume control disabled", e)
             threading.Thread(target=self._launch_worker, name="audio-launch", daemon=True).start()
             return True
-        except Exception as e:
+        except (OSError, json.JSONDecodeError) as e:
             log.error(f"Error loading sounds_index.json: {e}")
             return False
 
@@ -162,12 +186,26 @@ class AudioDriver(BaseDriver):
         return True
 
     def play_random(self, category: str, channel: int = 0, volume: int = 100) -> bool:
-        """Plays a random sound from the given category on the given channel at given volume (0-100)."""
-        sounds = self._index.get(category.lower())
+        """Plays a random sound from the given category on the given channel at given volume (0-100).
+
+        B-15: avoid playing the same file twice in a row. The previous
+        random.choice() implementation had a 1/N chance of repeating
+        which felt jarring in idle/ALIVE mode. We now track the last
+        sound per category and re-roll once if the choice matches.
+        """
+        cat = category.lower()
+        sounds = self._index.get(cat)
         if not sounds:
             log.warning(f"Unknown audio category: {category!r}")
             return False
+        last = self._last_random.get(cat)
         filename = random.choice(sounds)
+        # One re-roll if we landed on the same sound. With N>1 sounds the
+        # second roll has (N-1)/N chance of being different — good enough,
+        # avoids an infinite loop on a single-sound category.
+        if filename == last and len(sounds) > 1:
+            filename = random.choice(sounds)
+        self._last_random[cat] = filename
         return self.play(filename, channel, volume)
 
     def stop(self, channel: int | None = None) -> None:
@@ -199,16 +237,25 @@ class AudioDriver(BaseDriver):
                     self._procs[ch] = None
 
     def set_volume(self, volume: int) -> None:
-        """Sets ALSA volume (0-100) on the 3.5mm jack (card 0)."""
+        """Sets ALSA volume (0-100) on the 3.5mm jack (card 0). B-17: skip
+        the subprocess call entirely when the amixer probe at setup
+        determined the card is unusable — avoids per-call subprocess.run
+        cost and the silent failure that previously masked the issue."""
+        if self._amixer_ok is False:
+            log.debug("set_volume skipped — amixer not available")
+            return
         vol = max(0, min(100, volume))
         try:
             subprocess.run(
                 ['amixer', '-c', '0', 'cset', 'numid=1', f'{vol}%'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=2,
             )
             log.info(f"Volume: {vol}%")
-        except Exception as e:
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
             log.error(f"set_volume error: {e}")
+            # Update the cached probe so we stop retrying.
+            self._amixer_ok = False
 
     def handle_volume(self, value: str) -> None:
         """UART callback VOL:75 → sets the volume."""
@@ -217,23 +264,12 @@ class AudioDriver(BaseDriver):
         except (ValueError, TypeError) as e:
             log.error(f"Invalid VOL message {value!r}: {e}")
 
-    def handle_uart(self, value: str) -> None:
-        """
-        Callback for UART S: messages (channel 0).
-          - 'Happy001'       → play specific on ch0
-          - 'RANDOM:happy'   → play random on ch0
-          - 'STOP'           → stop ch0
-        """
-        self._handle_channel(value, channel=0)
-
-    def handle_uart2(self, value: str) -> None:
-        """
-        Callback for UART S2: messages (channel 1).
-          - 'Happy001'       → play specific on ch1
-          - 'RANDOM:happy'   → play random on ch1
-          - 'STOP'           → stop ch1
-        """
-        self._handle_channel(value, channel=1)
+    # B-18: handle_uart / handle_uart2 removed — they were one-shot
+    # wrappers over _handle_channel(value, channel=0/1) but the actual
+    # UART wiring in slave/main.py uses make_channel_handler(_i) for every
+    # channel (line 190). Dead code that confused future readers about
+    # whether the channel dispatch was via closure or direct method.
+    # Keep make_channel_handler as the sole entry point.
 
     def make_channel_handler(self, ch: int):
         """Returns a UART callback closure routing to channel ch."""
