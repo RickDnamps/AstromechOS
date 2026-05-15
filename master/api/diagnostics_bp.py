@@ -41,6 +41,7 @@ import time
 import logging
 from flask import Blueprint, request, jsonify
 import master.registry as reg
+from master.api._admin_auth import require_admin
 from master.app_watchdog import app_watchdog
 
 log = logging.getLogger(__name__)
@@ -57,8 +58,11 @@ def _slave_host() -> str:
 
 
 @diagnostics_bp.get('/diagnostics/logs')
+@require_admin
 def diag_logs():
-    """Last 50 lines of astromech-master journal, optionally filtered by severity."""
+    """Last 50 lines of astromech-master journal, optionally filtered by severity.
+    B-64 (audit 2026-05-15): admin-only. Journal lines can leak paths,
+    MACs, IPs, serial numbers, and stack traces — not for guests."""
     level = request.args.get('filter', 'ALL').upper()
     cmd = ['journalctl', '-u', 'astromech-master', '-n', '50', '--no-pager', '--output=short-iso']
     if level == 'ERROR':
@@ -100,6 +104,7 @@ def diag_stats():
 
 
 @diagnostics_bp.post('/diagnostics/ping_slave')
+@require_admin
 def diag_ping_slave():
     """Measures HTTP round-trip time to Slave health server (port 5001)."""
     import requests as _http
@@ -117,6 +122,7 @@ def diag_ping_slave():
 
 
 @diagnostics_bp.get('/diagnostics/uart_rtt')
+@require_admin
 def diag_uart_rtt():
     """UART round-trip stats for tuning body_servo_uart_lat.
 

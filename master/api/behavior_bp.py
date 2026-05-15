@@ -53,6 +53,22 @@ behavior_bp = Blueprint('behavior', __name__, url_prefix='/behavior')
 
 _CFG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'local.cfg')
 
+# B-69 / B-70 (audit 2026-05-15): validate every choreo name persisted
+# to local.cfg against the on-disk choreographies directory. Otherwise
+# a malicious POST could store '../../etc/passwd' or any arbitrary
+# string, and the BehaviorEngine later tries to load it.
+_CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
+import re as _re
+_CHOREO_NAME_RE = _re.compile(r'^[A-Za-z0-9_.\- ]+$')
+
+
+def _valid_choreo_name(name: str) -> bool:
+    """True if `name` is a syntactically valid choreo name AND a matching
+    .chor file exists in the choreo directory."""
+    if not name or not _CHOREO_NAME_RE.match(name):
+        return False
+    return os.path.isfile(os.path.join(_CHOREO_DIR, name + '.chor'))
+
 
 def _get_cfg() -> configparser.ConfigParser:
     """Read the current local.cfg."""
@@ -116,17 +132,28 @@ def save_config():
 
         if 'startup_enabled'     in data: _set('startup_enabled',     'true' if data['startup_enabled'] else 'false')
         if 'startup_delay'       in data: _set('startup_delay',       str(int(data['startup_delay'])))
-        if 'startup_choreo'      in data: _set('startup_choreo',      str(data['startup_choreo']))
+        if 'startup_choreo'      in data:
+            # B-69: validate against on-disk choreographies before
+            # persisting; empty string means "no startup choreo".
+            name = str(data['startup_choreo']).strip()
+            if name and not _valid_choreo_name(name):
+                return jsonify({'ok': False, 'error': f'unknown choreo: {name}'}), 400
+            _set('startup_choreo', name)
         if 'alive_enabled'       in data: _set('alive_enabled',       'true' if data['alive_enabled'] else 'false')
         if 'idle_timeout_min'    in data: _set('idle_timeout_min',    str(int(data['idle_timeout_min'])))
         if 'idle_mode'           in data: _set('idle_mode',           str(data['idle_mode']))
         if 'idle_audio_category' in data: _set('idle_audio_category', str(data['idle_audio_category']))
         if 'idle_choreo_list'    in data:
-            clist = data['idle_choreo_list']
-            if isinstance(clist, list):
-                _set('idle_choreo_list', ','.join(clist))
-            else:
-                _set('idle_choreo_list', str(clist))
+            # B-70: same validation per entry — drop unknown names with
+            # a 400 instead of letting BehaviorEngine try a path that
+            # doesn't exist. Empty list is allowed.
+            raw = data['idle_choreo_list']
+            items = raw if isinstance(raw, list) else [s for s in str(raw).split(',')]
+            items = [str(n).strip() for n in items if str(n).strip()]
+            for n in items:
+                if not _valid_choreo_name(n):
+                    return jsonify({'ok': False, 'error': f'unknown choreo: {n}'}), 400
+            _set('idle_choreo_list', ','.join(items))
         if 'dome_auto_on_alive'  in data: _set('dome_auto_on_alive',  'true' if data['dome_auto_on_alive'] else 'false')
 
         try:

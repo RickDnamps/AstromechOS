@@ -637,6 +637,22 @@ def servo_settings_get():
     return jsonify(data)
 
 
+_LABEL_ALLOWED_CHARS = set(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 _-.()'
+)
+
+
+def _sanitize_label(raw: str, fallback: str) -> str:
+    """B-68 (audit 2026-05-15): the panel label feeds into HTML
+    contexts (arms <option> via app.js:6307, Choreo block labels).
+    Even with escapeHtml now applied (B-41 frontend fix), restricting
+    the character set at the source keeps the data clean and prevents
+    accidental control-char injection into local.cfg too. 40-char
+    cap retained; any disallowed char is dropped."""
+    s = ''.join(c for c in str(raw)[:40] if c in _LABEL_ALLOWED_CHARS)
+    return s.strip() or fallback
+
+
 @servo_bp.post('/settings')
 @require_admin
 def servo_settings_save():
@@ -645,7 +661,7 @@ def servo_settings_save():
     for name, vals in (data.get('panels') or {}).items():
         if name in _ALL_PANELS and isinstance(vals, dict):
             panels[name] = {
-                'label': str(vals.get('label', name))[:40],
+                'label': _sanitize_label(vals.get('label', name), name),
                 'open':  _clamp(int(vals.get('open',  _DEFAULT_OPEN))),
                 'close': _clamp(int(vals.get('close', _DEFAULT_CLOSE))),
                 'speed': _clamp_speed(int(vals.get('speed', _DEFAULT_SPEED))),

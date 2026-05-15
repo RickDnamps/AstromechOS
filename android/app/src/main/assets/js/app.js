@@ -6054,6 +6054,15 @@ async function loadSettings() {
     if (host) host.value = data.slave.host || 'r2-slave.local';
   }
 
+  // B-74: capture baseline AFTER all inputs are populated so saveConfig
+  // can diff against it. Values match the exact strings POSTed.
+  _deployCfgBaseline = {
+    'github.repo_url':          (el('repo-url')?.value || '').trim(),
+    'github.branch':            (el('git-branch')?.value || '').trim(),
+    'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
+    'slave.host':               (el('slave-host')?.value || '').trim(),
+  };
+
   if (data.hardware) {
     const mh = el('master-hats-input');
     if (mh) mh.value = data.hardware.master_hats || '0x40';
@@ -6513,17 +6522,34 @@ async function applyHotspot() {
   await loadSettings();
 }
 
+// B-74 (audit 2026-05-15): snapshot of last-loaded config values so
+// saveConfig() can send only what changed. Was sending all 4 fields
+// every save regardless, which widened the race window with concurrent
+// /servo/arms (different blueprint, same local.cfg) and triggered
+// _sync_remote_url even when the URL hadn't really changed.
+let _deployCfgBaseline = {};
+
 async function saveConfig() {
   if (!confirm('Save deploy config?\n\nRepo URL / branch / slave host changes take effect on next git pull or reboot.')) return;
-  const payload = {
+  const current = {
     'github.repo_url':          (el('repo-url')?.value || '').trim(),
     'github.branch':            (el('git-branch')?.value || '').trim(),
     'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
     'slave.host':               (el('slave-host')?.value || '').trim(),
   };
+  // Diff against the baseline captured at last load. Send only changes.
+  const payload = {};
+  for (const [k, v] of Object.entries(current)) {
+    if (_deployCfgBaseline[k] !== v) payload[k] = v;
+  }
+  if (Object.keys(payload).length === 0) {
+    toast('No changes to save', 'info');
+    return;
+  }
   const data = await api('/settings/config', 'POST', payload);
   if (data && data.status === 'ok') {
-    toast('Config saved', 'ok');
+    toast(`Config saved (${Object.keys(payload).length} field${Object.keys(payload).length>1?'s':''})`, 'ok');
+    _deployCfgBaseline = { ..._deployCfgBaseline, ...payload };   // accept the persisted values as new baseline
   } else {
     toast('Error saving config', 'error');
   }
@@ -6811,11 +6837,28 @@ async function uploadIcon(input) {
   const form = new FormData();
   form.append('file', file);
   try {
-    const r = await fetch('/settings/icons/upload', { method: 'POST', body: form });
+    // B-71 (audit 2026-05-15): attach X-Admin-Pw header explicitly.
+    // The global api() helper handles JSON bodies; multipart uploads
+    // can't use it directly, so we add the header manually. Without
+    // this, the upload silently 401s after B-7's admin-auth fix
+    // landed.
+    const headers = {};
+    if (typeof adminGuard !== 'undefined') {
+      const tok = adminGuard.getToken && adminGuard.getToken();
+      if (tok) headers['X-Admin-Pw'] = tok;
+    }
+    const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+    const r = await fetch(base + '/settings/icons/upload',
+                          { method: 'POST', body: form, headers });
+    if (r.status === 401) {
+      if (status) { status.textContent = 'Admin authentication required'; status.style.color = 'var(--warn)'; }
+      input.value = '';
+      setTimeout(() => { if (status) status.textContent = ''; }, 4000);
+      return;
+    }
     const d = await r.json();
     if (d.status === 'ok') {
       if (status) { status.textContent = '✓ Uploaded'; status.style.color = 'var(--ok)'; }
-      // Reload picker and select new icon
       const grid = el('icon-picker-grid');
       if (grid) { grid.innerHTML = ''; await loadIconPicker(); }
       await saveRobotIcon('img:' + d.filename);

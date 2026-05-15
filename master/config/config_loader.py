@@ -94,9 +94,30 @@ def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
     """Writes cfg to path atomically using a .tmp file + os.replace().
     If the process crashes between write and replace, the original file
     is untouched. os.replace() is atomic on POSIX (rename syscall).
+
+    B-76 / B-77 (Settings audit 2026-05-15): local.cfg + slave.cfg hold
+    plaintext WiFi / hotspot / admin passwords. Restrict file
+    permissions to 0600 (owner read+write only) so non-artoo users on
+    the Pi can't read the passwords via filesystem access alone.
+    Anyone with SSH as artoo (default password 'deetoo') still gets
+    them — the real defense is changing the admin + SSH passwords,
+    which is operator responsibility. fsync flushes the rename
+    durability so a power loss right after replace doesn't lose it.
     """
     tmp = path + '.tmp'
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(tmp, 'w', encoding='utf-8') as f:
         cfg.write(f)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass   # Some filesystems (tmpfs) don't support fsync — best-effort
     os.replace(tmp, path)
+    try:
+        # 0o600 = rw------- for owner. Idempotent — fine to re-chmod
+        # an already-restricted file. Skip silently on Windows /
+        # filesystems that don't honour POSIX mode (tests on Pi only).
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
