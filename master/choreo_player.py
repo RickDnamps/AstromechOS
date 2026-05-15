@@ -410,6 +410,12 @@ class ChoreoPlayer:
                 'uses_propulsion': False,
                 'uses_dome':       False,
             })
+        # Audit finding Player L-3 2026-05-15: clear last-commanded
+        # servo positions so the next play() starts slews from a
+        # neutral baseline rather than the mid-air position the
+        # previous sequence stopped at. The driver's actual position
+        # is the source of truth for the next launch.
+        self._servo_pos.clear()
 
     def _launch_servo_slew(self, driver, name: str, target_angle: float,
                            dur_s: float, easing: str) -> None:
@@ -550,6 +556,14 @@ class ChoreoPlayer:
             dur_ms = ev.get('duration', 0)
             if not dur_ms or dur_ms <= 0:
                 dur_ms = 50   # fail-safe burst — no open-ended motor command
+            # Audit finding Player L-1 2026-05-15: was fail-safe ONLY on
+            # the lower bound. A bad file with duration=999000 (16min)
+            # would honor the value and rotate continuously. Cap to
+            # 30s — even the longest legit dome turn in the corpus is
+            # under 10s.
+            if dur_ms > 30000:
+                log.warning('Dome event duration %dms clamped to 30s', dur_ms)
+                dur_ms = 30000
             # Cap duration to avoid overlapping with the next dome event
             if i + 1 < len(dome_evs):
                 gap_ms = (dome_evs[i + 1]['t'] - ev['t']) * 1000.0

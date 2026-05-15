@@ -90,7 +90,23 @@ def _atomic_write_chor(path: str, chor: dict) -> None:
             os.fsync(f.fileno())
         except OSError:
             pass  # not all filesystems / pseudo-files support fsync
+    # Audit finding Backend M-2 2026-05-15: chmod 0o600 for consistency
+    # with write_cfg_atomic. .chor files don't carry secrets but the
+    # author labels may be considered config-grade content.
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, path)
+    # Audit finding Choreo L-9 2026-05-15: fsync the parent directory
+    # so a power loss between os.replace and the inode flush can't
+    # resurrect the old name. On a Pi 4B SD card this matters.
+    try:
+        dfd = os.open(os.path.dirname(path), os.O_RDONLY)
+        try: os.fsync(dfd)
+        finally: os.close(dfd)
+    except OSError:
+        pass
 
 from shared.paths import LOCAL_CFG as _LOCAL_CFG
 
@@ -232,9 +248,10 @@ def _safe_choreo_path(name):
         ), 400)
     candidate = os.path.realpath(os.path.join(_CHOREO_DIR, raw + '.chor'))
     base      = os.path.realpath(_CHOREO_DIR)
-    # Containment check: candidate must equal base (impossible since we
-    # appended .chor) or live strictly inside it.
-    if not (candidate == base or candidate.startswith(base + os.sep)):
+    # Audit finding Backend M-1 2026-05-15: the `candidate == base`
+    # branch was unreachable (we appended .chor so candidate can't
+    # equal the dir). Removed for clarity.
+    if not candidate.startswith(base + os.sep):
         return None, (jsonify({'error': 'invalid name (escape attempt)'}), 400)
     return candidate, None
 
@@ -772,6 +789,13 @@ def choreo_save():
     if isinstance(audio_evs, list):
         used_ch = {ev.get('ch', 1) for ev in audio_evs if isinstance(ev, dict)}
         chor['meta']['audio_channels_required'] = max(used_ch) if used_ch else 1
+    # Audit findings Schema L-1 + L-2 2026-05-15: drop dead meta
+    # fields. meta.bpm is unused by the player; meta.config_snapshot
+    # is written by the editor but never read at play time. Stripping
+    # at save keeps the on-disk schema lean + prevents drift if the
+    # editor ever forgets to update one of them.
+    chor['meta'].pop('bpm', None)
+    chor['meta'].pop('config_snapshot', None)
     os.makedirs(_CHOREO_DIR, exist_ok=True)
     with _chor_file_lock:
         _atomic_write_chor(path, chor)
@@ -1084,4 +1108,20 @@ def choreo_export_scr():
     with open(path, encoding='utf-8') as f:
         chor = json.load(f)
     scr = reg.choreo.export_scr(chor)
-    return jsonify({'status': 'ok', 'name': name, 'scr': scr})
+    # Audit finding Schema M-5 2026-05-15: surface lossy conversions
+    # so the UI can show a warning before download. Header comments
+    # already document the limits inside the .scr — but the operator
+    # using a legacy player needs to know up-front.
+    tracks = chor.get('tracks', {})
+    warnings = []
+    if any(ev.get('easing') for ev in tracks.get('dome', [])):
+        warnings.append('Dome easing flattened to discrete turns')
+    for tk in ('dome_servos', 'body_servos', 'arm_servos'):
+        if any(ev.get('easing') for ev in tracks.get(tk, [])):
+            warnings.append(f'{tk} easing not preserved')
+            break
+    if tracks.get('markers'):
+        warnings.append('Marker events dropped (not supported in .scr)')
+    if any(ev.get('panel_duration') or ev.get('arm_duration') for ev in tracks.get('arm_servos', [])):
+        warnings.append('Per-arm panel/arm durations flattened')
+    return jsonify({'status': 'ok', 'name': name, 'scr': scr, 'warnings': warnings})

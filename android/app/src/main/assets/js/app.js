@@ -564,7 +564,16 @@ async function apiDetail(endpoint, method = 'GET', body = null, timeoutMs = 5000
     let data = null;
     try { data = await res.json(); } catch {}
     if (!res.ok) {
-      const err = (data && data.error) || `HTTP ${res.status}`;
+      // Audit finding Perf L-9 2026-05-15: 413 Request Entity Too
+      // Large (server's MAX_CONTENT_LENGTH=16MB cap) used to surface
+      // as a generic error. Make the message specific so the
+      // operator knows the upload was rejected for size.
+      let err;
+      if (res.status === 413) {
+        err = 'Request too large (max 16MB). Reduce file size and retry.';
+      } else {
+        err = (data && data.error) || `HTTP ${res.status}`;
+      }
       console.warn(`API ${method} ${endpoint}: ${res.status} ${err}`);
       return { ok: false, status: res.status, data, error: err };
     }
@@ -8641,6 +8650,17 @@ const choreoEditor = (() => {
   function _addDropToLanes() {
     if (_lanesWired) return;
     _lanesWired = true;
+    // Audit finding Perf M-1 2026-05-15: clicking the empty timeline
+    // background (canvas wrap, not on a block / handle / ruler)
+    // deselects so the inspector clears.
+    const canvasWrap = document.getElementById('chor-canvas');
+    if (canvasWrap) {
+      canvasWrap.addEventListener('click', (e) => {
+        if (e.target.closest('.chor-block')) return;
+        if (e.target.closest('.chor-ruler-tick')) return;
+        _deselectAll();
+      });
+    }
     document.querySelectorAll('.chor-lane').forEach(lane => {
       lane.addEventListener('dragover', e => {
         e.preventDefault();
@@ -9262,6 +9282,15 @@ const choreoEditor = (() => {
   function _startDrag(e, block, track, idx) {
     const startX = e.clientX, startLeft = parseFloat(block.style.left) || 0;
     const scroll = document.getElementById('chor-scroll');
+    // Audit finding Perf M-3 2026-05-15: auto-scroll while dragging
+    // near the right (or left) edge so the operator can drop an
+    // event past the visible width without the block running out
+    // of mouse-reach. Edge zone = 40px; scroll speed scales linearly
+    // from 0 to 12px/tick within that zone.
+    let _scrollTimer = null;
+    const _stopAutoScroll = () => {
+      if (_scrollTimer) { clearInterval(_scrollTimer); _scrollTimer = null; }
+    };
     const onMove = e2 => {
       let newT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX)));
       if (track === 'dome') newT = _domeClampT(idx, newT);
@@ -9269,21 +9298,41 @@ const choreoEditor = (() => {
       _chor.tracks[track][idx].t = newT;
       _dirty = true;
       _updatePropsPanel(track, idx);
-      // Visual cue: dim block when dragged outside lane area
+      // Edge-driven auto-scroll
       if (scroll) {
         const r = scroll.getBoundingClientRect();
         block.style.opacity = (e2.clientY < r.top || e2.clientY > r.bottom) ? '0.3' : '1';
+        const EDGE = 40;
+        const rightOver = e2.clientX - (r.right - EDGE);
+        const leftOver  = (r.left + EDGE) - e2.clientX;
+        let dx = 0;
+        if (rightOver > 0) dx =  Math.min(12, Math.max(2, rightOver / 4));
+        else if (leftOver > 0) dx = -Math.min(12, Math.max(2, leftOver / 4));
+        if (dx !== 0) {
+          if (!_scrollTimer) {
+            _scrollTimer = setInterval(() => {
+              const before = scroll.scrollLeft;
+              scroll.scrollLeft += dx;
+              if (scroll.scrollLeft === before) return; // hit edge
+              // Keep the dragged block moving with the scroll
+              const adjT = _snap(_sec(Math.max(0, startLeft + e2.clientX - startX + (scroll.scrollLeft))));
+              const clamped = track === 'dome' ? _domeClampT(idx, adjT) : adjT;
+              block.style.left = _px(clamped) + 'px';
+              _chor.tracks[track][idx].t = clamped;
+            }, 16);
+          }
+        } else {
+          _stopAutoScroll();
+        }
       }
     };
     const onUp = e2 => {
+      _stopAutoScroll();
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (scroll) {
         const r = scroll.getBoundingClientRect();
         // Soft-delete with UNDO when dragged out of the timeline area.
-        // The old code called _deleteBlock directly with no recovery — on a
-        // tablet or oversensitive trackpad this destroys work silently.
-        // Snapshot the item, splice, and show a 5s undo toast.
         if (e2.clientY < r.top || e2.clientY > r.bottom) {
           _softDeleteWithUndo(track, idx);
           return;
@@ -9349,11 +9398,35 @@ const choreoEditor = (() => {
 
   // ── Properties panel ─────────────────────────────────────────────
   function _selectBlock(track, idx) {
-    document.querySelectorAll('.chor-block').forEach(b => b.classList.remove('selected'));
+    // Audit finding Perf M-7 2026-05-15: scope the deselection sweep
+    // to the active track's lane instead of the whole document. For
+    // a 1000-event chor the document walk was O(N) per click; the
+    // lane walk is O(events-in-this-lane). Falls back to global if
+    // we can't find the lane.
+    const lane = document.querySelector(`.chor-lane[data-track="${track}"]`);
+    const scope = lane || document;
+    scope.querySelectorAll('.chor-block.selected').forEach(b => b.classList.remove('selected'));
+    // If we narrowed to a lane, also clear any cross-lane selection
+    // (a previous click could have selected a block in a different
+    // lane — its .selected class persists if we only clear our lane).
+    if (lane) {
+      document.querySelectorAll('.chor-block.selected').forEach(b => b.classList.remove('selected'));
+    }
     const block = document.querySelector(`.chor-block[data-track="${track}"][data-idx="${idx}"]`);
     if (block) block.classList.add('selected');
     _selected = { track, idx };
     _updatePropsPanel(track, idx);
+  }
+
+  // Audit finding Perf M-1 2026-05-15: click empty timeline area
+  // clears the current selection so the inspector no longer shows
+  // a stale event the user has visually moved past.
+  function _deselectAll() {
+    document.querySelectorAll('.chor-block.selected').forEach(b => b.classList.remove('selected'));
+    _selected = null;
+    _clearInspectorTitle();
+    const panel = document.getElementById('chor-props-content');
+    if (panel) panel.replaceChildren();
   }
 
   function _selectDomeKF(idx) {
@@ -9379,10 +9452,11 @@ const choreoEditor = (() => {
         max  !== undefined ? `max="${max}"`   : '',
         step !== undefined ? `step="${step}"` : '',
       ].filter(Boolean).join(' ');
+      const t_e = escapeHtml(track), f_e = escapeHtml(field);
       return `<div class="chor-prop-row">
         <span class="chor-prop-key">${key}</span>
         <input class="chor-prop-input" type="number" value="${val}" ${attrs}
-          onchange="choreoEditor._setProp('${track}',${idx},'${field}',this.value)" style="width:68px">
+          onchange="choreoEditor._setProp('${t_e}',${idx},'${f_e}',this.value)" style="width:68px">
       </div>`;
     }
 
@@ -9406,10 +9480,16 @@ const choreoEditor = (() => {
           // inspector on a CH 0 audio block showed CH 1 as the active choice.
           opts += `<option value="${escapeHtml(val)}"${String(val) === String(current) ? ' selected' : ''}>${escapeHtml(label)}</option>`;
       }
+      // Audit finding Frontend M-2 2026-05-15: track + field are
+      // code-controlled enums today (no user input flow), but
+      // escapeHtml is the documented defense-in-depth for inline
+      // onchange handlers. escapeHtml now escapes `'` (audit L-2),
+      // so this wraps the latent risk.
+      const t_e = escapeHtml(track), f_e = escapeHtml(field);
       return `<div class="chor-prop-row-full">
         <span class="chor-prop-key">${key}</span>
         <select class="chor-prop-select"
-          onchange="choreoEditor._setProp('${track}',${idx},'${field}',this.value);choreoEditor._onFieldChange('${track}',${idx},'${field}',this.value)">
+          onchange="choreoEditor._setProp('${t_e}',${idx},'${f_e}',this.value);choreoEditor._onFieldChange('${t_e}',${idx},'${f_e}',this.value)">
           ${opts}
         </select>
       </div>`;
