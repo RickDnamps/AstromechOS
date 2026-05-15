@@ -7904,11 +7904,47 @@ const choreoEditor = (() => {
 
   function _startResize(e, block, track, idx) {
     const startX = e.clientX, startW = parseFloat(block.style.width) || 60;
+    const item = _chor.tracks[track][idx];
+
+    // User-reported 2026-05-15: arm_servos blocks could not be resized
+    // by dragging the right edge anymore. Cause: this handler writes
+    // item.duration unconditionally, but arm blocks compute their
+    // rendered width from panel_duration + delay + arm_duration (see
+    // _armBlockTotalDur). The `duration` write was a no-op for that
+    // track, so the next _renderTrack snapped the block back to its
+    // 3-field sum. Per-track resize logic below.
+    const isArmBlock = (track === 'arm_servos');
+    // Capture pre-drag arm field values so we can rescale them as the
+    // user drags, instead of re-computing from the (already-modified)
+    // dict on each move event (which would compound the scaling and
+    // produce non-linear growth).
+    const armStart = isArmBlock ? {
+      panel: parseFloat(item.panel_duration) || 0,
+      delay: parseFloat(item.delay)          || 0,
+      arm:   parseFloat(item.arm_duration)   || 0,
+    } : null;
+    const armStartTotal = isArmBlock
+      ? (armStart.panel + armStart.delay + armStart.arm)
+      : 0;
+
     const onMove = e2 => {
       let newDur = _snap(_sec(Math.max(20, startW + e2.clientX - startX)));
       if (track === 'dome') newDur = _domeClampDur(idx, newDur);
       block.style.width = _px(newDur) + 'px';
-      _chor.tracks[track][idx].duration = newDur;
+
+      if (isArmBlock && armStartTotal > 0) {
+        // Scale all three fields proportionally so the user sees the
+        // total duration change while the relative weight of panel /
+        // delay / arm stays the same. Round to 0.1s to match the
+        // inspector's step granularity and avoid floating-point noise
+        // like 1.0000000003.
+        const scale = newDur / armStartTotal;
+        item.panel_duration = +(armStart.panel * scale).toFixed(2);
+        item.delay          = +(armStart.delay * scale).toFixed(2);
+        item.arm_duration   = +(armStart.arm   * scale).toFixed(2);
+      } else {
+        item.duration = newDur;
+      }
       _dirty = true;
       _updatePropsPanel(track, idx);
     };
