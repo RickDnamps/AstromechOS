@@ -51,6 +51,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from master.uart_controller import UARTController
+from master import vesc_safety
 from master.lights import load_driver
 from master.deploy_controller import DeployController
 from master.config.config_loader import load, is_auto_pull_enabled
@@ -238,7 +239,12 @@ def main() -> None:
         dome_servo=reg.dome_servo,
         body_servo=reg.servo,
         vesc=reg.vesc,
-        telem_getter=lambda: reg.vesc_telem,
+        # Use staleness-gated pair so a disconnected VESC's last frame
+        # (often undervoltage if the battery was dying when the user
+        # unplugged) doesn't trigger ChoreoPlayer's safety abort. None
+        # for a side means "no recent telem" → ChoreoPlayer skips that
+        # side instead of reading stale v_in. Reported 2026-05-15.
+        telem_getter=vesc_safety.fresh_telem_pair,
     )
     reg.choreo.setup()
 

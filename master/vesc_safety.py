@@ -124,3 +124,28 @@ def status(max_age: float = _DEFAULT_MAX_AGE) -> tuple[bool, str | None]:
 # New code should call status() or _snapshot() + _side_ok_snap() directly.
 def _side_ok(side: str, max_age: float) -> bool:
     return _side_ok_snap(_snapshot(), side, max_age)
+
+
+def fresh_telem_pair(max_age: float = _DEFAULT_MAX_AGE) -> dict:
+    """Return {'L': telem|None, 'R': telem|None} where each side is the
+    last received frame ONLY if it's < max_age seconds old.
+
+    Reported 2026-05-15: the user unplugged a dying VESC during a choreo
+    test. ChoreoPlayer._check_telem read reg.vesc_telem directly and saw
+    the LAST stale frame (with v_in below the cell×3.5V floor because the
+    battery was dying). The undervoltage abort fired even though no VESC
+    was actually connected. The earlier _fresh_telem fix only covered the
+    /status display path; ChoreoPlayer + any future safety consumer needs
+    the same staleness gate, so the helper lives here next to its
+    siblings (is_drive_safe, block_reason).
+
+    Atomic snapshot pattern as elsewhere in this module — both sides are
+    captured at the same instant so a UART callback rotating one side
+    while we read the other can't return half-stale state."""
+    snap = _snapshot()
+    out: dict = {'L': None, 'R': None}
+    for side in ('L', 'R'):
+        t = snap[side]
+        if t is not None and snap['now'] - t.get('ts', 0) <= max_age:
+            out[side] = t
+    return out
