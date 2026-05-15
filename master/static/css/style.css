@@ -956,9 +956,21 @@ body[data-lock-mode="2"] #js-left-ring::after {
   text-align: center;
 }
 .shortcut-row .shortcut-row-icon {
-  width: 34px; padding: 2px 4px;
+  width: 36px;
+  height: 28px;
+  padding: 2px 4px;
   text-align: center;
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 24px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  cursor: text;
+}
+.shortcut-row .shortcut-row-icon:focus {
+  outline: 1px solid var(--blue);
+  border-color: var(--blue);
 }
 .shortcut-row .shortcut-row-label,
 .shortcut-row .shortcut-row-target {

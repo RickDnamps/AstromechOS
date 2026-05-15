@@ -6817,20 +6817,46 @@ const shortcutsEditor = {
   async save() {
     const status = el('shortcuts-status');
     if (status) status.textContent = 'Saving…';
-    const d = await api('/shortcuts', 'POST', { shortcuts: this._shortcuts });
-    if (!d) {
-      if (status) { status.textContent = 'Save failed — admin re-auth?'; status.className = 'settings-status error'; }
-      return;
+    // User-reported 2026-05-15: api() returns null on ANY non-2xx
+    // (401 admin OR 400 validation OR 5xx) — the previous "admin
+    // re-auth?" message was misleading when the real cause was a
+    // validation error. Use raw fetch here so we can surface the
+    // actual server error message + HTTP status.
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (typeof adminGuard !== 'undefined') {
+        const tok = adminGuard.getToken && adminGuard.getToken();
+        if (tok) headers['X-Admin-Pw'] = tok;
+      }
+      const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+      const res = await fetch(base + '/shortcuts', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ shortcuts: this._shortcuts }),
+      });
+      let d = null;
+      try { d = await res.json(); } catch {}
+      if (!res.ok) {
+        const errMsg = (d && d.error) || `HTTP ${res.status}`;
+        const hint = res.status === 401 ? ' (admin lock expired — re-auth)' : '';
+        if (status) {
+          status.textContent = '✗ ' + errMsg + hint;
+          status.className = 'settings-status error';
+        }
+        console.warn('Shortcuts save failed:', res.status, d);
+        return;
+      }
+      if (status) { status.textContent = `✓ ${d.count} saved`; status.className = 'settings-status ok'; }
+      toast('Shortcuts saved', 'ok');
+      this._shortcuts = d.shortcuts || [];
+      shortcutsRunner.load();
+    } catch (e) {
+      if (status) {
+        status.textContent = '✗ Network error: ' + (e.message || e);
+        status.className = 'settings-status error';
+      }
+      console.error('Shortcuts save error:', e);
     }
-    if (d.error) {
-      if (status) { status.textContent = '✗ ' + d.error; status.className = 'settings-status error'; }
-      return;
-    }
-    if (status) { status.textContent = `✓ ${d.count} saved`; status.className = 'settings-status ok'; }
-    toast('Shortcuts saved', 'ok');
-    this._shortcuts = d.shortcuts || [];
-    // Refresh the Drive overlay immediately so the operator sees their change
-    shortcutsRunner.load();
   },
 };
 
