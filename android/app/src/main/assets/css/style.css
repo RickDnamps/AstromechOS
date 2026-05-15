@@ -3843,9 +3843,14 @@ select.input-text option { background: var(--input-option); }
 ================================================================ */
 .toast {
   position: fixed;
-  bottom: 24px;
+  /* User-reported 2026-05-15: was bottom:24px which lands ON TOP
+   * of the E-STOP button in the Drive bottom action bar — operator
+   * couldn't see the STOWING… text on the button. Top placement
+   * keeps the toast visible without obscuring critical UI.
+   */
+  top: 60px;
   left: 50%;
-  transform: translateX(-50%) translateY(16px);
+  transform: translateX(-50%) translateY(-16px);
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -3864,6 +3869,8 @@ select.input-text option { background: var(--input-option); }
 }
 
 .toast.show        { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.toast-info  { border-color: var(--blue);   color: var(--blue);   box-shadow: 0 0 12px rgba(0,170,255,0.3); }
+.toast.toast-warn  { border-color: var(--amber, #ff8800); color: var(--amber, #ff8800); }
 .toast.toast-ok    { border-color: var(--green);  color: var(--green);  box-shadow: 0 0 12px rgba(0,204,102,0.3); }
 .toast.toast-error { border-color: var(--red);    color: var(--red);    box-shadow: 0 0 12px rgba(255,34,68,0.3); }
 .toast.toast-warn  { border-color: var(--orange); color: var(--orange); box-shadow: 0 0 12px rgba(255,136,0,0.3); }
