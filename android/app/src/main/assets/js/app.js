@@ -2604,6 +2604,23 @@ function _handleKeys() {
     if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
     return;
   }
+  // User-reported 2026-05-15: WASD used to drive the motors regardless
+  // of which tab was active. Operator typing into Settings → VESC was
+  // surprised to see the duty meter spike on their first W keypress.
+  // Now: WASD propulsion is only honored on the Drive tab. VESC Test
+  // Mode (Settings → VESC → Drive Test Mode ENABLE) has its own
+  // keyboard pipeline via vescTest.onKey() — that path is called
+  // BEFORE this function in the keydown handler, so when test mode
+  // is on the keys are captured there and never reach here. So the
+  // gate is: only act when the Drive tab is the active tab. Any
+  // in-flight propulsion gets stopped when the user switches off the
+  // Drive tab while a key is held.
+  const onDriveTab = document.querySelector('.tab.active')?.dataset.tab === 'drive';
+  if (!onDriveTab) {
+    if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
+    if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
+    return;
+  }
 
   // Propulsion — WASD only
   const fwd   = _keys['KeyW'];
