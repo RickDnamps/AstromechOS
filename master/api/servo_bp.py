@@ -65,6 +65,7 @@ Calibration:
 
 import configparser
 import json
+import logging
 import os
 import subprocess
 import threading
@@ -74,6 +75,8 @@ from flask import Blueprint, request, jsonify
 from master.api._admin_auth import require_admin
 import master.registry as reg
 from master.config.config_loader import write_cfg_atomic
+
+log = logging.getLogger(__name__)
 # B-49 (audit 2026-05-15): share settings_bp's write lock so concurrent
 # /servo/arms + /settings/config can't race on local.cfg RMW.
 from master.api.settings_bp import _cfg_write_lock
@@ -174,8 +177,26 @@ def _write_panels_cfg(panels: dict) -> None:
     _sync_angles_json(panels)
 
 
+# B-205 (remaining tabs audit 2026-05-15): single lock for the angle
+# JSON files. Two concurrent /servo/settings + /servo/arms posts both
+# call _sync_angles_json which RMW's the same files; without this lock
+# the second writer's `existing` dict is the pre-first-write snapshot
+# → first writer's label changes are silently lost.
+_angles_lock = threading.Lock()
+
+
 def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
-    """Updates a JSON angles file with the provided panels."""
+    """Updates a JSON angles file with the provided panels.
+
+    B-204 (remaining tabs audit 2026-05-15): atomic write — tmp +
+    os.replace + fsync. Previously open(w) truncated then wrote; a
+    crash between truncate and write left an empty/partial file. On
+    next reload (`reg.dome_servo.reload()`) the empty dict cleared
+    EVERY servo's calibration in memory. Same hardening pattern as
+    settings_bp write_cfg_atomic.
+
+    Caller MUST hold _angles_lock so two concurrent updates don't read
+    a pre-first-write `existing` and overwrite each other's edits."""
     subset = {k: v for k, v in panels.items() if k in names}
     if not subset:
         return
@@ -184,8 +205,8 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
         try:
             with open(filepath) as f:
                 existing = json.load(f)
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning("angles file unreadable (%s) — starting fresh: %s", filepath, e)
     for name, vals in subset.items():
         existing[name] = {
             'label': str(vals.get('label', existing.get(name, {}).get('label', name)))[:40],
@@ -194,24 +215,40 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
             'speed': _clamp_speed(int(vals.get('speed', existing.get(name, {}).get('speed', 10)))),
         }
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with open(filepath, 'w') as f:
+    tmp = filepath + '.tmp'
+    with open(tmp, 'w') as f:
         json.dump(existing, f, indent=2)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
+    os.replace(tmp, filepath)
 
 
 def _sync_angles_json(panels: dict) -> None:
     """Writes dome_angles.json (Master) and servo_angles.json (Slave via scp).
     Notifies both drivers to reload angles immediately — no service restart needed.
+
+    B-205 (remaining tabs audit 2026-05-15): the whole read+write+SCP
+    cycle runs under _angles_lock so concurrent /servo/settings +
+    /servo/arms posts can't lose each other's label changes.
     """
-    import logging
-    log = logging.getLogger(__name__)
+    with _angles_lock:
+        try:
+            _update_angles_file(_DOME_ANGLES_FILE, panels, DOME_SERVOS)
+            if reg.dome_servo and reg.dome_servo.is_ready():
+                reg.dome_servo.reload()
+        except OSError as e:
+            log.warning("Failed to write dome_angles.json: %s", e)
+        try:
+            _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
+        except OSError as e:
+            log.warning("Failed to write servo_angles.json: %s", e)
+            return
+    # SCP outside the lock — slow link can stall 5s, no need to block
+    # concurrent /servo/settings on a network op.
     try:
-        _update_angles_file(_DOME_ANGLES_FILE, panels, DOME_SERVOS)
-        if reg.dome_servo and reg.dome_servo.is_ready():
-            reg.dome_servo.reload()
-    except Exception as e:
-        log.warning("Failed to write dome_angles.json: %s", e)
-    try:
-        _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
         scp_result = subprocess.run(
             ['scp', _SLAVE_ANGLES_FILE, f'{_slave_host()}:{_SLAVE_ANGLES_FILE}'],
             timeout=5, check=False, capture_output=True,
@@ -221,7 +258,7 @@ def _sync_angles_json(panels: dict) -> None:
                 reg.uart.send('SRV', 'RELOAD')
         else:
             log.warning("SCP servo_angles.json to Slave failed (rc=%d) — Slave not reloaded", scp_result.returncode)
-    except Exception as e:
+    except (subprocess.TimeoutExpired, OSError) as e:
         log.warning("Sync servo_angles.json to Slave failed: %s", e)
 
 

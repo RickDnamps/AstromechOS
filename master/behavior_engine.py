@@ -276,20 +276,29 @@ class BehaviorEngine:
             return None
 
     def _write_cfg(self, key: str, value: str) -> None:
-        """Persist a [behavior] key to local.cfg."""
+        """Persist a [behavior] key to local.cfg.
+
+        B-206 (remaining tabs audit 2026-05-15): holds settings_bp's
+        `_cfg_write_lock` around the RMW. Before this, a concurrent
+        /behavior/config or /settings/config save (both of which DO
+        hold the lock) could interleave with this writer and lose
+        keys. Lazy import to avoid circular at module load.
+        """
         try:
+            from master.api.settings_bp import _cfg_write_lock
             cfg_path = os.path.join(
                 os.path.dirname(__file__), 'config', 'local.cfg'
             )
-            parser = configparser.ConfigParser()
-            parser.read(cfg_path)
-            if not parser.has_section('behavior'):
-                parser.add_section('behavior')
-            parser.set('behavior', key, value)
-            # Also update in-memory config
-            if not self._cfg.has_section('behavior'):
-                self._cfg.add_section('behavior')
-            self._cfg.set('behavior', key, value)
-            write_cfg_atomic(parser, cfg_path)
+            with _cfg_write_lock:
+                parser = configparser.ConfigParser()
+                parser.read(cfg_path)
+                if not parser.has_section('behavior'):
+                    parser.add_section('behavior')
+                parser.set('behavior', key, value)
+                # Also update in-memory config
+                if not self._cfg.has_section('behavior'):
+                    self._cfg.add_section('behavior')
+                self._cfg.set('behavior', key, value)
+                write_cfg_atomic(parser, cfg_path)
         except Exception:
             log.exception("Failed to persist behavior config key=%s", key)

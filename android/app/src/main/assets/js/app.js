@@ -2045,11 +2045,22 @@ const behaviorPanel = (() => {
   function _renderChoreoPills() {
     const container = el('beh-choreo-pills');
     if (!container) return;
-    container.innerHTML = '';
+    // B-200 (remaining tabs audit 2026-05-15): build pills with DOM
+    // primitives instead of innerHTML interpolation. The `name`
+    // (choreo filename) lands in HTML context AND was numerically-
+    // bound idx in the inline onclick — the surrounding name was
+    // un-escaped. A filename containing `"><img onerror=…>` (server
+    // regex allows `[A-Za-z0-9_.\\- ]`) would execute on every render.
+    container.replaceChildren();
     _choreoList.forEach((name, idx) => {
       const pill = document.createElement('span');
       pill.className = 'beh-choreo-pill';
-      pill.innerHTML = `${name} <button class="beh-pill-remove" onclick="behaviorPanel._removeChoreo(${idx})">×</button>`;
+      pill.appendChild(document.createTextNode(name + ' '));
+      const btn = document.createElement('button');
+      btn.className = 'beh-pill-remove';
+      btn.textContent = '×';
+      btn.addEventListener('click', () => behaviorPanel._removeChoreo(idx));
+      pill.appendChild(btn);
       container.appendChild(pill);
     });
   }
@@ -2827,27 +2838,72 @@ class ServoPanel {
   render() {
     const grid = el(this._gridId);
     if (!grid) return;
-    const varName = this._getVar();
-    grid.innerHTML = this._servos.map(name => {
+    // B-201 / B-202 (remaining tabs audit 2026-05-15): build rows via
+    // DOM primitives. The previous innerHTML template interpolated
+    // `panel.label` INSIDE the `value=` attribute and `${name}` inside
+    // an inline single-quoted `onclick="open('${name}')"`. escapeHtml
+    // does NOT escape `'` — a label or servo id containing a quote
+    // would break out. Legacy or out-of-band edited servo_angles.json
+    // (gitignored on the Pi) can hold any string. textContent for
+    // labels + addEventListener for click handlers eliminates both
+    // sinks. Servo names are server-allowlisted (`Servo_[DMS]\\d+`) but
+    // belt-and-suspenders is the policy after Sequences XSS audit.
+    grid.replaceChildren();
+    this._servos.forEach(name => {
       const panel = (_servoCfg.panels || {})[name] || { label: name, open: 110, close: 20, speed: 10 };
-      return `
-        <div class="servo-row" id="servo-row-${name}">
-          <span class="servo-name">${name}</span>
-          <input type="text" id="sc-label-${name}" class="servo-label-in"
-                 value="${panel.label || name}" placeholder="Label" maxlength="32">
-          <div class="servo-calib-wrap">
-            <label class="servo-calib-label">O<input type="number" id="sc-open-${name}"
-              class="servo-angle-in" min="10" max="170" value="${panel.open}"></label>
-            <label class="servo-calib-label">C<input type="number" id="sc-close-${name}"
-              class="servo-angle-in" min="10" max="170" value="${panel.close}"></label>
-            <label class="servo-calib-label">S<input type="number" id="sc-speed-${name}"
-              class="servo-angle-in" min="1" max="10" value="${panel.speed ?? 10}"></label>
-          </div>
-          <button class="btn btn-xs" onclick="${varName}.open('${name}')">OPEN</button>
-          <button class="btn btn-xs btn-dark" onclick="${varName}.close('${name}')">CLOSE</button>
-        </div>
-      `;
-    }).join('');
+      const row = document.createElement('div');
+      row.className = 'servo-row';
+      row.id = 'servo-row-' + name;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'servo-name';
+      nameSpan.textContent = name;
+      row.appendChild(nameSpan);
+
+      const lblIn = document.createElement('input');
+      lblIn.type = 'text';
+      lblIn.id = 'sc-label-' + name;
+      lblIn.className = 'servo-label-in';
+      lblIn.value = panel.label || name;   // setter is attr-safe (no HTML parse)
+      lblIn.placeholder = 'Label';
+      lblIn.maxLength = 32;
+      row.appendChild(lblIn);
+
+      const calibWrap = document.createElement('div');
+      calibWrap.className = 'servo-calib-wrap';
+      const mkAngleField = (letter, idSuffix, min, max, val) => {
+        const lab = document.createElement('label');
+        lab.className = 'servo-calib-label';
+        lab.appendChild(document.createTextNode(letter));
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.id = idSuffix + name;
+        inp.className = 'servo-angle-in';
+        inp.min = String(min);
+        inp.max = String(max);
+        inp.value = String(val);
+        lab.appendChild(inp);
+        return lab;
+      };
+      calibWrap.appendChild(mkAngleField('O', 'sc-open-',  10, 170, panel.open));
+      calibWrap.appendChild(mkAngleField('C', 'sc-close-', 10, 170, panel.close));
+      calibWrap.appendChild(mkAngleField('S', 'sc-speed-',  1,  10, panel.speed ?? 10));
+      row.appendChild(calibWrap);
+
+      const openBtn = document.createElement('button');
+      openBtn.className = 'btn btn-xs';
+      openBtn.textContent = 'OPEN';
+      openBtn.addEventListener('click', () => this.open(name));
+      row.appendChild(openBtn);
+
+      const closeBtn = document.createElement('button');
+      closeBtn.className = 'btn btn-xs btn-dark';
+      closeBtn.textContent = 'CLOSE';
+      closeBtn.addEventListener('click', () => this.close(name));
+      row.appendChild(closeBtn);
+
+      grid.appendChild(row);
+    });
   }
 
   updateInputs() {
@@ -2924,27 +2980,62 @@ const _hatPanels = {};
 
 function _renderHatBlocks(container, hats, apiPrefix, side) {
   if (!container) return;
-  container.innerHTML = '';
+  // B-202 (remaining tabs audit 2026-05-15): build sections via DOM
+  // primitives. The previous innerHTML template interpolated `label`
+  // (which contains user-controlled `_masterLocation` / `_slaveLocation`
+  // from /settings/robot_locations) INSIDE single-quoted inline
+  // onclicks: `onclick="...toast('${label} open','ok')"`. escapeHtml
+  // doesn't escape `'`, so a location of `Dome', alert(1), '` would
+  // break out. createElement + textContent + addEventListener cleans
+  // up both the title and the button handlers.
+  container.replaceChildren();
   hats.forEach(hat => {
     const gridId  = `${side}-servo-hat${hat.hat}-list`;
     const loc   = (side === 'dome' ? _masterLocation : _slaveLocation).toUpperCase();
     const label = hats.length > 1 ? `${loc} SERVOS ${hat.hat} (${hat.addr})` : `${loc} SERVOS`;
-    const varKey  = `_hatPanels['${gridId}']`;
     const section = document.createElement('section');
     section.className = 'card systems-card';
-    section.innerHTML = `
-      <h2 class="card-title">${label}</h2>
-      <div class="settings-note" style="margin-bottom:6px;">O° = open &nbsp;|&nbsp; C° = close &nbsp;|&nbsp; S = speed (1=slow…10=instant)</div>
-      <div class="servo-grid" id="${gridId}"><!-- generated by ServoPanel --></div>
-      <div class="row mt">
-        <button class="btn btn-active"
-          onclick="api('/servo/${side}/open_all','POST').then(()=>toast('${label} open','ok'))">OPEN ALL</button>
-        <button class="btn btn-dark"
-          onclick="api('/servo/${side}/close_all','POST').then(()=>toast('${label} closed','ok'))">CLOSE ALL</button>
-        <button class="btn"
-          onclick="${varKey}.saveAngles()">SAVE CONFIG</button>
-      </div>
-    `;
+
+    const title = document.createElement('h2');
+    title.className = 'card-title';
+    title.textContent = label;
+    section.appendChild(title);
+
+    const note = document.createElement('div');
+    note.className = 'settings-note';
+    note.style.marginBottom = '6px';
+    note.textContent = 'O° = open  |  C° = close  |  S = speed (1=slow…10=instant)';
+    section.appendChild(note);
+
+    const grid = document.createElement('div');
+    grid.className = 'servo-grid';
+    grid.id = gridId;
+    section.appendChild(grid);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'row mt';
+    const openAllBtn = document.createElement('button');
+    openAllBtn.className = 'btn btn-active';
+    openAllBtn.textContent = 'OPEN ALL';
+    openAllBtn.addEventListener('click', () => {
+      api(`/servo/${side}/open_all`, 'POST').then(() => toast(`${label} open`, 'ok'));
+    });
+    const closeAllBtn = document.createElement('button');
+    closeAllBtn.className = 'btn btn-dark';
+    closeAllBtn.textContent = 'CLOSE ALL';
+    closeAllBtn.addEventListener('click', () => {
+      api(`/servo/${side}/close_all`, 'POST').then(() => toast(`${label} closed`, 'ok'));
+    });
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn';
+    saveBtn.textContent = 'SAVE CONFIG';
+    saveBtn.addEventListener('click', () => {
+      const panel = _hatPanels[gridId];
+      if (panel) panel.saveAngles();
+    });
+    btnRow.append(openAllBtn, closeAllBtn, saveBtn);
+    section.appendChild(btnRow);
+
     container.appendChild(section);
     _hatPanels[gridId] = new ServoPanel(gridId, hat.servos, `/servo/${side}`);
   });

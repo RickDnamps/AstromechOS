@@ -52,11 +52,29 @@ def _read_cam_env() -> dict:
 
 
 def _write_cam_env(resolution: str, fps: int, quality: int) -> None:
+    """B-203 (remaining tabs audit 2026-05-15): atomic tmp+replace.
+    Was open(w) which truncated then wrote — a crash mid-write or a
+    concurrent read by `scripts/camera-start.sh` (which sources this
+    file at service start) would have seen an empty/partial file →
+    fallback defaults kick in silently. Pattern matches settings_bp
+    write_cfg_atomic + chmod 0600 (the env may eventually hold
+    sensitive camera tokens)."""
     os.makedirs(os.path.dirname(_ENV_PATH), exist_ok=True)
-    with open(_ENV_PATH, 'w') as f:
+    tmp = _ENV_PATH + '.tmp'
+    with open(tmp, 'w') as f:
         f.write(f'CAMERA_RESOLUTION={resolution}\n')
         f.write(f'CAMERA_FPS={fps}\n')
         f.write(f'CAMERA_QUALITY={quality}\n')
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass
+    os.replace(tmp, _ENV_PATH)
+    try:
+        os.chmod(_ENV_PATH, 0o644)   # readable by camera-start.sh
+    except OSError:
+        pass
 
 
 @camera_bp.post('/camera/take')
