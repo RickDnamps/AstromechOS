@@ -6716,6 +6716,13 @@ const shortcutsEditor = {
       this._cats   = idx?.categories || {};
       this._sounds = Object.values(this._cats).flat();
     }
+    // Decide whether each saved shortcut's icon was auto-derived
+    // (so future type/target changes can refresh it) or hand-picked
+    // (preserve as-is). Heuristic: if the icon matches the type's
+    // current default, it's auto; otherwise the operator changed it.
+    this._shortcuts.forEach(sc => {
+      sc._iconAuto = (sc.icon === this._defaultIconFor(sc.action));
+    });
     const slider = el('shortcuts-count');
     if (slider) { slider.max = this._max; slider.value = this._shortcuts.length; }
     const lbl = el('shortcuts-count-val');
@@ -6735,10 +6742,43 @@ const shortcutsEditor = {
         icon:   '⚡',
         color:  '',
         action: { type: 'none', target: '' },
+        _iconAuto: true,   // editor-only flag — overwritten by emojiPicker
       });
     }
     if (this._shortcuts.length > n) this._shortcuts.length = n;
     this._render();
+  },
+
+  // Default icon for a given action type + target combination.
+  // User-reported 2026-05-15: 'l'icone par défaut devrait être le
+  // même que celui dans la choreo quand il s'agit d'une choreo'.
+  // play_choreo → reuse the choreo's own emoji from /choreo/list so
+  //               a shortcut for "Angry" automatically picks up
+  //               whatever emoji the operator chose in Sequences.
+  // Other types fall back to a sensible category icon.
+  _defaultIconFor(action) {
+    const type   = action?.type || 'none';
+    const target = action?.target || '';
+    if (type === 'play_choreo' && target) {
+      const ch = (this._scripts || []).find(s => s.name === target);
+      if (ch && ch.emoji) return ch.emoji;
+      return '🎭';
+    }
+    if (type === 'play_sound')        return '🎵';
+    if (type === 'play_random_audio') return '🎲';
+    if (type === 'arms_toggle')       return '🦾';
+    if (type === 'body_panel_toggle') return '🚪';
+    if (type === 'dome_panel_toggle') return '🔘';
+    return '⚡';
+  },
+
+  // Apply the type/target-derived default to sc.icon, but ONLY if
+  // the operator hasn't explicitly picked one via the emoji picker
+  // (sc._iconAuto stays true until they click the icon button).
+  _maybeAutoFillIcon(sc) {
+    if (!sc._iconAuto) return;
+    const def = this._defaultIconFor(sc.action);
+    if (def && def !== sc.icon) sc.icon = def;
   },
 
   _render() {
@@ -6768,6 +6808,7 @@ const shortcutsEditor = {
         emojiPicker.open(sc.icon || '⚡', (emoji) => {
           if (!emoji) return;
           sc.icon = emoji;
+          sc._iconAuto = false;   // operator chose explicitly — lock it
           iconBtn.textContent = emoji;
           this._renderPreview();
         });
@@ -6794,7 +6835,10 @@ const shortcutsEditor = {
       });
       typeSel.addEventListener('change', () => {
         sc.action = { type: typeSel.value, target: '' };
-        this._render();   // re-render so the target field updates
+        // Re-derive the default icon for the new type (will be
+        // refined again once a target is auto-selected by mkSelect).
+        this._maybeAutoFillIcon(sc);
+        this._render();
       });
       row.appendChild(typeSel);
 
@@ -6880,8 +6924,18 @@ const shortcutsEditor = {
       if (!options.some(o => o.value === currentValue) && firstValid) {
         sel.value = firstValid;
         sc.action.target = firstValid;
+        // Newly auto-selected target may have a richer default icon
+        // (e.g. a choreo's own emoji) — refresh.
+        this._maybeAutoFillIcon(sc);
       }
-      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      sel.addEventListener('change', () => {
+        sc.action.target = sel.value;
+        if (sc._iconAuto) {
+          this._maybeAutoFillIcon(sc);
+          // Re-render so the icon button visually updates.
+          this._render();
+        }
+      });
       return sel;
     };
 
@@ -6973,10 +7027,16 @@ const shortcutsEditor = {
         if (tok) headers['X-Admin-Pw'] = tok;
       }
       const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+      // Strip editor-only state (_iconAuto) before sending. Backend
+      // rejects unknown fields silently anyway, but cleaner this way.
+      const payload = this._shortcuts.map(sc => {
+        const { _iconAuto, ...rest } = sc;
+        return rest;
+      });
       const res = await fetch(base + '/shortcuts', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ shortcuts: this._shortcuts }),
+        body: JSON.stringify({ shortcuts: payload }),
       });
       let d = null;
       try { d = await res.json(); } catch {}
