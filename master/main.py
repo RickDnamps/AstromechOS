@@ -371,17 +371,24 @@ def main() -> None:
     app_watchdog.start()      # stop motors if app heartbeat absent for 600ms
 
     # ------------------------------------------------------------------
-    # Slave Health Poll — reads http://r2-slave.local:5001/uart_health
-    # every 5s via urllib (stdlib, no extra dependency)
+    # Slave Health Poll — reads http://<slave_host>:5001/uart_health
+    # every 5s via urllib (stdlib, no extra dependency).
+    #
+    # B-221 (remaining tabs audit 2026-05-15): slave host read from
+    # local.cfg [slave] host. Was hardcoded `r2-slave.local`, which
+    # silently broke any installation that switched to an IP (mDNS
+    # `.local` is capricious on some networks — see project memory
+    # feedback_no_hardcoded_install_values).
     # ------------------------------------------------------------------
     def _slave_health_poll() -> None:
         import urllib.request
         import json as _json
+        slave_host = cfg.get('slave', 'host', fallback='r2-slave.local')
+        url = f'http://{slave_host}:5001/uart_health'
+        log.info("Slave health poll: %s", url)
         while True:
             try:
-                with urllib.request.urlopen(
-                    'http://r2-slave.local:5001/uart_health', timeout=1
-                ) as resp:
+                with urllib.request.urlopen(url, timeout=1) as resp:
                     reg.slave_uart_health = _json.loads(resp.read())
             except Exception:
                 reg.slave_uart_health = None

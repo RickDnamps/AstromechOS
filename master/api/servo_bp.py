@@ -246,20 +246,29 @@ def _sync_angles_json(panels: dict) -> None:
         except OSError as e:
             log.warning("Failed to write servo_angles.json: %s", e)
             return
-    # SCP outside the lock — slow link can stall 5s, no need to block
-    # concurrent /servo/settings on a network op.
-    try:
-        scp_result = subprocess.run(
-            ['scp', _SLAVE_ANGLES_FILE, f'{_slave_host()}:{_SLAVE_ANGLES_FILE}'],
-            timeout=5, check=False, capture_output=True,
-        )
+    # B-225 (remaining tabs audit 2026-05-15): SCP runs in a daemon
+    # thread now. Was blocking the Flask request thread for up to 5s;
+    # rapid Calibration saves (operator iterating angles) stacked
+    # threads. The reload signal still fires on success — operator
+    # sees the new angles take effect within ~1s of SCP completion.
+    def _bg_scp_and_reload():
+        try:
+            scp_result = subprocess.run(
+                ['scp', _SLAVE_ANGLES_FILE, f'{_slave_host()}:{_SLAVE_ANGLES_FILE}'],
+                timeout=5, check=False, capture_output=True,
+            )
+        except (subprocess.TimeoutExpired, OSError) as e:
+            log.warning("Sync servo_angles.json to Slave failed: %s", e)
+            return
         if scp_result.returncode == 0:
             if reg.uart:
                 reg.uart.send('SRV', 'RELOAD')
         else:
-            log.warning("SCP servo_angles.json to Slave failed (rc=%d) — Slave not reloaded", scp_result.returncode)
-    except (subprocess.TimeoutExpired, OSError) as e:
-        log.warning("Sync servo_angles.json to Slave failed: %s", e)
+            log.warning("SCP servo_angles.json to Slave failed (rc=%d) — Slave not reloaded",
+                        scp_result.returncode)
+
+    threading.Thread(target=_bg_scp_and_reload, daemon=True,
+                     name='angles-sync').start()
 
 
 def _panel_angle(name: str, direction: str, panels_cfg: dict) -> int:
@@ -285,20 +294,48 @@ def body_state():
     return jsonify(reg.servo.state if reg.servo else {})
 
 
+# B-260 / B-261 / B-262 (remaining tabs audit 2026-05-15): helper +
+# allowlist gate for the body/dome move/open/close endpoints. Was:
+# - `float(body.get('position', 0.0))` raised TypeError on list/dict
+# - name passed straight to the driver which silently rejected unknown
+#   names — API returned 200 with `{name: <bogus>}` instead of 400.
+def _valid_servo_name(name: str, side: str) -> bool:
+    if side == 'body':
+        return name in BODY_SERVOS
+    if side == 'dome':
+        return name in DOME_SERVOS
+    return False
+
+
+def _safe_position(raw) -> float | None:
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    import math
+    if not math.isfinite(v):
+        return None
+    return max(0.0, min(1.0, v))
+
+
 @servo_bp.post('/body/move')
 def body_move():
     body     = request.get_json(silent=True) or {}
     name     = body.get('name', '')
-    position = float(body.get('position', 0.0))
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
+    if not _valid_servo_name(name, 'body'):
+        return jsonify({'error': f'unknown body servo: {name}'}), 404
+    position = _safe_position(body.get('position', 0.0))
+    if position is None:
+        return jsonify({'error': 'position must be a float 0..1'}), 400
     cfg         = _read_panels_cfg()
     open_angle  = _panel_angle(name, 'open',  cfg)
     close_angle = _panel_angle(name, 'close', cfg)
     if reg.servo:
         reg.servo.move(name, position, open_angle, close_angle)
     elif reg.uart:
-        angle = close_angle + max(0.0, min(1.0, position)) * (open_angle - close_angle)
+        angle = close_angle + position * (open_angle - close_angle)
         reg.uart.send('SRV', f'{name},{angle:.1f}')
     return jsonify({'status': 'ok', 'name': name, 'position': position})
 
@@ -309,6 +346,8 @@ def body_open():
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
+    if not _valid_servo_name(name, 'body'):
+        return jsonify({'error': f'unknown body servo: {name}'}), 404
     cfg   = _read_panels_cfg()
     angle = _panel_angle(name, 'open', cfg)
     speed = _panel_speed(name, cfg)
@@ -325,6 +364,8 @@ def body_close():
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
+    if not _valid_servo_name(name, 'body'):
+        return jsonify({'error': f'unknown body servo: {name}'}), 404
     cfg   = _read_panels_cfg()
     angle = _panel_angle(name, 'close', cfg)
     speed = _panel_speed(name, cfg)
@@ -435,9 +476,13 @@ def dome_state():
 def dome_move():
     body     = request.get_json(silent=True) or {}
     name     = body.get('name', '')
-    position = float(body.get('position', 0.0))
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
+    if not _valid_servo_name(name, 'dome'):
+        return jsonify({'error': f'unknown dome servo: {name}'}), 404
+    position = _safe_position(body.get('position', 0.0))
+    if position is None:
+        return jsonify({'error': 'position must be a float 0..1'}), 400
     if not reg.dome_servo:
         return jsonify({'error': 'dome_servo driver not ready — check master logs'}), 503
     cfg         = _read_panels_cfg()
@@ -453,6 +498,8 @@ def dome_open():
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
+    if not _valid_servo_name(name, 'dome'):
+        return jsonify({'error': f'unknown dome servo: {name}'}), 404
     if not reg.dome_servo:
         return jsonify({'error': 'dome_servo driver not ready — check master logs'}), 503
     cfg   = _read_panels_cfg()
@@ -468,6 +515,8 @@ def dome_close():
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
+    if not _valid_servo_name(name, 'dome'):
+        return jsonify({'error': f'unknown dome servo: {name}'}), 404
     if not reg.dome_servo:
         return jsonify({'error': 'dome_servo driver not ready — check master logs'}), 503
     cfg   = _read_panels_cfg()

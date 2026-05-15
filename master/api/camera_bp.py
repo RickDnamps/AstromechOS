@@ -30,8 +30,43 @@ _VALID_RESOLUTIONS = {'640x480', '1280x720', '1920x1080'}
 _VALID_FPS         = {15, 30}
 _VALID_QUALITY     = range(10, 101)
 
+# B-208 (remaining tabs audit 2026-05-15): debounce timer for the
+# astromech-camera.service restart. Rapid /camera/config POSTs (drag
+# the quality slider) coalesce into one restart after _RESTART_DEBOUNCE
+# seconds of idle. _restart_lock protects the timer reference.
+_RESTART_DEBOUNCE = 2.0
+_restart_timer: threading.Timer | None = None
+_restart_lock   = threading.Lock()
+
+
+def _schedule_camera_restart() -> None:
+    """Coalesce multiple restart triggers within _RESTART_DEBOUNCE
+    seconds into a single systemctl restart. Each call resets the
+    countdown, so the operator's last edit wins and mjpg_streamer
+    isn't repeatedly killed mid-init."""
+    global _restart_timer
+
+    def _do_restart():
+        try:
+            subprocess.run(['sudo', 'systemctl', 'restart',
+                            'astromech-camera.service'], check=False)
+            log.info("Camera service restart issued")
+        except OSError as e:
+            log.warning("Camera service restart failed: %s", e)
+
+    with _restart_lock:
+        if _restart_timer is not None and _restart_timer.is_alive():
+            _restart_timer.cancel()
+        _restart_timer = threading.Timer(_RESTART_DEBOUNCE, _do_restart)
+        _restart_timer.daemon = True
+        _restart_timer.start()
+
 
 def _read_cam_env() -> dict:
+    """Read camera.env. B-210 (remaining tabs audit 2026-05-15):
+    tolerate malformed int values per-line instead of bubbling a
+    ValueError up to /camera/config GET (which would 500). Keep the
+    default for any field that fails parsing."""
     cfg = {'resolution': '640x480', 'fps': 30, 'quality': 80}
     try:
         with open(_ENV_PATH) as f:
@@ -43,11 +78,19 @@ def _read_cam_env() -> dict:
                 if k == 'CAMERA_RESOLUTION':
                     cfg['resolution'] = v
                 elif k == 'CAMERA_FPS':
-                    cfg['fps'] = int(v)
+                    try:
+                        cfg['fps'] = int(v)
+                    except ValueError:
+                        log.warning("camera.env: invalid CAMERA_FPS=%r (using default)", v)
                 elif k == 'CAMERA_QUALITY':
-                    cfg['quality'] = int(v)
+                    try:
+                        cfg['quality'] = int(v)
+                    except ValueError:
+                        log.warning("camera.env: invalid CAMERA_QUALITY=%r (using default)", v)
     except FileNotFoundError:
         pass
+    except OSError as e:
+        log.warning("camera.env unreadable: %s", e)
     return cfg
 
 
@@ -117,6 +160,13 @@ def camera_stream():
         return jsonify({'error': 'Camera error'}), 503
 
     def generate():
+        # B-209 (remaining tabs audit 2026-05-15): always close the
+        # upstream connection on exit (success, eviction, or exception).
+        # Previously the upstream `requests.Response` leaked when the
+        # client disconnected mid-stream — `iter_content` would raise,
+        # the bare-except swallowed it, but the underlying TCP socket
+        # to mjpg_streamer stayed open until GC. Heavy churn (multiple
+        # tablets reconnecting) exhausted the local-port pool over time.
         try:
             for chunk in upstream.iter_content(chunk_size=8192):
                 if _active_token != my_token:
@@ -125,6 +175,11 @@ def camera_stream():
                 yield chunk
         except Exception as e:
             log.warning("Camera stream error: %s", e)
+        finally:
+            try:
+                upstream.close()
+            except Exception:
+                pass
 
     return Response(generate(), mimetype=content_type)
 
@@ -159,8 +214,15 @@ def camera_config_set():
     """
     data       = request.get_json(silent=True) or {}
     resolution = data.get('resolution', '640x480')
-    fps        = int(data.get('fps', 30))
-    quality    = int(data.get('quality', 80))
+    # B-231 / B-232 (remaining tabs audit 2026-05-15): defensive int
+    # parsing — a non-numeric `fps` or `quality` body field used to
+    # propagate ValueError → 500. Now: clear 400 with the offending
+    # field name.
+    try:
+        fps     = int(data.get('fps', 30))
+        quality = int(data.get('quality', 80))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'fps and quality must be integers'}), 400
 
     if resolution not in _VALID_RESOLUTIONS:
         return jsonify({'error': f'Invalid resolution — valid: {sorted(_VALID_RESOLUTIONS)}'}), 400
@@ -172,8 +234,12 @@ def camera_config_set():
     _write_cam_env(resolution, fps, quality)
     log.info("Camera config: %s @ %dfps q%d — restarting service", resolution, fps, quality)
 
-    def _restart():
-        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-camera.service'], check=False)
-
-    threading.Thread(target=_restart, daemon=True).start()
+    # B-208 (remaining tabs audit 2026-05-15): serialize restarts.
+    # Rapid /camera/config POSTs (operator dragging the quality
+    # slider) would otherwise spawn N restart commands → mjpg_streamer
+    # killed mid-init repeatedly, camera goes dark. Single-flight slot
+    # protects the systemctl call; subsequent restarts during the 3s
+    # window collapse to one final restart by debouncing the trigger
+    # via a coalescing timer.
+    _schedule_camera_restart()
     return jsonify({'status': 'ok', 'resolution': resolution, 'fps': fps, 'quality': quality})

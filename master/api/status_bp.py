@@ -173,7 +173,12 @@ def _cpu_pct() -> float | None:
 
 try:
     from master.api import camera_bp as _cam_bp
-except Exception:
+except ImportError:
+    # B-212 (remaining tabs audit 2026-05-15): narrow to ImportError.
+    # Bare `except Exception` masked NameError / AttributeError / any
+    # syntax bug in camera_bp — /status would silently report
+    # `camera_active: false` instead of surfacing the failure. Per
+    # project feedback_silent_import_swallow policy.
     _cam_bp = None
 
 status_bp = Blueprint('status', __name__)

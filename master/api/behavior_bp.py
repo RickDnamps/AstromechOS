@@ -130,8 +130,24 @@ def save_config():
         def _set(key, value):
             parser.set('behavior', key, str(value))
 
+        # B-215 / B-216 / B-218 (remaining tabs audit 2026-05-15):
+        # value validation per key — clamps + allowlists. Catches
+        # non-numeric, out-of-range, and unknown enums BEFORE persist
+        # so BehaviorEngine never reads junk back.
+        _VALID_IDLE_MODES = {'sounds', 'sounds_lights', 'lights', 'choreo'}
+
+        def _safe_int_clamp(field, raw, lo, hi):
+            try:
+                return max(lo, min(hi, int(raw)))
+            except (TypeError, ValueError):
+                raise ValueError(f"{field} must be an integer ({lo}..{hi})")
+
         if 'startup_enabled'     in data: _set('startup_enabled',     'true' if data['startup_enabled'] else 'false')
-        if 'startup_delay'       in data: _set('startup_delay',       str(int(data['startup_delay'])))
+        if 'startup_delay'       in data:
+            try:
+                _set('startup_delay', str(_safe_int_clamp('startup_delay', data['startup_delay'], 0, 300)))
+            except ValueError as e:
+                return jsonify({'ok': False, 'error': str(e)}), 400
         if 'startup_choreo'      in data:
             # B-69: validate against on-disk choreographies before
             # persisting; empty string means "no startup choreo".
@@ -140,9 +156,27 @@ def save_config():
                 return jsonify({'ok': False, 'error': f'unknown choreo: {name}'}), 400
             _set('startup_choreo', name)
         if 'alive_enabled'       in data: _set('alive_enabled',       'true' if data['alive_enabled'] else 'false')
-        if 'idle_timeout_min'    in data: _set('idle_timeout_min',    str(int(data['idle_timeout_min'])))
-        if 'idle_mode'           in data: _set('idle_mode',           str(data['idle_mode']))
-        if 'idle_audio_category' in data: _set('idle_audio_category', str(data['idle_audio_category']))
+        if 'idle_timeout_min'    in data:
+            try:
+                _set('idle_timeout_min', str(_safe_int_clamp('idle_timeout_min', data['idle_timeout_min'], 1, 1440)))
+            except ValueError as e:
+                return jsonify({'ok': False, 'error': str(e)}), 400
+        if 'idle_mode'           in data:
+            mode = str(data['idle_mode']).strip().lower()
+            if mode not in _VALID_IDLE_MODES:
+                return jsonify({'ok': False, 'error': f'idle_mode must be one of {sorted(_VALID_IDLE_MODES)}'}), 400
+            _set('idle_mode', mode)
+        if 'idle_audio_category' in data:
+            # Validate against actual audio categories on disk
+            cat = str(data['idle_audio_category']).strip().lower()
+            try:
+                from master.api.audio_bp import _get_index
+                valid_cats = set(_get_index().get('categories', {}).keys())
+            except Exception:
+                valid_cats = set()   # can't validate — accept anything
+            if valid_cats and cat and cat not in valid_cats:
+                return jsonify({'ok': False, 'error': f'unknown audio category: {cat}'}), 400
+            _set('idle_audio_category', cat)
         if 'idle_choreo_list'    in data:
             # B-70: same validation per entry — drop unknown names with
             # a 400 instead of letting BehaviorEngine try a path that
