@@ -99,6 +99,9 @@ import re as _re_bt
 # (covers 'dpad_up' style synthetic codes too). Bounded to 32 chars.
 _VALID_BT_BUTTON_RE = _re_bt.compile(r'^[A-Za-z][A-Za-z0-9_]{0,31}$')
 
+# Shared MAC regex for both /bt/pair etc. and _btctl defense-in-depth.
+_BT_MAC_RE = _re_bt.compile(r'^[0-9A-F]{2}(:[0-9A-F]{2}){5}$')
+
 # gamepad_type is free-form metadata used only for the UI label —
 # allow any short printable string but bound the length.
 _GAMEPAD_TYPE_MAX = 32
@@ -177,8 +180,22 @@ def bt_estop_reset():
 
 # ── BT Pairing ────────────────────────────────────────────────────
 
+# Subcommands that take a MAC address as their second arg.
+_BTCTL_MAC_VERBS = {'pair', 'unpair', 'connect', 'disconnect', 'trust', 'untrust', 'remove'}
+
+
 def _btctl(*args, timeout=8) -> tuple[bool, str]:
-    """Runs a non-interactive bluetoothctl command. Returns (ok, stdout)."""
+    """Runs a non-interactive bluetoothctl command. Returns (ok, stdout).
+
+    Audit finding A4-M2 2026-05-15: defense-in-depth. The caller-side
+    MAC regex at /bt/pair etc. is the primary check, but if a future
+    caller forgets the regex this helper would happily pass anything
+    (including `--help` or CLI flags) to bluetoothctl. Assert MAC
+    shape here too — fails fast in dev with a clear error.
+    """
+    if args and len(args) >= 2 and args[0] in _BTCTL_MAC_VERBS:
+        if not _BT_MAC_RE.match(str(args[1]).upper()):
+            return False, f'_btctl: invalid MAC for verb {args[0]!r}: {args[1]!r}'
     try:
         r = subprocess.run(
             ['bluetoothctl', '--', *args],
@@ -186,7 +203,11 @@ def _btctl(*args, timeout=8) -> tuple[bool, str]:
         )
         out = r.stdout + r.stderr
         return (r.returncode == 0), out
-    except Exception as e:
+    except (subprocess.TimeoutExpired, OSError) as e:
+        # Narrow exception (was bare Exception). Real subprocess
+        # failures are TimeoutExpired or OSError (ENOENT if
+        # bluetoothctl not installed). Anything else is a bug we
+        # want to see.
         return False, str(e)
 
 

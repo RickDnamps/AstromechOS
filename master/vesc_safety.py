@@ -48,7 +48,7 @@ def _snapshot():
         'L':     telem.get('L'),
         'R':     telem.get('R'),
         'bench': bool(getattr(reg, 'vesc_bench_mode', False)),
-        'now':   time.time(),
+        'now':   time.monotonic(),
     }
 
 

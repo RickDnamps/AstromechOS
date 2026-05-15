@@ -704,7 +704,17 @@ def upload_sound():
 
         # Update sounds_index.json with the FINAL stem.
         sounds = cats.setdefault(category, [])
+        # Audit finding A2-L3 2026-05-15: cap per-category sound count.
+        # 512 covers the biggest legit collection by a wide margin
+        # (R2-D2 ships with 324 across all 14 cats). Caps stop a
+        # runaway script from bloating the index.
+        _SOUNDS_PER_CAT_MAX = 512
         if final_stem not in sounds:
+            if len(sounds) >= _SOUNDS_PER_CAT_MAX:
+                return jsonify({
+                    'ok': False,
+                    'error': f'Category "{category}" full (max {_SOUNDS_PER_CAT_MAX} sounds)',
+                }), 400
             sounds.append(final_stem)
             sounds.sort()
         _atomic_write_index(index)
@@ -760,6 +770,12 @@ def create_category():
         cats = index.setdefault('categories', {})
         if name in cats:
             return jsonify({'ok': False, 'error': f'Category "{name}" already exists'}), 409
+        # Audit finding A2-L3 2026-05-15: hard cap on category count.
+        # Admin-protected but a typo'd script could create thousands
+        # before anyone notices, ballooning the index file.
+        _CAT_COUNT_MAX = 64
+        if len(cats) >= _CAT_COUNT_MAX:
+            return jsonify({'ok': False, 'error': f'Too many categories (max {_CAT_COUNT_MAX})'}), 400
         cats[name] = []
         _atomic_write_index(index)
         with _audio_state_lock:

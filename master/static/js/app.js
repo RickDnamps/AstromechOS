@@ -364,6 +364,14 @@ function saveCustomTheme() {
     _pickerFont:   fontOpt,
   };
   const list = _loadCustomThemes().filter(c => c.id !== entry.id);
+  // Audit finding A2-L4 2026-05-15: cap custom themes at 16 so a
+  // browser tab kept open for months can't grow localStorage to
+  // its 5-10MB limit. Self-DoS only (per-tab), but worth a guard.
+  const _CUSTOM_THEMES_MAX = 16;
+  if (list.length >= _CUSTOM_THEMES_MAX) {
+    toast(`Custom themes capped at ${_CUSTOM_THEMES_MAX} — delete some first`, 'warn');
+    return;
+  }
   list.push(entry);
   _saveCustomThemesStore(list);
   document.getElementById('theme-editor').style.display = 'none';
@@ -478,11 +486,19 @@ function syncHoloSlider(s) {
 }
 
 function escapeHtml(s) {
+  // Audit finding A2-L2 2026-05-15: now also escapes ' (single quote)
+  // and ` (backtick). Previously missing — meant the function was
+  // unsafe inside HTML attribute values delimited by either char.
+  // The codebase has migrated nearly every sink to createElement +
+  // textContent, but completing the escape map closes the gap for
+  // any remaining or future caller.
   return String(s)
     .replace(/&/g,'&amp;')
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;');
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;')
+    .replace(/`/g,'&#96;');
 }
 
 // ================================================================
@@ -659,6 +675,17 @@ class LockManager {
     const v = el('kids-speed-val');
     if (v) v.textContent = val + '%';
     if (this._mode === 1) this._applyKidsSpeed();
+    // Audit finding A4-L2 2026-05-15: push the new cap to the server
+    // immediately so server-side _kids_cap reflects the operator's
+    // change. Previously the new value lived only in localStorage
+    // until the next /lock/set call (e.g. mode toggle) — so between
+    // moving the slider and toggling, motion was still capped at the
+    // PRIOR value. POST is admin-gated; the call relies on the
+    // existing admin token (lockMgr is reached after admin unlock).
+    api('/lock/set', 'POST', {
+      mode: this._mode,
+      kids_speed_limit: val / 100,
+    });
   }
 
   onBtnClick() {

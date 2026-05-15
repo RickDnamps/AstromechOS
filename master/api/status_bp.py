@@ -261,7 +261,7 @@ def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
         return True
     if telem is None:
         return False
-    if _time.time() - telem.get('ts', 0) > max_age:
+    if _time.monotonic() - telem.get('ts', 0) > max_age:
         return False
     return telem.get('fault', 0) == 0
 
@@ -283,7 +283,7 @@ def _fresh_telem(side: str, max_age: float = 2.0) -> dict | None:
     telem = reg.vesc_telem.get(side)
     if telem is None:
         return None
-    if _time.time() - telem.get('ts', 0) > max_age:
+    if _time.monotonic() - telem.get('ts', 0) > max_age:
         return None
     return telem
 

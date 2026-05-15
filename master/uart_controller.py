@@ -209,7 +209,15 @@ class UARTController:
                 data = self._serial.read(256)
                 if not data:
                     continue
-                buffer += data.decode('utf-8', errors='replace')
+                # Audit finding A5-M8 2026-05-15: count UTF-8 decode
+                # replacements separately from CRC errors. Previously
+                # garbled bytes became U+FFFD, the resulting payload
+                # failed CRC and was charged to crc_errors — couldn't
+                # distinguish a noisy bus from a misframed protocol.
+                decoded = data.decode('utf-8', errors='replace')
+                if '�' in decoded:
+                    self.decode_errors = getattr(self, 'decode_errors', 0) + 1
+                buffer += decoded
                 if len(buffer) > _MAX_BUFFER:
                     # Keep the trailing 256 bytes — preserves the start of any
                     # in-flight frame instead of dropping ~350ms of bus data

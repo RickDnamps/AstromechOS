@@ -524,8 +524,14 @@ class VescDriver(BaseDriver):
                 elif self._can_lost and self._uart:
                     # Push a synthetic fault frame so Master's safety gate trips
                     # on the next telemetry tick (no waiting for staleness).
+                    # Audit finding A3-L1 2026-05-15: previously used vl['v_in']
+                    # for the dead R side. Master's undervoltage abort check
+                    # (cells*3.5V) would have seen a valid voltage from the
+                    # left and never tripped on under-voltage even though R
+                    # is dead. Use 0.0 so under-voltage AND CAN_LOST both
+                    # fire as expected.
                     self._uart.send('TR',
-                        f"{vl['v_in']}:0.0:0.0:0:0.0:{self._SYNTHETIC_FAULT_CAN_LOST}"
+                        f"0.0:0.0:0.0:0:0.0:{self._SYNTHETIC_FAULT_CAN_LOST}"
                     )
 
             time.sleep(TELEM_INTERVAL)

@@ -423,7 +423,12 @@ class BTControllerDriver:
                 if drive_active:
                     left, right = last_drive
                     if abs(left) > 0.01 or abs(right) > 0.01:
-                        _ka_count += 1
+                        # Audit finding A4-M4 2026-05-15: wrap to bound
+                        # the counter. CPython ints don't overflow but
+                        # an unbounded counter is sloppy — wrap at 1M
+                        # (~83 hours of continuous drive at 300ms) so
+                        # the log signal remains useful.
+                        _ka_count = (_ka_count + 1) % 1_000_000
                         if _ka_count % 10 == 1:  # log every ~3s (10 × 300ms)
                             log.info("BT keepalive #%d: drive=(%.3f, %.3f)", _ka_count, left, right)
                         self._do_drive(left, right, reg)

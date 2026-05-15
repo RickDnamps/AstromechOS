@@ -298,7 +298,12 @@ def main() -> None:
                 'rpm':     int(rpm),
                 'duty':    float(duty),
                 'fault':   int(fault),
-                'ts':      time.time(),
+                # Audit finding A5-M2 2026-05-15: time.monotonic
+                # not time.time so NTP corrections / manual `date`
+                # changes don't spuriously flag fresh telem as stale.
+                # ALL consumers (status_bp._fresh_telem,
+                # vesc_safety._snapshot) now also use monotonic.
+                'ts':      time.monotonic(),
             }
         except Exception:
             return None
