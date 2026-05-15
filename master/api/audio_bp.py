@@ -324,11 +324,15 @@ def _valid_category(cat: str) -> bool:
 
 @audio_bp.get('/categories')
 def get_categories():
-    """List of categories with sound count."""
+    """List of categories with sound count.
+    L-4: sorted alphabetically so the UI pill order is deterministic
+    across Master reboots (was dict-insertion-order: depended on the
+    write order of sounds_index.json, surprising after manual edits)."""
     try:
         cats = _get_index().get('categories', {})
         return jsonify({
-            'categories': [{'name': k, 'count': len(v)} for k, v in cats.items()],
+            'categories': [{'name': k, 'count': len(cats[k])}
+                           for k in sorted(cats.keys())],
             'total': sum(len(v) for v in cats.values())
         })
     except Exception as e:
@@ -377,6 +381,12 @@ def play_random():
     category = body.get('category', 'happy').strip().lower()
     if not _valid_category(category):
         return jsonify({'error': f'Unknown category: {category}'}), 404
+    # L-3: refuse empty categories. Without this, the slave gets
+    # `S:RANDOM:emptycat`, scans an empty file list, and silently no-ops
+    # — UI flips to 'playing' for a second then back to idle with no
+    # error, which is worse UX than a clear 409.
+    if not _get_index().get('categories', {}).get(category):
+        return jsonify({'error': f'Category "{category}" has no sounds'}), 409
     if reg.uart:
         reg.uart.send('S', f'RANDOM:{category}')
     reg.audio_playing = True
@@ -427,14 +437,60 @@ def stream_sound_file(sound):
 
 @audio_bp.post('/stop')
 def stop_audio():
-    """Stops the current sound."""
-    if _play_timer and _play_timer.is_alive():
-        _play_timer.cancel()
+    """Stops the current sound. L-1: timer cancel under _audio_state_lock
+    so a concurrent /play can't replace _play_timer between is_alive() and
+    cancel() — would otherwise leave the new timer running while we
+    clear audio_playing here, then the timer's _reset would fire later
+    and re-clear (already cleared, no-op) — minor but the lock makes the
+    state transition atomic."""
+    global _play_timer
+    with _audio_state_lock:
+        if _play_timer and _play_timer.is_alive():
+            _play_timer.cancel()
+        _play_timer = None
+        reg.audio_playing = False
+        reg.audio_current = ''
     if reg.uart:
         reg.uart.send('S', 'STOP')
-    reg.audio_playing = False
-    reg.audio_current = ''
     return jsonify({'status': 'ok'})
+
+
+# L-2: volume persistence. reg.audio_volume was in-memory only; without
+# this, every Master reboot would show the slider at 80 even if the
+# operator had set it to 30 yesterday. Stored under [audio] volume in
+# local.cfg alongside the existing audio_channels / profile_* keys.
+def _read_persisted_volume() -> int | None:
+    """Return last-saved volume from local.cfg [audio] volume, or None."""
+    try:
+        cfg = configparser.ConfigParser()
+        cfg.read(_LOCAL_CFG, encoding='utf-8')
+        if cfg.has_option('audio', 'volume'):
+            return max(0, min(100, cfg.getint('audio', 'volume')))
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _persist_volume(vol: int) -> None:
+    """Write vol to local.cfg [audio] volume so it survives reboots."""
+    try:
+        cfg = configparser.ConfigParser()
+        cfg.read(_LOCAL_CFG, encoding='utf-8')
+        if not cfg.has_section('audio'):
+            cfg.add_section('audio')
+        cfg.set('audio', 'volume', str(vol))
+        with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
+            cfg.write(f)
+    except OSError:
+        pass   # transient FS error — next /volume will retry
+
+
+# Hydrate reg.audio_volume at module import so any /audio/play arriving
+# before the first /audio/volume GET still uses the operator's last
+# setting rather than the 80 default.
+if not hasattr(reg, 'audio_volume'):
+    _persisted = _read_persisted_volume()
+    reg.audio_volume = _persisted if _persisted is not None else 80
 
 
 @audio_bp.get('/volume')
@@ -445,7 +501,10 @@ def get_volume():
 
 @audio_bp.post('/volume')
 def set_volume():
-    """Sets the volume. Body: {"volume": 75}  (0-100)"""
+    """Sets the volume. Body: {"volume": 75}  (0-100)
+    L-2: persists to local.cfg so the slider position survives a Master
+    reboot. The cfg write happens after the UART push so the audible
+    change isn't blocked by FS sync latency."""
     body = request.get_json(silent=True) or {}
     try:
         vol = max(0, min(100, int(body.get('volume', 80))))
@@ -454,6 +513,7 @@ def set_volume():
     reg.audio_volume = vol
     if reg.uart:
         reg.uart.send('VOL', str(vol))
+    _persist_volume(vol)
     return jsonify({'status': 'ok', 'volume': vol})
 
 
