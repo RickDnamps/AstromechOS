@@ -2757,8 +2757,25 @@ function estopReset() {
   _estopBusy = true;
   api('/system/estop_reset', 'POST').then(r => {
     if (r && r.status === 'reset') {
-      toast('E-STOP RESET — servos re-armed', 'ok');
+      // User-reported 2026-05-15: previous toast 'servos re-armed' was
+      // BOTH misleading (servos are still stowing, not yet armed) AND
+      // visually covered the E-STOP button so the operator couldn't
+      // see the STOWING… text appearing on it. Honest short message
+      // that clears fast (the STOWING button text is the real status).
+      toast('Stowing servos…', 'info');
       _setEstopUI(false);
+      // Watch for stow_in_progress to flip false then announce ready.
+      // The status poller already updates the button text; this just
+      // gives the operator a "ready" confirmation toast at the end.
+      const _stowWatch = setInterval(async () => {
+        const s = await api('/status');
+        if (!s || !s.stow_in_progress) {
+          clearInterval(_stowWatch);
+          if (s) toast('R2 ready — drive armed', 'ok');
+        }
+      }, 500);
+      // Safety: stop polling after 15s no matter what
+      setTimeout(() => clearInterval(_stowWatch), 15000);
     } else {
       toast('Reset failed', 'error');
     }
