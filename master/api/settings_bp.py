@@ -39,12 +39,19 @@ Endpoints:
 """
 
 import configparser
+import hmac
 import logging
 import os
 import subprocess
+import threading
+import time
 from flask import Blueprint, request, jsonify, send_from_directory
 from master.config.config_loader import write_cfg_atomic
 from master.api._admin_auth import require_admin
+# B-102 / B-103 (audit 2026-05-15): consolidated all stdlib imports
+# at the top instead of scattering `import threading as _threading_cfg`
+# / `import threading as _th` / `import time as _t` at three function
+# scopes. Aliases dropped — plain `threading` and `time` everywhere.
 
 settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
@@ -81,12 +88,10 @@ def _safe_int(val: str, fallback: int) -> int:
         return fallback
 
 
-import threading as _threading_cfg
-
 # Serialize all read-modify-write cycles on local.cfg + slave.cfg so that
 # concurrent saves (Settings tab + Android, two browser tabs, etc.) cannot
 # interleave and lose keys.
-_cfg_write_lock = _threading_cfg.Lock()
+_cfg_write_lock = threading.Lock()
 
 
 def _read_cfg() -> configparser.ConfigParser:
@@ -149,7 +154,6 @@ def _sync_slave_hat_cfg(**kwargs) -> None:
             return   # nothing to push if local write failed
 
     def _bg_sync_and_restart():
-        import time as _t
         target = _resolve_slave_ssh_target()
         try:
             r = subprocess.run(
@@ -164,13 +168,12 @@ def _sync_slave_hat_cfg(**kwargs) -> None:
                       r.returncode, r.stderr[:200] if r.stderr else '')
             return
         log.info("slave.cfg synced to Slave (hat config)")
-        _t.sleep(2)
+        time.sleep(2)
         subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
         log.info("Slave service restart issued")
 
-    import threading as _th
-    _th.Thread(target=_bg_sync_and_restart, daemon=True,
-               name='slave-hat-sync').start()
+    threading.Thread(target=_bg_sync_and_restart, daemon=True,
+                     name='slave-hat-sync').start()
     log.info("Slave HAT sync scheduled (background)")
 
 
@@ -191,8 +194,7 @@ def _nm_field(device: str, field: str) -> str:
     return out if rc == 0 else ''
 
 
-import threading as _threading
-_lights_reload_lock = _threading.Lock()
+_lights_reload_lock = threading.Lock()
 
 
 def _read_fresh_cfg() -> configparser.ConfigParser:
@@ -232,8 +234,7 @@ def _reload_lights_driver(backend: str) -> dict:
     # Shut down old driver AFTER lock released (avoids deadlock if shutdown is slow).
     # Brief sleep lets any in-flight request that holds a local ref to old_driver finish.
     if old_driver:
-        import time as _time
-        _time.sleep(0.1)
+        time.sleep(0.1)
         try:
             old_driver.shutdown()
         except Exception as e:
@@ -279,14 +280,12 @@ def _sync_audio_channels(channels: int) -> None:
 
     # Delayed restart (2s) — lets the HTTP response reach the client first
     def _delayed_restart():
-        import time as _time
-        _time.sleep(2)
+        time.sleep(2)
         subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
-        _time.sleep(1)
+        time.sleep(1)
         subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-master'], check=False)
 
-    import threading as _threading
-    _threading.Thread(target=_delayed_restart, daemon=True).start()
+    threading.Thread(target=_delayed_restart, daemon=True).start()
     log.info("Services scheduled to restart in 2s (audio_channels=%d)", channels)
 
 
@@ -391,7 +390,7 @@ def wifi_scan():
 @require_admin
 def set_wifi():
     """Updates wlan1 credentials and attempts to connect."""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
 
@@ -442,7 +441,7 @@ def set_wifi():
 @require_admin
 def set_hotspot():
     """Updates hotspot credentials for wlan0 and restarts the hotspot."""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
 
@@ -477,7 +476,7 @@ def set_hotspot():
 @require_admin
 def set_config():
     """Updates general parameters in local.cfg."""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
 
     # Allowed keys (section.key)
     _SLAVE_HAT_KEYS = {'i2c_servo_hats.slave_hats', 'i2c_servo_hats.slave_motor_hat'}
@@ -630,7 +629,7 @@ def set_config():
 def apply_audio_profile():
     """Applies a saved volume profile immediately. Body: {"profile": "convention"}"""
     import master.registry as reg
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     name = data.get('profile', '').strip().lower()
     _defaults = {'convention': 70, 'maison': 85, 'exterieur': 95}
     if name not in _defaults:
@@ -699,7 +698,7 @@ def admin_verify():
             'error': 'too many attempts',
             'retry_after_s': int(retry),
         }), 429
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     pwd  = (data.get('password', '') or '').encode()
     expected = _get_admin_password().encode()
     # compare_digest needs equal-length operands; pad to expected len
@@ -716,7 +715,7 @@ def admin_verify():
 @require_admin
 def admin_change_password():
     """Changes the admin password. Body: {\"current\": \"...\", \"new\": \"...\"}"""
-    data    = request.get_json() or {}
+    data    = request.get_json(silent=True) or {}
     current = data.get('current', '')
     new_pwd = data.get('new', '').strip()
 
@@ -779,7 +778,7 @@ def upload_icon():
 @require_admin
 def delete_icon():
     """Deletes an icon file. Body: {\"filename\": \"foo.png\"}"""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     fname = os.path.basename(data.get('filename', ''))
     if not fname or fname.startswith('.'):
         return jsonify({'error': 'filename required'}), 400
@@ -801,7 +800,7 @@ def delete_icon():
 @require_admin
 def set_robot_icon():
     """Saves robot header icon to local.cfg. Body: {\"icon\": \"img:foo.png\"} or {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset."""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     icon = data.get('icon', '').strip()
     _write_key('robot', 'icon', icon)
     return jsonify({'status': 'ok', 'icon': icon})
@@ -811,7 +810,7 @@ def set_robot_icon():
 @require_admin
 def set_robot_locations():
     """Saves master/slave display location names. Body: {\"master_location\":\"Dome\",\"slave_location\":\"Body\"}"""
-    data   = request.get_json() or {}
+    data   = request.get_json(silent=True) or {}
     master = data.get('master_location', '').strip()[:20]
     slave  = data.get('slave_location',  '').strip()[:20]
     if master: _write_key('robot', 'master_location', master)
@@ -823,7 +822,7 @@ def set_robot_locations():
 @require_admin
 def set_robot_name():
     """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     name = data.get('name', '').strip()
     if not name:
         return jsonify({'error': 'name is required'}), 400
@@ -837,7 +836,7 @@ def set_robot_name():
 @require_admin
 def set_lights_backend():
     """Changes the lights driver at runtime (no reboot). Body: {\"backend\": \"astropixels\"}"""
-    data    = request.get_json() or {}
+    data    = request.get_json(silent=True) or {}
     backend = data.get('backend', '').strip().lower()
     if backend not in {'teeces', 'astropixels'}:
         return jsonify({'error': 'invalid backend. Values: teeces, astropixels'}), 400

@@ -128,9 +128,17 @@ def set_config():
     """Sets the power scale (0.1-1.0). Sent to Slave via UART VCFG:."""
     body = request.get_json(silent=True) or {}
     try:
-        scale = max(0.1, min(1.0, float(body.get('scale', 1.0))))
+        raw = float(body.get('scale', 1.0))
     except (TypeError, ValueError):
         return jsonify({'error': 'scale must be a float 0.1-1.0'}), 400
+    # B-109 (audit 2026-05-15): NaN/Inf propagate through max/min — a
+    # JSON body of {"scale": NaN} or {"scale": Infinity} would have
+    # landed in local.cfg as 'nan' and the slave would interpret it
+    # as 0 or fault. Explicit reject.
+    import math
+    if not math.isfinite(raw):
+        return jsonify({'error': 'scale must be finite (no NaN/Inf)'}), 400
+    scale = max(0.1, min(1.0, raw))
 
     reg.vesc_power_scale = scale
     _save_vesc_cfg(power_scale=f'{scale:.2f}')

@@ -132,17 +132,22 @@ def _paired_devices() -> list[dict]:
             ['bluetoothctl', 'devices', 'Paired'],
             capture_output=True, text=True, timeout=4
         )
-        out = _strip_ansi(r.stdout + r.stderr)
-        devices = []
-        for line in out.splitlines():
-            m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
-            if m:
-                addr = m.group(1).upper()
-                name = m.group(2).strip() or addr
-                devices.append({'address': addr, 'name': name})
-        return devices
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError) as e:
+        # B-106 (audit 2026-05-15): narrow except + log. Bare except
+        # returning [] looked identical to 'no paired devices' so a
+        # broken BT stack hid permanently. Now log a warning so the
+        # operator sees the real error in journalctl.
+        log.warning("bluetoothctl devices Paired failed: %s", e)
         return []
+    out = _strip_ansi(r.stdout + r.stderr)
+    devices = []
+    for line in out.splitlines():
+        m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
+        if m:
+            addr = m.group(1).upper()
+            name = m.group(2).strip() or addr
+            devices.append({'address': addr, 'name': name})
+    return devices
 
 
 def _strip_ansi(text: str) -> str:
@@ -156,17 +161,18 @@ def _all_devices() -> dict[str, str]:
             ['bluetoothctl', 'devices'],
             capture_output=True, text=True, timeout=4
         )
-        out = _strip_ansi(r.stdout + r.stderr)
-        devices = {}
-        for line in out.splitlines():
-            m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
-            if m:
-                addr = m.group(1).upper()
-                name = m.group(2).strip()
-                devices[addr] = name if name and name != addr else addr
-        return devices
-    except Exception:
+    except (subprocess.TimeoutExpired, OSError) as e:
+        log.warning("bluetoothctl devices failed: %s", e)
         return {}
+    out = _strip_ansi(r.stdout + r.stderr)
+    devices = {}
+    for line in out.splitlines():
+        m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
+        if m:
+            addr = m.group(1).upper()
+            name = m.group(2).strip()
+            devices[addr] = name if name and name != addr else addr
+    return devices
 
 
 def _scan_worker(duration: int):

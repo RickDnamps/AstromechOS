@@ -6171,7 +6171,11 @@ const soundProfiles = {
   },
 
   async save(name) {
-    const vol = parseInt(el(`profile-${name}-vol`)?.value) || 80;
+    // B-121 (audit 2026-05-15): `|| 80` swallowed a legitimate vol=0
+    // (mute profile) and silently stored 80%. parseInt+Number.isFinite
+    // accepts 0 while still rejecting NaN from a blank input.
+    const raw = parseInt(el(`profile-${name}-vol`)?.value);
+    const vol = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 80;
     const status = el('audio-profiles-status');
     if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
     const d = await api('/settings/config', 'POST', { [`audio.profile_${name}`]: vol });
@@ -6549,6 +6553,9 @@ async function saveConfig() {
   const current = {
     'github.repo_url':          (el('repo-url')?.value || '').trim(),
     'github.branch':            (el('git-branch')?.value || '').trim(),
+    // B-110 (audit 2026-05-15): send the native string the backend
+    // _normalise() coerces from common truthy/falsy values. Keeps the
+    // wire format stable across legacy ConfigParser readers.
     'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
     'slave.host':               (el('slave-host')?.value || '').trim(),
   };
@@ -6581,15 +6588,29 @@ function confirmAction(msg, endpoint) {
 async function systemUpdate() {
   if (!confirm('Force update?\n\ngit pull + rsync Slave + reboot Slave')) return;
   toast('Update started…', 'info');
+  // B-112 (audit 2026-05-15): explicit error path (same rationale as B-113).
   const d = await api('/system/update', 'POST');
-  if (d) toast('Update in progress — Slave will reboot', 'ok');
+  if (!d) {
+    toast('Update failed — admin re-auth may be needed', 'error');
+    return;
+  }
+  toast('Update in progress — Slave will reboot', 'ok');
 }
 
 async function systemRollback() {
   if (!confirm('ROLLBACK to previous commit?\n\nThis will revert the last git pull, then rsync Slave and reboot it.\n\nCannot be undone easily.')) return;
   toast('Rollback started…', 'info');
+  // B-113 (audit 2026-05-15): surface failure. Was fire-and-forget;
+  // a 401 (admin lock expired) or 5xx silently looked successful
+  // because the success toast fires whenever `d` is truthy AND null
+  // is falsy, so a null return path skipped both toasts. Explicit
+  // error path now.
   const d = await api('/system/rollback', 'POST');
-  if (d) toast('Rollback in progress — Slave will reboot', 'ok');
+  if (!d) {
+    toast('Rollback failed — admin re-auth may be needed', 'error');
+    return;
+  }
+  toast('Rollback in progress — Slave will reboot', 'ok');
 }
 
 // Latest recommendation cached for the APPLY button
