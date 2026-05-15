@@ -121,10 +121,25 @@ def _write_key(section: str, key: str, value: str) -> None:
         write_cfg_atomic(cfg, LOCAL_CFG)
 
 
+# B-63 (remaining tabs audit 2026-05-15): mtime-keyed cache for
+# slave.cfg. GET /settings reads slave.cfg up to 3× per response;
+# without caching that's 3 file parses per dashboard poll per client.
+_SLAVE_CFG_CACHE: dict = {'mtime': 0.0, 'cfg': None}
+
+
 def _read_slave_cfg() -> configparser.ConfigParser:
+    try:
+        mt = os.path.getmtime(_SLAVE_CFG)
+    except OSError:
+        mt = 0.0
+    cached = _SLAVE_CFG_CACHE['cfg']
+    if cached is not None and _SLAVE_CFG_CACHE['mtime'] == mt:
+        return cached
     cfg = configparser.ConfigParser()
     if os.path.exists(_SLAVE_CFG):
         cfg.read(_SLAVE_CFG)
+    _SLAVE_CFG_CACHE['cfg']   = cfg
+    _SLAVE_CFG_CACHE['mtime'] = mt
     return cfg
 
 
@@ -188,10 +203,27 @@ def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
         return 1, '', str(e)
 
 
+# B-62 (remaining tabs audit 2026-05-15): TTL cache around _nm_field.
+# GET /settings calls nmcli FOUR times per response (wlan0 state +
+# wlan1 state/conn/ip). Each call forks subprocess.run + waits up to
+# 2s. With multiple polling clients that's a real Master CPU + latency
+# tax. 3s TTL is short enough that operator-visible state changes
+# (connect/disconnect) appear within one poll while keeping the
+# subprocess fork rate bounded.
+_NM_CACHE: dict = {}   # {(device, field): (expiry, value)}
+_NM_TTL_S = 3.0
+
+
 def _nm_field(device: str, field: str) -> str:
-    """Reads an nmcli field for a device."""
+    """Reads an nmcli field for a device. Cached for _NM_TTL_S seconds."""
+    now = time.monotonic()
+    cached = _NM_CACHE.get((device, field))
+    if cached is not None and cached[0] > now:
+        return cached[1]
     rc, out, _ = _run(['nmcli', '-g', field, 'device', 'show', device])
-    return out if rc == 0 else ''
+    val = out if rc == 0 else ''
+    _NM_CACHE[(device, field)] = (now + _NM_TTL_S, val)
+    return val
 
 
 _lights_reload_lock = threading.Lock()
@@ -407,6 +439,16 @@ def set_wifi():
     if any(c in ssid for c in '\n\r\x00') or any(c in password for c in '\n\r\x00'):
         return jsonify({'error': 'SSID/password contains illegal control char'}), 400
 
+    # B-73 (remaining tabs audit 2026-05-15): snapshot existing
+    # ssid/password BEFORE persisting so we can roll back local.cfg if
+    # nmcli rejects the new config. Without this, a typo or rejected
+    # SSID left local.cfg pointing at the bad creds even though wlan1
+    # was still on the OLD connection in NM — boot would then pick up
+    # the bad creds.
+    _old_cfg = _read_cfg()
+    prev_ssid = _old_cfg.get('home_wifi', 'ssid', fallback='')
+    prev_pwd  = _old_cfg.get('home_wifi', 'password', fallback='')
+
     # Save to local.cfg
     _write_key('home_wifi', 'ssid', ssid)
     if password:
@@ -426,8 +468,13 @@ def set_wifi():
 
     rc, _, err = _run(cmd)
     if rc != 0:
-        log.error(f"nmcli add wlan1 failed: {err}")
-        return jsonify({'error': f'nmcli error: {err}'}), 500
+        log.error(f"nmcli add wlan1 failed: {err} — rolling back local.cfg")
+        # B-73: restore the previous values so reboot doesn't pick up
+        # the half-baked config. Best effort — _write_key swallows
+        # internal errors so the rollback is naturally idempotent.
+        _write_key('home_wifi', 'ssid', prev_ssid)
+        _write_key('home_wifi', 'password', prev_pwd)
+        return jsonify({'error': f'nmcli error: {err}', 'rolled_back': True}), 500
 
     rc2, _, _ = _run(['nmcli', 'connection', 'up', INTERNET_CON])
     connected = rc2 == 0

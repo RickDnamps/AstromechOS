@@ -5255,14 +5255,22 @@ class BTController {
       inactivity_timeout: parseInt(el('bt-timeout-num')?.value || el('bt-inactivity-timeout')?.value) || 30,
       mappings,
     };
-    // Aussi sauvegarder localement pour la Gamepad API JS
-    localStorage.setItem('r2d2-bt-mappings', JSON.stringify({
-      throttle: 'L_STICK_Y', steer: 'L_STICK_X', dome: 'R_STICK_X',
-      panel1: 'SQUARE', panel2: 'TRIANGLE', audio: 'CIRCLE',
-      deadzone: el('bt-deadzone')?.value || '10',
-    }));
+    // B-94 (remaining tabs audit 2026-05-15): localStorage now mirrors
+    // the ACTUAL mappings the user just configured, not a hardcoded
+    // dict. Previous code overwrote with fixed PS5-default values
+    // regardless of what the operator selected → Gamepad API JS path
+    // diverged from BT controller path. Send to server first, then
+    // mirror the same mapping object client-side.
     const r = await api('/bt/config', 'POST', cfg);
-    toast(r?.status === 'ok' ? 'BT config saved' : 'Save error', r?.status === 'ok' ? 'ok' : 'error');
+    if (r?.status === 'ok') {
+      localStorage.setItem('r2d2-bt-mappings', JSON.stringify({
+        ...mappings,
+        deadzone: el('bt-deadzone')?.value || '10',
+      }));
+      toast('BT config saved', 'ok');
+    } else {
+      toast('Save error', 'error');
+    }
   }
 
   _getMappings() {
@@ -5716,6 +5724,20 @@ const cockpitPanel = {
       alerts.push({ cls: 'warn', msg: 'Body servos not ready' });
     if (data.camera_found === false)
       alerts.push({ cls: 'warn', msg: 'Camera not found — check USB' });
+    // B-238 (remaining tabs audit 2026-05-15): surface a "Stream
+    // offline" alert when the USB camera is detected but mjpg_streamer
+    // hasn't actually been streaming for 5+ minutes. Track first-seen
+    // time on the cockpit object so the alert only fires after a real
+    // sustained outage (not every brief reconnect blip).
+    else if (data.camera_found === true && data.camera_active === false) {
+      if (!cockpitPanel._streamOfflineSince) {
+        cockpitPanel._streamOfflineSince = Date.now();
+      } else if (Date.now() - cockpitPanel._streamOfflineSince > 5 * 60 * 1000) {
+        alerts.push({ cls: 'warn', msg: 'Camera stream offline — check astromech-camera.service' });
+      }
+    } else {
+      cockpitPanel._streamOfflineSince = null;
+    }
     if (Array.isArray(data.dome_hat_health)) {
       data.dome_hat_health.forEach(h => {
         if (!h.ok)

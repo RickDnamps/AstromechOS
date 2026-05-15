@@ -819,13 +819,19 @@ def _sftp_sync_sound(local_mp3: str, stem: str, index: dict) -> None:
 # ── BT Speaker proxy (forwards to slave port 5001) ────────────────────────────
 
 def _slave_bt(path: str, method: str = 'GET', body: dict | None = None):
-    """Forward a BT request to the slave health server."""
+    """Forward a BT request to the slave health server.
+
+    B-67 (remaining tabs audit 2026-05-15): GET timeout dropped 12s→4s.
+    Status reads are admin-only now but operator still WAITS for the
+    HTTP response; 4s covers a healthy slave round-trip with margin.
+    POST stays at 12s because BT pair/connect operations legitimately
+    take that long on the Slave side."""
     url = f'http://{_slave_host()}:5001{path}'
     try:
         if method == 'POST':
             r = _requests.post(url, json=body or {}, timeout=12)
         else:
-            r = _requests.get(url, timeout=12)
+            r = _requests.get(url, timeout=4)
         return r.json(), r.status_code
     except Exception as e:
         return {'ok': False, 'error': str(e)}, 503

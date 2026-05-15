@@ -147,7 +147,12 @@ def camera_stream():
         return jsonify({'error': 'No active token — call POST /camera/take first'}), 403
 
     try:
-        upstream = _requests.get(MJPG_URL, stream=True, timeout=5)
+        # B-265 (remaining tabs audit 2026-05-15): drop timeout 5s→2s.
+        # MJPG_URL is localhost — a 2s timeout still covers a healthy
+        # mjpg_streamer cold-start. Going beyond that meant a wedged
+        # service tied up Flask worker threads for 5s × N concurrent
+        # clients during reconnects.
+        upstream = _requests.get(MJPG_URL, stream=True, timeout=2)
         content_type = upstream.headers.get(
             'Content-Type',
             'multipart/x-mixed-replace; boundary=boundarydonotcross'

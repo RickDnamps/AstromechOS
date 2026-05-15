@@ -86,13 +86,22 @@ def _cached_cfg() -> configparser.ConfigParser:
 
 
 def _iface_ip(iface: str) -> str | None:
+    """B-213 (remaining tabs audit 2026-05-15): cached for 5s. IP
+    addresses don't change between two adjacent /status polls in
+    practice, but the ioctl was running per-iface per-client per-poll."""
+    now = _time.monotonic()
+    cached = _IFACE_CACHE.get(iface)
+    if cached is not None and cached[0] > now:
+        return cached[1]
     try:
         import socket, struct, fcntl
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         raw = fcntl.ioctl(s.fileno(), 0x8915, struct.pack('256s', iface[:15].encode()))
-        return socket.inet_ntoa(raw[20:24])
-    except Exception:
-        return None
+        v = socket.inet_ntoa(raw[20:24])
+    except OSError:
+        v = None
+    _IFACE_CACHE[iface] = (now + 5.0, v)
+    return v
 
 
 def _slave_host() -> str:
@@ -185,29 +194,58 @@ status_bp = Blueprint('status', __name__)
 
 
 
+# B-213 (remaining tabs audit 2026-05-15): TTL caches for the fs reads
+# that /status hits every 2s × N clients. VERSION + iface IPs change
+# rarely (deploy or network event); 5s TTL is fine and turns ~20+
+# syscalls/sec into ~4. Temp + uptime change continuously but only at
+# ~1Hz granularity; 1s TTL halves the syscall rate without UI lag.
+_VERSION_CACHE: dict = {'value': None, 'expires': 0.0}
+_UPTIME_CACHE:  dict = {'value': None, 'expires': 0.0}
+_TEMP_CACHE:    dict = {'value': None, 'expires': 0.0}
+_IFACE_CACHE:   dict = {}   # {iface: (expires, value)}
+
+
 def _read_version() -> str:
+    now = _time.monotonic()
+    if _VERSION_CACHE['value'] is not None and _VERSION_CACHE['expires'] > now:
+        return _VERSION_CACHE['value']
     try:
         with open(VERSION_FILE, encoding='utf-8') as f:
-            return f.read().strip()
-    except Exception:
-        return 'unknown'
+            v = f.read().strip()
+    except OSError:
+        v = 'unknown'
+    _VERSION_CACHE['value']   = v
+    _VERSION_CACHE['expires'] = now + 5.0
+    return v
 
 
 def _uptime() -> str:
+    now = _time.monotonic()
+    if _UPTIME_CACHE['value'] is not None and _UPTIME_CACHE['expires'] > now:
+        return _UPTIME_CACHE['value']
     try:
         with open('/proc/uptime', 'r') as f:
             seconds = float(f.readline().split()[0])
-        return str(datetime.timedelta(seconds=int(seconds)))
-    except Exception:
-        return 'unknown'
+        v = str(datetime.timedelta(seconds=int(seconds)))
+    except OSError:
+        v = 'unknown'
+    _UPTIME_CACHE['value']   = v
+    _UPTIME_CACHE['expires'] = now + 1.0
+    return v
 
 
 def _cpu_temp() -> float | None:
+    now = _time.monotonic()
+    if _TEMP_CACHE['expires'] > now:
+        return _TEMP_CACHE['value']
     try:
         with open('/sys/class/thermal/thermal_zone0/temp') as f:
-            return round(int(f.read().strip()) / 1000, 1)
-    except Exception:
-        return None
+            v = round(int(f.read().strip()) / 1000, 1)
+    except OSError:
+        v = None
+    _TEMP_CACHE['value']   = v
+    _TEMP_CACHE['expires'] = now + 1.0
+    return v
 
 
 def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:

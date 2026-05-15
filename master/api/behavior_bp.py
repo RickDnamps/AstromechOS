@@ -71,10 +71,25 @@ def _valid_choreo_name(name: str) -> bool:
 
 
 def _get_cfg() -> configparser.ConfigParser:
-    """Read the current local.cfg."""
+    """Read the current local.cfg. B-217 (remaining tabs audit
+    2026-05-15): mtime-keyed cache. /behavior/status is hit on every
+    Settings tab open + frequent polls; re-parsing the file on each
+    call was unnecessary I/O."""
+    try:
+        mt = os.path.getmtime(_CFG_PATH)
+    except OSError:
+        mt = 0.0
+    cached = _BEHAVIOR_CFG_CACHE['cfg']
+    if cached is not None and _BEHAVIOR_CFG_CACHE['mtime'] == mt:
+        return cached
     parser = configparser.ConfigParser()
     parser.read(_CFG_PATH)
+    _BEHAVIOR_CFG_CACHE['cfg']   = parser
+    _BEHAVIOR_CFG_CACHE['mtime'] = mt
     return parser
+
+
+_BEHAVIOR_CFG_CACHE: dict = {'mtime': 0.0, 'cfg': None}
 
 
 @behavior_bp.post('/alive')
