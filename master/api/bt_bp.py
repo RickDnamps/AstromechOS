@@ -75,7 +75,7 @@ def bt_status():
 @bt_bp.post('/enable')
 @require_admin
 def bt_enable():
-    body    = request.get_json(silent=True) or {}
+    body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     enabled = bool(body.get('enabled', True))
     if reg.bt_ctrl:
         reg.bt_ctrl.set_enabled(enabled)
@@ -318,7 +318,7 @@ def bt_scan_devices():
 @require_admin
 def bt_pair():
     """Pair + trust + connect a BT device by MAC address."""
-    body    = request.get_json(silent=True) or {}
+    body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     address = body.get('address', '').strip().upper()
     if not re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', address):
         return jsonify({'error': 'invalid address'}), 400
@@ -336,7 +336,7 @@ def bt_pair():
 @require_admin
 def bt_unpair():
     """Removes a paired BT device."""
-    body    = request.get_json(silent=True) or {}
+    body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     address = body.get('address', '').strip().upper()
     if not re.match(r'^([0-9A-F]{2}:){5}[0-9A-F]{2}$', address):
         return jsonify({'error': 'invalid address'}), 400

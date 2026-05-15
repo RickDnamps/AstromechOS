@@ -217,7 +217,7 @@ def camera_config_set():
     Saves camera settings and restarts astromech-camera.service.
     Body: { resolution: '1280x720', fps: 30, quality: 80 }
     """
-    data       = request.get_json(silent=True) or {}
+    data       = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     resolution = data.get('resolution', '640x480')
     # B-231 / B-232 (remaining tabs audit 2026-05-15): defensive int
     # parsing — a non-numeric `fps` or `quality` body field used to

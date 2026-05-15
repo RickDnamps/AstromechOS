@@ -368,7 +368,7 @@ def get_sounds():
 @audio_bp.post('/play')
 def play_sound():
     """Plays a specific sound. Body: {"sound": "Happy001"}"""
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     sound = body.get('sound', '').strip()
     if not sound:
         return jsonify({'error': 'Field "sound" required'}), 400
@@ -385,7 +385,7 @@ def play_sound():
 @audio_bp.post('/random')
 def play_random():
     """Plays a random sound. Body: {"category": "happy"}"""
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     category = body.get('category', 'happy').strip().lower()
     if not _valid_category(category):
         return jsonify({'error': f'Unknown category: {category}'}), 404
@@ -480,15 +480,27 @@ def _read_persisted_volume() -> int | None:
 
 
 def _persist_volume(vol: int) -> None:
-    """Write vol to local.cfg [audio] volume so it survives reboots."""
+    """Write vol to local.cfg [audio] volume so it survives reboots.
+
+    Audit finding H-2 2026-05-15: previously used `open(_LOCAL_CFG, 'w')`
+    direct, violating BOTH project invariants:
+      - Cross-blueprint cfg lock (settings_bp._cfg_write_lock)
+      - Atomic write (write_cfg_atomic: tmp + replace + fsync + chmod 0600)
+    A concurrent /settings/config save would race on the same file,
+    AND the open-truncate-write sequence left a half-written cfg
+    visible to other readers mid-flush. The direct open() also dropped
+    the 0600 permission bit that protects [admin] password.
+    """
     try:
-        cfg = configparser.ConfigParser()
-        cfg.read(_LOCAL_CFG, encoding='utf-8')
-        if not cfg.has_section('audio'):
-            cfg.add_section('audio')
-        cfg.set('audio', 'volume', str(vol))
-        with open(_LOCAL_CFG, 'w', encoding='utf-8') as f:
-            cfg.write(f)
+        from master.api.settings_bp import _cfg_write_lock
+        from master.config.config_loader import write_cfg_atomic
+        with _cfg_write_lock:
+            cfg = configparser.ConfigParser()
+            cfg.read(_LOCAL_CFG, encoding='utf-8')
+            if not cfg.has_section('audio'):
+                cfg.add_section('audio')
+            cfg.set('audio', 'volume', str(vol))
+            write_cfg_atomic(cfg, _LOCAL_CFG)
     except OSError:
         pass   # transient FS error — next /volume will retry
 
@@ -514,7 +526,7 @@ def set_volume():
     L-2: persists to local.cfg so the slider position survives a Master
     reboot. The cfg write happens after the UART push so the audible
     change isn't blocked by FS sync latency."""
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     try:
         vol = max(0, min(100, int(body.get('volume', 80))))
     except (TypeError, ValueError):
@@ -697,7 +709,7 @@ def upload_sound():
 @require_admin
 def create_category():
     """Create a new empty audio category. Body: {"name": "mycat"}"""
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = (body.get('name') or '').strip().lower()
     if not _CATEGORY_NAME_RE.match(name):
         return jsonify({'ok': False, 'error': 'Invalid category name'}), 400
@@ -857,41 +869,78 @@ def bt_speaker_scan():
     return jsonify(data), code
 
 
+# Strict MAC regex shared by every endpoint that forwards a MAC to
+# bluetoothctl on the Slave. Audit finding H-3 2026-05-15: the
+# value was passed unvalidated, opening BT control to argument-style
+# injection (--help, etc.) and reaching bluetoothctl with garbage
+# strings that would only error opaquely.
+import re as _re_bt_mac
+_BT_MAC_RE = _re_bt_mac.compile(r'^[0-9A-F]{2}(:[0-9A-F]{2}){5}$')
+
+
+def _validated_mac_body(body: dict, want_volume: bool = False):
+    """Return (clean_body, error_response_or_None). MAC required;
+    optional integer volume clamped 0..100."""
+    if not isinstance(body, dict):
+        return None, (jsonify({'error': 'expected JSON object'}), 400)
+    mac = str(body.get('mac', '')).strip().upper()
+    if not _BT_MAC_RE.match(mac):
+        return None, (jsonify({'error': 'invalid MAC (expected AA:BB:CC:DD:EE:FF)'}), 400)
+    clean = {'mac': mac}
+    if want_volume:
+        try:
+            vol = int(body.get('volume', 80))
+        except (TypeError, ValueError):
+            return None, (jsonify({'error': 'volume must be an integer 0..100'}), 400)
+        clean['volume'] = max(0, min(100, vol))
+    return clean, None
+
+
 @audio_bp.post('/bt/pair')
 @require_admin
 def bt_speaker_pair():
-    body = request.get_json(silent=True) or {}
-    data, code = _slave_bt('/audio/bt/pair', 'POST', body)
+    body = request.get_json(silent=True)
+    clean, err = _validated_mac_body(body)
+    if err: return err
+    data, code = _slave_bt('/audio/bt/pair', 'POST', clean)
     return jsonify(data), code
 
 
 @audio_bp.post('/bt/connect')
 @require_admin
 def bt_speaker_connect():
-    body = request.get_json(silent=True) or {}
-    data, code = _slave_bt('/audio/bt/connect', 'POST', body)
+    body = request.get_json(silent=True)
+    clean, err = _validated_mac_body(body)
+    if err: return err
+    data, code = _slave_bt('/audio/bt/connect', 'POST', clean)
     return jsonify(data), code
 
 
 @audio_bp.post('/bt/disconnect')
 @require_admin
 def bt_speaker_disconnect():
-    body = request.get_json(silent=True) or {}
-    data, code = _slave_bt('/audio/bt/disconnect', 'POST', body)
+    body = request.get_json(silent=True)
+    clean, err = _validated_mac_body(body)
+    if err: return err
+    data, code = _slave_bt('/audio/bt/disconnect', 'POST', clean)
     return jsonify(data), code
 
 
 @audio_bp.post('/bt/remove')
 @require_admin
 def bt_speaker_remove():
-    body = request.get_json(silent=True) or {}
-    data, code = _slave_bt('/audio/bt/remove', 'POST', body)
+    body = request.get_json(silent=True)
+    clean, err = _validated_mac_body(body)
+    if err: return err
+    data, code = _slave_bt('/audio/bt/remove', 'POST', clean)
     return jsonify(data), code
 
 
 @audio_bp.post('/bt/volume')
 @require_admin
 def bt_speaker_volume():
-    body = request.get_json(silent=True) or {}
-    data, code = _slave_bt('/audio/bt/volume', 'POST', body)
+    body = request.get_json(silent=True)
+    clean, err = _validated_mac_body(body, want_volume=True)
+    if err: return err
+    data, code = _slave_bt('/audio/bt/volume', 'POST', clean)
     return jsonify(data), code

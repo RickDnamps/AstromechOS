@@ -60,6 +60,14 @@ def create_app() -> Flask:
                 static_folder=static_dir)
 
     app.config['JSON_SORT_KEYS'] = False
+    # Global upload size cap. Audit finding 2026-05-15: client-side
+    # caps (10MB audio at AudioBoard, 2MB icon at iconPicker) were
+    # bypassable via `curl` — admin-authenticated DoS could fill the
+    # disk before any post-validation ran. WSGI rejects oversized
+    # requests at the framework layer (413 Request Entity Too Large)
+    # before they ever hit the blueprint. 16MB > biggest legit MP3
+    # the project ships (320kbps × ~6min = ~14MB).
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
     # ------------------------------------------------------------------
     # Blueprints

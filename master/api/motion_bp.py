@@ -165,7 +165,7 @@ def drive():
     if blocked is not None:
         return blocked
 
-    body  = request.get_json(silent=True) or {}
+    body  = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     reg.web_last_drive_t = time.time()
     left  = _clamp(_safe_float(body.get('left',  0.0)))
     right = _clamp(_safe_float(body.get('right', 0.0)))
@@ -189,7 +189,7 @@ def arcade():
     if blocked is not None:
         return blocked
 
-    body     = request.get_json(silent=True) or {}
+    body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     reg.web_last_drive_t = time.time()
     throttle = _clamp(_safe_float(body.get('throttle', 0.0)))
     steering = _clamp(_safe_float(body.get('steering', 0.0)))
@@ -249,7 +249,7 @@ def dome_turn():
     if blocked is not None:
         return blocked
 
-    body  = request.get_json(silent=True) or {}
+    body  = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     reg.web_last_dome_t = time.time()
     speed = _clamp(_safe_float(body.get('speed', 0.0)))
 
@@ -276,7 +276,7 @@ def dome_stop():
 @motion_bp.post('/dome/random')
 def dome_random():
     """Dome random mode. Body: {"enabled": bool}"""
-    body    = request.get_json(silent=True) or {}
+    body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     enabled = bool(body.get('enabled', False))
     if not enabled:
         motion_watchdog.clear_dome()

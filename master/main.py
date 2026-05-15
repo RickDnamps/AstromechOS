@@ -211,7 +211,18 @@ def main() -> None:
     reg.uart   = uart
     reg.teeces = teeces
     reg.deploy = deploy
-    reg.vesc_power_scale = cfg.getfloat('vesc', 'power_scale', fallback=1.0)
+    # Audit finding H-5 2026-05-15: a corrupted local.cfg could carry
+    # power_scale=inf or NaN. cfg.getfloat returns the raw value
+    # without finite/clamp validation — the slave's int(left * inf *
+    # max_erpm) then OverflowError'd. Validate + clamp at load.
+    import math as _math
+    try:
+        _ps = cfg.getfloat('vesc', 'power_scale', fallback=1.0)
+        if not _math.isfinite(_ps):
+            _ps = 1.0
+    except (ValueError, TypeError):
+        _ps = 1.0
+    reg.vesc_power_scale = max(0.1, min(1.0, _ps))
     reg.vesc_invert_L    = cfg.getboolean('vesc', 'invert_l',    fallback=False)
     reg.vesc_invert_R    = cfg.getboolean('vesc', 'invert_r',    fallback=False)
     reg.vesc_bench_mode  = cfg.getboolean('vesc', 'bench_mode',  fallback=False)

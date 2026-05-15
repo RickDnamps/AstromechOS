@@ -356,7 +356,7 @@ def manage_categories():
     All actions run inside _categories_lock so two concurrent admins
     can't load the same baseline, mutate independently, and lose one
     side's write (B-6 from the audit)."""
-    data   = request.get_json(silent=True) or {}
+    data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     action = data.get('action', '')
 
     with _categories_lock:
@@ -481,7 +481,7 @@ def manage_categories():
 @choreo_bp.post('/choreo/set-category')
 @require_admin
 def set_choreo_category():
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name     = data.get('name', '').strip()
     category = _norm_cat_id(data.get('category', ''))
     if not name or not category:
@@ -509,7 +509,7 @@ def set_choreo_category():
 @choreo_bp.post('/choreo/set-emoji')
 @require_admin
 def set_choreo_emoji():
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name  = data.get('name', '').strip()
     emoji = _norm_emoji(data.get('emoji', ''))   # B-3: length-capped
     if not name:
@@ -530,7 +530,7 @@ def set_choreo_emoji():
 @choreo_bp.post('/choreo/set-label')
 @require_admin
 def set_choreo_label():
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name  = data.get('name', '').strip()
     label = _norm_label(data.get('label', ''))   # B-4: length-capped
     if not name:
@@ -552,7 +552,7 @@ def set_choreo_label():
 @require_admin
 def choreo_rename():
     """Rename a .chor file. Body: {"old_name": "foo", "new_name": "bar"}"""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     old_name = data.get('old_name', '').strip()
     new_name = data.get('new_name', '').strip()
     if not old_name or not new_name:
@@ -656,7 +656,7 @@ def choreo_load():
 
 @choreo_bp.post('/choreo/save')
 def choreo_save():
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     chor = data.get('chor')
     if not chor or 'meta' not in chor:
         return jsonify({'error': 'invalid chor'}), 400
@@ -887,7 +887,7 @@ def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> boo
 def choreo_play():
     if not reg.choreo:
         return jsonify({'error': 'choreo player not available'}), 503
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = data.get('name', '')
     if not name:
         return jsonify({'error': 'name required'}), 400
@@ -931,7 +931,7 @@ def choreo_status():
 def choreo_export_scr():
     if not reg.choreo:
         return jsonify({'error': 'choreo player not available'}), 503
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = data.get('name', '')
     if not name:
         return jsonify({'error': 'name required'}), 400

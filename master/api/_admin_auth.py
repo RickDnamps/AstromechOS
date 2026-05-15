@@ -63,6 +63,28 @@ def _get_admin_password() -> str:
     return _src()
 
 
+def get_json_object():
+    """Return the parsed JSON object body, or None if the body is
+    missing/malformed/not an object.
+
+    Audit finding 2026-05-15: 9+ endpoints did
+    `body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))` then `body.get(...)`.
+    A top-level JSON array body (e.g. `curl -d '[1,2,3]'`) survived
+    the `or` chain because non-empty lists are truthy → AttributeError
+    on `.get` → unhandled 500 with stack trace leak. This helper
+    consolidates the safe shape: blueprint code does
+
+        body = get_json_object()
+        if body is None:
+            return jsonify({'error': 'expected JSON object'}), 400
+
+    or accepts None and treats it as empty for endpoints where every
+    field is optional.
+    """
+    body = request.get_json(silent=True)
+    return body if isinstance(body, dict) else None
+
+
 def require_admin(view):
     """Decorator: 401 unless `X-Admin-Pw` matches local.cfg [admin] password.
 

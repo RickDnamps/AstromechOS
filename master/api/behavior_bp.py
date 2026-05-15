@@ -96,7 +96,7 @@ _BEHAVIOR_CFG_CACHE: dict = {'mtime': 0.0, 'cfg': None}
 @require_admin
 def set_alive():
     """Toggle ALIVE mode on or off."""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     enabled = bool(data.get('enabled', False))
     be = reg.behavior_engine
     if be is None:
@@ -136,7 +136,7 @@ def save_config():
     POST can't load the same baseline, mutate independently, and lose
     one side's keys at the os.replace step.
     """
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     with _cfg_write_lock:
         parser = _get_cfg()
         if not parser.has_section('behavior'):

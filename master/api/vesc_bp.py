@@ -56,12 +56,19 @@ from shared.paths import LOCAL_CFG as _LOCAL_CFG
 # would clobber the first. The lock holds for the brief duration of
 # read+modify+atomic-write — typically <5ms — well below any user-
 # perceptible latency.
-_cfg_lock = threading.Lock()
+#
+# Audit finding H-2/H-4 2026-05-15: was using a vesc_bp-local
+# threading.Lock(), violating the CLAUDE.md invariant "Toute nouvelle
+# écriture de local.cfg DOIT importer et tenir settings_bp._cfg_write_lock."
+# Concurrent /settings/config + /vesc/config would race on different
+# sections of the SAME file. Now shares the single project-wide lock.
 
 
 def _save_vesc_cfg(**kwargs) -> None:
-    """Persist one or more keys to local.cfg [vesc] under _cfg_lock."""
-    with _cfg_lock:
+    """Persist one or more keys to local.cfg [vesc] under the shared
+    cross-blueprint cfg-write lock."""
+    from master.api.settings_bp import _cfg_write_lock
+    with _cfg_write_lock:
         cfg = configparser.ConfigParser()
         if os.path.exists(_LOCAL_CFG):
             cfg.read(_LOCAL_CFG)
@@ -126,7 +133,7 @@ def get_telemetry():
 @require_admin
 def set_config():
     """Sets the power scale (0.1-1.0). Sent to Slave via UART VCFG:."""
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     try:
         raw = float(body.get('scale', 1.0))
     except (TypeError, ValueError):
@@ -172,7 +179,7 @@ def set_bench_mode():
     impossible. The Master now propagates bench mode to the slave via
     UART so vesc_driver can bypass its can_lost guard too.
     """
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     enabled = bool(body.get('enabled', False))
     reg.vesc_bench_mode = enabled
     _save_vesc_cfg(bench_mode='1' if enabled else '0')
@@ -186,7 +193,7 @@ def set_bench_mode():
 @require_admin
 def set_mode():
     """Switches drive mode. Body: {"duty": true/false}. Not persisted — resets on reboot."""
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     duty = bool(body.get('duty', False))
     reg.vesc_duty_mode = duty
     if reg.uart:
@@ -201,7 +208,7 @@ def invert_motor():
     Sets motor direction. Body: {"side": "L", "state": true/false}.
     State is persisted to local.cfg and sent to Slave via UART VINV:L:1.
     """
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     side = body.get('side', '').upper()
     if side not in ('L', 'R'):
         return jsonify({'error': 'side must be "L" or "R"'}), 400

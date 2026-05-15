@@ -94,8 +94,12 @@ def _load_cfg() -> dict:
         return merged
     except FileNotFoundError:
         return dict(_DEFAULT_CFG)
-    except Exception as e:
-        log.warning(f"bt_config.json unreadable: {e}")
+    except (OSError, json.JSONDecodeError) as e:
+        # Audit finding H-3 2026-05-15: bare `except Exception` here
+        # hid corruption from genuine bugs (KeyError, MemoryError).
+        # Narrow to the two cases we actually expect: missing-file
+        # variants of OSError + JSON corruption.
+        log.warning("bt_config.json unreadable (%s) — using defaults", e)
         return dict(_DEFAULT_CFG)
 
 
@@ -375,6 +379,25 @@ class BTControllerDriver:
                 import master.registry as reg
                 if getattr(reg, 'estop_active', False):
                     continue
+                # Audit finding H-2 2026-05-15: stow_in_progress
+                # was checked indirectly via _do_drive but the
+                # keep-alive still ran its bookkeeping (incremented
+                # _ka_count, refreshed _last_input_t) on every cycle
+                # — masking inactivity from the watchdog AND spamming
+                # the log during the stow window. Bail before any of
+                # that work happens.
+                if getattr(reg, 'stow_in_progress', False):
+                    continue
+                # Same logic for the anti-tip safety ramp: while the
+                # ramp is in flight nothing should re-feed the
+                # watchdog from BT, the ramp's own writer owns the
+                # propulsion bus for that ≤400ms window.
+                try:
+                    from master.safe_stop import is_drive_ramp_active, is_dome_ramp_active
+                    if is_drive_ramp_active() or is_dome_ramp_active():
+                        continue
+                except ImportError:
+                    pass
                 if getattr(reg, 'lock_mode', 0) == 2:
                     continue
                 if self._is_vesc_unsafe(reg):

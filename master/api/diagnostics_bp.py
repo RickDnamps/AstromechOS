@@ -89,6 +89,7 @@ def diag_logs():
 
 
 @diagnostics_bp.get('/diagnostics/stats')
+@require_admin
 def diag_stats():
     """UART health metrics from both Master and Slave."""
     slave_h = reg.slave_uart_health or {}

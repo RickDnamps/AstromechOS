@@ -434,7 +434,7 @@ def wifi_scan():
 @require_admin
 def set_wifi():
     """Updates wlan1 credentials and attempts to connect."""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
 
@@ -500,7 +500,7 @@ def set_wifi():
 @require_admin
 def set_hotspot():
     """Updates hotspot credentials for wlan0 and restarts the hotspot."""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
 
@@ -535,7 +535,7 @@ def set_hotspot():
 @require_admin
 def set_config():
     """Updates general parameters in local.cfg."""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
 
     # Allowed keys (section.key)
     _SLAVE_HAT_KEYS = {'i2c_servo_hats.slave_hats', 'i2c_servo_hats.slave_motor_hat'}
@@ -616,12 +616,34 @@ def set_config():
         # I2C HAT keys handled separately below; pass through.
         return s
 
+    # Audit finding H-1 2026-05-15: Slave-HAT keys used to skip
+    # _normalise entirely and pass raw operator input straight into
+    # slave.cfg via ConfigParser. A POST like
+    # `{"i2c_servo_hats.slave_hats": "0x41\n[admin]\npassword=pwn"}`
+    # injected a fake [admin] section into slave.cfg at the next
+    # write. Now validate as comma-separated 0xNN hex addresses with
+    # control chars stripped, before letting them through.
+    import re as _re_hat
+    _HAT_LIST_RE = _re_hat.compile(r'^0x[0-9a-fA-F]{2}(\s*,\s*0x[0-9a-fA-F]{2})*$')
+    _HAT_SINGLE_RE = _re_hat.compile(r'^0x[0-9a-fA-F]{2}$')
+
     updated = []
     rejected = []
     for dotkey, value in data.items():
         if dotkey not in allowed:
             continue
         if dotkey in _SLAVE_HAT_KEYS:
+            # Strip newlines + leading/trailing whitespace before regex
+            # so the inject-via-newline trick can't bypass.
+            raw = str(value).replace('\r', '').replace('\n', '').replace('\x00', '').strip()
+            # slave_motor_hat is single address; slave_hats is list.
+            key_short = dotkey.split('.', 1)[1]
+            ok = (_HAT_SINGLE_RE.match(raw) if key_short == 'slave_motor_hat'
+                  else _HAT_LIST_RE.match(raw))
+            if not ok:
+                rejected.append(dotkey)
+                continue
+            data[dotkey] = raw   # canonicalise for the sync step below
             updated.append(dotkey)
             continue
         norm = _normalise(dotkey, value)
@@ -688,7 +710,7 @@ def set_config():
 def apply_audio_profile():
     """Applies a saved volume profile immediately. Body: {"profile": "convention"}"""
     import master.registry as reg
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = data.get('profile', '').strip().lower()
     _defaults = {'convention': 70, 'maison': 85, 'exterieur': 95}
     if name not in _defaults:
@@ -757,7 +779,7 @@ def admin_verify():
             'error': 'too many attempts',
             'retry_after_s': int(retry),
         }), 429
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     pwd  = (data.get('password', '') or '').encode()
     expected = _get_admin_password().encode()
     # compare_digest needs equal-length operands; pad to expected len
@@ -774,7 +796,7 @@ def admin_verify():
 @require_admin
 def admin_change_password():
     """Changes the admin password. Body: {\"current\": \"...\", \"new\": \"...\"}"""
-    data    = request.get_json(silent=True) or {}
+    data    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     current = data.get('current', '')
     new_pwd = data.get('new', '').strip()
 
@@ -842,7 +864,7 @@ def upload_icon():
 @require_admin
 def delete_icon():
     """Deletes an icon file. Body: {\"filename\": \"foo.png\"}"""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     fname = os.path.basename(data.get('filename', ''))
     if not fname or fname.startswith('.'):
         return jsonify({'error': 'filename required'}), 400
@@ -864,7 +886,7 @@ def delete_icon():
 @require_admin
 def set_robot_icon():
     """Saves robot header icon to local.cfg. Body: {\"icon\": \"img:foo.png\"} or {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset."""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     icon = data.get('icon', '').strip()
     _write_key('robot', 'icon', icon)
     return jsonify({'status': 'ok', 'icon': icon})
@@ -874,7 +896,7 @@ def set_robot_icon():
 @require_admin
 def set_robot_locations():
     """Saves master/slave display location names. Body: {\"master_location\":\"Dome\",\"slave_location\":\"Body\"}"""
-    data   = request.get_json(silent=True) or {}
+    data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     master = data.get('master_location', '').strip()[:20]
     slave  = data.get('slave_location',  '').strip()[:20]
     if master: _write_key('robot', 'master_location', master)
@@ -886,7 +908,7 @@ def set_robot_locations():
 @require_admin
 def set_robot_name():
     """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""
-    data = request.get_json(silent=True) or {}
+    data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = data.get('name', '').strip()
     if not name:
         return jsonify({'error': 'name is required'}), 400
@@ -900,7 +922,7 @@ def set_robot_name():
 @require_admin
 def set_lights_backend():
     """Changes the lights driver at runtime (no reboot). Body: {\"backend\": \"astropixels\"}"""
-    data    = request.get_json(silent=True) or {}
+    data    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     backend = data.get('backend', '').strip().lower()
     if backend not in {'teeces', 'astropixels'}:
         return jsonify({'error': 'invalid backend. Values: teeces, astropixels'}), 400

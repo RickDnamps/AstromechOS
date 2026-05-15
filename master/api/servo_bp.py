@@ -324,7 +324,7 @@ def _safe_position(raw) -> float | None:
 
 @servo_bp.post('/body/move')
 def body_move():
-    body     = request.get_json(silent=True) or {}
+    body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name     = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
@@ -346,7 +346,7 @@ def body_move():
 
 @servo_bp.post('/body/open')
 def body_open():
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
@@ -364,7 +364,7 @@ def body_open():
 
 @servo_bp.post('/body/close')
 def body_close():
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
@@ -478,7 +478,7 @@ def dome_state():
 
 @servo_bp.post('/dome/move')
 def dome_move():
-    body     = request.get_json(silent=True) or {}
+    body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name     = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
@@ -498,7 +498,7 @@ def dome_move():
 
 @servo_bp.post('/dome/open')
 def dome_open():
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
@@ -515,7 +515,7 @@ def dome_open():
 
 @servo_bp.post('/dome/close')
 def dome_close():
-    body = request.get_json(silent=True) or {}
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
         return jsonify({'error': 'Field "name" required'}), 400
@@ -585,7 +585,7 @@ def arms_config_get():
 def arms_config_save():
     import logging
     log = logging.getLogger(__name__)
-    data   = request.get_json(silent=True) or {}
+    data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     count  = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
     servos = data.get('servos', [])
     panels = data.get('panels', [])
@@ -746,7 +746,7 @@ def _sanitize_label(raw: str, fallback: str) -> str:
 @servo_bp.post('/settings')
 @require_admin
 def servo_settings_save():
-    data   = request.get_json(silent=True) or {}
+    data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     panels = {}
     for name, vals in (data.get('panels') or {}).items():
         if name in _ALL_PANELS and isinstance(vals, dict):
