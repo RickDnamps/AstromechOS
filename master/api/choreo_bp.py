@@ -708,7 +708,6 @@ def _reset_servos():
                         t.name, _SERVO_RESET_JOIN_TIMEOUT)
 
 
-@choreo_bp.post('/choreo/play')
 def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> bool:
     """Stop any in-flight choreo, reset servos, start the new one — all
     under _play_lock. Returns True on success, False on lock timeout
@@ -743,6 +742,7 @@ def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> boo
         _play_lock.release()
 
 
+@choreo_bp.post('/choreo/play')
 def choreo_play():
     if not reg.choreo:
         return jsonify({'error': 'choreo player not available'}), 503
