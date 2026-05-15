@@ -426,8 +426,12 @@ def _act_play_choreo(target: str, current: str) -> str:
     # tampered shortcuts.json or symlink race between save and
     # trigger could otherwise escape the choreographies dir. Same
     # helper choreo_bp uses for its own /play endpoint.
-    path = _safe_choreo_path(target)
-    if not path or not os.path.isfile(path):
+    # NOTE: _safe_choreo_path returns a (path, err) TUPLE — not a
+    # bare string. Earlier code missed the unpack and crashed with
+    # 'stat: path should be string, not tuple' on every shortcut
+    # trigger (user-reported 2026-05-15).
+    path, err = _safe_choreo_path(target)
+    if err is not None or not path or not os.path.isfile(path):
         return 'off'
     try:
         with open(path, encoding='utf-8') as f:
