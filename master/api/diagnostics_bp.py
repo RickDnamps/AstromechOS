@@ -36,6 +36,7 @@ Diagnostics Blueprint — system logs, UART stats, slave ping.
 """
 
 import configparser
+import re
 import subprocess
 import time
 import logging
@@ -79,13 +80,32 @@ def diag_logs():
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         lines = result.stdout.strip().splitlines()
-        return jsonify({'lines': lines, 'filter': level})
+        # Audit finding M-6 2026-05-15: defense-in-depth secret filter.
+        # Admin-only endpoint AND no current log line includes
+        # passwords today (verified by grep), but if a future driver
+        # bug ever logs a config dump, redact before returning. Also
+        # cap each line at 4KB so a misbehaving driver dumping data
+        # can't balloon the response.
+        _LINE_CAP = 4096
+        _SECRET_RE = re.compile(
+            r'(?i)(password|psk|x-admin-pw|secret|token|api[_-]?key)\s*[:=]\s*\S+',
+        )
+        cleaned = []
+        for ln in lines:
+            ln = _SECRET_RE.sub(r'\1=***REDACTED***', ln)
+            if len(ln) > _LINE_CAP:
+                ln = ln[:_LINE_CAP] + ' …[truncated]'
+            cleaned.append(ln)
+        return jsonify({'lines': cleaned, 'filter': level})
     except subprocess.TimeoutExpired:
         log.warning("journalctl timed out (>2s)")
         return jsonify({'lines': [], 'filter': level, 'error': 'journalctl timeout'}), 504
     except OSError as e:
+        # Audit finding L-7 2026-05-15: str(e) on a ConnectionError /
+        # FileNotFoundError leaks paths + LAN topology. Hard-code a
+        # generic message + log the detail for operator debugging.
         log.warning("journalctl error: %s", e)
-        return jsonify({'lines': [], 'filter': level, 'error': str(e)}), 500
+        return jsonify({'lines': [], 'filter': level, 'error': 'journalctl failed'}), 500
 
 
 @diagnostics_bp.get('/diagnostics/stats')

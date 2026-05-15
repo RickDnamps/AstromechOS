@@ -249,5 +249,9 @@ class UARTController:
         for cb in self._callbacks.get(msg_type, []):
             try:
                 cb(value)
-            except Exception as e:
-                log.error(f"Callback error {msg_type}: {e}")
+            except Exception:
+                # Audit finding L-6 2026-05-15: was log.error which
+                # dropped the traceback. log.exception keeps the
+                # stack so a buggy callback surfaces in journalctl
+                # with file:line — without breaking the read loop.
+                log.exception("Callback error for UART msg type %s", msg_type)

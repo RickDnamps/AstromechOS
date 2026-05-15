@@ -584,9 +584,17 @@ def set_config():
         if dotkey == 'battery.chemistry':
             return s.lower() if s.lower() in _VALID_CHEM else None
         if dotkey == 'slave.host':
-            # Non-empty hostname — bare IP, hostname, or .local. Cap
-            # length so a 5KB host can't bloat the cfg.
-            return s if (s and len(s) <= 253) else None
+            # Audit finding M-8 2026-05-15: was just length-capped,
+            # let through 'host;rm -rf /' or 'host with space'. Tighter
+            # regex now — alphanumeric + dot + hyphen, RFC-1123-ish.
+            # Argv-passing already blocks shell injection, this is
+            # defense-in-depth + early reject of garbage values.
+            import re as _re_h
+            if not s or len(s) > 253:
+                return None
+            if not _re_h.match(r'^[A-Za-z0-9](?:[A-Za-z0-9.\-]*[A-Za-z0-9])?$', s):
+                return None
+            return s
         if dotkey == 'github.repo_url':
             # Light validation — must look like a URL (http/https/git@)
             if not s:
@@ -839,6 +847,43 @@ def list_icons():
     return jsonify({'icons': files})
 
 
+# Magic-bytes signatures for each accepted image format. Verified
+# after Werkzeug's content-type parsing but BEFORE writing to disk —
+# audit finding M-6 2026-05-15: extension-only allowlist let an
+# attacker upload a 500MB PHP/HTML/binary file pretending to be PNG.
+# No PHP interpreter on the Pi so not directly exploitable, but
+# defense-in-depth + blocks the disk-fill DoS via lying extensions.
+_IMAGE_MAGIC = {
+    '.png':  [b'\x89PNG\r\n\x1a\n'],
+    '.jpg':  [b'\xff\xd8\xff'],
+    '.jpeg': [b'\xff\xd8\xff'],
+    '.gif':  [b'GIF87a', b'GIF89a'],
+    '.webp': [b'RIFF'],   # followed by 4 bytes size + b'WEBP' at offset 8
+}
+
+
+def _verify_magic_bytes(ext: str, head: bytes) -> bool:
+    """Return True if the first bytes match the extension's signature."""
+    sigs = _IMAGE_MAGIC.get(ext, [])
+    if not sigs:
+        return False
+    for sig in sigs:
+        if head.startswith(sig):
+            # WebP needs the secondary check at offset 8
+            if ext == '.webp':
+                return len(head) >= 12 and head[8:12] == b'WEBP'
+            return True
+    return False
+
+
+# ASCII-only filename regex. Audit finding M-5 2026-05-15: the
+# isalnum() char filter accepted unicode (RTL marks, homoglyphs)
+# which makes for confusing filenames on Windows shares mounted by
+# other admins. Force ASCII alphanumerics + dot/hyphen/underscore.
+import re as _re_icon
+_ICON_FILENAME_RE = _re_icon.compile(r'^[A-Za-z][A-Za-z0-9._-]{0,63}$')
+
+
 @settings_bp.post('/settings/icons/upload')
 @require_admin
 def upload_icon():
@@ -853,17 +898,23 @@ def upload_icon():
             'error': f'unsupported format (allowed: {", ".join(sorted(_ALLOWED_UPLOAD_EXT))}). '
                      f'SVG uploads blocked for security — convert to PNG.'
         }), 400
-    # Sanitize filename — keep only safe chars
-    safe = ''.join(c for c in os.path.basename(fname) if c.isalnum() or c in '._- ')
-    # B-55 (audit 2026-05-15): reject leading dot to block .htaccess /
-    # hidden file uploads, and require at least one alphanumeric stem
-    # character so '....' doesn't pass.
-    if not safe or safe.startswith('.') or not any(c.isalnum() for c in safe):
-        return jsonify({'error': 'invalid filename'}), 400
+
+    # Sanitize filename: strip path, drop non-ASCII, lower case, regex check.
+    raw = os.path.basename(fname).strip().rstrip('.')
+    safe = ''.join(c for c in raw if c.isascii() and (c.isalnum() or c in '._-'))
+    if not _ICON_FILENAME_RE.match(safe):
+        return jsonify({
+            'error': 'invalid filename (ASCII letters/digits/.-_ only, must start with a letter, ≤64 chars)',
+        }), 400
+
+    # Magic bytes verification — read up to 12 bytes then rewind.
+    head = f.stream.read(12)
+    f.stream.seek(0)
+    if not _verify_magic_bytes(ext, head):
+        return jsonify({'error': f'file content does not match {ext} format'}), 400
+
     os.makedirs(_ICONS_DIR, exist_ok=True)
     dest = os.path.realpath(os.path.join(_ICONS_DIR, safe))
-    # B-56 layer: containment check — even with basename + char filter,
-    # a symlink or weird realpath could land outside _ICONS_DIR. Reject.
     icons_real = os.path.realpath(_ICONS_DIR)
     if not dest.startswith(icons_real + os.sep):
         return jsonify({'error': 'invalid filename (escape attempt)'}), 400

@@ -485,7 +485,12 @@ class BTControllerDriver:
                 return 0.0
             val = self._norm(ai.value, info)
             return val if abs(val) > dz else 0.0
-        except Exception:
+        except OSError:
+            # Audit finding M-5 2026-05-15: narrowed from bare Exception
+            # to OSError. Real device disconnects raise OSError mid-poll
+            # (errno=19 ENODEV). Capability-mismatch or evdev-type bugs
+            # used to be silently turned into "axis at rest" — now they
+            # propagate so journalctl shows the actual crash.
             return 0.0
 
     def _send_drive(self, abs_info: dict, m: dict, reg) -> None:

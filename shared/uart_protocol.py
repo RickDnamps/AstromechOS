@@ -48,6 +48,9 @@ Why sum + len instead of just sum?
 
 import logging
 
+# Module-level counter for CRC-mismatch coalescing (see parse_msg).
+_crc_miss_count = 0
+
 MSG_TERMINATOR = "\n"
 MSG_SEPARATOR  = ":"
 HEARTBEAT_INTERVAL_MS = 200
@@ -88,7 +91,19 @@ def parse_msg(raw: str) -> tuple[str, str] | None:
     payload = ":".join(payload_parts)
     expected_cs = calc_crc(payload)
     if received_cs != expected_cs:
-        logging.warning(f"Checksum mismatch: got {received_cs}, expected {expected_cs} for '{payload}'")
+        # Audit finding L-8 2026-05-15: drop to debug + rate-limit.
+        # uart_controller already coalesces with MAX_INVALID_CRC_BEFORE_ALERT
+        # so per-mismatch warnings just spam the log on a noisy bus
+        # without adding signal. Keep one line per 100 misses at INFO
+        # for visibility into intermittent corruption.
+        global _crc_miss_count
+        _crc_miss_count += 1
+        if _crc_miss_count % 100 == 1:
+            logging.info("UART CRC mismatch #%d (sample: got=%s exp=%s payload=%r)",
+                         _crc_miss_count, received_cs, expected_cs, payload[:40])
+        else:
+            logging.debug("Checksum mismatch: got %s, expected %s for %r",
+                          received_cs, expected_cs, payload[:80])
         return None
     msg_type = payload_parts[0]
     msg_value = ":".join(payload_parts[1:])

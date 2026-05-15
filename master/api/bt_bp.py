@@ -210,13 +210,29 @@ def _paired_devices() -> list[dict]:
         m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
         if m:
             addr = m.group(1).upper()
-            name = m.group(2).strip() or addr
+            name = _sanitize_device_name(m.group(2)) or addr
             devices.append({'address': addr, 'name': name})
     return devices
 
 
 def _strip_ansi(text: str) -> str:
     return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+
+def _sanitize_device_name(raw: str) -> str:
+    """Sanitize a BT device name before returning it to the frontend.
+
+    Audit finding M-1 2026-05-15: bluetoothctl can emit any UTF-8
+    string a device advertises. Frontend uses textContent so we're
+    XSS-safe today, but a future caller (Android, log viewer) that
+    forgets and innerHTML's the list would reopen the surface.
+    Strip non-printable + cap length defense-in-depth. Keeps emoji
+    + accents (which printable() accepts) but drops control codes.
+    """
+    if not raw:
+        return ''
+    clean = ''.join(c for c in raw if c.isprintable())
+    return clean[:64].strip()
 
 
 def _all_devices() -> dict[str, str]:
@@ -235,7 +251,7 @@ def _all_devices() -> dict[str, str]:
         m = re.search(r'Device\s+([0-9A-Fa-f:]{17})\s+(.*)', line)
         if m:
             addr = m.group(1).upper()
-            name = m.group(2).strip()
+            name = _sanitize_device_name(m.group(2))
             devices[addr] = name if name and name != addr else addr
     return devices
 
