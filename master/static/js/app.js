@@ -6629,14 +6629,24 @@ const shortcutsEditor = {
       idxLbl.textContent = '#' + (idx + 1);
       row.appendChild(idxLbl);
 
-      const iconInp = document.createElement('input');
-      iconInp.type = 'text';
-      iconInp.className = 'shortcut-row-icon';
-      iconInp.value = sc.icon || '';
-      iconInp.maxLength = 8;
-      iconInp.placeholder = '🦾';
-      iconInp.addEventListener('input', () => { sc.icon = iconInp.value; this._renderPreview(); });
-      row.appendChild(iconInp);
+      // User-reported 2026-05-15: 'l'éditeur d'emoji devrait apparaître
+      // je connais pas par cœur les emoji'. Replace the text input
+      // with a clickable button that opens the existing emojiPicker.
+      // Same pattern used by Sequences pill + Choreo card emoji editors.
+      const iconBtn = document.createElement('button');
+      iconBtn.type = 'button';
+      iconBtn.className = 'shortcut-row-icon';
+      iconBtn.textContent = sc.icon || '⚡';
+      iconBtn.title = 'Click to pick an emoji';
+      iconBtn.addEventListener('click', () => {
+        emojiPicker.open(sc.icon || '⚡', (emoji) => {
+          if (!emoji) return;
+          sc.icon = emoji;
+          iconBtn.textContent = emoji;
+          this._renderPreview();
+        });
+      });
+      row.appendChild(iconBtn);
 
       const lblInp = document.createElement('input');
       lblInp.type = 'text';
@@ -6686,6 +6696,23 @@ const shortcutsEditor = {
     this._renderPreview();
   },
 
+  // User-reported 2026-05-15: prefer the Calibration label over the
+  // raw servo id. armsConfig._labels maps servo_id → user-set label.
+  // Falls back to "Arm N" / the servo id when no custom label exists.
+  _armLabel(armNum) {
+    const idx = armNum - 1;
+    const sid = (armsConfig._servos || [])[idx] || '';
+    const lbl = sid ? armsConfig._labels[sid] : '';
+    if (lbl && lbl !== sid) return lbl;
+    return `Arm ${armNum}`;
+  },
+
+  _panelLabel(servoId) {
+    const labels = (window._servoSettings && window._servoSettings.panels) || {};
+    const lbl = labels[servoId]?.label;
+    return (lbl && lbl !== servoId) ? `${lbl} (${servoId})` : servoId;
+  },
+
   _buildTargetInput(sc) {
     const type = sc.action?.type || 'none';
     if (type === 'none') {
@@ -6695,100 +6722,74 @@ const shortcutsEditor = {
       s.textContent = '—';
       return s;
     }
-    if (type === 'arms_toggle') {
+
+    // Common helper to populate a <select> and auto-prefill
+    // sc.action.target with the first usable option. Fixes the user-
+    // reported "#0: arms_toggle requires a target" bug — the browser
+    // shows the first option as selected but never fires a 'change'
+    // event, so sc.action.target stayed empty on first render. We
+    // explicitly assign it here.
+    const mkSelect = (options, currentValue) => {
       const sel = document.createElement('select');
       sel.className = 'shortcut-row-target input-text';
+      let firstValid = '';
+      options.forEach((o, idx) => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        if (o.disabled) opt.disabled = true;
+        if (o.value === currentValue) opt.selected = true;
+        if (!firstValid && !o.disabled && o.value !== '') firstValid = o.value;
+        sel.appendChild(opt);
+      });
+      // If nothing matches the saved value, fall back to the first
+      // valid option so the displayed name and the persisted value
+      // match (no silent "I selected the dropdown but my target is
+      // still ''" trap).
+      if (!options.some(o => o.value === currentValue) && firstValid) {
+        sel.value = firstValid;
+        sc.action.target = firstValid;
+      }
+      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      return sel;
+    };
+
+    if (type === 'arms_toggle') {
       const count = (armsConfig._count || 0);
       if (count === 0) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = '(configure arms first)';
-        opt.disabled = true; opt.selected = true;
-        sel.appendChild(opt);
-      } else {
-        for (let i = 1; i <= count; i++) {
-          const opt = document.createElement('option');
-          opt.value = String(i);
-          opt.textContent = `Arm ${i}`;
-          if (sc.action.target === String(i)) opt.selected = true;
-          sel.appendChild(opt);
-        }
+        return mkSelect([{value: '', text: '(configure arms first)', disabled: true}], sc.action.target);
       }
-      sel.addEventListener('change', () => { sc.action.target = sel.value; });
-      return sel;
+      const options = [];
+      for (let i = 1; i <= count; i++) {
+        options.push({value: String(i), text: this._armLabel(i)});
+      }
+      return mkSelect(options, sc.action.target);
     }
     if (type === 'body_panel_toggle' || type === 'dome_panel_toggle') {
-      const sel = document.createElement('select');
-      sel.className = 'shortcut-row-target input-text';
       const prefix = type === 'body_panel_toggle' ? 'Servo_S' : 'Servo_M';
-      const labels = (window._servoSettings && window._servoSettings.panels) || {};
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = '(pick a servo)';
-      sel.appendChild(empty);
-      // Range 0..31 (2 HATs max)
+      const options = [{value: '', text: '(pick a servo)'}];
       for (let i = 0; i < 32; i++) {
         const id = prefix + i;
-        const opt = document.createElement('option');
-        opt.value = id;
-        const lbl = labels[id]?.label;
-        opt.textContent = (lbl && lbl !== id) ? `${lbl} (${id})` : id;
-        if (sc.action.target === id) opt.selected = true;
-        sel.appendChild(opt);
+        options.push({value: id, text: this._panelLabel(id)});
       }
-      sel.addEventListener('change', () => { sc.action.target = sel.value; });
-      return sel;
+      return mkSelect(options, sc.action.target);
     }
     if (type === 'play_choreo') {
-      const sel = document.createElement('select');
-      sel.className = 'shortcut-row-target input-text';
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = '(pick a choreo)';
-      sel.appendChild(empty);
+      const options = [{value: '', text: '(pick a choreo)'}];
       (this._scripts || []).forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s.name;
-        opt.textContent = s.label || s.name;
-        if (sc.action.target === s.name) opt.selected = true;
-        sel.appendChild(opt);
+        options.push({value: s.name, text: s.label || s.name});
       });
-      sel.addEventListener('change', () => { sc.action.target = sel.value; });
-      return sel;
+      return mkSelect(options, sc.action.target);
     }
     if (type === 'play_sound') {
-      const sel = document.createElement('select');
-      sel.className = 'shortcut-row-target input-text';
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = '(pick a sound)';
-      sel.appendChild(empty);
-      (this._sounds || []).forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s;
-        opt.textContent = s;
-        if (sc.action.target === s) opt.selected = true;
-        sel.appendChild(opt);
-      });
-      sel.addEventListener('change', () => { sc.action.target = sel.value; });
-      return sel;
+      const options = [{value: '', text: '(pick a sound)'}];
+      (this._sounds || []).forEach(s => options.push({value: s, text: s}));
+      return mkSelect(options, sc.action.target);
     }
     if (type === 'play_random_audio') {
-      const sel = document.createElement('select');
-      sel.className = 'shortcut-row-target input-text';
-      const empty = document.createElement('option');
-      empty.value = '';
-      empty.textContent = '(pick a category)';
-      sel.appendChild(empty);
-      Object.keys(this._cats || {}).sort().forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c;
-        opt.textContent = c;
-        if (sc.action.target === c) opt.selected = true;
-        sel.appendChild(opt);
-      });
-      sel.addEventListener('change', () => { sc.action.target = sel.value; });
-      return sel;
+      const options = [{value: '', text: '(pick a category)'}];
+      Object.keys(this._cats || {}).sort().forEach(c => options.push({value: c, text: c}));
+      return mkSelect(options, sc.action.target);
     }
     const span = document.createElement('span');
     span.textContent = '—';
