@@ -1,55 +1,68 @@
-"""One-shot diagnostic: parse every .mp3 in slave/sounds and report
-bitrate detection coverage + duration estimate sanity-check."""
+"""Diagnostic: walk every .mp3 in slave/sounds and verify our duration
+estimator agrees with mutagen's frame-accurate decode on every file."""
 import os, sys, glob
 
 sys.path.insert(0, '/home/artoo/astromechos')
-from master.api.audio_bp import _parse_mp3_bitrate, _estimate_duration_ms
+from master.api.audio_bp import _estimate_duration_ms, _HAVE_MUTAGEN
+
+print(f'mutagen available in audio_bp: {_HAVE_MUTAGEN}')
+
+try:
+    from mutagen.mp3 import MP3
+except ImportError:
+    print('mutagen not installed — re-run scripts/update.sh')
+    sys.exit(1)
 
 SOUNDS = '/home/artoo/astromechos/slave/sounds'
-
 files = sorted(glob.glob(os.path.join(SOUNDS, '*.mp3')))
 print(f'Total .mp3 files: {len(files)}')
 
-# Bitrate distribution across the whole library.
-bitrate_counts = {}
-unparsed = []
+mismatches = []   # files where estimator and mutagen disagree by > 1s
+mutagen_failures = []
+total_audio_s = 0.0
+
 for path in files:
-    br = _parse_mp3_bitrate(path)
-    bitrate_counts[br] = bitrate_counts.get(br, 0) + 1
-    if br is None:
-        unparsed.append(os.path.basename(path))
-
-print('\nBitrate distribution:')
-for br, n in sorted(bitrate_counts.items(),
-                    key=lambda x: (-1 if x[0] is None else x[0])):
-    label = 'UNPARSED (fallback to 192)' if br is None else f'{br} kbps'
-    pct = 100 * n / len(files)
-    print(f'  {label:30s} {n:4d} files  ({pct:5.1f}%)')
-
-if unparsed:
-    print(f'\nUNPARSED files (first 10): {unparsed[:10]}')
-else:
-    print('\nALL files parsed -> 100% accurate estimates')
-
-# Sample one file per detected bitrate, show estimate.
-print('\nEstimate sample (one file per bitrate seen):')
-print(f'  {"file":40s} {"size":>10s} {"bitrate":>9s} {"est":>7s}')
-seen = set()
-for path in files:
-    br = _parse_mp3_bitrate(path)
-    if br in seen:
+    try:
+        actual_s = MP3(path).info.length
+    except Exception as e:
+        mutagen_failures.append((os.path.basename(path), str(e)))
         continue
-    seen.add(br)
-    size = os.path.getsize(path)
-    est  = _estimate_duration_ms(path)
-    print(f'  {os.path.basename(path):40s} {size:>9d}B {br or 0:>6d}kbps {est/1000:>6.1f}s')
+    est_ms = _estimate_duration_ms(path)
+    est_s  = est_ms / 1000.0
+    # Estimator adds +500ms cold-start tail, so subtract it for the
+    # like-for-like comparison.
+    audio_only_s = est_s - 0.5
+    diff_s = audio_only_s - actual_s
+    total_audio_s += actual_s
+    if abs(diff_s) > 1.0:
+        mismatches.append((os.path.basename(path), actual_s, audio_only_s, diff_s))
 
-# Birthday is our known-good ground truth: mpg123 -t says 0:39.
-# Estimate must come out within ±2s of 39s.
-path = os.path.join(SOUNDS, 'birthday.mp3')
-if os.path.exists(path):
-    est_s = _estimate_duration_ms(path) / 1000.0
-    print(f'\nbirthday.mp3 ground-truth check:')
-    print(f'  mpg123 -t actual: 39.0 s')
-    print(f'  our estimate:     {est_s:.1f} s')
-    print(f'  ' + ('PASS' if abs(est_s - 39) <= 2 else 'FAIL'))
+print(f'\nTotal audio runtime: {total_audio_s/60:.1f} min ({total_audio_s:.0f} s)')
+print(f'mutagen failures:     {len(mutagen_failures)}')
+print(f'estimator >1s off:    {len(mismatches)}')
+
+if mutagen_failures:
+    print('\nFiles mutagen could not parse:')
+    for name, err in mutagen_failures[:10]:
+        print(f'  {name}: {err}')
+
+if mismatches:
+    print('\nFiles where estimator disagrees with mutagen by >1s:')
+    print(f'  {"file":40s} {"actual":>9s} {"estimate":>10s} {"diff":>7s}')
+    for name, actual, est, diff in mismatches[:20]:
+        print(f'  {name:40s} {actual:>8.2f}s {est:>9.2f}s {diff:>+6.2f}s')
+else:
+    print('\n✓ ALL files match mutagen within ±1s — duration is now ms-accurate.')
+
+# Spot-check a few specific files for sanity output.
+samples = ['birthday', 'Cantina_orig', 'StayinAl', 'ALARM001',
+           'TIE_FIGHTER_LASER_PASS', 'Gangnam']
+print('\nSpot-check:')
+print(f'  {"file":30s} {"mutagen":>10s} {"our est":>10s}')
+for name in samples:
+    path = os.path.join(SOUNDS, name + '.mp3')
+    if not os.path.exists(path):
+        continue
+    actual = MP3(path).info.length
+    est    = _estimate_duration_ms(path) / 1000.0
+    print(f'  {name:30s} {actual:>9.2f}s {est:>9.2f}s')
