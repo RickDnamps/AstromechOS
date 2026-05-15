@@ -4152,9 +4152,22 @@ class ScriptEngine {
     // from init(), every tab switch to 'sequences', every 15s, and on
     // reconnect — rapid tab thrash or a brief offline blip used to
     // multiply requests. If a load is already in flight, return its
-    // promise so callers still get a resolution. The promise clears
-    // itself in the finally block.
+    // promise so callers still get a resolution.
+    //
+    // F-22 (audit 2026-05-15): also bail when a drag is in progress.
+    // Admin operations (set-emoji, set-category, set-label, etc.) call
+    // this.load() to refresh after the POST. If the user is mid-drag
+    // when one of those races (e.g. an emoji-pick fires during a card
+    // drag), grid.innerHTML rebuilds destroy the dragged card's DOM
+    // element along with its pointer handlers' closures. The window-
+    // level _winUp fallback already catches the drop, but the closure
+    // leak is avoided entirely by deferring the reload here.
     if (this._loadInFlight) return this._loadInFlight;
+    if (this._dragActive) {
+      // Re-attempt on the next periodic tick — the 15s setInterval and
+      // tab-switch paths will fire load() again once the drag is done.
+      return Promise.resolve();
+    }
     this._loadInFlight = (async () => {
       try {
         const [scripts, cats] = await Promise.all([
@@ -4272,7 +4285,18 @@ class ScriptEngine {
 
   selectCategory(catId) {
     this._activeCategory = catId;
-    this._renderPills();
+    // F-19 (audit 2026-05-15): toggle .active on existing pills instead
+    // of nuking and rebuilding the whole pill row + Sortable instance.
+    // Old _renderPills() also tore down and recreated the Sortable
+    // drag-drop helper, which was wasteful on every click. The pill
+    // row only needs a full rebuild when categories change (add /
+    // delete / reorder / label edit), not on selection change.
+    const container = el('seq-pills');
+    if (container) {
+      container.querySelectorAll('.seq-pill[data-cat]').forEach(p => {
+        p.classList.toggle('active', p.dataset.cat === catId);
+      });
+    }
     this._renderGrid();
   }
 
@@ -4327,6 +4351,13 @@ class ScriptEngine {
   async deleteCategory(event, catId) {
     event.stopPropagation();
     const cat = this._categories.find(c => c.id === catId);
+    // F-18 (audit 2026-05-15): refresh _scripts before showing the
+    // confirm so the displayed count reflects what's actually on the
+    // server NOW, not a 0-15s-old snapshot. A category could have
+    // received new sequences from another tab/client since the last
+    // poll → the operator deserves to know the real impact before
+    // clicking yes.
+    await this.load();
     const count = this._scripts.filter(s => s.category === catId).length;
     const msg = count > 0
       ? `Delete "${cat.label}"? ${count} sequence(s) will move to New Choreo.`
@@ -4541,31 +4572,34 @@ class ScriptEngine {
       window.removeEventListener('pointercancel', cleanup);
     };
 
-    // Window-level fallback: fires even if the card element is removed from the DOM
-    // (e.g. the 15s periodic reload destroys the card mid-drag)
-    const _winUp = (e) => {
+    // F-23 (audit 2026-05-15): single drop handler used by both the
+    // card's pointerup AND the window-level fallback. Previously the
+    // identical drop logic was inlined twice (15 lines × 2), making
+    // updates error-prone — the F-24 label fix had to be applied to
+    // both paths. _handleDrop centralises it so a future change has
+    // one place to touch.
+    const _handleDrop = (clientX, clientY) => {
       if (!dragging) { cleanup(); return; }
-      const dropX = e.clientX, dropY = e.clientY;
       cleanup();
-      const target = document.elementFromPoint(dropX, dropY);
+      const target = document.elementFromPoint(clientX, clientY);
       const pill = target?.closest('.seq-pill[data-cat]');
-      if (pill && pill.dataset.cat !== 'all') {
-        // F-24 (audit 2026-05-15): use human label not raw id in toast.
-        // F-13-style failure handling: surface errors instead of
-        // silently failing.
-        const cat = this._categories.find(c => c.id === pill.dataset.cat);
-        const display = cat?.label || pill.dataset.cat;
-        api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
-          .then(d => {
-            if (!d) {
-              toast(`Failed to move to ${display} — admin re-auth may be needed`, 'error');
-              return;
-            }
-            toast(`Moved to ${display}`, 'ok');
-            this.load();
-          });
-      }
+      if (!pill || pill.dataset.cat === 'all') return;
+      const cat = this._categories.find(c => c.id === pill.dataset.cat);
+      const display = cat?.label || pill.dataset.cat;
+      api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
+        .then(d => {
+          if (!d) {
+            toast(`Failed to move to ${display} — admin re-auth may be needed`, 'error');
+            return;
+          }
+          toast(`Moved to ${display}`, 'ok');
+          this.load();
+        });
     };
+
+    // Window-level fallback: fires even if the card element is removed
+    // from the DOM (e.g. periodic reload destroys the card mid-drag).
+    const _winUp = (e) => _handleDrop(e.clientX, e.clientY);
 
     card.addEventListener('pointerdown', (e) => {
       pressed = true;
@@ -4600,30 +4634,12 @@ class ScriptEngine {
     });
 
     card.addEventListener('pointerup', (e) => {
-      // If card is still in DOM, remove the window fallback and handle drop directly
+      // If card is still in DOM, remove the window fallback (it would
+      // double-fire) and delegate to the same _handleDrop logic.
       window.removeEventListener('pointerup',     _winUp);
       window.removeEventListener('pointercancel', cleanup);
       if (!dragging) { pressed = false; return; }
-      const dropX = e.clientX, dropY = e.clientY;
-      cleanup();
-      const target = document.elementFromPoint(dropX, dropY);
-      const pill = target?.closest('.seq-pill[data-cat]');
-      if (pill && pill.dataset.cat !== 'all') {
-        // F-24 (audit 2026-05-15): use human label not raw id in toast.
-        // F-13-style failure handling: surface errors instead of
-        // silently failing.
-        const cat = this._categories.find(c => c.id === pill.dataset.cat);
-        const display = cat?.label || pill.dataset.cat;
-        api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
-          .then(d => {
-            if (!d) {
-              toast(`Failed to move to ${display} — admin re-auth may be needed`, 'error');
-              return;
-            }
-            toast(`Moved to ${display}`, 'ok');
-            this.load();
-          });
-      }
+      _handleDrop(e.clientX, e.clientY);
     });
 
     card.addEventListener('pointercancel', cleanup);
@@ -4727,12 +4743,17 @@ class ScriptEngine {
   }
 
   stopAll() {
-    api('/choreo/stop', 'POST').then(() => {
-      this._running.clear();
+    // F-26 (audit 2026-05-15): defer ALL DOM updates to updateRunning(),
+    // which is the single writer for #running-scripts and the .running /
+    // .looping classes. Previously stopAll did the DOM ops itself AND
+    // the poller also did them → two writers for the same elements,
+    // hard to reason about when output diverges. Now stopAll just
+    // touches the in-memory sets and calls updateRunning([]) to flush;
+    // the next status poll re-syncs from the server.
+    api('/choreo/stop', 'POST').then(d => {
+      if (!d) { toast('Failed to stop sequences — see logs', 'error'); return; }
       this._looping.clear();
-      document.querySelectorAll('.seq-card').forEach(c => c.classList.remove('running', 'looping'));
-      const list = el('running-scripts');
-      if (list) list.textContent = '—';
+      this.updateRunning([]);
       toast('Sequences stopped', 'ok');
     });
   }
