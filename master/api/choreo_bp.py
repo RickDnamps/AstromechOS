@@ -26,14 +26,36 @@ import time
 
 from flask import Blueprint, jsonify, request
 import master.registry as reg
+from master.api._admin_auth import require_admin
 
 log = logging.getLogger(__name__)
 choreo_bp = Blueprint('choreo', __name__)
+
+# Sequences-tab audit 2026-05-15:
+# B-2 / B-3 / B-4 — input validation for category id / emoji / label.
+# A network attacker who could POST directly to the admin endpoints
+# (B-1) could otherwise plant arbitrary strings into JSON we render
+# back into innerHTML or inline onclick attributes — stored XSS that
+# survives reboots. With B-1 closed, this regex/cap layer is
+# defence-in-depth: even if a future endpoint forgets the @require_admin
+# decorator, the input shape stops the worst payloads.
+import re as _re
+_CAT_ID_RE     = _re.compile(r'^[a-z0-9_]{1,32}$')
+_EMOJI_MAX_LEN = 16    # one emoji glyph is up to ~10 codepoints (ZWJ joiners + skin tone)
+_LABEL_MAX_LEN = 64    # generous for human display strings, blocks the 5MB DoS
 
 # Serialize the stop → reset → play sequence so two simultaneous /choreo/play
 # requests cannot both pass the is_playing() guard and start two _run loops
 # fighting over the same drivers.
 _play_lock = threading.Lock()
+
+# Serialize the categories file's read-modify-write cycle (B-6 from the
+# audit). manage_categories does load_categories → mutate → save with no
+# guard — two concurrent admin actions both load the same baseline,
+# mutate, and the second's save loses the first's edit. Held
+# AROUND the entire action so even a "create" racing a "reorder" can't
+# interleave.
+_categories_lock = threading.Lock()
 
 # Serialize EVERY .chor filesystem mutation (save, set-category, set-emoji,
 # set-label, rename, delete). Multiple Flask worker threads serving these
@@ -221,89 +243,156 @@ def get_categories():
     return jsonify(cats)
 
 
+def _norm_cat_id(raw: str) -> str:
+    """Normalize a user-supplied category id and validate against the
+    allowlist. Returns '' if invalid (caller returns 400)."""
+    cid = (raw or '').strip().lower().replace(' ', '_')
+    if not _CAT_ID_RE.match(cid):
+        return ''
+    return cid
+
+
+def _norm_emoji(raw: str) -> str:
+    """Trim + length-cap an emoji string. Empty string is allowed (means
+    'revert to auto')."""
+    return (raw or '').strip()[:_EMOJI_MAX_LEN]
+
+
+def _norm_label(raw: str) -> str:
+    """Trim + length-cap a label string. Empty string is allowed (means
+    'revert to filename')."""
+    return (raw or '').strip()[:_LABEL_MAX_LEN]
+
+
 @choreo_bp.post('/choreo/categories')
+@require_admin
 def manage_categories():
-    data = request.get_json(silent=True) or {}
+    """Mutate the choreo category list. Admin-only since 2026-05-15
+    (B-1) — every action used to be reachable by any LAN client.
+
+    All actions run inside _categories_lock so two concurrent admins
+    can't load the same baseline, mutate independently, and lose one
+    side's write (B-6 from the audit)."""
+    data   = request.get_json(silent=True) or {}
     action = data.get('action', '')
-    cats = _load_categories()
-    ids = [c['id'] for c in cats]
 
-    if action == 'create':
-        cat_id    = data.get('id', '').strip().lower().replace(' ', '_')
-        cat_label = data.get('label', '').strip()
-        cat_emoji = data.get('emoji', '📦').strip()
-        if not cat_id or not cat_label:
-            return jsonify({'error': 'id and label required'}), 400
-        if cat_id in ids:
-            return jsonify({'error': 'id already exists'}), 409
-        cats.append({'id': cat_id, 'label': cat_label, 'emoji': cat_emoji,
-                     'order': max((c.get('order', 0) for c in cats), default=0) + 1})
-        _save_categories(cats)
-        return jsonify({'status': 'ok', 'id': cat_id})
+    with _categories_lock:
+        cats = _load_categories()
+        ids = [c['id'] for c in cats]
 
-    elif action == 'update':
-        cat_id    = data.get('id', '')
-        cat_emoji = data.get('emoji', '').strip()
-        cat_label = data.get('label', '').strip()
-        for c in cats:
-            if c['id'] == cat_id:
-                if cat_emoji:
-                    c['emoji'] = cat_emoji
-                if cat_label:
-                    c['label'] = cat_label
-                _save_categories(cats)
-                return jsonify({'status': 'ok'})
-        return jsonify({'error': 'category not found'}), 404
+        if action == 'create':
+            cat_id    = _norm_cat_id(data.get('id', ''))
+            cat_label = _norm_label(data.get('label', ''))
+            cat_emoji = _norm_emoji(data.get('emoji', '📦'))
+            if not cat_id:
+                return jsonify({'error': 'id required (lowercase a-z 0-9 _, max 32 chars)'}), 400
+            if not cat_label:
+                return jsonify({'error': 'label required'}), 400
+            if cat_id in ids:
+                return jsonify({'error': 'id already exists'}), 409
+            cats.append({'id': cat_id, 'label': cat_label, 'emoji': cat_emoji,
+                         'order': max((c.get('order', 0) for c in cats), default=0) + 1})
+            _save_categories(cats)
+            return jsonify({'status': 'ok', 'id': cat_id})
 
-    elif action == 'reorder':
-        new_order = data.get('order', [])
-        cat_map = {c['id']: c for c in cats}
-        reordered = []
-        for i, cat_id in enumerate(new_order):
-            if cat_id in cat_map:
-                cat_map[cat_id]['order'] = i
-                reordered.append(cat_map[cat_id])
-        # Add any missing cats at end
-        for c in cats:
-            if c['id'] not in new_order:
-                reordered.append(c)
-        _save_categories(reordered)
-        return jsonify({'status': 'ok'})
-
-    elif action == 'delete':
-        cat_id = data.get('id', '')
-        if cat_id == _SYSTEM_CATEGORY:
-            return jsonify({'error': 'cannot delete system category'}), 400
-        if cat_id not in ids:
+        elif action == 'update':
+            cat_id    = _norm_cat_id(data.get('id', ''))
+            cat_emoji = _norm_emoji(data.get('emoji', ''))
+            cat_label = _norm_label(data.get('label', ''))
+            if not cat_id:
+                return jsonify({'error': 'invalid id'}), 400
+            for c in cats:
+                if c['id'] == cat_id:
+                    if cat_emoji:
+                        c['emoji'] = cat_emoji
+                    if cat_label:
+                        c['label'] = cat_label
+                    _save_categories(cats)
+                    return jsonify({'status': 'ok'})
             return jsonify({'error': 'category not found'}), 404
-        # Move sequences in this category to newchoreo
-        for fname in os.listdir(_CHOREO_DIR):
-            if not fname.endswith('.chor'):
-                continue
-            fpath = os.path.join(_CHOREO_DIR, fname)
-            try:
-                with open(fpath, encoding='utf-8') as f:
-                    chor = json.load(f)
-                if chor.get('meta', {}).get('category') == cat_id:
-                    chor['meta']['category'] = _SYSTEM_CATEGORY
-                    with open(fpath, 'w', encoding='utf-8') as f:
-                        json.dump(chor, f, indent=2, ensure_ascii=False)
-            except Exception:
-                pass
-        cats = [c for c in cats if c['id'] != cat_id]
-        _save_categories(cats)
-        return jsonify({'status': 'ok'})
 
-    return jsonify({'error': f'unknown action: {action}'}), 400
+        elif action == 'reorder':
+            new_order_raw = data.get('order', [])
+            # Normalize each id; silently drop anything that fails the
+            # allowlist instead of erroring — the action is benign and
+            # the reorder still succeeds with the recognised ids.
+            new_order = [_norm_cat_id(x) for x in new_order_raw if isinstance(x, str)]
+            new_order = [x for x in new_order if x]
+            cat_map = {c['id']: c for c in cats}
+            reordered = []
+            for i, cat_id in enumerate(new_order):
+                if cat_id in cat_map:
+                    cat_map[cat_id]['order'] = i
+                    reordered.append(cat_map[cat_id])
+            # Add any missing cats at end so a stale-snapshot client
+            # doesn't accidentally drop categories created in another tab.
+            for c in cats:
+                if c['id'] not in new_order:
+                    reordered.append(c)
+            _save_categories(reordered)
+            return jsonify({'status': 'ok'})
+
+        elif action == 'delete':
+            cat_id = _norm_cat_id(data.get('id', ''))
+            if not cat_id:
+                return jsonify({'error': 'invalid id'}), 400
+            if cat_id == _SYSTEM_CATEGORY:
+                return jsonify({'error': 'cannot delete system category'}), 400
+            if cat_id not in ids:
+                return jsonify({'error': 'category not found'}), 404
+            # B-5: move sequences to newchoreo using ATOMIC write under
+            # the choreo file lock. Old code used `open(w)` (truncate +
+            # write, non-atomic) and bare `except Exception: pass` —
+            # crash mid-loop or concurrent /choreo/save would corrupt
+            # the .chor file irreversibly. Now: atomic replace, narrow
+            # exception, log every failure so the operator can recover
+            # the orphan instead of silently losing it.
+            with _chor_file_lock:
+                for fname in os.listdir(_CHOREO_DIR):
+                    if not fname.endswith('.chor'):
+                        continue
+                    fpath = os.path.join(_CHOREO_DIR, fname)
+                    try:
+                        with open(fpath, encoding='utf-8') as f:
+                            chor = json.load(f)
+                    except (OSError, json.JSONDecodeError) as e:
+                        log.warning(
+                            "delete category: skipped unreadable %s: %s",
+                            fname, e,
+                        )
+                        continue
+                    if chor.get('meta', {}).get('category') != cat_id:
+                        continue
+                    chor['meta']['category'] = _SYSTEM_CATEGORY
+                    try:
+                        _atomic_write_chor(fpath, chor)
+                    except OSError as e:
+                        log.error(
+                            "delete category: failed to update %s: %s",
+                            fname, e,
+                        )
+            cats = [c for c in cats if c['id'] != cat_id]
+            _save_categories(cats)
+            return jsonify({'status': 'ok'})
+
+        return jsonify({'error': f'unknown action: {action}'}), 400
 
 
 @choreo_bp.post('/choreo/set-category')
+@require_admin
 def set_choreo_category():
     data = request.get_json(silent=True) or {}
     name     = data.get('name', '').strip()
-    category = data.get('category', '').strip()
+    category = _norm_cat_id(data.get('category', ''))
     if not name or not category:
-        return jsonify({'error': 'name and category required'}), 400
+        return jsonify({'error': 'name and valid category required'}), 400
+    # B-7: refuse if the target category doesn't exist. Old code blindly
+    # wrote whatever string the client sent; a typo (or race with a
+    # concurrent /choreo/categories delete) left the .chor with an
+    # orphan category id, making it disappear from every pill except
+    # 'all'.
+    if category not in {c['id'] for c in _load_categories()}:
+        return jsonify({'error': f'unknown category: {category}'}), 404
     path, err = _safe_choreo_path(name)
     if err:
         return err
@@ -318,10 +407,11 @@ def set_choreo_category():
 
 
 @choreo_bp.post('/choreo/set-emoji')
+@require_admin
 def set_choreo_emoji():
     data = request.get_json(silent=True) or {}
     name  = data.get('name', '').strip()
-    emoji = data.get('emoji', '').strip()
+    emoji = _norm_emoji(data.get('emoji', ''))   # B-3: length-capped
     if not name:
         return jsonify({'error': 'name required'}), 400
     path, err = _safe_choreo_path(name)
@@ -338,10 +428,11 @@ def set_choreo_emoji():
 
 
 @choreo_bp.post('/choreo/set-label')
+@require_admin
 def set_choreo_label():
     data = request.get_json(silent=True) or {}
     name  = data.get('name', '').strip()
-    label = data.get('label', '').strip()
+    label = _norm_label(data.get('label', ''))   # B-4: length-capped
     if not name:
         return jsonify({'error': 'name required'}), 400
     path, err = _safe_choreo_path(name)
@@ -358,6 +449,7 @@ def set_choreo_label():
 
 
 @choreo_bp.post('/choreo/rename')
+@require_admin
 def choreo_rename():
     """Rename a .chor file. Body: {"old_name": "foo", "new_name": "bar"}"""
     data = request.get_json(silent=True) or {}
@@ -441,6 +533,7 @@ def choreo_save():
 
 
 @choreo_bp.delete('/choreo/<name>')
+@require_admin
 def choreo_delete(name: str):
     """Delete a choreography file by name."""
     path, err = _safe_choreo_path(name)
@@ -453,8 +546,11 @@ def choreo_delete(name: str):
             os.remove(path)
             log.info(f"Choreo deleted: {name}")
             return jsonify({'status': 'ok', 'name': name})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        except OSError as e:
+            # B-20: don't leak the filesystem path back to the client.
+            # Log it so operators can debug, return a generic message.
+            log.error("Failed to delete %s: %s", name, e)
+            return jsonify({'error': 'delete failed'}), 500
 
 
 # Body panels for the choreo→choreo reset path. Derive from the actual

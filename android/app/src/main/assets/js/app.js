@@ -478,7 +478,18 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
   try {
     const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
     const url  = base + endpoint;
-    const opts = { method, headers: { 'Content-Type': 'application/json' }, signal: ctrl.signal };
+    const headers = { 'Content-Type': 'application/json' };
+    // Sequences-tab audit B-1 (2026-05-15): admin endpoints now require
+    // an X-Admin-Pw header. AdminGuard remembers the password in memory
+    // after a successful /settings/admin/verify and exposes it via
+    // .getToken(); we attach it transparently for any non-GET so admin
+    // operations still flow through the same api() helper without each
+    // call site needing to know.
+    if (method !== 'GET' && typeof adminGuard !== 'undefined') {
+      const tok = adminGuard.getToken && adminGuard.getToken();
+      if (tok) headers['X-Admin-Pw'] = tok;
+    }
+    const opts = { method, headers, signal: ctrl.signal };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
     if (!res.ok) { console.warn(`API ${method} ${endpoint}: HTTP ${res.status}`); return null; }
@@ -810,6 +821,12 @@ class AdminGuard {
     api('/settings/admin/verify', 'POST', { password: pwd })
       .then(d => {
         if (d && d.ok) {
+          // B-1: remember the password in memory so api() can attach it
+          // as X-Admin-Pw on every subsequent admin call. Cleared in
+          // lock(). Not persisted anywhere — sessionStorage would
+          // survive tab reloads but a malicious browser extension
+          // could read it; in-memory minimises the exposure window.
+          this._token = pwd;
           this._unlock();
         } else {
           this._showError();
@@ -817,6 +834,13 @@ class AdminGuard {
       })
       .catch(() => this._showError())
       .finally(() => { if (btn) btn.disabled = false; });
+  }
+
+  // Used by api() to attach X-Admin-Pw on admin endpoints. Returns
+  // empty string when locked so api() simply omits the header (the
+  // server then 401s any admin endpoint, which is what we want).
+  getToken() {
+    return this._unlocked ? (this._token || '') : '';
   }
 
   _showError() {
@@ -866,6 +890,7 @@ class AdminGuard {
       return;
     }
     this._unlocked = false;
+    this._token = '';   // B-1: drop the in-memory password on lock
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
     audioBoard?.showUploadZone(false);
@@ -4142,27 +4167,68 @@ class ScriptEngine {
     const isAdmin = adminGuard.unlocked;
     const cats = this._categories;
 
-    const allPill = `<div class="seq-pill${this._activeCategory === 'all' ? ' active' : ''}"
-        data-cat="all" onclick="scriptEngine.selectCategory('all')">
-        <span>🌐</span> ALL
-      </div>`;
+    // F-1 / F-2 (audit 2026-05-15): build pills with createElement +
+    // textContent + addEventListener. The previous innerHTML template
+    // string interpolated `c.emoji` raw and `c.id` into single-quoted
+    // inline onclick attributes — escapeHtml() doesn't escape `'`, so
+    // any attacker-controlled emoji or id (now reachable via the
+    // server-side validation we added in B-2/B-3 for new writes, but
+    // legacy data may exist) would break out and execute arbitrary JS
+    // on every dashboard load. Stored XSS that can fire /system/estop
+    // or worse. Using .textContent + dataset eliminates the sink
+    // entirely — even a malicious emoji string just renders as text.
+    container.replaceChildren();
+    const make = (cls, ...children) => {
+      const div = document.createElement('div');
+      div.className = cls;
+      children.forEach(ch => div.appendChild(ch));
+      return div;
+    };
+    const txt = (tag, content, cls) => {
+      const e = document.createElement(tag);
+      e.textContent = content || '';
+      if (cls) e.className = cls;
+      return e;
+    };
 
-    const catPills = cats.map(c => `
-      <div class="seq-pill${this._activeCategory === c.id ? ' active' : ''}${isAdmin ? ' admin-mode' : ''}"
-           data-cat="${c.id}" onclick="scriptEngine.selectCategory('${c.id}')">
-        <span class="seq-pill-emoji" ${isAdmin ? `onclick="scriptEngine.onPillEmojiClick(event,'${c.id}')"` : ''}
-        >${c.emoji}</span>
-        ${escapeHtml(c.label)}
-        ${isAdmin && c.id !== 'newchoreo'
-          ? `<span class="seq-pill-close" onclick="scriptEngine.deleteCategory(event,'${c.id}')">✕</span>`
-          : ''}
-      </div>`).join('');
+    // ALL pill
+    const allActive = this._activeCategory === 'all' ? ' active' : '';
+    const allPill = make('seq-pill' + allActive, txt('span', '🌐'),
+                          document.createTextNode(' ALL'));
+    allPill.dataset.cat = 'all';
+    allPill.addEventListener('click', () => this.selectCategory('all'));
+    container.appendChild(allPill);
 
-    const addPill = isAdmin
-      ? `<div class="seq-pill pill-add" onclick="scriptEngine.createCategory()">+ Cat</div>`
-      : '';
+    // Category pills
+    cats.forEach(c => {
+      const active = this._activeCategory === c.id ? ' active' : '';
+      const adminCls = isAdmin ? ' admin-mode' : '';
+      const pill = document.createElement('div');
+      pill.className = 'seq-pill' + active + adminCls;
+      pill.dataset.cat = c.id;
+      pill.addEventListener('click', () => this.selectCategory(c.id));
 
-    container.innerHTML = allPill + catPills + addPill;
+      const emojiSpan = txt('span', c.emoji, 'seq-pill-emoji');
+      if (isAdmin) {
+        emojiSpan.addEventListener('click', (e) => this.onPillEmojiClick(e, c.id));
+      }
+      pill.appendChild(emojiSpan);
+      pill.appendChild(document.createTextNode(' ' + (c.label || '')));
+
+      if (isAdmin && c.id !== 'newchoreo') {
+        const close = txt('span', '✕', 'seq-pill-close');
+        close.addEventListener('click', (e) => this.deleteCategory(e, c.id));
+        pill.appendChild(close);
+      }
+      container.appendChild(pill);
+    });
+
+    // Add-category pill
+    if (isAdmin) {
+      const add = txt('div', '+ Cat', 'seq-pill pill-add');
+      add.addEventListener('click', () => this.createCategory());
+      container.appendChild(add);
+    }
 
     if (this._pillSortable) { this._pillSortable.destroy(); this._pillSortable = null; }
     if (isAdmin) {
@@ -4233,24 +4299,68 @@ class ScriptEngine {
       ? this._scripts
       : this._scripts.filter(s => s.category === this._activeCategory);
 
-    grid.innerHTML = scripts.map(s => {
+    // F-1 (audit 2026-05-15): build cards with createElement so s.emoji
+    // can never escape into HTML. Same XSS hazard the pills had — a
+    // user with a malicious emoji string in their .chor would inject
+    // arbitrary JS into the dashboard. textContent + dataset eliminate
+    // every HTML interpolation sink in this render path.
+    grid.replaceChildren();
+    scripts.forEach(s => {
       const isRunning = this._running.has(s.name);
       const isLooping = this._looping.has(s.name);
       const label = s.label || s.name.toUpperCase().replace(/_/g, ' ');
-      return `
-        <div class="seq-card${isRunning ? ' running' : ''}${isLooping ? ' looping' : ''}"
-             id="seq-card-${s.name}"
-             data-name="${s.name}"
-             data-duration="${s.duration || 5}">
-          ${isAdmin ? `<div class="seq-card-handle">⠿</div>` : ''}
-          <span class="seq-card-loop">🔄</span>
-          <span class="seq-card-emoji">${s.emoji}</span>
-          <div class="seq-card-wave"><span></span><span></span><span></span><span></span><span></span><span></span></div>
-          <span class="seq-card-label">${escapeHtml(label)}</span>
-          <div class="seq-card-progress"><div class="seq-card-progress-fill" id="seq-prog-${s.name}"></div></div>
-          ${isAdmin ? `<div class="seq-card-play" onclick="scriptEngine.play(event,'${s.name}')">▶</div>` : ''}
-        </div>`;
-    }).join('');
+
+      const card = document.createElement('div');
+      card.className = 'seq-card' + (isRunning ? ' running' : '') + (isLooping ? ' looping' : '');
+      card.id = 'seq-card-' + s.name;
+      card.dataset.name = s.name;
+      card.dataset.duration = String(s.duration || 5);
+
+      if (isAdmin) {
+        const handle = document.createElement('div');
+        handle.className = 'seq-card-handle';
+        handle.textContent = '⠿';
+        card.appendChild(handle);
+      }
+
+      const loop = document.createElement('span');
+      loop.className = 'seq-card-loop';
+      loop.textContent = '🔄';
+      card.appendChild(loop);
+
+      const emoji = document.createElement('span');
+      emoji.className = 'seq-card-emoji';
+      emoji.textContent = s.emoji || '';   // textContent neutralises any payload
+      card.appendChild(emoji);
+
+      const wave = document.createElement('div');
+      wave.className = 'seq-card-wave';
+      wave.innerHTML = '<span></span>'.repeat(6);
+      card.appendChild(wave);
+
+      const lbl = document.createElement('span');
+      lbl.className = 'seq-card-label';
+      lbl.textContent = label;
+      card.appendChild(lbl);
+
+      const progWrap = document.createElement('div');
+      progWrap.className = 'seq-card-progress';
+      const progFill = document.createElement('div');
+      progFill.className = 'seq-card-progress-fill';
+      progFill.id = 'seq-prog-' + s.name;
+      progWrap.appendChild(progFill);
+      card.appendChild(progWrap);
+
+      if (isAdmin) {
+        const play = document.createElement('div');
+        play.className = 'seq-card-play';
+        play.textContent = '▶';
+        play.addEventListener('click', (e) => this.play(e, s.name));
+        card.appendChild(play);
+      }
+
+      grid.appendChild(card);
+    });
 
     this._attachCardEvents(grid, isAdmin);
   }
