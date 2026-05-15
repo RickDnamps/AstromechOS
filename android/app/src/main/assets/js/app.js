@@ -1050,6 +1050,7 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'behavior')    behaviorPanel.load();
   if (panelId === 'audio')       { soundProfiles.load(); btSpeaker.refresh(); }
   if (panelId === 'diagnostics') diagPanel.load();
+  if (panelId === 'shortcuts')   shortcutsEditor.load();
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -6553,6 +6554,362 @@ async function saveBatteryCells() {
   }
 }
 
+// ─── Shortcuts (Settings → Shortcuts + Drive tab overlay) ────────────────────
+// Two cooperating objects:
+//   shortcutsEditor — Settings panel: count slider + per-shortcut row
+//                     editor + small preview pane. Saves to /shortcuts.
+//   shortcutsRunner — Drive tab overlay: renders the configured
+//                     shortcuts split across the left+right joystick
+//                     pads, handles clicks, updates indicator dots.
+const _SHORTCUT_ACTION_TYPES = [
+  { value: 'none',                label: '— none —' },
+  { value: 'arms_toggle',         label: 'Arm toggle' },
+  { value: 'body_panel_toggle',   label: 'Body panel toggle' },
+  { value: 'dome_panel_toggle',   label: 'Dome panel toggle' },
+  { value: 'play_choreo',         label: 'Play choreo' },
+  { value: 'play_sound',          label: 'Play sound' },
+  { value: 'play_random_audio',   label: 'Play random (category)' },
+];
+
+const shortcutsEditor = {
+  _shortcuts: [],
+  _max:        12,
+  _scripts:    null,   // cache of /choreo/list for the choreo dropdown
+  _sounds:     null,   // cache of /audio/index for the sound dropdown
+  _cats:       null,   // audio categories
+
+  async load() {
+    const d = await api('/shortcuts');
+    if (!d) return;
+    this._max = d.max || 12;
+    this._shortcuts = (d.shortcuts || []).slice();
+    // Lazy-fetch the dropdown sources only once per editor open.
+    if (!this._scripts) this._scripts = await api('/choreo/list') || [];
+    if (!this._sounds) {
+      const idx = await api('/audio/index');
+      this._cats   = idx?.categories || {};
+      this._sounds = Object.values(this._cats).flat();
+    }
+    const slider = el('shortcuts-count');
+    if (slider) { slider.max = this._max; slider.value = this._shortcuts.length; }
+    const lbl = el('shortcuts-count-val');
+    if (lbl) lbl.textContent = String(this._shortcuts.length);
+    this._render();
+  },
+
+  onCountChange(raw) {
+    const n = Math.max(0, Math.min(this._max, parseInt(raw) || 0));
+    const lbl = el('shortcuts-count-val');
+    if (lbl) lbl.textContent = String(n);
+    // Grow or shrink the working list to match
+    while (this._shortcuts.length < n) {
+      this._shortcuts.push({
+        id:     '',   // server will assign on save
+        label:  `BTN ${this._shortcuts.length + 1}`,
+        icon:   '⚡',
+        color:  '',
+        action: { type: 'none', target: '' },
+      });
+    }
+    if (this._shortcuts.length > n) this._shortcuts.length = n;
+    this._render();
+  },
+
+  _render() {
+    const list = el('shortcuts-list');
+    if (!list) return;
+    list.replaceChildren();
+    this._shortcuts.forEach((sc, idx) => {
+      // B-44-style DOM build — no innerHTML interpolation of user values.
+      const row = document.createElement('div');
+      row.className = 'shortcut-row';
+
+      const idxLbl = document.createElement('span');
+      idxLbl.className = 'shortcut-row-idx';
+      idxLbl.textContent = '#' + (idx + 1);
+      row.appendChild(idxLbl);
+
+      const iconInp = document.createElement('input');
+      iconInp.type = 'text';
+      iconInp.className = 'shortcut-row-icon';
+      iconInp.value = sc.icon || '';
+      iconInp.maxLength = 8;
+      iconInp.placeholder = '🦾';
+      iconInp.addEventListener('input', () => { sc.icon = iconInp.value; this._renderPreview(); });
+      row.appendChild(iconInp);
+
+      const lblInp = document.createElement('input');
+      lblInp.type = 'text';
+      lblInp.className = 'shortcut-row-label';
+      lblInp.value = sc.label || '';
+      lblInp.maxLength = 32;
+      lblInp.placeholder = 'Label';
+      lblInp.addEventListener('input', () => { sc.label = lblInp.value; this._renderPreview(); });
+      row.appendChild(lblInp);
+
+      const typeSel = document.createElement('select');
+      typeSel.className = 'shortcut-row-type input-text';
+      _SHORTCUT_ACTION_TYPES.forEach(opt => {
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.label;
+        if ((sc.action?.type || 'none') === opt.value) o.selected = true;
+        typeSel.appendChild(o);
+      });
+      typeSel.addEventListener('change', () => {
+        sc.action = { type: typeSel.value, target: '' };
+        this._render();   // re-render so the target field updates
+      });
+      row.appendChild(typeSel);
+
+      const targetCell = document.createElement('div');
+      targetCell.style.minWidth = '0';
+      targetCell.appendChild(this._buildTargetInput(sc));
+      row.appendChild(targetCell);
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'shortcut-row-del';
+      delBtn.title = 'Remove';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', () => {
+        this._shortcuts.splice(idx, 1);
+        const slider = el('shortcuts-count');
+        if (slider) slider.value = this._shortcuts.length;
+        const lbl = el('shortcuts-count-val');
+        if (lbl) lbl.textContent = String(this._shortcuts.length);
+        this._render();
+      });
+      row.appendChild(delBtn);
+
+      list.appendChild(row);
+    });
+    this._renderPreview();
+  },
+
+  _buildTargetInput(sc) {
+    const type = sc.action?.type || 'none';
+    if (type === 'none') {
+      const s = document.createElement('span');
+      s.style.color = 'var(--text-dim)';
+      s.style.fontSize = '10px';
+      s.textContent = '—';
+      return s;
+    }
+    if (type === 'arms_toggle') {
+      const sel = document.createElement('select');
+      sel.className = 'shortcut-row-target input-text';
+      const count = (armsConfig._count || 0);
+      if (count === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '(configure arms first)';
+        opt.disabled = true; opt.selected = true;
+        sel.appendChild(opt);
+      } else {
+        for (let i = 1; i <= count; i++) {
+          const opt = document.createElement('option');
+          opt.value = String(i);
+          opt.textContent = `Arm ${i}`;
+          if (sc.action.target === String(i)) opt.selected = true;
+          sel.appendChild(opt);
+        }
+      }
+      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      return sel;
+    }
+    if (type === 'body_panel_toggle' || type === 'dome_panel_toggle') {
+      const sel = document.createElement('select');
+      sel.className = 'shortcut-row-target input-text';
+      const prefix = type === 'body_panel_toggle' ? 'Servo_S' : 'Servo_M';
+      const labels = (window._servoSettings && window._servoSettings.panels) || {};
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = '(pick a servo)';
+      sel.appendChild(empty);
+      // Range 0..31 (2 HATs max)
+      for (let i = 0; i < 32; i++) {
+        const id = prefix + i;
+        const opt = document.createElement('option');
+        opt.value = id;
+        const lbl = labels[id]?.label;
+        opt.textContent = (lbl && lbl !== id) ? `${lbl} (${id})` : id;
+        if (sc.action.target === id) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      return sel;
+    }
+    if (type === 'play_choreo') {
+      const sel = document.createElement('select');
+      sel.className = 'shortcut-row-target input-text';
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = '(pick a choreo)';
+      sel.appendChild(empty);
+      (this._scripts || []).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.name;
+        opt.textContent = s.label || s.name;
+        if (sc.action.target === s.name) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      return sel;
+    }
+    if (type === 'play_sound') {
+      const sel = document.createElement('select');
+      sel.className = 'shortcut-row-target input-text';
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = '(pick a sound)';
+      sel.appendChild(empty);
+      (this._sounds || []).forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        if (sc.action.target === s) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      return sel;
+    }
+    if (type === 'play_random_audio') {
+      const sel = document.createElement('select');
+      sel.className = 'shortcut-row-target input-text';
+      const empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = '(pick a category)';
+      sel.appendChild(empty);
+      Object.keys(this._cats || {}).sort().forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        if (sc.action.target === c) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', () => { sc.action.target = sel.value; });
+      return sel;
+    }
+    const span = document.createElement('span');
+    span.textContent = '—';
+    return span;
+  },
+
+  _renderPreview() {
+    const left  = el('sc-preview-left');
+    const right = el('sc-preview-right');
+    if (!left || !right) return;
+    left.replaceChildren();
+    right.replaceChildren();
+    const n = this._shortcuts.length;
+    const leftN = Math.ceil(n / 2);
+    this._shortcuts.forEach((sc, idx) => {
+      const dest = idx < leftN ? left : right;
+      const b = document.createElement('div');
+      b.className = 'shortcut-preview-btn';
+      // textContent prevents the operator's icon/label from injecting HTML.
+      b.textContent = sc.icon || sc.label?.[0] || '?';
+      b.title = sc.label || '';
+      dest.appendChild(b);
+    });
+  },
+
+  async save() {
+    const status = el('shortcuts-status');
+    if (status) status.textContent = 'Saving…';
+    const d = await api('/shortcuts', 'POST', { shortcuts: this._shortcuts });
+    if (!d) {
+      if (status) { status.textContent = 'Save failed — admin re-auth?'; status.className = 'settings-status error'; }
+      return;
+    }
+    if (d.error) {
+      if (status) { status.textContent = '✗ ' + d.error; status.className = 'settings-status error'; }
+      return;
+    }
+    if (status) { status.textContent = `✓ ${d.count} saved`; status.className = 'settings-status ok'; }
+    toast('Shortcuts saved', 'ok');
+    this._shortcuts = d.shortcuts || [];
+    // Refresh the Drive overlay immediately so the operator sees their change
+    shortcutsRunner.load();
+  },
+};
+
+
+// Drive-tab renderer. Pulls /shortcuts at boot, every tab switch back
+// to Drive, and after a successful save in the editor. Renders into
+// the two .shortcut-pad containers (left + right) inside the joystick
+// panels.
+const shortcutsRunner = {
+  _shortcuts: [],
+  _states:    {},
+
+  async load() {
+    const d = await api('/shortcuts');
+    if (!d) return;
+    this._shortcuts = d.shortcuts || [];
+    this._states    = d.states || {};
+    this._render();
+  },
+
+  _render() {
+    const left  = el('shortcut-pad-left');
+    const right = el('shortcut-pad-right');
+    if (!left || !right) return;
+    left.replaceChildren();
+    right.replaceChildren();
+    const n = this._shortcuts.length;
+    const leftN = Math.ceil(n / 2);
+    this._shortcuts.forEach((sc, idx) => {
+      const dest = idx < leftN ? left : right;
+      const btn = document.createElement('button');
+      btn.className = 'shortcut-btn';
+      btn.title = sc.label || '';
+      if (this._states[sc.id] === 'on') btn.classList.add('is-on');
+      if (sc.color) btn.style.borderColor = sc.color;
+
+      const icon = document.createElement('span');
+      icon.className = 'shortcut-icon';
+      icon.textContent = sc.icon || '⚡';
+      btn.appendChild(icon);
+
+      if (sc.label) {
+        const lbl = document.createElement('span');
+        lbl.className = 'shortcut-label';
+        lbl.textContent = sc.label;
+        btn.appendChild(lbl);
+      }
+
+      btn.addEventListener('click', () => this._trigger(sc.id, btn));
+      dest.appendChild(btn);
+    });
+  },
+
+  async _trigger(id, btn) {
+    btn.disabled = true;
+    try {
+      const d = await api(`/shortcuts/${encodeURIComponent(id)}/trigger`, 'POST');
+      if (!d) {
+        toast('Shortcut failed', 'error');
+        return;
+      }
+      const state = d.state;
+      this._states[id] = state === 'fired' ? 'off' : state;
+      // Update UI
+      btn.classList.toggle('is-on', this._states[id] === 'on');
+      if (state === 'fired') {
+        btn.classList.remove('is-fired');
+        // Force reflow so the animation restarts on rapid taps
+        void btn.offsetWidth;
+        btn.classList.add('is-fired');
+        setTimeout(() => btn.classList.remove('is-fired'), 700);
+      }
+    } finally {
+      btn.disabled = false;
+    }
+  },
+};
+
+
 // ─── Arms config ──────────────────────────────────────────────────────────────
 const armsConfig = {
   _count:  0,
@@ -7333,6 +7690,7 @@ async function init() {
     btController.loadConfig(),
     cameraConfig.load(),
     armsConfig.load(),
+    shortcutsRunner.load(),
   ]);
 
   // Start polling

@@ -858,6 +858,181 @@ body[data-lock-mode="2"] #js-left-ring::after {
   min-height: 360px;
 }
 
+/* ─── Drive tab shortcut pads ──────────────────────────────────────
+ * Two grids of macro-buttons, one above each joystick (auto-balanced
+ * split). The container has pointer-events:none so missing a button
+ * doesn't block the joystick grab; individual buttons re-enable
+ * pointer-events so taps register. Semi-transparent idle, full opacity
+ * on hover/active. Indicator dot at top-right when the underlying
+ * state is "on" (arm deployed, panel open, etc.).
+ */
+.shortcut-pad {
+  display: grid;
+  grid-template-columns: repeat(2, 52px);
+  gap: 6px;
+  margin-bottom: 10px;
+  pointer-events: none;
+  min-height: 0;
+}
+.shortcut-pad-left  { justify-self: start; }
+.shortcut-pad-right { justify-self: end; }
+.shortcut-pad:empty { display: none; }
+
+.shortcut-btn {
+  pointer-events: auto;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(var(--blue-rgb), 0.4);
+  border-radius: 8px;
+  background: rgba(var(--blue-rgb), 0.08);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  opacity: 0.78;
+  transition: opacity 0.15s, transform 0.1s, background 0.15s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+  padding: 4px;
+  overflow: hidden;
+}
+.shortcut-btn:hover { opacity: 1; background: rgba(var(--blue-rgb), 0.18); }
+.shortcut-btn:active { transform: scale(0.94); }
+.shortcut-btn .shortcut-icon { font-size: 20px; line-height: 1; }
+.shortcut-btn .shortcut-label {
+  font-size: 8px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* "On" state (toggle deployed): full opacity + bright dot indicator */
+.shortcut-btn.is-on {
+  opacity: 1;
+  background: rgba(92, 200, 120, 0.18);
+  border-color: rgba(92, 200, 120, 0.7);
+}
+.shortcut-btn.is-on::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #5cc878;
+  box-shadow: 0 0 6px #5cc878;
+}
+/* "Fired" — short flash for one-shot actions (play_choreo/play_sound) */
+.shortcut-btn.is-fired {
+  animation: shortcut-fire 0.6s ease-out;
+}
+@keyframes shortcut-fire {
+  0%   { background: rgba(var(--blue-rgb), 0.5); transform: scale(1.05); }
+  100% { background: rgba(var(--blue-rgb), 0.08); transform: scale(1); }
+}
+
+/* ─── Settings → Shortcuts editor + preview ─── */
+.shortcut-row {
+  display: grid;
+  grid-template-columns: 24px 36px 1fr 130px 1fr 24px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  margin-bottom: 5px;
+  background: rgba(var(--blue-rgb), 0.03);
+}
+.shortcut-row-idx {
+  font-family: var(--font-data);
+  color: var(--text-dim);
+  text-align: center;
+}
+.shortcut-row .shortcut-row-icon {
+  width: 34px; padding: 2px 4px;
+  text-align: center;
+  font-size: 14px;
+}
+.shortcut-row .shortcut-row-label,
+.shortcut-row .shortcut-row-target {
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text);
+  width: 100%;
+}
+.shortcut-row .shortcut-row-type {
+  font-size: 10px;
+}
+.shortcut-row .shortcut-row-del {
+  background: none; border: none; color: var(--text-dim);
+  cursor: pointer; font-size: 14px;
+}
+.shortcut-row .shortcut-row-del:hover { color: var(--red); }
+
+.shortcuts-preview {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg2);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  min-height: 180px;
+}
+.shortcuts-preview-pad {
+  display: grid;
+  grid-template-columns: repeat(2, 40px);
+  gap: 4px;
+  align-content: start;
+}
+.shortcuts-preview-pad.left  { justify-self: start; }
+.shortcuts-preview-pad.right { justify-self: end; }
+.shortcuts-preview-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.shortcuts-preview-camera {
+  padding: 24px 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.shortcuts-preview-joys { display: flex; gap: 18px; }
+.shortcuts-preview-joy {
+  width: 38px; height: 38px;
+  border: 1px solid var(--text-dim);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+.shortcut-preview-btn {
+  width: 40px; height: 40px;
+  border: 1px solid rgba(var(--blue-rgb), 0.4);
+  border-radius: 6px;
+  background: rgba(var(--blue-rgb), 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
 .joystick-panel {
   flex: 0 0 auto;
   display: flex;

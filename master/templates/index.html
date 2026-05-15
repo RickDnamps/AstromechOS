@@ -355,6 +355,10 @@
 
       <!-- Left joystick — Propulsion -->
       <div class="joystick-panel joystick-panel-left">
+        <!-- Shortcuts pad — populated by shortcutsRunner.render() from
+             /shortcuts. Auto-split: first half of configured shortcuts
+             land here, rest on the right pad. -->
+        <div class="shortcut-pad shortcut-pad-left" id="shortcut-pad-left"></div>
         <div class="joystick-label">PROPULSION</div>
         <div class="joystick-ring" id="js-left-ring">
           <div class="joystick-crosshair"></div>
@@ -419,6 +423,7 @@
 
       <!-- Right joystick — Dome -->
       <div class="joystick-panel joystick-panel-right">
+        <div class="shortcut-pad shortcut-pad-right" id="shortcut-pad-right"></div>
         <div class="joystick-label" id="joystick-master-label">DOME</div>
         <div class="joystick-ring" id="js-right-ring">
           <div class="joystick-crosshair"></div>
@@ -937,6 +942,7 @@
       <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
       <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
+      <button class="settings-nav-item" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">⚡ Shortcuts</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
       <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
       <button class="settings-nav-item" data-panel="system"       onclick="switchSettingsPanel('system')">🖥️ System</button>
@@ -1399,6 +1405,50 @@
           </div>
           <button class="btn" onclick="saveBatteryCells()">APPLY</button>
           <div class="settings-status" id="battery-cells-status"></div>
+        </section>
+      </div>
+
+      <!-- ⚡ Shortcuts -->
+      <div class="settings-panel" id="spanel-shortcuts">
+        <section class="card settings-card">
+          <h2 class="card-title">SHORTCUTS</h2>
+          <p class="settings-note">
+            Macro buttons that appear on the <b>Drive</b> tab — one tap fires an action (toggle arm, play sound, play choreo…).
+            Auto-balanced: half on the left (above propulsion joystick), half on the right (above dome joystick).
+          </p>
+
+          <div class="form-group" style="display:flex;align-items:center;gap:14px">
+            <label style="min-width:130px">How many buttons?</label>
+            <input type="range" id="shortcuts-count" min="0" max="12" value="0"
+                   style="flex:1;max-width:280px"
+                   oninput="shortcutsEditor.onCountChange(this.value)">
+            <span id="shortcuts-count-val" style="font-family:var(--font-data);min-width:30px">0</span>
+          </div>
+
+          <div id="shortcuts-list" style="margin-top:10px"></div>
+
+          <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+            <button class="btn btn-active" onclick="shortcutsEditor.save()">SAVE SHORTCUTS</button>
+            <div class="settings-status" id="shortcuts-status"></div>
+          </div>
+
+          <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+
+          <h3 style="font-size:12px;letter-spacing:.1em;color:var(--text-dim);margin:0 0 8px 0">PREVIEW · Drive tab layout</h3>
+          <p class="settings-note" style="margin-top:0">
+            Aperçu de l'emplacement des boutons sur l'onglet Drive. Drag-drop pour repositionner libre — bientôt (v2).
+          </p>
+          <div id="shortcuts-preview" class="shortcuts-preview">
+            <div class="shortcuts-preview-pad left" id="sc-preview-left"></div>
+            <div class="shortcuts-preview-center">
+              <div class="shortcuts-preview-camera">📷  CAMERA</div>
+              <div class="shortcuts-preview-joys">
+                <div class="shortcuts-preview-joy">◯ L</div>
+                <div class="shortcuts-preview-joy">◯ R</div>
+              </div>
+            </div>
+            <div class="shortcuts-preview-pad right" id="sc-preview-right"></div>
+          </div>
         </section>
       </div>
 

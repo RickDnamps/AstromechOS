@@ -76,6 +76,7 @@ def create_app() -> Flask:
     from master.api.camera_bp   import camera_bp
     from master.api.behavior_bp     import behavior_bp
     from master.api.diagnostics_bp  import diagnostics_bp
+    from master.api.shortcuts_bp    import shortcuts_bp
 
     app.register_blueprint(audio_bp)
     app.register_blueprint(motion_bp)
@@ -89,6 +90,7 @@ def create_app() -> Flask:
     app.register_blueprint(camera_bp)
     app.register_blueprint(behavior_bp)
     app.register_blueprint(diagnostics_bp)
+    app.register_blueprint(shortcuts_bp)
 
     # ------------------------------------------------------------------
     # Activity tracking — update last_activity on user-driven POSTs.
