@@ -444,11 +444,18 @@ class BTControllerDriver:
                     if abs(spd) > 0.01:
                         self._do_dome(spd, reg)
                         self._last_input_t = time.time()
-            except (AttributeError, OSError) as e:
+            except (AttributeError, OSError, ImportError) as e:
                 # Narrow catch — known transient errors (driver hot-swap,
-                # serial port gone) shouldn't kill the thread. Let unexpected
-                # exceptions propagate so a real bug is visible.
+                # serial port gone, ImportError during hot-reload).
+                # Audit finding BT M-3 2026-05-15: ImportError used to
+                # propagate and KILL the keep-alive thread → permanent
+                # BT outage until daemon restart. Now caught + logged.
                 log.warning("keepalive transient error: %s", e)
+            except Exception:
+                # Anything else → log with traceback but DON'T kill the
+                # thread. A buggy callback shouldn't take down BT input
+                # forever; daemon restart is too heavy.
+                log.exception("keepalive unexpected error — continuing")
 
     # ------------------------------------------------------------------
     # Axes

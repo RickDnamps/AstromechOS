@@ -97,6 +97,16 @@ class VescDriver:
         left  : float [-1.0 … +1.0]
         right : float [-1.0 … +1.0]
         """
+        # Audit finding Motion L-5 2026-05-15: silent fail when setup()
+        # never succeeded. uart.send would raise an unhandled exception
+        # in the motion handler. Now: return False so caller can log.
+        if not self._ready:
+            return False
+        # Audit finding Motion L-2 sibling: reject non-finite values
+        # before clamp + serialize. NaN survives min/max in Python.
+        import math
+        if not (math.isfinite(left) and math.isfinite(right)):
+            return False
         left  = self._clamp(left)
         right = self._clamp(right)
 

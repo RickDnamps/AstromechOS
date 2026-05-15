@@ -722,17 +722,18 @@ class LockManager {
     const v = el('kids-speed-val');
     if (v) v.textContent = val + '%';
     if (this._mode === 1) this._applyKidsSpeed();
-    // Audit finding A4-L2 2026-05-15: push the new cap to the server
-    // immediately so server-side _kids_cap reflects the operator's
-    // change. Previously the new value lived only in localStorage
-    // until the next /lock/set call (e.g. mode toggle) — so between
-    // moving the slider and toggling, motion was still capped at the
-    // PRIOR value. POST is admin-gated; the call relies on the
-    // existing admin token (lockMgr is reached after admin unlock).
-    api('/lock/set', 'POST', {
-      mode: this._mode,
-      kids_speed_limit: val / 100,
-    });
+    // Audit finding Drive UX M-2 2026-05-15: debounce the server
+    // POST. Slider oninput fires per pixel of drag → ~55 POSTs at
+    // 30Hz, all serialized on _cfg_write_lock. Coalesce into one
+    // POST 250ms after the operator stops dragging.
+    if (this._kidsSendTimer) clearTimeout(this._kidsSendTimer);
+    this._kidsSendTimer = setTimeout(() => {
+      api('/lock/set', 'POST', {
+        mode: this._mode,
+        kids_speed_limit: val / 100,
+      });
+      this._kidsSendTimer = null;
+    }, 250);
   }
 
   onBtnClick() {

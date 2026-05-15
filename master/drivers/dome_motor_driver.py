@@ -70,6 +70,10 @@ class DomeMotorDriver:
         self._speed = 0.0
         self._random_mode = False
         self._random_thread: threading.Thread | None = None
+        # Audit finding Motion L-3 2026-05-15: Event.wait so disabling
+        # random mode wakes the loop immediately instead of waiting up
+        # to RANDOM_INTERVAL_MAX (8s) for the next time.sleep tick.
+        self._random_stop = threading.Event()
 
     def setup(self) -> bool:
         self._ready = True
@@ -94,6 +98,14 @@ class DomeMotorDriver:
         speed : float [-1.0 … +1.0]
           -1.0 = full left, +1.0 = full right, 0.0 = stop
         """
+        # Audit finding Motion L-2 2026-05-15: reject NaN/Inf before
+        # format. `f"{nan:.3f}"` produces 'nan' which is forwarded to
+        # the slave's Syren10 driver as `D:nan` → float('nan') →
+        # undefined behaviour.
+        import math
+        if not math.isfinite(speed):
+            log.warning("dome.turn: rejected non-finite speed %r", speed)
+            return False
         if abs(speed) < DEADZONE:
             speed = 0.0
         self._speed = max(-1.0, min(1.0, speed))
@@ -113,13 +125,16 @@ class DomeMotorDriver:
     def set_random(self, enabled: bool) -> None:
         """Enable/disable random rotation mode."""
         self._random_mode = enabled
-        if enabled and (self._random_thread is None or not self._random_thread.is_alive()):
-            self._random_thread = threading.Thread(
-                target=self._random_loop, name="dome-random", daemon=True
-            )
-            self._random_thread.start()
-            log.info("Dome random mode enabled")
-        elif not enabled:
+        if enabled:
+            self._random_stop.clear()
+            if self._random_thread is None or not self._random_thread.is_alive():
+                self._random_thread = threading.Thread(
+                    target=self._random_loop, name="dome-random", daemon=True
+                )
+                self._random_thread.start()
+                log.info("Dome random mode enabled")
+        else:
+            self._random_stop.set()   # wakes the loop's Event.wait immediately
             log.info("Dome random mode disabled")
             self.stop()
 
@@ -133,9 +148,12 @@ class DomeMotorDriver:
 
     def _random_loop(self) -> None:
         while self._random_mode:
-            # Pause between movements
+            # Audit finding Motion L-3 2026-05-15: Event.wait so the
+            # operator-disable path wakes us up immediately. Previously
+            # the next time.sleep tick could be 8s.
             pause = random.uniform(RANDOM_INTERVAL_MIN, RANDOM_INTERVAL_MAX)
-            time.sleep(pause)
+            if self._random_stop.wait(pause):
+                break
             if not self._random_mode:
                 break
 
@@ -144,5 +162,7 @@ class DomeMotorDriver:
             duration = random.uniform(0.5, 2.0)
 
             self.turn(speed)
-            time.sleep(duration)
+            if self._random_stop.wait(duration):
+                self.stop()
+                break
             self.stop()

@@ -784,6 +784,13 @@ def system_estop_reset():
         # not start retracting until the arms they shield are fully home.
         for t in arm_threads:
             t.join(timeout=10.0)
+            # Audit finding Safety M-2 2026-05-15: log timeout. If a
+            # servo is stuck, panels will start closing onto an arm
+            # that's still mid-slew. Visible warning gives operator a
+            # chance to intervene; the sequence proceeds (the next
+            # step assumes the previous one completed).
+            if t.is_alive():
+                log.warning("safe_home: arm thread %s did not finish in 10s — proceeding", t.name)
 
         # ── Step 3: remaining body servos (skip arm-managed ones) in parallel ──
         if reg.servo:

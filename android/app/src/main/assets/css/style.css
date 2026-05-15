@@ -879,7 +879,16 @@ body[data-lock-mode="2"] #js-left-ring::after {
   margin-bottom: 10px;
   pointer-events: none;
   min-height: 0;
+  /* Audit finding Drive UX M-1 2026-05-15: cap height + scroll for
+   * 12+ shortcuts so they don't push the joystick off-screen. The
+   * .shortcut-btn keeps pointer-events:auto inside this scrollable
+   * container — finger taps still register on the buttons.
+   */
+  max-height: 220px;
+  overflow-y: auto;
 }
+.shortcut-pad::-webkit-scrollbar { width: 4px; }
+.shortcut-pad::-webkit-scrollbar-thumb { background: rgba(var(--blue-rgb), 0.3); border-radius: 2px; }
 .shortcut-pad-left  { justify-self: start; }
 .shortcut-pad-right { justify-self: end; }
 .shortcut-pad:empty { display: none; }
@@ -1126,8 +1135,13 @@ body.choreo-prop-locked .joystick-panel-left  .joystick-ring {
 /* Right joystick: keep pointer-events ON when only dome is locked
  * because the Y axis (camera tilt, v2) is still usable. JS clamps
  * X to 0 inside the onMove handler. */
-body.choreo-prop-locked .joystick-panel-left::after,
-body.choreo-dome-locked .joystick-panel-right::after {
+.joystick-ring { position: relative; }   /* anchor for the ::after */
+/* Audit finding Drive UX M-5 2026-05-15: was on .joystick-panel-*
+ * which positions the badge at the centre of the FULL panel (incl.
+ * the shortcut pad above the ring). Now anchored to .joystick-ring
+ * directly so the "🎬 CHOREO" badge sits over the actual joystick. */
+body.choreo-prop-locked .joystick-panel-left  .joystick-ring::after,
+body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   content: '🎬 CHOREO';
   position: absolute;
   top: 50%;

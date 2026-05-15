@@ -63,7 +63,7 @@ from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.motion_watchdog import motion_watchdog
 from master.safe_stop import cancel_ramp, is_drive_ramp_active, is_dome_ramp_active
-from master.vesc_safety import is_drive_safe, block_reason
+from master.vesc_safety import is_drive_safe, block_reason, status as _vesc_status
 from master.api._admin_auth import require_admin
 
 motion_bp = Blueprint('motion', __name__, url_prefix='/motion')
@@ -114,8 +114,14 @@ def _drive_gate():
         return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
     if reg.lock_mode == 2:
         return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
-    if not is_drive_safe():
-        return jsonify({'status': 'blocked', 'reason': block_reason() or 'vesc_unsafe'}), 503
+    # Audit finding Motion M-4 2026-05-15: atomic snapshot via
+    # vesc_safety.status() — was calling is_drive_safe() THEN
+    # block_reason() separately, opening a race window where the
+    # telem could update between calls and produce safe=False with
+    # reason=None.
+    safe, reason = _vesc_status()
+    if not safe:
+        return jsonify({'status': 'blocked', 'reason': reason or 'vesc_unsafe'}), 503
     return None
 
 
