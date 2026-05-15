@@ -119,6 +119,31 @@ All POST endpoints accept and return `application/json`.
 | POST | `/choreo/category` | `{"name":"foo.chor","category":"emotion"}` |
 | POST | `/choreo/emoji` | `{"name":"foo.chor","emoji":"🎭"}` |
 | POST | `/choreo/label` | `{"name":"foo.chor","label":"My Label"}` |
+| POST | `/choreo/rename` | `{"old_name":"foo","new_name":"bar"}` — cascades to shortcuts |
+| DELETE | `/choreo/<name>` | refuses if currently playing · cascades shortcuts → action:'none' |
+
+---
+
+## Shortcuts (Drive-tab macro buttons)
+
+| Method | Path | Body / Notes |
+|--------|------|------|
+| GET | `/shortcuts` | `{count, max, shortcuts:[…], states:{id:'on'\|'off'}}` |
+| POST | `/shortcuts` | admin · `{shortcuts:[{label, icon, color, action:{type, target}}, …]}` · server assigns `id` · validates per action type |
+| POST | `/shortcuts/<id>/trigger` | LAN-open · returns `{state:'on'\|'off'\|'fired'}` · re-press kills active choreo/sound |
+
+**Action types**: `arms_toggle` · `body_panel_toggle` · `dome_panel_toggle` · `play_choreo` · `play_sound` · `play_random_audio` · `none`. Target validation per type (range / allowlist / on-disk file / category membership). Max 12 shortcuts.
+
+---
+
+## Lock Mode
+
+| Method | Path | Body / Notes |
+|--------|------|------|
+| POST | `/lock/set` | admin · `{mode:0\|1\|2, kids_speed_limit:0..1}` · persists `local.cfg [security]` |
+| POST | `/lock/unlock` | LAN-open · `{password, mode:0}` · server-side `hmac.compare_digest` vs admin password · operator-facing unlock from Kids/Child Lock |
+
+Mode 0 = Normal · Mode 1 = Kids (capped via `kids_speed_limit`) · Mode 2 = Child Lock (drive forbidden, dome/sounds/lights free).
 
 ---
 

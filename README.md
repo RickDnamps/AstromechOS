@@ -45,7 +45,7 @@ A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. T
 <td align="center" width="50%">
 
 ### 🕹️ Drive
-Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction HUD · E-Stop · Lock modes
+Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction HUD · E-Stop · Lock modes · **🎛️ Shortcuts** overlay (up to 12 macro buttons split symmetrically over both joysticks for one-tap arms/panels/sound/choreo)
 
 ![Drive Interface](Screenshots/Drive.png)
 
@@ -175,7 +175,8 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🔌 **Hot-swap light drivers** | Teeces32 ↔ AstroPixels+ without reboot |
 | 🚀 **One-button OTA deploy** | Dome button → git pull + rsync + reboot — no SSH needed |
 | 📷 **USB camera autodetect** | MJPEG stream · hardware-compressed · auto-reconnect after restart |
-| 🎨 **Theme system** | 8 built-in themes · unlimited custom themes · live preview · 7 sci-fi fonts · persisted across sessions |
+| 🎨 **Theme system** | 8 built-in themes · 16-slot custom themes · live preview · 7 sci-fi fonts · persisted across sessions |
+| 🎛️ **Drive-tab Shortcuts** | Up to 12 operator-configurable macro buttons split over both joysticks · toggle arms/panels · play choreo/sound/random · green pulse while playing · re-press kills · auto-fills icon+label from choreo emoji · per-axis motion lockout (drive choreo locks left, dome choreo locks dome rotation, sound-only stays free) |
 
 ---
 
@@ -220,7 +221,14 @@ All three trigger a **graceful decel ramp** — never an abrupt stop that could 
 
 **Paired-side CAN liveness** — if the right VESC (CAN ID 2) goes silent while the left side keeps responding, the Slave detects the asymmetry, refuses further drive commands locally, and emits a synthetic fault code so the Master's safety gate trips immediately. Prevents one-wheel runaways.
 
-**Slave reboot config resync** — when the Slave reboots mid-session, it sends a `BOOT:READY` banner over UART. The Master reacts by re-pushing the persisted VESC scale and inversion config so the Slave never resumes operating with stale defaults.
+**Slave reboot config resync** — when the Slave reboots mid-session, it sends a `BOOT:READY` banner over UART. The Master reacts by re-pushing the persisted VESC scale, inversion AND bench-mode config so the Slave never resumes operating with stale defaults.
+
+**Per-axis choreo motion lockout** — when a choreography is playing, the operator's joysticks are veiled with a "🎬 CHOREO" overlay ONLY on the axes the playback actually drives:
+- Choreo uses `tracks['propulsion']` → propulsion joystick locked (web + Android + Bluetooth gamepad + WASD all gated)
+- Choreo uses `tracks['dome']` → dome rotation locked (right-joystick X clamped to 0; Y stays free for the planned camera tilt in v2)
+- Sound/light/panel-only choreographies → both joysticks stay free → operator can drive R2 around while it animates ("alive" effect — e.g. launch an angry choreo and walk towards the visitor while it scolds)
+
+**Cascade integrity** — renaming or deleting a `.chor` propagates through every Drive-tab shortcut targeting it (cascade_rename / cascade_delete in `shortcuts_bp`). No stale shortcuts pointing at non-existent choreos.
 
 ---
 
