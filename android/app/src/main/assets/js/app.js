@@ -5964,6 +5964,13 @@ class StatusPoller {
     if (data.estop_active !== undefined && data.estop_active !== _estopTripped)
       _setEstopUI(data.estop_active);
 
+    // Drive-tab shortcut indicators — turn buttons green while the
+    // matching choreo/sound is actually playing, revert when done.
+    // User-reported 2026-05-15: 'il faudrait au moins avoir un
+    // indicateur ... savoir qu'il est toujours en train de jouer'.
+    this._lastData = data;
+    if (typeof shortcutsRunner !== 'undefined') shortcutsRunner.updateFromStatus(data);
+
     // Cockpit pills — always updated (panel may be closed)
     this._setCockpitHbPill(data.heartbeat_ok);
     this._setCockpitUartPill(data.uart_ready, data.uart_health, data.uart_crc_errors ?? 0);
@@ -6901,6 +6908,7 @@ const shortcutsRunner = {
     if (!left || !right) return;
     left.replaceChildren();
     right.replaceChildren();
+    this._btnById = {};   // id → DOM button, used by updateFromStatus
     const n = this._shortcuts.length;
     const leftN = Math.ceil(n / 2);
     this._shortcuts.forEach((sc, idx) => {
@@ -6908,6 +6916,7 @@ const shortcutsRunner = {
       const btn = document.createElement('button');
       btn.className = 'shortcut-btn';
       btn.title = sc.label || '';
+      btn.dataset.scid = sc.id;
       if (this._states[sc.id] === 'on') btn.classList.add('is-on');
       if (sc.color) btn.style.borderColor = sc.color;
 
@@ -6925,6 +6934,46 @@ const shortcutsRunner = {
 
       btn.addEventListener('click', () => this._trigger(sc.id, btn));
       dest.appendChild(btn);
+      this._btnById[sc.id] = btn;
+    });
+  },
+
+  // Called every status-poll tick (~2s) with the /status payload.
+  // For one-shot actions (play_choreo/play_sound/play_random_audio)
+  // we mirror the real playback state from the server: button is
+  // green while reg.choreo_name / reg.audio_current matches the
+  // shortcut target, normal otherwise. For toggle actions
+  // (arms/panels) the source of truth is /shortcuts._states and is
+  // updated at click + on /shortcuts refresh, so we leave them alone
+  // here.
+  updateFromStatus(data) {
+    if (!this._shortcuts || !this._shortcuts.length) return;
+    if (!data) return;
+    const choreoName = data.choreo_playing ? (data.choreo_name || '') : '';
+    const audioCur   = data.audio_playing  ? (data.audio_current || '') : '';
+    // audio_current looks like '🎲 happy' for random-category plays, plain
+    // sound name otherwise. Strip the '🎲 ' prefix to recover the category.
+    const randomCat = audioCur.startsWith('🎲 ') ? audioCur.slice(2).trim() : '';
+
+    this._shortcuts.forEach(sc => {
+      const btn = this._btnById && this._btnById[sc.id];
+      if (!btn) return;
+      const type   = sc.action?.type || 'none';
+      const target = sc.action?.target || '';
+      let active = false;
+      if (type === 'play_choreo') {
+        active = !!choreoName && choreoName === target;
+      } else if (type === 'play_sound') {
+        active = !!audioCur && audioCur === target;
+      } else if (type === 'play_random_audio') {
+        // Backend tags random plays with '🎲 <category>', so we can
+        // tell precisely which category-shortcut is "owning" the
+        // playback right now.
+        active = !!randomCat && randomCat === target;
+      } else {
+        return;   // toggles handled by _states, don't touch
+      }
+      btn.classList.toggle('is-playing', active);
     });
   },
 
@@ -6938,14 +6987,19 @@ const shortcutsRunner = {
       }
       const state = d.state;
       this._states[id] = state === 'fired' ? 'off' : state;
-      // Update UI
       btn.classList.toggle('is-on', this._states[id] === 'on');
+      // Immediate visual ack for one-shot triggers — the green
+      // 'is-playing' indicator is then taken over by the status
+      // poller on the next 2s tick when choreo_name/audio_current
+      // reflect the actual playback.
       if (state === 'fired') {
-        btn.classList.remove('is-fired');
-        // Force reflow so the animation restarts on rapid taps
-        void btn.offsetWidth;
-        btn.classList.add('is-fired');
-        setTimeout(() => btn.classList.remove('is-fired'), 700);
+        btn.classList.add('is-playing');
+        // If the poller hasn't seen it within 2.5s the action was
+        // ultra-short (or the server rejected silently): clear so
+        // the button isn't stuck green.
+        setTimeout(() => {
+          if (poller && poller._lastData) shortcutsRunner.updateFromStatus(poller._lastData);
+        }, 2500);
       }
     } finally {
       btn.disabled = false;

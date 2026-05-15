@@ -938,6 +938,39 @@ body[data-lock-mode="2"] #js-left-ring::after {
   100% { background: rgba(var(--blue-rgb), 0.08); transform: scale(1); }
 }
 
+/* "is-playing" — sustained indicator while a one-shot action
+ * (choreo/sound/random) is actively running on the server. Class is
+ * driven by the status poller (~2s tick) matching data.choreo_name
+ * or data.audio_current against the shortcut target. Subtle green
+ * pulse + pulsing dot makes "still playing" visible at a glance
+ * without screaming for attention. Auto-clears when the playback
+ * ends on the backend.
+ */
+.shortcut-btn.is-playing {
+  opacity: 1;
+  background: rgba(92, 200, 120, 0.22);
+  border-color: rgba(92, 200, 120, 0.85);
+  animation: shortcut-pulse 1.2s ease-in-out infinite;
+}
+.shortcut-btn.is-playing::after {
+  content: '';
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #5cc878;
+  box-shadow: 0 0 8px #5cc878;
+  animation: shortcut-dot-pulse 1.2s ease-in-out infinite;
+}
+@keyframes shortcut-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(92, 200, 120, 0.45); }
+  50%      { box-shadow: 0 0 0 5px rgba(92, 200, 120, 0); }
+}
+@keyframes shortcut-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
 /* ─── Settings → Shortcuts editor + preview ─── */
 .shortcut-row {
   display: grid;
