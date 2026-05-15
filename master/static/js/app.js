@@ -6975,18 +6975,36 @@ const shortcutsEditor = {
         if (!firstValid && !o.disabled && o.value !== '') firstValid = o.value;
         sel.appendChild(opt);
       });
-      // If nothing matches the saved value, fall back to the first
-      // valid option so the displayed name and the persisted value
-      // match (no silent "I selected the dropdown but my target is
-      // still ''" trap).
-      if (!options.some(o => o.value === currentValue) && firstValid) {
+      // Auto-prefill the first real option in two cases:
+      //   1. currentValue isn't in the options (saved target was
+      //      deleted / cascade_delete neutralized).
+      //   2. currentValue is empty (operator just switched type
+      //      from 'none' to play_choreo etc. — the '(pick a X)'
+      //      placeholder satisfies value==='' but the user wants
+      //      the first concrete choice prefilled so the icon/label
+      //      auto-fill kicks in immediately).
+      // User-reported 2026-05-15 (buttons 5-8 weren't auto-filling):
+      // the previous logic stopped at the placeholder match and
+      // forced the operator to manually pick a target before the
+      // icon/label updated.
+      const validMatch = currentValue !== '' &&
+                         options.some(o => o.value === currentValue);
+      if (!validMatch && firstValid) {
         sel.value = firstValid;
         sc.action.target = firstValid;
-        // Newly auto-selected target may have a richer default icon
-        // and label (e.g. a choreo's own emoji + Sequences display
-        // label) — refresh both if not yet locked by the operator.
+        const iconBefore  = sc.icon;
+        const labelBefore = sc.label;
         this._maybeAutoFillIcon(sc);
         this._maybeAutoFillLabel(sc);
+        // mkSelect runs DURING the current _render() pass, so the
+        // icon button and label input above us were already built
+        // with the stale values. If autofill changed anything, queue
+        // a second render in the next microtask so the DOM catches
+        // up. Visually the operator sees the new icon/label flash in
+        // ~1 frame after picking the type — clean enough.
+        if (sc.icon !== iconBefore || sc.label !== labelBefore) {
+          Promise.resolve().then(() => this._render());
+        }
       }
       sel.addEventListener('change', () => {
         sc.action.target = sel.value;
