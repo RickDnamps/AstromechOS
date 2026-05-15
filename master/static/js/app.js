@@ -3079,12 +3079,6 @@ class AudioBoard {
     const epoch = ++this._selectEpoch;
     this._currentCat = cat;
 
-    // F-16: reset the sound filter when changing category — searching in
-    // 'happy' shouldn't silently hide everything when the user jumps to
-    // 'angry'.
-    const filterInp = el('audio-sounds-filter');
-    if (filterInp) filterInp.value = '';
-
     // Marquer la pill active
     document.querySelectorAll('.category-pill').forEach(p => p.classList.remove('active'));
     const pill = el(`cat-pill-${cat}`);
@@ -3154,19 +3148,6 @@ class AudioBoard {
       });
       grid.dataset.wired = '1';
     }
-  }
-
-  // F-16: live filter for the sound grid. Hides buttons whose data-sound
-  // doesn't contain the query (case-insensitive substring). RANDOM button
-  // always stays visible.
-  filterSounds(query) {
-    const q = (query || '').trim().toLowerCase();
-    const grid = el('audio-sounds-grid');
-    if (!grid) return;
-    grid.querySelectorAll('button[data-sound]').forEach(btn => {
-      const match = !q || btn.dataset.sound.toLowerCase().includes(q);
-      btn.style.display = match ? '' : 'none';
-    });
   }
 
   play(sound) {
