@@ -3469,7 +3469,8 @@ class AudioBoard {
 
     this._uploadStatus(`Uploading ${queued.length} file(s)…`, 'info');
     let ok = 0;
-    const failed = [];   // F-7: keep per-file reason
+    const renamed = [];   // {original, final}  — server auto-resolved a collision
+    const failed = [];    // F-7: keep per-file reason
     for (const file of queued) {
       const form = new FormData();
       form.append('file', file);
@@ -3480,6 +3481,9 @@ class AudioBoard {
         try { d = await res.json(); } catch {}
         if (res.ok && d && d.ok) {
           ok++;
+          // Server auto-renamed because the requested name was taken.
+          // Surface this so the operator notices ("happy.mp3 → HAPPY_2").
+          if (d.renamed) renamed.push({ original: d.original, final: d.filename });
         } else {
           failed.push({
             name:   file.name,
@@ -3491,7 +3495,14 @@ class AudioBoard {
       }
     }
     if (ok) {
-      this._uploadStatus(`✓ ${ok} file(s) uploaded to ${cat.toUpperCase()}`, 'ok');
+      let msg = `✓ ${ok} file(s) uploaded to ${cat.toUpperCase()}`;
+      if (renamed.length) {
+        const first = renamed[0];
+        const more  = renamed.length > 1 ? ` (+${renamed.length - 1} more)` : '';
+        msg += ` — ${renamed.length} renamed: ${first.original} → ${first.final}${more}`;
+        console.info('Auto-renamed uploads:', renamed);
+      }
+      this._uploadStatus(msg, 'ok');
     }
     if (failed.length || skipped.length) {
       // F-7: detailed list goes to console for debugging; the toast +

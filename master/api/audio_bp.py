@@ -517,6 +517,37 @@ def set_volume():
     return jsonify({'status': 'ok', 'volume': vol})
 
 
+def _next_available_stem(base: str, cats: dict) -> str:
+    """Return base if nothing else uses it, else base_2, base_3, … up to
+    base_999. Considers BOTH disk presence (slave/sounds/<stem>.mp3) AND
+    every category in the index. Used by /audio/upload to auto-resolve
+    name collisions instead of rejecting the upload.
+
+    User feedback 2026-05-15: 'quand on upload un son il faudrait au
+    moins que le système s'assure que le nouveau son n'a pas le même nom
+    qu'un son existant déjà si oui il renomme en ajoutant un chiffre'.
+
+    Why both disk + index? Files in slave/sounds/ that aren't indexed
+    (orphans from a deleted category, or built-ins not yet registered)
+    must still block the name — overwriting them would break behaviors
+    that reference them by stem."""
+    indexed: set[str] = set()
+    for sounds in cats.values():
+        indexed.update(sounds)
+    for n in range(1, 1000):
+        candidate = base if n == 1 else f'{base}_{n}'
+        # Stay within the same regex the rest of the pipeline enforces —
+        # base already passed it, so candidate will too unless n produces
+        # a string >80 chars (impossible: base ≤80, _999 = 4 chars).
+        if not _SOUND_NAME_RE.match(candidate):
+            return base
+        path = os.path.join(_SOUNDS_DIR, candidate + '.mp3')
+        if not os.path.exists(path) and candidate not in indexed:
+            return candidate
+    # Ridiculously unlikely fallback (1000 collisions on the same stem).
+    return f'{base}_OVERFLOW'
+
+
 @audio_bp.post('/upload')
 def upload_sound():
     """Upload an MP3 to a category.
@@ -561,16 +592,8 @@ def upload_sound():
         return jsonify({'ok': False, 'error': 'Invalid filename (escape attempt)'}), 400
 
     with _upload_lock:
-        # B-2 layer 4: refuse to overwrite an existing file — operator should
-        # explicitly delete the old one first. Avoids silent clobbering of
-        # the built-in 317 sounds.
-        if os.path.exists(dest_path):
-            return jsonify({
-                'ok': False, 'error': f'"{stem}.mp3" already exists — delete it first',
-            }), 409
-
-        # Load the index BEFORE writing, so we can dedup against other
-        # categories and reject duplicates at any tier.
+        # Load the index BEFORE writing, so we can resolve name collisions
+        # against both disk presence AND any category in the index.
         try:
             index = json.loads(Path(_INDEX_FILE).read_text(encoding='utf-8'))
         except (OSError, json.JSONDecodeError):
@@ -579,26 +602,31 @@ def upload_sound():
             index = {'categories': {}}
         cats = index.setdefault('categories', {})
 
-        # Cross-category dedup: a sound stem must live in EXACTLY one
-        # category. Reject the upload if the stem is already indexed
-        # somewhere else — prevents the "same file under two categories"
-        # state that diverged the index from disk reality.
-        for other_cat, sounds in cats.items():
-            if stem in sounds and other_cat != category:
-                return jsonify({
-                    'ok': False,
-                    'error': f'"{stem}" already exists in category "{other_cat}"',
-                }), 409
+        # Auto-rename on collision (user feedback 2026-05-15: prefer
+        # auto-resolution over outright rejection — operator dragging in
+        # a folder of new sounds shouldn't have to manually fix every
+        # name clash). Helper picks BASE, BASE_2, BASE_3 … so the chosen
+        # name is unique against both disk and ALL categories in the
+        # index. Replaces the previous two 409 paths (overwrite + cross-
+        # category dedup) which both wanted manual intervention.
+        final_stem = _next_available_stem(stem, cats)
+        if final_stem != stem:
+            log.info('Upload collision: %s → %s', stem, final_stem)
+        dest_path = os.path.realpath(os.path.join(_SOUNDS_DIR, final_stem + '.mp3'))
+        # Re-verify containment for the resolved name — defense in depth
+        # in case _next_available_stem ever produces something exotic.
+        if not dest_path.startswith(_SOUNDS_DIR_REAL + os.sep):
+            return jsonify({'ok': False, 'error': 'Invalid filename (escape attempt)'}), 400
 
         # Save the file to disk. By this point we've cleared every gate,
         # so f.save() is the first irreversible op.
         os.makedirs(_SOUNDS_DIR, exist_ok=True)
         f.save(dest_path)
 
-        # Update sounds_index.json
+        # Update sounds_index.json with the FINAL stem.
         sounds = cats.setdefault(category, [])
-        if stem not in sounds:
-            sounds.append(stem)
+        if final_stem not in sounds:
+            sounds.append(final_stem)
             sounds.sort()
         Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
         with _audio_state_lock:
@@ -619,12 +647,21 @@ def upload_sound():
     # since the file is already on disk locally.
     threading.Thread(
         target=_sftp_sync_sound,
-        args=(dest_path, stem, index),
+        args=(dest_path, final_stem, index),
         daemon=True,
-        name=f'sftp-sync-{stem}',
+        name=f'sftp-sync-{final_stem}',
     ).start()
 
-    return jsonify({'ok': True, 'filename': stem, 'category': category})
+    return jsonify({
+        'ok':       True,
+        'filename': final_stem,
+        'category': category,
+        # Tell the UI when we auto-renamed so it can surface that fact
+        # to the operator (e.g. "happy.mp3 → HAPPY_2"). When no rename
+        # happened both fields are equal and the UI just shows the name.
+        'original': stem,
+        'renamed':  final_stem != stem,
+    })
 
 
 @audio_bp.post('/category/create')
