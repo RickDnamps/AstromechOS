@@ -9273,17 +9273,15 @@ const choreoEditor = (() => {
 
   // ── Drag + resize ─────────────────────────────────────────────────
   function _attachBlockEvents(block, track, idx) {
-    // Audit finding Frontend M-1 2026-05-15: migrate from mousedown
-    // to pointerdown so multi-touch on tablets doesn't lose track of
-    // the drag. _startDrag and _startResize internally still use
-    // document mouse/pointermove listeners — pointer-events surface
-    // both 'mousemove' AND 'pointermove' so the existing implementation
-    // continues to work; this entry point just upgrades pointer tracking.
-    block.addEventListener('pointerdown', e => {
-      // Capture so we get all subsequent move/up events even if the
-      // pointer leaves the block (essential when dragging into the
-      // gutter or past the timeline edge for soft-delete).
-      try { block.setPointerCapture(e.pointerId); } catch {}
+    // User-reported regression 2026-05-15: pointerdown +
+    // setPointerCapture broke desktop drag — the captured pointer
+    // intercepted mouseup so the document-level onUp never fired,
+    // leaving the block in "still-clicking" state. Reverted to
+    // mousedown. Multi-touch Pointer Events migration on the timeline
+    // is a bigger refactor (needs _startDrag/_startResize to use
+    // pointermove/pointerup pairs) — deferred until that's done in
+    // one pass, not piecemeal.
+    block.addEventListener('mousedown', e => {
       e.target.dataset.resize ? _startResize(e, block, track, idx) : _startDrag(e, block, track, idx);
       _selectBlock(track, idx);
       e.preventDefault();
