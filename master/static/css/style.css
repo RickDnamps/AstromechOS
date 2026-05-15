@@ -4020,6 +4020,24 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   text-shadow: 0 0 8px var(--red);
 }
 .admin-pwd-error.hidden { display: none; }
+
+/* CapsLock warning shown live below the password field. Triggered
+ * by adminGuard.onKeyDown/onKeyUp via getModifierState('CapsLock').
+ * Yellow (caution) rather than red (error) — operator hasn't
+ * submitted yet, so this is a heads-up, not a failure.
+ */
+.admin-pwd-caps {
+  font-size: 11px;
+  color: var(--warn, #ffaa44);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(255, 170, 68, 0.6);
+  animation: caps-pulse 1.4s ease-in-out infinite;
+}
+.admin-pwd-caps.hidden { display: none; }
+@keyframes caps-pulse {
+  0%, 100% { opacity: 0.95; }
+  50%      { opacity: 0.6; }
+}
 .admin-modal-btns { display: flex; gap: 10px; width: 100%; justify-content: flex-end; margin-top: 4px; }
 .lock-childlock-sep { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; margin-top: 6px; }
 .lock-sep-line { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }

@@ -256,7 +256,9 @@
     <div class="admin-modal-title" id="lock-modal-title">UNLOCK</div>
     <div class="admin-modal-sub" id="lock-modal-sub">Enter password to return to normal mode</div>
     <input type="password" id="lock-pwd-input" class="admin-pwd-input" placeholder="Password"
-           onkeydown="if(event.key==='Enter') lockMgr.submitModal(); if(event.key==='Escape') lockMgr.cancelModal()">
+           onkeydown="lockMgr.onKeyDown(event)"
+           onkeyup="lockMgr.onKeyUp(event)">
+    <div id="lock-pwd-caps" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
     <div id="lock-pwd-error" class="admin-pwd-error hidden">Incorrect password</div>
     <div class="admin-modal-btns">
       <button class="btn" onclick="lockMgr.cancelModal()">CANCEL</button>
@@ -290,7 +292,9 @@
     <div class="admin-modal-title">ADMIN ACCESS</div>
     <div class="admin-modal-sub">Unlocks: SERVO · VESC · CONFIG · CHOREO tabs + audio uploads</div>
     <input type="password" id="admin-pwd-input" class="admin-pwd-input" placeholder="Password"
-           onkeydown="if(event.key==='Enter') adminGuard.submit(); if(event.key==='Escape') adminGuard.cancel()">
+           onkeydown="adminGuard.onKeyDown(event)"
+           onkeyup="adminGuard.onKeyUp(event)">
+    <div id="admin-pwd-caps" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
     <div id="admin-pwd-error" class="admin-pwd-error hidden">Incorrect password</div>
     <div class="admin-modal-btns">
       <button class="btn" onclick="adminGuard.cancel()">CANCEL</button>
@@ -931,6 +935,7 @@
 
     <!-- Sidebar -->
     <nav class="settings-sidebar">
+      <button class="settings-nav-item" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">🎛️ Shortcuts</button>
       <button class="settings-nav-item active" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
       <button class="settings-nav-item" data-panel="interface"  onclick="switchSettingsPanel('interface')">🎨 Interface</button>
       <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
@@ -942,7 +947,6 @@
       <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
       <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
-      <button class="settings-nav-item" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">🎛️ Shortcuts</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
       <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
       <button class="settings-nav-item" data-panel="system"       onclick="switchSettingsPanel('system')">🖥️ System</button>

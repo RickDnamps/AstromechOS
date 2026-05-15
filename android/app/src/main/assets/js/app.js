@@ -692,6 +692,20 @@ class LockManager {
     this._applyMode(2);
   }
 
+  _updateCapsHint(e) {
+    const hint = el('lock-pwd-caps');
+    if (!hint) return;
+    const on = e && typeof e.getModifierState === 'function'
+      ? e.getModifierState('CapsLock') : false;
+    hint.classList.toggle('hidden', !on);
+  }
+  onKeyDown(e) {
+    if (e.key === 'Enter')  { this.submitModal(); return; }
+    if (e.key === 'Escape') { this.cancelModal(); return; }
+    this._updateCapsHint(e);
+  }
+  onKeyUp(e) { this._updateCapsHint(e); }
+
   submitModal() {
     const pwd = el('lock-pwd-input').value;
     if (pwd === 'deetoo') {
@@ -834,6 +848,26 @@ class AdminGuard {
   onOverlayClick(e) {
     if (e.target === el('admin-modal')) this.cancel();
   }
+
+  // CapsLock indicator — user-reported 2026-05-15: 'quand le Caps
+  // Lock est activé il devrait avoir une indication'. Browsers can't
+  // toggle the OS key state from JS, so we surface a warning instead.
+  // getModifierState('CapsLock') reflects the LIVE state at event
+  // time on both keydown and keyup (so toggling the key with the
+  // field empty still updates the indicator).
+  _updateCapsHint(e) {
+    const hint = el('admin-pwd-caps');
+    if (!hint) return;
+    const on = e && typeof e.getModifierState === 'function'
+      ? e.getModifierState('CapsLock') : false;
+    hint.classList.toggle('hidden', !on);
+  }
+  onKeyDown(e) {
+    if (e.key === 'Enter')  { this.submit(); return; }
+    if (e.key === 'Escape') { this.cancel(); return; }
+    this._updateCapsHint(e);
+  }
+  onKeyUp(e) { this._updateCapsHint(e); }
 
   submit() {
     const pwd = el('admin-pwd-input').value;
