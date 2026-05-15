@@ -596,11 +596,20 @@ async function apiDetail(endpoint, method = 'GET', body = null, timeoutMs = 5000
 // This helper aborts the previous in-flight motion request as soon as a
 // new one starts. driveStop / domeStop use regular api() (NOT this helper)
 // so the release POST is never aborted and always reaches the server.
-let _motionAbort = null;
+// Audit finding Joystick M-2 2026-05-15: per-AXIS abort slots so a
+// dome/turn POST doesn't cancel an in-flight arcade POST (and vice
+// versa). With one global slot, two-thumb operation made the robot
+// pulse propulsion every time the operator nudged the dome thumb.
+// Maps endpoint prefix → its own AbortController slot.
+const _motionAborts = { drive: null, dome: null };
+function _motionSlotFor(endpoint) {
+  return endpoint.startsWith('/motion/dome') ? 'dome' : 'drive';
+}
 async function _postMotion(endpoint, body, timeoutMs = 3000) {
-  if (_motionAbort) { try { _motionAbort.abort(); } catch {} }
+  const slot = _motionSlotFor(endpoint);
+  if (_motionAborts[slot]) { try { _motionAborts[slot].abort(); } catch {} }
   const ctrl = new AbortController();
-  _motionAbort = ctrl;
+  _motionAborts[slot] = ctrl;
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
@@ -618,7 +627,7 @@ async function _postMotion(endpoint, body, timeoutMs = 3000) {
     return null;
   } finally {
     clearTimeout(timer);
-    if (_motionAbort === ctrl) _motionAbort = null;
+    if (_motionAborts[slot] === ctrl) _motionAborts[slot] = null;
   }
 }
 
@@ -1385,7 +1394,23 @@ class VirtualJoystick {
       try { this.ring.releasePointerCapture(this._pointerId); } catch {}
       this._pointerId = null;
     }
-    if (this.active) this._release();
+    // Audit finding Joystick M-4 + UX L-J 2026-05-15: cleanup the
+    // keep-alive interval AND fire onStop unconditionally on
+    // forceRelease, even if `active` was already false. Previously
+    // an E-STOP fired between pointerdown and the first pointermove
+    // would leave _keepAlive running (impossible by current code,
+    // fragile) and never fire onStop. Defense-in-depth.
+    if (this._keepAlive) {
+      clearInterval(this._keepAlive);
+      this._keepAlive = null;
+    }
+    if (this.active) {
+      this._release();
+    } else if (this.onStop) {
+      // Even without an active drag, ensure the server gets a stop
+      // so a borderline-down release path doesn't leave motion alive.
+      try { this.onStop(); } catch {}
+    }
   }
 
   _start(ptr) {
@@ -1403,6 +1428,10 @@ class VirtualJoystick {
       // alive. Re-firing onMove(0, 0) at 5 Hz was pure log + network spam.
       if (Math.abs(this.x) + Math.abs(this.y) < 0.02) return;
       this.onMove(this.x, this.y);
+      // Audit finding Joystick M-1 2026-05-15: update _lastSend so
+      // the throttle in _move() doesn't immediately allow a 7th
+      // request within 16ms after the keep-alive ticks.
+      this._lastSend = performance.now();
     }, 200);
   }
 
@@ -2357,16 +2386,29 @@ async function _takeCameraStream() {
     const taken = el('cam-taken');
     if (!img) return;
 
-    // Detect mjpg_streamer going away (service restart / camera unplug)
+    // Audit finding Camera M-3 + M-4 2026-05-15:
+    //  - Set onerror BEFORE src so the latch catches errors during
+    //    the very first byte (Chrome can fire onerror before our
+    //    next line if the connection refuses immediately).
+    //  - Explicit img.src = '' before reassignment so Android
+    //    WebView (whose abort-on-reassignment behavior is
+    //    inconsistent) is forced to drop the previous stream
+    //    before starting the new one.
     img.onerror = () => { _camErrored = true; };
+    if (img.src) img.src = '';
 
     if (taken) {
-      // Reset the overlay text back to its default in case a previous
-      // failure left "CAMERA OFFLINE" on it.
       const txt = taken.querySelector('.cam-taken-text');
       if (txt) txt.textContent = 'STREAM TAKEN';
       taken.style.display = 'none';
     }
+
+    // Audit finding Camera L-3 2026-05-15: show a CONNECTING
+    // placeholder until the first frame arrives. img.onload fires
+    // on the first multipart payload chunk.
+    if (bg) bg.dataset.state = 'connecting';
+    img.onload = () => { if (bg) bg.dataset.state = 'live'; };
+
     img.src = _camBase() + `/camera/stream?t=${_camToken}&_=${Date.now()}`;
     img.style.display = 'block';
     if (bg) bg.style.display = 'none';
@@ -2823,7 +2865,11 @@ const KBD_IDS = {
 };
 
 document.addEventListener('keydown', e => {
+  // Audit finding Joystick L-1 2026-05-15: also skip contenteditable
+  // elements (none on Drive today, but the choreo editor uses them
+  // for inline label edit). Future-proofing.
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.target.isContentEditable) return;
   // VESC test mode captures keys when active
   if (vescTest.onKey(e.code, true)) return;
   // Audit finding Drive UX H-3 2026-05-15: don't accumulate _keys[]
@@ -6250,6 +6296,19 @@ class StatusPoller {
     // E-STOP overlay — sync from server state (survives page reload)
     if (data.estop_active !== undefined && data.estop_active !== _estopTripped)
       _setEstopUI(data.estop_active);
+
+    // Audit finding Safety L-5 2026-05-15: surface stow_in_progress
+    // on the E-STOP button text. While the safe-home is mid-stow,
+    // the button shows STOWING… so the operator doesn't think reset
+    // succeeded fully and try to drive (which 503s during stow).
+    const estopTxt = el('estop-toggle-text');
+    if (estopTxt) {
+      if (data.stow_in_progress) {
+        estopTxt.textContent = 'STOWING…';
+      } else if (!_estopTripped && estopTxt.textContent === 'STOWING…') {
+        estopTxt.textContent = 'EMERGENCY STOP';
+      }
+    }
 
     // Drive-tab shortcut indicators — turn buttons green while the
     // matching choreo/sound is actually playing, revert when done.

@@ -207,6 +207,9 @@ class BTControllerDriver:
             'bt_gamepad_type':      self._cfg.get('gamepad_type', 'ps'),
             'bt_inactivity_timeout': int(self._cfg.get('inactivity_timeout', 30)),
             'bt_rssi':               self._rssi,
+            # Audit finding BT M-1 2026-05-15: surface the inactivity
+            # pause state so the UI can warn the operator.
+            'bt_inactivity_pause':  bool(getattr(self, '_inactivity_pause', False)),
         }
 
     # ------------------------------------------------------------------
@@ -255,21 +258,9 @@ class BTControllerDriver:
     # Read loop
     # ------------------------------------------------------------------
 
-    def _find_hidraw(self, dev) -> str | None:
-        """Find the /dev/hidrawN path corresponding to this evdev device."""
-        import glob as _glob, os as _os
-        vid = f'{dev.info.vendor:04x}'
-        pid = f'{dev.info.product:04x}'
-        for hr_sys in sorted(_glob.glob('/sys/class/hidraw/hidraw*')):
-            try:
-                uevent = open(_os.path.join(hr_sys, 'device', 'uevent')).read().lower()
-                if vid in uevent and pid in uevent:
-                    name = _os.path.basename(hr_sys)
-                    return f'/dev/{name}'
-            except Exception:
-                pass
-        hids = sorted(_glob.glob('/dev/hidraw*'))
-        return hids[0] if hids else None
+    # Audit finding BT L-1 2026-05-15: _find_hidraw was leftover dead
+    # code from an abandoned RSSI-via-hidraw attempt. Removed — RSSI
+    # now polled via _hw_poll_loop using bluetoothctl info <MAC>.
 
     def _poll_loop(self) -> None:
         try:
@@ -825,3 +816,13 @@ class BTControllerDriver:
                 if self._drive_active or self._dome_active:
                     log.info(f"BT inactivity >{timeout:.0f}s — stopping movement")
                     self._stop_motion()
+                    # Audit finding BT M-1 2026-05-15: surface the
+                    # event so the operator's UI can show "BT idle".
+                    # Was logging only — operator saw "BT connected"
+                    # pill but the robot quietly ignored input.
+                    self._inactivity_pause = True
+            else:
+                # Resume — clear the pause flag so the UI reverts.
+                if getattr(self, '_inactivity_pause', False):
+                    log.info("BT input resumed after inactivity")
+                    self._inactivity_pause = False

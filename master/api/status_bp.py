@@ -360,6 +360,12 @@ def get_status():
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
         'estop_active':      reg.estop_active,
+        # Audit finding Safety L-5 2026-05-15: surface stow_in_progress
+        # so the frontend can swap the E-STOP button text to
+        # 'STOWING…' during the ~3s safe-home window. Without this, the
+        # button flips back to 'EMERGENCY STOP' immediately on Reset
+        # while servos are still slewing — operator confusion.
+        'stow_in_progress':  bool(getattr(reg, 'stow_in_progress', False)),
         'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
         'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),

@@ -23,6 +23,11 @@ log = logging.getLogger(__name__)
 
 _lock         = threading.Lock()
 _active_token = 0
+# Audit finding Camera M-2 2026-05-15: bounded concurrent stream
+# count. 8 covers any realistic 2-3 tablet + spare reconnect scenario.
+_MAX_ACTIVE_STREAMS = 8
+_active_streams = 0
+_streams_lock   = threading.Lock()
 
 _ENV_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'camera.env')
 
@@ -199,45 +204,57 @@ def camera_stream():
     if my_token != _active_token or my_token < 1:
         return jsonify({'error': 'No active token — call POST /camera/take first'}), 403
 
+    # Audit finding Camera M-2 2026-05-15: cap concurrent generate()
+    # instances. Token-eviction stops the previous viewer's stream on
+    # the next mjpg_streamer chunk (~33ms at 30fps), but during rapid
+    # reconnects N upstreams can briefly coexist. Cap protects against
+    # rogue clients holding sockets open.
+    global _active_streams
+    if _active_streams >= _MAX_ACTIVE_STREAMS:
+        log.warning("Camera stream cap reached (%d)", _active_streams)
+        return jsonify({'error': 'too many active streams'}), 503
+
     try:
-        # B-265 (remaining tabs audit 2026-05-15): drop timeout 5s→2s.
-        # MJPG_URL is localhost — a 2s timeout still covers a healthy
-        # mjpg_streamer cold-start. Going beyond that meant a wedged
-        # service tied up Flask worker threads for 5s × N concurrent
-        # clients during reconnects.
         upstream = _requests.get(_mjpg_url(), stream=True, timeout=2)
         content_type = upstream.headers.get(
             'Content-Type',
             'multipart/x-mixed-replace; boundary=boundarydonotcross'
         )
     except _requests.exceptions.ConnectionError:
-        log.warning("Camera not reachable at %s", MJPG_URL)
+        log.warning("Camera not reachable at %s", _mjpg_url())
         return jsonify({'error': 'Camera not available'}), 503
-    except Exception as e:
+    except _requests.exceptions.RequestException as e:
+        # Audit finding Camera L-5 2026-05-15: narrowed from bare
+        # Exception to RequestException — actual transport errors get
+        # caught here, but a programming bug (e.g. AttributeError)
+        # surfaces in journalctl instead of being swallowed.
         log.warning("Camera connect error: %s", e)
         return jsonify({'error': 'Camera error'}), 503
 
+    # Increment active stream count under the dedicated lock.
+    # (global _active_streams already declared above for the cap check.)
+    with _streams_lock:
+        _active_streams += 1
+
     def generate():
-        # B-209 (remaining tabs audit 2026-05-15): always close the
-        # upstream connection on exit (success, eviction, or exception).
-        # Previously the upstream `requests.Response` leaked when the
-        # client disconnected mid-stream — `iter_content` would raise,
-        # the bare-except swallowed it, but the underlying TCP socket
-        # to mjpg_streamer stayed open until GC. Heavy churn (multiple
-        # tablets reconnecting) exhausted the local-port pool over time.
+        global _active_streams
         try:
             for chunk in upstream.iter_content(chunk_size=8192):
                 if _active_token != my_token:
-                    # Another client claimed the slot — stop this stream
                     break
                 yield chunk
-        except Exception as e:
+        except (_requests.exceptions.RequestException, OSError) as e:
+            # Audit finding Camera L-5 (sibling): narrow exception in
+            # the streaming loop too. Bare Exception used to swallow
+            # all errors silently; now non-transport bugs surface.
             log.warning("Camera stream error: %s", e)
         finally:
             try:
                 upstream.close()
-            except Exception:
+            except OSError:
                 pass
+            with _streams_lock:
+                _active_streams -= 1
 
     return Response(generate(), mimetype=content_type)
 

@@ -194,8 +194,16 @@ def _btctl(*args, timeout=8) -> tuple[bool, str]:
     shape here too — fails fast in dev with a clear error.
     """
     if args and len(args) >= 2 and args[0] in _BTCTL_MAC_VERBS:
-        if not _BT_MAC_RE.match(str(args[1]).upper()):
+        # Audit finding BT M-5 2026-05-15: also normalize the args
+        # list so subprocess receives the upper-cased MAC. bluetoothctl
+        # is permissive on case but some versions return "Device not
+        # found" for lowercase. Tuple→list conversion is cheap.
+        mac_upper = str(args[1]).upper()
+        if not _BT_MAC_RE.match(mac_upper):
             return False, f'_btctl: invalid MAC for verb {args[0]!r}: {args[1]!r}'
+        args = list(args)
+        args[1] = mac_upper
+        args = tuple(args)
     try:
         r = subprocess.run(
             ['bluetoothctl', '--', *args],
