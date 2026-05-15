@@ -48,6 +48,7 @@ import threading
 import time
 
 from flask import Blueprint, request, jsonify
+from master.api._admin_auth import require_admin
 import master.registry as reg
 
 # ── Internal scan state ───────────────────────────────────────────
@@ -69,6 +70,7 @@ def bt_status():
 
 
 @bt_bp.post('/enable')
+@require_admin
 def bt_enable():
     body    = request.get_json(silent=True) or {}
     enabled = bool(body.get('enabled', True))
@@ -78,6 +80,7 @@ def bt_enable():
 
 
 @bt_bp.post('/config')
+@require_admin
 def bt_config():
     body = request.get_json(silent=True) or {}
     if not reg.bt_ctrl:
@@ -193,6 +196,7 @@ def _scan_worker(duration: int):
 
 
 @bt_bp.post('/scan/start')
+@require_admin
 def bt_scan_start():
     """Starts a 15-second Bluetooth scan."""
     global _scan_active, _scan_devices
@@ -219,6 +223,7 @@ def bt_scan_devices():
 
 
 @bt_bp.post('/pair')
+@require_admin
 def bt_pair():
     """Pair + trust + connect a BT device by MAC address."""
     body    = request.get_json(silent=True) or {}
@@ -236,6 +241,7 @@ def bt_pair():
 
 
 @bt_bp.post('/unpair')
+@require_admin
 def bt_unpair():
     """Removes a paired BT device."""
     body    = request.get_json(silent=True) or {}

@@ -47,6 +47,7 @@ import subprocess
 import threading
 import time as _time
 from flask import Blueprint, request, jsonify
+from master.api._admin_auth import require_admin
 import master.registry as reg
 from master.app_watchdog import app_watchdog
 from master.vesc_safety import is_drive_safe
@@ -353,6 +354,7 @@ def get_version():
 
 
 @status_bp.post('/system/update')
+@require_admin
 def system_update():
     """Forces git pull + rsync Slave + reboot Slave (same as the dome button)."""
     if not reg.deploy:
@@ -363,6 +365,7 @@ def system_update():
 
 
 @status_bp.post('/lock/set')
+@require_admin
 def lock_set():
     """Sets the lock mode: 0=Normal, 1=Kids, 2=ChildLock."""
     body = request.get_json(silent=True) or {}
@@ -376,6 +379,7 @@ def lock_set():
 
 
 @status_bp.post('/system/rollback')
+@require_admin
 def system_rollback():
     """Rolls back to the previous git commit + rsync Slave + reboot Slave."""
     if not reg.deploy:
@@ -386,6 +390,7 @@ def system_rollback():
 
 
 @status_bp.post('/system/resync_slave')
+@require_admin
 def system_resync_slave():
     """
     Rsync + service install + restart Slave only.
@@ -401,6 +406,7 @@ def system_resync_slave():
 
 
 @status_bp.post('/system/reboot')
+@require_admin
 def system_reboot():
     """Reboots the Master (dome Pi)."""
     threading.Thread(
@@ -411,6 +417,7 @@ def system_reboot():
 
 
 @status_bp.post('/system/reboot_slave')
+@require_admin
 def system_reboot_slave():
     """Sends a reboot command to the Slave via UART."""
     if reg.uart:
@@ -420,6 +427,7 @@ def system_reboot_slave():
 
 
 @status_bp.post('/system/reboot_both')
+@require_admin
 def system_reboot_both():
     """Reboots Slave first (via UART), then Master after a short delay."""
     if reg.uart:
@@ -433,6 +441,7 @@ def system_reboot_both():
 
 
 @status_bp.post('/system/shutdown_slave')
+@require_admin
 def system_shutdown_slave():
     """Sends a shutdown command to the Slave via UART."""
     if reg.uart:
@@ -442,6 +451,7 @@ def system_shutdown_slave():
 
 
 @status_bp.post('/system/shutdown_both')
+@require_admin
 def system_shutdown_both():
     """Shuts down Slave first (via UART), then Master after a short delay."""
     if reg.uart:
@@ -455,6 +465,7 @@ def system_shutdown_both():
 
 
 @status_bp.post('/system/shutdown')
+@require_admin
 def system_shutdown():
     """Shuts down the Master."""
     threading.Thread(

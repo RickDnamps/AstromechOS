@@ -15,6 +15,7 @@ import threading
 import logging
 import requests as _requests
 from flask import Blueprint, Response, jsonify, request
+from master.api._admin_auth import require_admin
 
 camera_bp = Blueprint('camera', __name__)
 log = logging.getLogger(__name__)
@@ -132,6 +133,7 @@ def camera_config_get():
 
 
 @camera_bp.post('/camera/config')
+@require_admin
 def camera_config_set():
     """
     Saves camera settings and restarts astromech-camera.service.

@@ -39,8 +39,13 @@ import os
 import time
 import configparser
 from flask import Blueprint, request, jsonify
+from master.api._admin_auth import require_admin
 import master.registry as reg
 from master.config.config_loader import write_cfg_atomic
+# B-48 (audit 2026-05-15): share settings_bp's write lock so concurrent
+# saves of /behavior/config and /settings/config can't lose data via
+# RMW interleave on local.cfg.
+from master.api.settings_bp import _cfg_write_lock
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +62,7 @@ def _get_cfg() -> configparser.ConfigParser:
 
 
 @behavior_bp.post('/alive')
+@require_admin
 def set_alive():
     """Toggle ALIVE mode on or off."""
     data = request.get_json(silent=True) or {}
@@ -90,40 +96,48 @@ def get_status():
 
 
 @behavior_bp.post('/config')
+@require_admin
 def save_config():
-    """Save full behavior configuration to local.cfg."""
+    """Save full behavior configuration to local.cfg.
+
+    B-48 (audit 2026-05-15): the entire read-modify-write cycle runs
+    under settings_bp._cfg_write_lock so a concurrent /settings/config
+    POST can't load the same baseline, mutate independently, and lose
+    one side's keys at the os.replace step.
+    """
     data = request.get_json(silent=True) or {}
-    parser = _get_cfg()
-    if not parser.has_section('behavior'):
-        parser.add_section('behavior')
+    with _cfg_write_lock:
+        parser = _get_cfg()
+        if not parser.has_section('behavior'):
+            parser.add_section('behavior')
 
-    def _set(key, value):
-        parser.set('behavior', key, str(value))
+        def _set(key, value):
+            parser.set('behavior', key, str(value))
 
-    if 'startup_enabled'     in data: _set('startup_enabled',     'true' if data['startup_enabled'] else 'false')
-    if 'startup_delay'       in data: _set('startup_delay',       str(int(data['startup_delay'])))
-    if 'startup_choreo'      in data: _set('startup_choreo',      str(data['startup_choreo']))
-    if 'alive_enabled'       in data: _set('alive_enabled',       'true' if data['alive_enabled'] else 'false')
-    if 'idle_timeout_min'    in data: _set('idle_timeout_min',    str(int(data['idle_timeout_min'])))
-    if 'idle_mode'           in data: _set('idle_mode',           str(data['idle_mode']))
-    if 'idle_audio_category' in data: _set('idle_audio_category', str(data['idle_audio_category']))
-    if 'idle_choreo_list'    in data:
-        clist = data['idle_choreo_list']
-        if isinstance(clist, list):
-            _set('idle_choreo_list', ','.join(clist))
-        else:
-            _set('idle_choreo_list', str(clist))
-    if 'dome_auto_on_alive'  in data: _set('dome_auto_on_alive',  'true' if data['dome_auto_on_alive'] else 'false')
+        if 'startup_enabled'     in data: _set('startup_enabled',     'true' if data['startup_enabled'] else 'false')
+        if 'startup_delay'       in data: _set('startup_delay',       str(int(data['startup_delay'])))
+        if 'startup_choreo'      in data: _set('startup_choreo',      str(data['startup_choreo']))
+        if 'alive_enabled'       in data: _set('alive_enabled',       'true' if data['alive_enabled'] else 'false')
+        if 'idle_timeout_min'    in data: _set('idle_timeout_min',    str(int(data['idle_timeout_min'])))
+        if 'idle_mode'           in data: _set('idle_mode',           str(data['idle_mode']))
+        if 'idle_audio_category' in data: _set('idle_audio_category', str(data['idle_audio_category']))
+        if 'idle_choreo_list'    in data:
+            clist = data['idle_choreo_list']
+            if isinstance(clist, list):
+                _set('idle_choreo_list', ','.join(clist))
+            else:
+                _set('idle_choreo_list', str(clist))
+        if 'dome_auto_on_alive'  in data: _set('dome_auto_on_alive',  'true' if data['dome_auto_on_alive'] else 'false')
 
-    try:
-        cfg_path = os.path.normpath(_CFG_PATH)
-        write_cfg_atomic(parser, cfg_path)
-        # Update in-memory config on the engine if available
-        be = reg.behavior_engine
-        if be:
-            be._cfg.read(os.path.normpath(_CFG_PATH))
-        log.info("Behavior config saved")
-        return jsonify({'ok': True})
-    except Exception as e:
-        log.exception("Failed to save behavior config")
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        try:
+            cfg_path = os.path.normpath(_CFG_PATH)
+            write_cfg_atomic(parser, cfg_path)
+            # Update in-memory config on the engine if available
+            be = reg.behavior_engine
+            if be:
+                be._cfg.read(os.path.normpath(_CFG_PATH))
+            log.info("Behavior config saved")
+            return jsonify({'ok': True})
+        except Exception as e:
+            log.exception("Failed to save behavior config")
+            return jsonify({'ok': False, 'error': str(e)}), 500

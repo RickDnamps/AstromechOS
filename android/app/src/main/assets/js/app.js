@@ -386,10 +386,17 @@ function _renderThemePicker() {
     btn.className = 'theme-btn' + (id === _activeTheme ? ' active' : '');
     btn.dataset.theme = id;
     btn.onclick = () => applyTheme(id);
-    const swatchStyle = theme.light
+    // B-44 (audit 2026-05-15): theme labels for built-ins are
+    // constants — but the same render code path is used for custom
+    // themes (line below) where the label comes from operator input
+    // stored in localStorage. Build via DOM so a malicious or
+    // accidentally-pasted HTML-shaped label can't escape.
+    const sw = document.createElement('span');
+    sw.className = 'theme-swatch';
+    sw.style.cssText = theme.light
       ? `background:linear-gradient(135deg,#ffffff 50%,${theme.swatch} 50%);border-color:${theme.swatch}`
       : `background:${theme.swatch}`;
-    btn.innerHTML = `<span class="theme-swatch" style="${swatchStyle}"></span>${theme.label}`;
+    btn.append(sw, document.createTextNode(theme.label || ''));
     grid.appendChild(btn);
   });
   _loadCustomThemes().forEach(t => {
@@ -399,7 +406,12 @@ function _renderThemePicker() {
     btn.className = 'theme-btn' + (t.id === _activeTheme ? ' active' : '');
     btn.dataset.theme = t.id;
     btn.onclick = () => openThemeEditor(t.id);
-    btn.innerHTML = `<span class="theme-swatch" style="background:${t.swatch}"></span>${t.label}`;
+    // B-44 mirror — custom theme labels are the real XSS sink. DOM
+    // build with textContent for the label.
+    const csw = document.createElement('span');
+    csw.className = 'theme-swatch';
+    csw.style.cssText = `background:${t.swatch}`;
+    btn.append(csw, document.createTextNode(t.label || ''));
     const editBtn = document.createElement('button');
     editBtn.className = 'theme-btn-edit';
     editBtn.title = 'Edit';
@@ -5228,12 +5240,32 @@ const btPairing = {
       el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— No devices detected —</div>';
       return;
     }
-    el2.innerHTML = list.map(d => `
-      <div class="bt-pair-row">
-        <span class="bt-pair-name">${d.name}</span>
-        <span class="bt-pair-addr">${d.address}</span>
-        <button class="btn btn-active btn-xs" onclick="btPairing.pair('${d.address}','${d.name.replace(/'/g,'&apos;')}')">PAIR</button>
-      </div>`).join('');
+    // B-42 (audit 2026-05-15): bluetoothctl reports raw advertised BT
+    // device names — an attacker in range can broadcast a name that
+    // breaks out of the inline-onclick single quotes (escapeHtml
+    // doesn't escape `'`). Build via createElement + dataset +
+    // addEventListener so the name never reaches an HTML interpolation
+    // context. address/name flow through dataset and the handler reads
+    // them via target.closest().
+    el2.replaceChildren();
+    list.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'bt-pair-row';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'bt-pair-name';
+      nameSpan.textContent = d.name || '';
+      const addrSpan = document.createElement('span');
+      addrSpan.className = 'bt-pair-addr';
+      addrSpan.textContent = d.address || '';
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-active btn-xs';
+      btn.textContent = 'PAIR';
+      btn.dataset.addr = d.address || '';
+      btn.dataset.name = d.name || '';
+      btn.addEventListener('click', () => this.pair(btn.dataset.addr, btn.dataset.name));
+      row.append(nameSpan, addrSpan, btn);
+      el2.appendChild(row);
+    });
   },
 
   _renderPaired(list) {
@@ -5242,12 +5274,25 @@ const btPairing = {
       el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— No paired controller —</div>';
       return;
     }
-    el2.innerHTML = list.map(d => `
-      <div class="bt-pair-row">
-        <span class="bt-pair-name">${d.name}</span>
-        <span class="bt-pair-addr">${d.address}</span>
-        <button class="btn btn-xs" onclick="btPairing.unpair('${d.address}')">REMOVE</button>
-      </div>`).join('');
+    // B-42 mirror — paired list, same DOM-safe construction.
+    el2.replaceChildren();
+    list.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'bt-pair-row';
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'bt-pair-name';
+      nameSpan.textContent = d.name || '';
+      const addrSpan = document.createElement('span');
+      addrSpan.className = 'bt-pair-addr';
+      addrSpan.textContent = d.address || '';
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-xs';
+      btn.textContent = 'REMOVE';
+      btn.dataset.addr = d.address || '';
+      btn.addEventListener('click', () => this.unpair(btn.dataset.addr));
+      row.append(nameSpan, addrSpan, btn);
+      el2.appendChild(row);
+    });
   },
 
   pair(address, name) {
@@ -5409,7 +5454,16 @@ const cockpitPanel = {
   },
 
   _svcRow(label, cls, val) {
-    return `<div class="cockpit-row"><span class="cockpit-row-lbl">${label}</span><span class="cockpit-row-val cockpit-${cls}">${val}</span></div>`;
+    // B-40 (audit 2026-05-15): `label` includes user-supplied
+    // master_location / slave_location strings (written via
+    // /settings/robot_locations, now admin-gated by B-10 but still
+    // arbitrary text up to 20 chars). Escape both label AND val so a
+    // malicious location like `<img src=x onerror=…>` renders as
+    // text. `cls` is from a fixed allowlist (ok/warn/err/dim) and
+    // doesn't need escaping. The `val` strings here are all internal
+    // constants + numeric ids today but escape them anyway as
+    // defence-in-depth — a future code path could feed user data in.
+    return `<div class="cockpit-row"><span class="cockpit-row-lbl">${escapeHtml(label)}</span><span class="cockpit-row-val cockpit-${cls}">${escapeHtml(val)}</span></div>`;
   },
 
   _updateServices(data) {
@@ -6167,24 +6221,66 @@ const btSpeaker = {
     const volRow = el('btspk-vol-row');
     if (volRow) volRow.style.display = connected ? 'flex' : 'none';
 
-    let html = '';
-    for (const dev of (d.paired || []))     html += this._row(dev, true);
-    for (const dev of (d.discovered || [])) html += this._row(dev, false);
-    if (!html) html = '<div style="color:var(--txt-dim);font-size:11px;padding:4px 0">— No devices —</div>';
+    // B-43: _row now returns DOM nodes (not HTML strings) so dev.mac /
+    // dev.name never enter an interpolation context. Append them.
     const list = el('btspk-device-list');
-    if (list) list.innerHTML = html;
+    if (!list) return;
+    list.replaceChildren();
+    let any = false;
+    for (const dev of (d.paired || []))     { list.appendChild(this._row(dev, true));  any = true; }
+    for (const dev of (d.discovered || [])) { list.appendChild(this._row(dev, false)); any = true; }
+    if (!any) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:var(--txt-dim);font-size:11px;padding:4px 0';
+      empty.textContent = '— No devices —';
+      list.appendChild(empty);
+    }
   },
 
   _row(dev, isPaired) {
-    const name = escapeHtml(dev.name || dev.mac);
-    const mac  = escapeHtml(dev.mac);
-    const dot  = dev.connected ? '<span style="color:#5cb85c;font-size:10px">●</span> ' : '';
-    let btns = '';
-    if (!isPaired)   btns += `<button class="btn btn-xs btn-active" onclick="btSpeaker._act('/audio/bt/pair','${dev.mac}')">PAIR</button>`;
-    if (isPaired && !dev.connected) btns += `<button class="btn btn-xs btn-active" onclick="btSpeaker._act('/audio/bt/connect','${dev.mac}')">CONNECT</button>`;
-    if (dev.connected)              btns += `<button class="btn btn-xs btn-warn" onclick="btSpeaker._act('/audio/bt/disconnect','${dev.mac}')">DISCONNECT</button>`;
-    if (isPaired)                   btns += `<button class="btn btn-xs" onclick="btSpeaker._act('/audio/bt/remove','${dev.mac}')">✕</button>`;
-    return `<div class="bt-pair-row">${dot}<span class="bt-pair-name">${name}</span><span class="bt-pair-addr">${mac}</span><div style="display:flex;gap:4px;margin-left:auto">${btns}</div></div>`;
+    // B-43 (audit 2026-05-15): build the row via DOM so dev.mac and
+    // dev.name never reach an inline-onclick interpolation (escapeHtml
+    // doesn't escape `'`, so a crafted MAC with a quote breaks out).
+    // The row is returned as outerHTML for the caller's join() but we
+    // attach listeners directly to the in-progress DOM nodes BEFORE
+    // serialising — actually we can't, because the caller does
+    // .innerHTML = '<rows>'. Switch the caller to appendChild too.
+    const row = document.createElement('div');
+    row.className = 'bt-pair-row';
+    if (dev.connected) {
+      const dot = document.createElement('span');
+      dot.style.cssText = 'color:#5cb85c;font-size:10px';
+      dot.textContent = '● ';
+      row.appendChild(dot);
+    }
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'bt-pair-name';
+    nameSpan.textContent = dev.name || dev.mac || '';
+    row.appendChild(nameSpan);
+    const macSpan = document.createElement('span');
+    macSpan.className = 'bt-pair-addr';
+    macSpan.textContent = dev.mac || '';
+    row.appendChild(macSpan);
+    const btnWrap = document.createElement('div');
+    btnWrap.style.cssText = 'display:flex;gap:4px;margin-left:auto';
+    const mkBtn = (cls, txt, endpoint) => {
+      const b = document.createElement('button');
+      b.className = cls;
+      b.textContent = txt;
+      b.dataset.mac = dev.mac || '';
+      b.addEventListener('click', () => this._act(endpoint, b.dataset.mac));
+      return b;
+    };
+    if (!isPaired)
+      btnWrap.appendChild(mkBtn('btn btn-xs btn-active', 'PAIR', '/audio/bt/pair'));
+    if (isPaired && !dev.connected)
+      btnWrap.appendChild(mkBtn('btn btn-xs btn-active', 'CONNECT', '/audio/bt/connect'));
+    if (dev.connected)
+      btnWrap.appendChild(mkBtn('btn btn-xs btn-warn', 'DISCONNECT', '/audio/bt/disconnect'));
+    if (isPaired)
+      btnWrap.appendChild(mkBtn('btn btn-xs', '✕', '/audio/bt/remove'));
+    row.appendChild(btnWrap);
+    return row;
   },
 
   async _act(endpoint, mac) {
@@ -6301,10 +6397,17 @@ const armsConfig = {
     if (this._count === 0) { container.innerHTML = ''; return; }
     const allBodyServos = this._bodyServos || Array.from({length:16}, (_,j) => `Servo_S${j}`);
     const panelServos   = allBodyServos.slice(0, 16);
+    // B-41 (audit 2026-05-15): the servo label comes from operator
+    // input via /servo/settings (B-36 now admin-gated, B-68 still
+    // has no character filter). Escape both id and text so a
+    // malicious `<img src=x onerror=…>` label can't break out of
+    // the <option> body. id is regex-safe today (Servo_S\d+) but
+    // belt-and-suspenders.
     const mkOpts = (list, selected) => list.map(id => {
       const lbl  = this._labels[id] || id;
       const text = lbl !== id ? `${lbl} (${id})` : id;
-      return `<option value="${id}"${id === selected ? ' selected' : ''}>${text}</option>`;
+      const sel  = id === selected ? ' selected' : '';
+      return `<option value="${escapeHtml(id)}"${sel}>${escapeHtml(text)}</option>`;
     }).join('');
     let html = `<div class="arms-grid">
       <div class="arms-gh">#</div>
@@ -6617,9 +6720,26 @@ function _applyRobotIcon(icon) {
       wrap.innerHTML = _R2_LOGO_SVG;
     } else if (icon.startsWith('img:')) {
       const fname = icon.slice(4);
-      wrap.innerHTML = `<img class="brand-icon-img" src="/icons/${encodeURIComponent(fname)}" alt="icon">`;
+      // B-39 (audit 2026-05-15): img path is fine but build via DOM so
+      // a future change can't accidentally re-introduce an interpolation
+      // sink. img.src setter URL-encodes for us.
+      wrap.replaceChildren();
+      const img = document.createElement('img');
+      img.className = 'brand-icon-img';
+      img.src = '/icons/' + encodeURIComponent(fname);
+      img.alt = 'icon';
+      wrap.appendChild(img);
     } else {
-      wrap.innerHTML = `<span class="brand-icon-emoji">${icon}</span>`;
+      // B-39 (audit 2026-05-15): the emoji branch previously dropped
+      // `icon` straight into innerHTML. Server-side (B-9) had no
+      // validation, so any LAN client could POST /settings/robot_icon
+      // with `<img src=x onerror=…>` and trigger XSS on every
+      // dashboard load. textContent neutralises any payload.
+      wrap.replaceChildren();
+      const span = document.createElement('span');
+      span.className = 'brand-icon-emoji';
+      span.textContent = icon;
+      wrap.appendChild(span);
     }
   }
   // Highlight selected button in picker

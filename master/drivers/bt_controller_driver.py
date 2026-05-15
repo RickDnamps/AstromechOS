@@ -100,12 +100,20 @@ def _load_cfg() -> dict:
 
 
 def save_cfg(cfg: dict) -> bool:
+    # B-50 (audit 2026-05-15): atomic write — tmp + os.replace + fsync.
+    # Non-atomic open(w) could leave bt_config.json truncated on crash;
+    # _load_cfg's bare-except would then return defaults at next boot,
+    # silently losing the operator's button mappings.
     try:
         os.makedirs(os.path.dirname(_CFG_PATH), exist_ok=True)
-        with open(_CFG_PATH, 'w', encoding='utf-8') as f:
+        tmp = _CFG_PATH + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, _CFG_PATH)
         return True
-    except Exception as e:
+    except OSError as e:
         log.error(f"Error saving bt_config: {e}")
         return False
 

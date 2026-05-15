@@ -46,6 +46,7 @@ import re
 import threading
 from pathlib import Path
 from flask import Blueprint, request, jsonify, send_file, abort
+from master.api._admin_auth import require_admin
 import requests as _requests
 import master.registry as reg
 
@@ -500,6 +501,7 @@ def get_volume():
 
 
 @audio_bp.post('/volume')
+@require_admin
 def set_volume():
     """Sets the volume. Body: {"volume": 75}  (0-100)
     L-2: persists to local.cfg so the slider position survives a Master
@@ -568,6 +570,7 @@ def _next_available_stem(base: str, cats: dict) -> str:
 
 
 @audio_bp.post('/upload')
+@require_admin
 def upload_sound():
     """Upload an MP3 to a category.
     Form fields: file (MP3), category (str).
@@ -684,6 +687,7 @@ def upload_sound():
 
 
 @audio_bp.post('/category/create')
+@require_admin
 def create_category():
     """Create a new empty audio category. Body: {"name": "mycat"}"""
     body = request.get_json(silent=True) or {}
@@ -834,12 +838,14 @@ def bt_speaker_status():
 
 
 @audio_bp.post('/bt/scan')
+@require_admin
 def bt_speaker_scan():
     data, code = _slave_bt('/audio/bt/scan', 'POST')
     return jsonify(data), code
 
 
 @audio_bp.post('/bt/pair')
+@require_admin
 def bt_speaker_pair():
     body = request.get_json(silent=True) or {}
     data, code = _slave_bt('/audio/bt/pair', 'POST', body)
@@ -847,6 +853,7 @@ def bt_speaker_pair():
 
 
 @audio_bp.post('/bt/connect')
+@require_admin
 def bt_speaker_connect():
     body = request.get_json(silent=True) or {}
     data, code = _slave_bt('/audio/bt/connect', 'POST', body)
@@ -854,6 +861,7 @@ def bt_speaker_connect():
 
 
 @audio_bp.post('/bt/disconnect')
+@require_admin
 def bt_speaker_disconnect():
     body = request.get_json(silent=True) or {}
     data, code = _slave_bt('/audio/bt/disconnect', 'POST', body)
@@ -861,6 +869,7 @@ def bt_speaker_disconnect():
 
 
 @audio_bp.post('/bt/remove')
+@require_admin
 def bt_speaker_remove():
     body = request.get_json(silent=True) or {}
     data, code = _slave_bt('/audio/bt/remove', 'POST', body)
@@ -868,6 +877,7 @@ def bt_speaker_remove():
 
 
 @audio_bp.post('/bt/volume')
+@require_admin
 def bt_speaker_volume():
     body = request.get_json(silent=True) or {}
     data, code = _slave_bt('/audio/bt/volume', 'POST', body)

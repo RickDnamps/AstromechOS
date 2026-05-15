@@ -39,6 +39,9 @@ import logging
 import subprocess
 import configparser
 import os
+import time   # B-51: rsync_to_slave's retry loop calls time.sleep(backoff)
+              # but the module never imported time → NameError on first
+              # retry. Settings audit 2026-05-15.
 
 log = logging.getLogger(__name__)
 

@@ -71,8 +71,12 @@ import threading
 import time
 
 from flask import Blueprint, request, jsonify
+from master.api._admin_auth import require_admin
 import master.registry as reg
 from master.config.config_loader import write_cfg_atomic
+# B-49 (audit 2026-05-15): share settings_bp's write lock so concurrent
+# /servo/arms + /settings/config can't race on local.cfg RMW.
+from master.api.settings_bp import _cfg_write_lock
 
 servo_bp = Blueprint('servo', __name__, url_prefix='/servo')
 
@@ -487,6 +491,7 @@ def arms_config_get():
 
 
 @servo_bp.post('/arms')
+@require_admin
 def arms_config_save():
     import logging
     log = logging.getLogger(__name__)
@@ -499,26 +504,31 @@ def arms_config_save():
     # Snapshot previous config so we can revert labels for removed arms
     prev = _read_arms_cfg()
 
-    cfg = configparser.ConfigParser()
-    cfg.read(_LOCAL_CFG)
-    if not cfg.has_section('arms'):
-        cfg.add_section('arms')
-    cfg.set('arms', 'count', str(count))
-    new_servos, new_panels = [], []
-    for i in range(1, _ARM_COUNT_MAX + 1):
-        raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
-        raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
-        raw_delay = delays[i - 1] if i - 1 < len(delays) else _ARM_DEFAULT_DELAY
-        sv = raw_servo if raw_servo in BODY_SERVOS else ''
-        pn = raw_panel if raw_panel in BODY_SERVOS else ''
-        dl = round(max(0.1, min(5.0, float(raw_delay))), 2)
-        cfg.set('arms', f'arm_{i}',   sv)
-        cfg.set('arms', f'panel_{i}', pn)
-        cfg.set('arms', f'delay_{i}', str(dl))
-        new_servos.append(sv)
-        new_panels.append(pn)
-    os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
-    write_cfg_atomic(cfg, _LOCAL_CFG)
+    # B-49 (audit 2026-05-15): RMW under settings_bp._cfg_write_lock
+    # so a concurrent /settings/config (different blueprint, same
+    # local.cfg) can't load + mutate + write in between and lose one
+    # side's keys.
+    with _cfg_write_lock:
+        cfg = configparser.ConfigParser()
+        cfg.read(_LOCAL_CFG)
+        if not cfg.has_section('arms'):
+            cfg.add_section('arms')
+        cfg.set('arms', 'count', str(count))
+        new_servos, new_panels = [], []
+        for i in range(1, _ARM_COUNT_MAX + 1):
+            raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
+            raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
+            raw_delay = delays[i - 1] if i - 1 < len(delays) else _ARM_DEFAULT_DELAY
+            sv = raw_servo if raw_servo in BODY_SERVOS else ''
+            pn = raw_panel if raw_panel in BODY_SERVOS else ''
+            dl = round(max(0.1, min(5.0, float(raw_delay))), 2)
+            cfg.set('arms', f'arm_{i}',   sv)
+            cfg.set('arms', f'panel_{i}', pn)
+            cfg.set('arms', f'delay_{i}', str(dl))
+            new_servos.append(sv)
+            new_panels.append(pn)
+        os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
+        write_cfg_atomic(cfg, _LOCAL_CFG)
 
     # Auto-label servos in servo_angles.json to match their arm role.
     # Only overwrites if the current label doesn't already start with the expected prefix —
@@ -628,6 +638,7 @@ def servo_settings_get():
 
 
 @servo_bp.post('/settings')
+@require_admin
 def servo_settings_save():
     data   = request.get_json(silent=True) or {}
     panels = {}

@@ -42,6 +42,7 @@ import configparser
 import os
 import threading
 from flask import Blueprint, request, jsonify
+from master.api._admin_auth import require_admin
 import master.registry as reg
 from master.config.config_loader import write_cfg_atomic
 
@@ -122,6 +123,7 @@ def get_telemetry():
 
 
 @vesc_bp.post('/config')
+@require_admin
 def set_config():
     """Sets the power scale (0.1-1.0). Sent to Slave via UART VCFG:."""
     body = request.get_json(silent=True) or {}
@@ -150,6 +152,7 @@ def get_config():
 
 
 @vesc_bp.post('/bench_mode')
+@require_admin
 def set_bench_mode():
     """Enables/disables bench mode (bypasses VESC safety lock when no telem). Persisted to local.cfg."""
     body = request.get_json(silent=True) or {}
@@ -160,6 +163,7 @@ def set_bench_mode():
 
 
 @vesc_bp.post('/mode')
+@require_admin
 def set_mode():
     """Switches drive mode. Body: {"duty": true/false}. Not persisted — resets on reboot."""
     body = request.get_json(silent=True) or {}
@@ -171,6 +175,7 @@ def set_mode():
 
 
 @vesc_bp.post('/invert')
+@require_admin
 def invert_motor():
     """
     Sets motor direction. Body: {"side": "L", "state": true/false}.

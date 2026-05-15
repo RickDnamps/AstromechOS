@@ -44,6 +44,7 @@ import os
 import subprocess
 from flask import Blueprint, request, jsonify, send_from_directory
 from master.config.config_loader import write_cfg_atomic
+from master.api._admin_auth import require_admin
 
 settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
@@ -108,11 +109,13 @@ def _sync_slave_hat_cfg(**kwargs) -> None:
         for key, value in kwargs.items():
             slave_cfg.set('i2c_servo_hats', key, str(value))
         try:
+            # B-46 (audit 2026-05-15): atomic write — tmp + os.replace.
+            # Non-atomic `open(w)` could corrupt slave.cfg on crash and
+            # leave the Slave with a half-written config at next boot.
             os.makedirs(os.path.dirname(_SLAVE_CFG), exist_ok=True)
-            with open(_SLAVE_CFG, 'w') as f:
-                slave_cfg.write(f)
+            write_cfg_atomic(slave_cfg, _SLAVE_CFG)
             log.info("slave.cfg written: %s", kwargs)
-        except Exception as e:
+        except OSError as e:
             log.warning("Failed to write slave.cfg: %s", e)
         try:
             subprocess.run(['scp', _SLAVE_CFG, f'{_SLAVE_HOST}:{_SLAVE_CFG}'],
@@ -217,11 +220,11 @@ def _sync_audio_channels(channels: int) -> None:
         slave_cfg.add_section('audio')
     slave_cfg.set('audio', 'audio_channels', str(channels))
     try:
+        # B-47: atomic write — same hardening as B-46.
         os.makedirs(os.path.dirname(slave_cfg_path), exist_ok=True)
-        with open(slave_cfg_path, 'w') as f:
-            slave_cfg.write(f)
+        write_cfg_atomic(slave_cfg, slave_cfg_path)
         log.info("slave.cfg written: audio_channels=%d", channels)
-    except Exception as e:
+    except OSError as e:
         log.warning("Failed to write slave.cfg: %s", e)
 
     # SCP to Slave
@@ -345,6 +348,7 @@ def wifi_scan():
 
 
 @settings_bp.post('/settings/wifi')
+@require_admin
 def set_wifi():
     """Updates wlan1 credentials and attempts to connect."""
     data = request.get_json() or {}
@@ -353,6 +357,16 @@ def set_wifi():
 
     if not ssid:
         return jsonify({'error': 'SSID required'}), 400
+    # B-45 (audit 2026-05-15): argv passing avoids shell injection but
+    # nmcli treats leading '-' as an option flag. An SSID like
+    # '--auto-connect=no' would be parsed as nmcli args. Reject any
+    # SSID/password starting with `-` to be safe; real SSIDs never do.
+    if ssid.startswith('-') or (password and password.startswith('-')):
+        return jsonify({'error': 'SSID/password cannot start with "-"'}), 400
+    # B-57 also bites here — ConfigParser writes newlines verbatim; a
+    # SSID containing \n would inject a fake [section] on next read.
+    if any(c in ssid for c in '\n\r\x00') or any(c in password for c in '\n\r\x00'):
+        return jsonify({'error': 'SSID/password contains illegal control char'}), 400
 
     # Save to local.cfg
     _write_key('home_wifi', 'ssid', ssid)
@@ -385,6 +399,7 @@ def set_wifi():
 
 
 @settings_bp.post('/settings/hotspot')
+@require_admin
 def set_hotspot():
     """Updates hotspot credentials for wlan0 and restarts the hotspot."""
     data = request.get_json() or {}
@@ -419,6 +434,7 @@ def set_hotspot():
 
 
 @settings_bp.post('/settings/config')
+@require_admin
 def set_config():
     """Updates general parameters in local.cfg."""
     data = request.get_json() or {}
@@ -493,6 +509,7 @@ def set_config():
 
 
 @settings_bp.post('/settings/audio/profile/apply')
+@require_admin
 def apply_audio_profile():
     """Applies a saved volume profile immediately. Body: {"profile": "convention"}"""
     import master.registry as reg
@@ -526,6 +543,7 @@ def admin_verify():
 
 
 @settings_bp.post('/settings/admin/password')
+@require_admin
 def admin_change_password():
     """Changes the admin password. Body: {\"current\": \"...\", \"new\": \"...\"}"""
     data    = request.get_json() or {}
@@ -554,6 +572,7 @@ def list_icons():
 
 
 @settings_bp.post('/settings/icons/upload')
+@require_admin
 def upload_icon():
     """Uploads a new image to the icons/ folder. Multipart form: file=<image>."""
     if 'file' not in request.files:
@@ -575,6 +594,7 @@ def upload_icon():
 
 
 @settings_bp.post('/settings/icons/delete')
+@require_admin
 def delete_icon():
     """Deletes an icon file. Body: {\"filename\": \"foo.png\"}"""
     data = request.get_json() or {}
@@ -590,6 +610,7 @@ def delete_icon():
 
 
 @settings_bp.post('/settings/robot_icon')
+@require_admin
 def set_robot_icon():
     """Saves robot header icon to local.cfg. Body: {\"icon\": \"img:foo.png\"} or {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset."""
     data = request.get_json() or {}
@@ -599,6 +620,7 @@ def set_robot_icon():
 
 
 @settings_bp.post('/settings/robot_locations')
+@require_admin
 def set_robot_locations():
     """Saves master/slave display location names. Body: {\"master_location\":\"Dome\",\"slave_location\":\"Body\"}"""
     data   = request.get_json() or {}
@@ -610,6 +632,7 @@ def set_robot_locations():
 
 
 @settings_bp.post('/settings/robot_name')
+@require_admin
 def set_robot_name():
     """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""
     data = request.get_json() or {}
@@ -623,6 +646,7 @@ def set_robot_name():
 
 
 @settings_bp.post('/settings/lights')
+@require_admin
 def set_lights_backend():
     """Changes the lights driver at runtime (no reboot). Body: {\"backend\": \"astropixels\"}"""
     data    = request.get_json() or {}
