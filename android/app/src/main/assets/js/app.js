@@ -491,13 +491,17 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
     const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
     const url  = base + endpoint;
     const headers = { 'Content-Type': 'application/json' };
-    // Sequences-tab audit B-1 (2026-05-15): admin endpoints now require
+    // Sequences-tab audit B-1 (2026-05-15): admin endpoints require
     // an X-Admin-Pw header. AdminGuard remembers the password in memory
     // after a successful /settings/admin/verify and exposes it via
-    // .getToken(); we attach it transparently for any non-GET so admin
-    // operations still flow through the same api() helper without each
-    // call site needing to know.
-    if (method !== 'GET' && typeof adminGuard !== 'undefined') {
+    // .getToken(); we attach it transparently on EVERY request so
+    // admin operations and admin-protected reads (/diagnostics/logs,
+    // /diagnostics/uart_rtt — all GET methods) work without each call
+    // site needing to know. Non-admin endpoints ignore the header.
+    // Updated 2026-05-15 (Settings MEDIUM post-deploy fix): was only
+    // attaching on non-GET, which broke the diagnostics panel after
+    // B-64/B-66 made those reads admin-only.
+    if (typeof adminGuard !== 'undefined') {
       const tok = adminGuard.getToken && adminGuard.getToken();
       if (tok) headers['X-Admin-Pw'] = tok;
     }
