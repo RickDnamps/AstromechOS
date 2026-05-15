@@ -258,6 +258,7 @@ def camera_release():
     viewer. Now requires the caller to present their own token
     (the one /camera/take returned) OR be authenticated as admin.
     Without a matching token, refuses with 401."""
+    global _active_token   # need explicit global because we assign below
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     presented = body.get('token')
     admin_pw = request.headers.get('X-Admin-Pw', '')
