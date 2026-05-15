@@ -485,6 +485,13 @@ class ChoreoPlayer:
             self._arm_timers.clear()
         self._drive_fail_count = 0
         self._servo_pos.clear()
+        # Audit finding Player H-2 2026-05-15: clear _abort_reason so a
+        # transient abort from iteration N doesn't surface in status
+        # during iteration N+1 (state leak when looping). _stop_flag
+        # being set is sticky, so a real abort still terminates the
+        # loop — but the status field stops lying.
+        self._abort_reason = None
+        self._last_telem = None
 
     # ── Event queue ───────────────────────────────────────────────────────────
 
@@ -601,6 +608,22 @@ class ChoreoPlayer:
         t_start = time.monotonic()
 
         while not self._stop_flag.is_set():
+            # Defense-in-depth safety re-check at every loop iteration.
+            # Audit finding Player H-1 2026-05-15: the loop only checked
+            # _stop_flag, relying on /system/estop's handler to also call
+            # reg.choreo.stop(). If that wiring ever regresses, the
+            # choreo would keep dispatching servo / audio / light events
+            # during a freeze. Bail directly here too.
+            import master.registry as _reg
+            if getattr(_reg, 'estop_active', False):
+                self._abort_reason = 'estop_active'
+                log.warning("ChoreoPlayer: estop_active raised mid-playback — aborting")
+                break
+            if getattr(_reg, 'stow_in_progress', False):
+                self._abort_reason = 'stow_in_progress'
+                log.warning("ChoreoPlayer: stow_in_progress raised mid-playback — aborting")
+                break
+
             t_now = time.monotonic() - t_start
 
             # Fire all discrete events whose time has arrived

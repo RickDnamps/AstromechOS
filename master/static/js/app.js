@@ -540,6 +540,44 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
   }
 }
 
+// apiDetail — same wire pattern as api() but returns the full response
+// shape: {ok, status, data, error}. Use when the caller needs to
+// distinguish 401 (admin lock expired) from 409 (conflict) from 503
+// (busy) from 5xx (server bug) — choreo editor save/rename/play_failed
+// flows in particular. Audit finding (multiple) 2026-05-15: api()
+// collapses every non-2xx into `null`, which forced callers to fall
+// back to generic toasts.
+async function apiDetail(endpoint, method = 'GET', body = null, timeoutMs = 5000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+    const url  = base + endpoint;
+    const headers = { 'Content-Type': 'application/json' };
+    if (typeof adminGuard !== 'undefined') {
+      const tok = adminGuard.getToken && adminGuard.getToken();
+      if (tok) headers['X-Admin-Pw'] = tok;
+    }
+    const opts = { method, headers, signal: ctrl.signal };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    let data = null;
+    try { data = await res.json(); } catch {}
+    if (!res.ok) {
+      const err = (data && data.error) || `HTTP ${res.status}`;
+      console.warn(`API ${method} ${endpoint}: ${res.status} ${err}`);
+      return { ok: false, status: res.status, data, error: err };
+    }
+    return { ok: true, status: res.status, data, error: null };
+  } catch (e) {
+    const err = e.name === 'AbortError' ? 'timeout' : (e.message || String(e));
+    if (e.name !== 'AbortError') console.error(`API ${method} ${endpoint}:`, e);
+    return { ok: false, status: 0, data: null, error: err };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // F-6: single-in-flight slot for /motion/arcade and /motion/drive POSTs.
 // The joystick onMove fires at 60Hz; on a slow network these can stack up
 // in the browser's HTTP/1.1 queue and arrive out of order on the Pi. Worse,
@@ -1073,6 +1111,18 @@ function switchTab(tabId) {
   if (adminGuard.isProtected(tabId) && !adminGuard.unlocked) {
     adminGuard.showModal(tabId);
     return;
+  }
+
+  // Dirty-flag guard for tab switch. Audit finding Frontend H-3
+  // 2026-05-15: switching tabs away from the Choreo editor with
+  // unsaved changes silently discarded them. Confirm before leaving.
+  const currentTab = document.querySelector('.tab.active')?.dataset.tab;
+  if (currentTab === 'choreo' && tabId !== 'choreo'
+      && typeof choreoEditor !== 'undefined' && choreoEditor.hasUnsavedChanges
+      && choreoEditor.hasUnsavedChanges()) {
+    if (!confirm('Choreo editor has unsaved changes. Leave anyway and lose them?')) {
+      return;
+    }
   }
 
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
@@ -8052,9 +8102,19 @@ function startAppHeartbeat() {
   if (document.visibilityState === 'visible') _hbStart();
 
   // Emergency stop when the tab/app actually closes
-  window.addEventListener('beforeunload', () => {
+  window.addEventListener('beforeunload', (e) => {
     fetch(base() + '/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
     fetch(base() + '/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    // Audit finding Frontend H-3 2026-05-15: warn before leaving if
+    // the Choreo editor has unsaved changes. Most browsers ignore the
+    // custom string and show their own generic prompt, but the prompt
+    // itself appears as long as we call preventDefault + returnValue.
+    if (typeof choreoEditor !== 'undefined' && choreoEditor.hasUnsavedChanges
+        && choreoEditor.hasUnsavedChanges()) {
+      e.preventDefault();
+      e.returnValue = 'Choreo editor has unsaved changes.';
+      return e.returnValue;
+    }
   });
 }
 
@@ -8159,6 +8219,11 @@ const choreoEditor = (() => {
   let _pollTimer   = null;
   let _dirty       = false;
   let _existsOnDisk = false;  // true only after an explicit admin Save or loading an existing file
+  // Inspector audio-duration probe — SINGLE reused Audio instance
+  // (B-12 / audit Perf H-2 2026-05-15). _probeToken makes stale
+  // loadedmetadata callbacks from a previous probe ignorable.
+  let _probeAudio  = null;
+  let _probeToken  = 0;
   let _lanesWired   = false;
   let _paletteWired = false;
   // _globalsWired covers page-level listeners that should be installed once
@@ -9586,20 +9651,34 @@ const choreoEditor = (() => {
       _renderTrack('body_servos');
     }
     if (track !== 'audio' || field !== 'file' || !value) return;
-    // Auto-detect duration via an Audio element + /audio/file/<sound>
-    const audioEl = new Audio(`/audio/file/${encodeURIComponent(value)}`);
-    audioEl.addEventListener('loadedmetadata', () => {
-      if (audioEl.duration && isFinite(audioEl.duration)) {
-        const dur = Math.ceil(audioEl.duration * 10) / 10;
-        choreoEditor._setProp(track, idx, 'duration', dur);
-        _renderTrack(track);   // rebuild block — locks resize handle
-        _refreshLayout();
-        if (_selected && _selected.track === track && _selected.idx === idx)
-          _updatePropsPanel(track, idx);
-      }
-    });
-    audioEl.preload = 'metadata';
-    audioEl.load();
+    // Audit finding Perf H-2 2026-05-15: previously created a fresh
+    // `new Audio(...)` per filename change → 40+ orphan elements per
+    // typical "scrub through sounds" workflow, each holding the full
+    // MP3 in memory until GC. Per CLAUDE.md B-12 the audio board
+    // already uses a single reused instance — apply the same pattern
+    // here. Token guards against late `loadedmetadata` events from a
+    // previous probe (operator clicks fast).
+    if (!_probeAudio) {
+      _probeAudio = new Audio();
+      _probeAudio.preload = 'metadata';
+      _probeAudio.addEventListener('loadedmetadata', () => {
+        if (_probeAudio._token !== _probeToken) return;   // stale callback
+        if (_probeAudio.duration && isFinite(_probeAudio.duration)) {
+          const dur = Math.ceil(_probeAudio.duration * 10) / 10;
+          const ctx = _probeAudio._ctx || {};
+          choreoEditor._setProp(ctx.track, ctx.idx, 'duration', dur);
+          _renderTrack(ctx.track);
+          _refreshLayout();
+          if (_selected && _selected.track === ctx.track && _selected.idx === ctx.idx)
+            _updatePropsPanel(ctx.track, ctx.idx);
+        }
+      });
+    }
+    _probeToken = (_probeToken + 1) | 0;
+    _probeAudio._token = _probeToken;
+    _probeAudio._ctx = { track, idx };
+    _probeAudio.src = `/audio/file/${encodeURIComponent(value)}`;
+    _probeAudio.load();
   }
 
   function _validateAudioOverflow() {
@@ -9934,7 +10013,7 @@ const choreoEditor = (() => {
         sel.innerHTML = '<option value="">— select choreography —</option>' +
           _chorSelectOptions(names);
         if (_chor && _chor.meta && _chor.meta.name) sel.value = _chor.meta.name;
-        sel.onchange = () => this.load(sel.value);
+        sel.onchange = () => this._switchTo(sel.value);
       }
       // F-10: if a choreo is currently playing on the Pi (tab was opened
       // during playback, OR user switched away then back), resume polling
@@ -9947,6 +10026,30 @@ const choreoEditor = (() => {
           _startPolling();
         }
       } catch {}
+    },
+
+    // Exposed for switchTab() + beforeunload guards. Returns true if
+    // there are unsaved local edits that would be lost on navigation.
+    hasUnsavedChanges() {
+      return !!(_dirty && _chor && _chor.meta && _chor.meta.name);
+    },
+
+    // Dirty-flag guard for the chor-select dropdown. Audit finding
+    // Frontend H-3 2026-05-15: switching choreos via the dropdown
+    // silently discarded unsaved edits. Now confirms before swapping.
+    // load() itself doesn't run the check (it's also called from
+    // delete/save flows that have their own state-management) — only
+    // the dropdown path goes through _switchTo.
+    _switchTo(name) {
+      if (_dirty && _chor && _chor.meta && _chor.meta.name) {
+        if (!confirm(`"${_chor.meta.name}" has unsaved changes. Switch anyway and lose them?`)) {
+          // Revert the dropdown selection to the current choreo
+          const sel = document.getElementById('chor-select');
+          if (sel && _chor.meta.name) sel.value = _chor.meta.name;
+          return;
+        }
+      }
+      this.load(name);
     },
 
     async load(name) {
@@ -10051,7 +10154,7 @@ const choreoEditor = (() => {
       if (sel && names) {
         sel.innerHTML = '<option value="">— select choreography —</option>' +
           _chorSelectOptions(names);
-        sel.onchange = () => this.load(sel.value);
+        sel.onchange = () => this._switchTo(sel.value);
         if (names.length > 0) { sel.value = names[0].name || names[0]; await this.load(names[0].name || names[0]); }
       }
       toast(`Deleted: ${name}`, 'ok');
@@ -10066,8 +10169,16 @@ const choreoEditor = (() => {
       const oldName = _chor.meta.name;
       const newName = (prompt('New filename (without .chor):', oldName) || '').trim();
       if (!newName || newName === oldName) return;
-      const result = await api('/choreo/rename', 'POST', { old_name: oldName, new_name: newName });
-      if (!result || result.error) { toast(result?.error || 'Rename failed', 'error'); return; }
+      // apiDetail so we can surface 409 "already exists" + 401 "admin
+      // expired" + 503 separately. Was using api() which collapsed
+      // everything to null → generic "Rename failed".
+      const r = await apiDetail('/choreo/rename', 'POST', { old_name: oldName, new_name: newName });
+      if (!r.ok) {
+        const hint = r.status === 401 ? ' — admin lock expired' :
+                     r.status === 409 ? ' — name already exists' : '';
+        toast(`Rename failed: ${r.error}${hint}`, 'error');
+        return;
+      }
       _chor.meta.name = newName;
       // Refresh select dropdown: update existing option value + text
       const sel = document.getElementById('chor-select');
@@ -10191,12 +10302,20 @@ const choreoEditor = (() => {
           vesc_power_scale: _vescCfgSnapshot.power_scale ?? 1.0,
         };
       }
-      const result = await api('/choreo/save', 'POST', { chor: _chor });
-      if (result) {
-        _dirty = false; _existsOnDisk = true;
-        _validateServoRefs(); _validateAudioRefs();
-        toast(`Saved: ${_chor.meta.name}`, 'ok');
+      // apiDetail so we can surface the schema-validation error from the
+      // server (CR-2 audit added the validator) — was generic "Save failed"
+      // before. 401 also distinguishable from a real schema reject.
+      const r = await apiDetail('/choreo/save', 'POST', { chor: _chor });
+      if (!r.ok) {
+        const hint = r.status === 401 ? ' — admin lock expired' :
+                     r.status === 400 ? '' :   // schema error already in r.error
+                     r.status === 503 ? ' — server busy' : '';
+        toast(`Save failed: ${r.error}${hint}`, 'error');
+        return;
       }
+      _dirty = false; _existsOnDisk = true;
+      _validateServoRefs(); _validateAudioRefs();
+      toast(`Saved: ${_chor.meta.name}`, 'ok');
     },
 
     async exportChor() {
@@ -10235,7 +10354,7 @@ const choreoEditor = (() => {
         if (sel && names) {
           sel.innerHTML = '<option value="">— select choreography —</option>' +
             _chorSelectOptions(names);
-          sel.onchange = () => this.load(sel.value);
+          sel.onchange = () => this._switchTo(sel.value);
           sel.value = chor.meta.name;
         }
         await this.load(chor.meta.name);
