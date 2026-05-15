@@ -352,7 +352,6 @@ def _act_dome_panel_toggle(target: str, current: str) -> str:
 def _act_play_choreo(target: str, current: str) -> str:
     # Toggle: if THIS choreo is currently playing, a second press kills
     # it (operator wants to abort without going through Sequences).
-    # User-reported 2026-05-15.
     if reg.choreo and reg.choreo.is_playing():
         status = reg.choreo.get_status() or {}
         if status.get('name') == target:
@@ -364,10 +363,17 @@ def _act_play_choreo(target: str, current: str) -> str:
         return 'off'
     if not reg.choreo:
         return 'off'
-    from master.api.choreo_bp import safe_play
-    choreo_dir = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
+    from master.api.choreo_bp import safe_play, _safe_choreo_path
+    # Re-validate the path at trigger time (defense in depth) — the
+    # save-time check already runs through _validate_action, but a
+    # tampered shortcuts.json or symlink race between save and
+    # trigger could otherwise escape the choreographies dir. Same
+    # helper choreo_bp uses for its own /play endpoint.
+    path = _safe_choreo_path(target)
+    if not path or not os.path.isfile(path):
+        return 'off'
     try:
-        with open(os.path.join(choreo_dir, target + '.chor'), encoding='utf-8') as f:
+        with open(path, encoding='utf-8') as f:
             chor = json.load(f)
     except (OSError, json.JSONDecodeError):
         return 'off'
@@ -377,24 +383,45 @@ def _act_play_choreo(target: str, current: str) -> str:
 
 def _act_play_sound(target: str, current: str) -> str:
     # Toggle: re-pressing while THIS sound is playing stops it.
-    # reg.audio_current is set by audio_bp to either the sound name
-    # (plain play) or '🎲 <category>' (random play). Match exactly so
-    # a random shortcut doesn't kill a named-sound shortcut.
-    if reg.uart:
-        if reg.audio_playing and reg.audio_current == target:
-            reg.uart.send('S', 'STOP')
-            return 'off'
-        reg.uart.send('S', target)
+    # Delegates registry-state bookkeeping to audio_bp helpers so
+    # reg.audio_playing / reg.audio_current / _schedule_audio_reset
+    # stay in sync with the UART send — matches what /audio/play
+    # does. Without this, the 'is-playing' indicator never lit up
+    # for shortcut-triggered plays (audit finding H-1).
+    from master.api.audio_bp import (
+        _schedule_audio_reset, _get_sound_duration_ms,
+    )
+    if not reg.uart:
+        return 'off'
+    if reg.audio_playing and reg.audio_current == target:
+        reg.uart.send('S', 'STOP')
+        reg.audio_playing = False
+        reg.audio_current = ''
+        return 'off'
+    reg.uart.send('S', target)
+    reg.audio_playing = True
+    reg.audio_current = target
+    _schedule_audio_reset(_get_sound_duration_ms(target))
     return 'fired'
 
 
 def _act_play_random_audio(target: str, current: str) -> str:
-    if reg.uart:
-        tagged = f'🎲 {target}'
-        if reg.audio_playing and reg.audio_current == tagged:
-            reg.uart.send('S', 'STOP')
-            return 'off'
-        reg.uart.send('S', f'RANDOM:{target}')
+    from master.api.audio_bp import (
+        _schedule_audio_reset, _category_avg_duration_ms,
+        RANDOM_PLAY_PREFIX,
+    )
+    if not reg.uart:
+        return 'off'
+    tagged = f'{RANDOM_PLAY_PREFIX}{target}'
+    if reg.audio_playing and reg.audio_current == tagged:
+        reg.uart.send('S', 'STOP')
+        reg.audio_playing = False
+        reg.audio_current = ''
+        return 'off'
+    reg.uart.send('S', f'RANDOM:{target}')
+    reg.audio_playing = True
+    reg.audio_current = tagged
+    _schedule_audio_reset(_category_avg_duration_ms(target) + 500)
     return 'fired'
 
 
@@ -435,7 +462,12 @@ def save_shortcuts():
     """Replace the full shortcuts list. Body: {shortcuts: [...]}
     Validates every entry; on the first failure returns 400 with the
     offending index + reason."""
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    # Reject anything that isn't a JSON object — a top-level array
+    # would otherwise raise AttributeError on body.get and 500 the
+    # request. (Audit finding M-2.)
+    if not isinstance(body, dict):
+        body = {}
     raw_list = body.get('shortcuts', [])
     if not isinstance(raw_list, list):
         return jsonify({'error': 'shortcuts must be a list'}), 400

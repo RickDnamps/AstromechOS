@@ -103,6 +103,13 @@ _audio_state_lock = threading.Lock()
 _SOUND_NAME_RE = re.compile(r'^[A-Za-z0-9_]{1,80}$')
 _CATEGORY_NAME_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 
+# Prefix used in reg.audio_current to tag random-category plays.
+# Shared across audio_bp + shortcuts_bp + frontend so the
+# "is-playing" indicator can attribute the playback to the right
+# shortcut/category. Don't change this string without updating
+# shortcutsRunner.updateFromStatus' parser in app.js.
+RANDOM_PLAY_PREFIX = '🎲 '
+
 
 # B-14: duration cache. _get_sound_duration_ms is called on every /play
 # AND on every choreo audio block dispatch. Mutagen.MP3 walks the file
@@ -391,7 +398,7 @@ def play_random():
     if reg.uart:
         reg.uart.send('S', f'RANDOM:{category}')
     reg.audio_playing = True
-    reg.audio_current = f'🎲 {category}'
+    reg.audio_current = f'{RANDOM_PLAY_PREFIX}{category}'
     # B-14 / F-4: use the category's average duration instead of the
     # 60s default — auto-random UI was rate-limited to one sound per
     # minute for short categories because audio_playing stayed True for

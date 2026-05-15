@@ -304,13 +304,14 @@ def get_status():
     # {choreo_playing:True, choreo_name:None} which the frontend
     # treated as 'no cards running' and cleared every highlight for
     # one tick. Compute the pair atomically here.
-    _choreo_playing = bool(reg.choreo and reg.choreo.is_playing())
-    _choreo_status  = reg.choreo.get_status() if _choreo_playing else {}
+    # One get_status() call so playing/name/uses_* are observed
+    # atomically. A separate is_playing() + get_status() pair could
+    # see (True, name=None) if the choreo stops between the calls;
+    # the result is safe but the indicator briefly disagrees with
+    # the lockout. Read once, derive everything from the snapshot.
+    _choreo_status  = reg.choreo.get_status() if reg.choreo else {}
+    _choreo_playing = bool(_choreo_status.get('playing'))
     _choreo_name    = _choreo_status.get('name') if _choreo_playing else None
-    # Per-axis motion ownership flags. Frontend uses these to grey out
-    # only the joystick axes the choreo actually drives, leaving the
-    # operator free to drive/dome manually when the playback doesn't
-    # touch those tracks.
     _choreo_uses_prop = bool(_choreo_status.get('uses_propulsion')) if _choreo_playing else False
     _choreo_uses_dome = bool(_choreo_status.get('uses_dome'))       if _choreo_playing else False
     return jsonify({

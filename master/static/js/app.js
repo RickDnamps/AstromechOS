@@ -665,6 +665,7 @@ class LockManager {
     el('lock-childlock-btn').style.display = '';   // montrer bouton Child Lock
     el('lock-pwd-input').value = '';
     el('lock-pwd-error').classList.add('hidden');
+    el('lock-pwd-caps')?.classList.add('hidden');   // reset stale hint on reopen
     setTimeout(() => el('lock-pwd-input').focus(), 80);
   }
 
@@ -679,6 +680,7 @@ class LockManager {
     el('lock-childlock-btn').style.display = 'none';   // cacher bouton Child Lock
     el('lock-pwd-input').value = '';
     el('lock-pwd-error').classList.add('hidden');
+    el('lock-pwd-caps')?.classList.add('hidden');   // reset stale hint on reopen
     setTimeout(() => el('lock-pwd-input').focus(), 80);
   }
 
@@ -840,6 +842,7 @@ class AdminGuard {
     m.classList.remove('hidden');
     el('admin-pwd-input').value = '';
     el('admin-pwd-error').classList.add('hidden');
+    el('admin-pwd-caps')?.classList.add('hidden');   // reset stale hint on reopen
     setTimeout(() => el('admin-pwd-input').focus(), 80);
   }
 
