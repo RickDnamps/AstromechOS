@@ -5452,7 +5452,22 @@ const cockpitPanel = {
   },
 
   update(data) {
-    this._updateVitals(data);
+    // B-220 / B-223 (remaining tabs audit 2026-05-15): skip redundant
+    // re-renders when the relevant fields haven't changed since last
+    // poll. We compute a cheap fingerprint per panel section and only
+    // call the _update* helper when its fingerprint moved. Cuts DOM
+    // writes from ~30 nodes/2s to near-zero when state is steady.
+    const vitalsFP = `${data.cpu_temp}|${data.master_temp}|${data.slave_temp}|${data.cpu_pct}|${data.battery_voltage}|${data.mem?.used_mb}|${data.disk?.used_gb}|${data.slave_uart_health?.cpu_temp}|${data.slave_uart_health?.cpu_pct}|${data.slave_uart_health?.mem?.used_mb}|${data.slave_uart_health?.disk?.used_gb}`;
+    if (vitalsFP !== this._lastVitalsFP) {
+      this._updateVitals(data);
+      this._lastVitalsFP = vitalsFP;
+    } else {
+      // Always touch vitals once (idempotent layout) — but skip the
+      // 30-node innerHTML rewrite. _updateVitals does some
+      // CSS-variable updates that are cheap, but the textContent
+      // writes inside are the bulk of the cost. Skipping here is
+      // safe because nothing visible changed.
+    }
     this._updateServices(data);
     this._updateActivity(data);
     this._updateNetwork(data);
@@ -6431,9 +6446,17 @@ const cameraConfig = {
       const resEl = el('cam-resolution');
       const fpsEl = el('cam-fps');
       const qEl   = el('cam-quality');
-      if (resEl) resEl.value = d.resolution || '640x480';
-      if (fpsEl) fpsEl.value = String(d.fps   || 30);
-      if (qEl)  { qEl.value = d.quality || 80; syncHoloSlider(qEl); el('cam-quality-val').textContent = qEl.value; }
+      // B-245 (remaining tabs audit 2026-05-15): don't overwrite an
+      // input the operator is currently editing. Same focus-guard
+      // pattern that fixed the calibration tab typing bug.
+      if (resEl && !resEl.matches(':focus')) resEl.value = d.resolution || '640x480';
+      if (fpsEl && !fpsEl.matches(':focus')) fpsEl.value = String(d.fps   || 30);
+      if (qEl  && !qEl.matches(':focus')) {
+        qEl.value = d.quality || 80;
+        syncHoloSlider(qEl);
+        const valLbl = el('cam-quality-val');
+        if (valLbl) valLbl.textContent = qEl.value;   // B-224 null-safe
+      }
     } catch(e) {}
   },
   async save() {
@@ -6499,8 +6522,12 @@ const armsConfig = {
     for (const [id, cfg] of Object.entries(panels)) {
       if (id.startsWith('Servo_S')) this._labels[id] = cfg.label || id;
     }
+    // B-234 / B-235 (remaining tabs audit 2026-05-15): focus-guard.
+    // arms-count is a numeric input the admin types into. Without the
+    // guard, a tab switch or reload mid-edit wipes the value while
+    // the cursor is still in the field. Same pattern as B-245.
     const countEl = el('arms-count');
-    if (countEl) countEl.value = String(this._count);
+    if (countEl && !countEl.matches(':focus')) countEl.value = String(this._count);
     this._renderSelectors();
   },
 

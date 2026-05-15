@@ -193,10 +193,18 @@ def save_config():
         try:
             cfg_path = os.path.normpath(_CFG_PATH)
             write_cfg_atomic(parser, cfg_path)
-            # Update in-memory config on the engine if available
+            # B-236 / B-237 (remaining tabs audit 2026-05-15): snapshot-
+            # on-write. Mutating the engine's existing parser via
+            # `.read(path)` while _tick reads from it could see torn
+            # state (configparser internal dicts are not atomically
+            # mutated). Atomic ref assignment of a NEW parser is
+            # GIL-safe; the engine's next read sees either old or new
+            # whole.
             be = reg.behavior_engine
             if be:
-                be._cfg.read(os.path.normpath(_CFG_PATH))
+                fresh = configparser.ConfigParser()
+                fresh.read(cfg_path)
+                be._cfg = fresh
             log.info("Behavior config saved")
             return jsonify({'ok': True})
         except Exception as e:

@@ -99,6 +99,10 @@ def _read_hat_addresses() -> tuple[list, list]:
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
     def _parse(s: str) -> list[int]:
+        # B-248 (remaining tabs audit 2026-05-15): log on parse fail
+        # instead of silently dropping. Otherwise a typo like
+        # `master_hats = 0xZZ` quietly drops to the fallback [0x40]
+        # and the operator has no idea why their HAT isn't detected.
         result = []
         for p in s.split(','):
             p = p.strip()
@@ -106,7 +110,7 @@ def _read_hat_addresses() -> tuple[list, list]:
                 try:
                     result.append(int(p, 16) if p.startswith('0x') else int(p))
                 except ValueError:
-                    pass
+                    log.warning("Invalid I2C HAT addr %r — ignored", p)
         return result
     master = _parse(cfg.get('i2c_servo_hats', 'master_hats', fallback='0x40')) or [0x40]
     slave  = _parse(cfg.get('i2c_servo_hats', 'slave_hats',  fallback='0x41')) or [0x41]
