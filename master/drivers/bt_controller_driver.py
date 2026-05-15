@@ -525,7 +525,14 @@ class BTControllerDriver:
             return
 
         # Web/Android priority — yield if recent web command (<500ms)
-        if time.time() - getattr(reg, 'web_last_drive_t', 0) < 0.5:
+        # Audit finding Motion H-3 + BT H-2 2026-05-15:
+        #  - time.monotonic to match the producer in motion_bp (immune
+        #    to NTP clock-skew jumps that would freeze BT for hours).
+        #  - 1.0s window matches CLAUDE.md "BT yields to web for <1s"
+        #    documentation. Previous 0.5s was shorter than the BT
+        #    keep-alive cadence (300ms), producing motion jitter when
+        #    both inputs were simultaneously active.
+        if time.monotonic() - getattr(reg, 'web_last_drive_t', 0) < 1.0:
             return
 
         dev = self._device
@@ -616,6 +623,11 @@ class BTControllerDriver:
 
         # Dome panel (held = open, released = closed)
         if _is(m.get('panel_dome', 'BTN_WEST')):
+            # Audit finding BT H-1 2026-05-15: guard FIRST so the
+            # attribute lookup `reg.dome_servo.open` doesn't raise
+            # AttributeError when dome_servo is None (would be
+            # swallowed by the outer except Exception). Operator
+            # presses panel → nothing happens silently.
             if (pressed or released) and reg.dome_servo:
                 direction = 'open' if pressed else 'close'
                 log.info("BT: %s_all dome_servo (config-aware)", direction)
@@ -638,7 +650,9 @@ class BTControllerDriver:
 
         # Body panel (held = open, released = closed)
         elif _is(m.get('panel_body', 'BTN_NORTH')):
-            if pressed or released:
+            # Audit finding BT H-1 2026-05-15: guard reg.servo BEFORE
+            # accessing .open/.close attribute.
+            if (pressed or released) and reg.servo:
                 direction = 'open' if pressed else 'close'
                 log.info("BT: %s_all body_servo (config-aware)", direction)
                 try:

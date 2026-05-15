@@ -153,7 +153,15 @@ def _kids_cap(left: float, right: float) -> tuple:
     Kids mode, which contradicted the three-tier lock model documented
     on lockMgr._applyMode."""
     if getattr(reg, 'lock_mode', 0) == 1:
+        # Audit finding Motion H-bonus 2026-05-15: re-clamp cap at
+        # read time. status_bp validates kids_speed_limit at write,
+        # but a poisoned registry value (e.g. set to 2.0 by a buggy
+        # plug-in) would silently make Kids Mode FASTER than normal.
+        # Defense in depth — also math.isfinite to reject NaN/Inf.
         cap = float(getattr(reg, 'kids_speed_limit', 0.5))
+        if not math.isfinite(cap):
+            cap = 0.5
+        cap = max(0.0, min(1.0, cap))
         return left * cap, right * cap
     return left, right
 
@@ -166,7 +174,7 @@ def drive():
         return blocked
 
     body  = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    reg.web_last_drive_t = time.time()
+    reg.web_last_drive_t = time.monotonic()
     left  = _clamp(_safe_float(body.get('left',  0.0)))
     right = _clamp(_safe_float(body.get('right', 0.0)))
 
@@ -190,7 +198,7 @@ def arcade():
         return blocked
 
     body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    reg.web_last_drive_t = time.time()
+    reg.web_last_drive_t = time.monotonic()
     throttle = _clamp(_safe_float(body.get('throttle', 0.0)))
     steering = _clamp(_safe_float(body.get('steering', 0.0)))
 
@@ -250,9 +258,15 @@ def dome_turn():
         return blocked
 
     body  = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    reg.web_last_dome_t = time.time()
+    reg.web_last_dome_t = time.monotonic()
     speed = _clamp(_safe_float(body.get('speed', 0.0)))
 
+    # Audit finding Safety H-2 2026-05-15: parity with /motion/drive
+    # which calls cancel_ramp() to wake a stalled dome ramp on
+    # operator resume. Without this, a re-press during the 400ms
+    # ramp was silently 503'd (gate refuses while ramp active) and
+    # the operator's intent was dropped.
+    cancel_ramp()
     motion_watchdog.feed_dome(speed)          # feed the watchdog
 
     if reg.dome:
@@ -274,6 +288,7 @@ def dome_stop():
 
 
 @motion_bp.post('/dome/random')
+@require_admin
 def dome_random():
     """Dome random mode. Body: {"enabled": bool}.
     Audit finding L-5 2026-05-15: enabling random dome motion now

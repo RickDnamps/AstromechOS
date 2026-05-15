@@ -2497,6 +2497,7 @@ const _CAM_ARC_LEN = 101;
 let _hudPending = null;
 let _hudRafId   = 0;
 let _hudArcColorThreshold = 0;  // cache last arc color band to skip redundant writes
+let _hudLastSpeedPct = -1;       // cache last text % to skip layout invalidation on Android
 
 function _updateDriveHUD(throttle, steering) {
   _hudPending = { throttle, steering };
@@ -2516,7 +2517,15 @@ function _flushDriveHUD() {
   const arc   = el('cam-speed-arc');
   const val   = el('cam-speed-val');
   if (arc) arc.style.strokeDashoffset = _CAM_ARC_LEN * (1 - speed);
-  if (val) val.textContent = Math.round(speed * 100) + '%';
+  // Audit finding Drive UX H-4 2026-05-15: skip-if-unchanged on
+  // textContent. At 60Hz joystick refresh, every assignment triggers
+  // a layout invalidation on low-end Android tablets even when the
+  // rounded percent is identical to the previous frame.
+  const speedPct = Math.round(speed * 100);
+  if (val && _hudLastSpeedPct !== speedPct) {
+    val.textContent = speedPct + '%';
+    _hudLastSpeedPct = speedPct;
+  }
 
   // Color arc green→orange→red with speed. Skip the write when we're in
   // the same band — every assignment triggers a style recalc even when
@@ -2586,6 +2595,12 @@ function _setChoreoLockUI(propLocked, domeLocked, choreoName) {
       ['w','a','s','d','W','A','S','D'].forEach(k => delete _keys[k]);
       if (typeof _updateKbdUI === 'function') _updateKbdUI();
     }
+    // Audit finding Drive UX H-2 2026-05-15: snap the HUD to 0 so
+    // the speed arc + direction arrow don't freeze at the last
+    // pre-lock value. Mirrors the E-STOP path which clears HUD via
+    // _handleKeys when a held key triggers driveStop.
+    if (typeof _updateDriveHUD === 'function') _updateDriveHUD(0, 0);
+    if (typeof _propKeyWasActive !== 'undefined') _propKeyWasActive = false;
   }
   if (domeLocked && !wasDome) {
     if (typeof jsRight !== 'undefined' && jsRight.forceRelease) jsRight.forceRelease();
@@ -2593,6 +2608,7 @@ function _setChoreoLockUI(propLocked, domeLocked, choreoName) {
       ['ArrowLeft','ArrowRight'].forEach(k => delete _keys[k]);
       if (typeof _updateKbdUI === 'function') _updateKbdUI();
     }
+    if (typeof _domeKeyWasActive !== 'undefined') _domeKeyWasActive = false;
   }
 }
 
@@ -2638,7 +2654,7 @@ function _setEstopUI(tripped) {
 // window). The joystick's keep-alive interval would keep re-sending the
 // last deflection, and the AppWatchdog wouldn't trip if the heartbeat
 // already shut off cleanly via the existing visibilitychange path.
-window.addEventListener('blur', () => {
+function _releaseAllControlInputs() {
   if (typeof jsLeft !== 'undefined' && jsLeft.forceRelease) jsLeft.forceRelease();
   if (typeof jsRight !== 'undefined' && jsRight.forceRelease) jsRight.forceRelease();
   if (typeof _keys !== 'undefined') {
@@ -2646,6 +2662,17 @@ window.addEventListener('blur', () => {
     if (typeof _updateKbdUI === 'function') _updateKbdUI();
     if (typeof _handleKeys === 'function') _handleKeys();
   }
+}
+window.addEventListener('blur', _releaseAllControlInputs);
+// Audit finding Drive H-2 (Agent 1 + Agent 6) 2026-05-15: Android
+// Chrome fires `visibilitychange` when a tab goes to background
+// WITHOUT firing `blur`. Without this hook, the joystick keep-alive
+// keeps re-posting the held deflection until AppWatchdog (600ms) cuts
+// it — operator backgrounds the browser while holding the stick =
+// ~600ms of unintended drive. Now both events release joysticks +
+// clear keys.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) _releaseAllControlInputs();
 });
 
 // F-9: serialize E-STOP / RESET button so rapid clicks (or a click during
@@ -2798,6 +2825,13 @@ document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
   // VESC test mode captures keys when active
   if (vescTest.onKey(e.code, true)) return;
+  // Audit finding Drive UX H-3 2026-05-15: don't accumulate _keys[]
+  // state outside the Drive tab. Switching to Settings/Audio with a
+  // key held then switching back used to surface the stale held-state
+  // until the next real keydown. Now: drop the event before it ever
+  // mutates _keys. The choreo editor's own keydown handler (Space /
+  // arrows for nudge) runs separately on its own tab.
+  if (document.querySelector('.tab.active')?.dataset.tab !== 'drive') return;
   if (_keys[e.code]) return;
   _keys[e.code] = true;
   _updateKbdUI();
@@ -2806,6 +2840,9 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('keyup', e => {
   if (vescTest.onKey(e.code, false)) return;
+  // Always allow keyup to clear stale state — even if user switched
+  // tabs mid-press, the prior keydown may have set _keys[] when the
+  // Drive tab was active. Letting keyup clear it always is safe.
   delete _keys[e.code];
   _updateKbdUI();
   _handleKeys();

@@ -12,6 +12,7 @@ Endpoints:
 import os
 import subprocess
 import threading
+import time
 import logging
 import requests as _requests
 from flask import Blueprint, Response, jsonify, request
@@ -23,8 +24,28 @@ log = logging.getLogger(__name__)
 _lock         = threading.Lock()
 _active_token = 0
 
-MJPG_URL  = 'http://127.0.0.1:8080/?action=stream'
 _ENV_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'camera.env')
+
+
+def _mjpg_url() -> str:
+    """Build the mjpg_streamer proxy URL from local.cfg [camera] port,
+    falling back to 8080. Audit finding Camera H-4 2026-05-15: was
+    hardcoded — violated 'never hardcode installation values'. Reads
+    on every call (cheap) so changes take effect without master
+    reboot."""
+    try:
+        import configparser as _cp
+        from shared.paths import LOCAL_CFG, MAIN_CFG
+        cfg = _cp.ConfigParser()
+        cfg.read([MAIN_CFG, LOCAL_CFG])
+        port = cfg.getint('camera', 'mjpg_port', fallback=8080)
+    except Exception:
+        port = 8080
+    return f'http://127.0.0.1:{port}/?action=stream'
+
+
+# Backward compat for any external caller importing the constant.
+MJPG_URL = _mjpg_url()
 
 _VALID_RESOLUTIONS = {'640x480', '1280x720', '1920x1080'}
 _VALID_FPS         = {15, 30}
@@ -113,25 +134,53 @@ def _write_cam_env(resolution: str, fps: int, quality: int) -> None:
             os.fsync(f.fileno())
         except OSError:
             pass
+    # Audit finding Camera M-5 2026-05-15: chmod the TMP file before
+    # os.replace, not the destination after. Previously left a tiny
+    # window where the dest file was world-readable (umask=0o022 →
+    # 0o644 at create time). Now the replaced file inherits 0o600.
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, _ENV_PATH)
     try:
-        # Audit finding M-3 2026-05-15: camera-start.sh runs under
-        # User=artoo (same as the master service), so 0o600 still
-        # works — drops world+group read so future camera tokens
-        # added to this file are owner-only. Matches write_cfg_atomic.
-        os.chmod(_ENV_PATH, 0o600)
+        os.chmod(_ENV_PATH, 0o600)   # belt + braces
     except OSError:
         pass
 
 
+_TAKE_RATE_LIMIT_PER_IP: dict = {}   # ip → (count, window_start)
+_TAKE_LIMIT_LOCK = threading.Lock()
+_TAKE_MAX_PER_WINDOW = 10
+_TAKE_WINDOW_SECONDS = 10.0
+
+
 @camera_bp.post('/camera/take')
 def camera_take():
-    """Claim the camera stream. Any previous holder will see their stream stop."""
+    """Claim the camera stream. Any previous holder will see their stream stop.
+
+    Audit finding Camera H-3 2026-05-15: was unauthenticated AND
+    unrate-limited — any LAN client could spam /take continually,
+    evicting the operator's view every chunk. Now per-IP rate-limit:
+    max 10 takes per 10 seconds. Returns 429 over that. Admin auth
+    not required so multiple legit tablets can hot-swap quickly."""
+    ip = request.remote_addr or 'unknown'
+    now = time.monotonic()
+    with _TAKE_LIMIT_LOCK:
+        bucket = _TAKE_RATE_LIMIT_PER_IP.get(ip, (0, now))
+        count, window_start = bucket
+        if now - window_start > _TAKE_WINDOW_SECONDS:
+            count, window_start = 0, now
+        count += 1
+        _TAKE_RATE_LIMIT_PER_IP[ip] = (count, window_start)
+    if count > _TAKE_MAX_PER_WINDOW:
+        log.warning("camera_take rate-limited: %s (%d in window)", ip, count)
+        return jsonify({'error': 'too many takes', 'retry_after_s': int(_TAKE_WINDOW_SECONDS)}), 429
     global _active_token
     with _lock:
         _active_token += 1
         token = _active_token
-    log.debug("Camera claimed by %s — token %d", request.remote_addr, token)
+    log.debug("Camera claimed by %s — token %d", ip, token)
     return jsonify({'token': token})
 
 
@@ -156,7 +205,7 @@ def camera_stream():
         # mjpg_streamer cold-start. Going beyond that meant a wedged
         # service tied up Flask worker threads for 5s × N concurrent
         # clients during reconnects.
-        upstream = _requests.get(MJPG_URL, stream=True, timeout=2)
+        upstream = _requests.get(_mjpg_url(), stream=True, timeout=2)
         content_type = upstream.headers.get(
             'Content-Type',
             'multipart/x-mixed-replace; boundary=boundarydonotcross'
@@ -196,14 +245,34 @@ def camera_stream():
 @camera_bp.get('/camera/status')
 def camera_status():
     """Returns the current active token. Clients poll this to detect eviction."""
-    return jsonify({'active_token': _active_token})
+    with _lock:
+        return jsonify({'active_token': _active_token})
 
 
 @camera_bp.post('/camera/release')
 def camera_release():
-    """Release the stream — resets active token to 0 so /status reports camera_active=false."""
-    global _active_token
+    """Release the stream — resets active token to 0 so /status reports camera_active=false.
+
+    Audit finding Camera H-2 2026-05-15: was unauthenticated — any
+    LAN guest could POST /camera/release to evict the legitimate
+    viewer. Now requires the caller to present their own token
+    (the one /camera/take returned) OR be authenticated as admin.
+    Without a matching token, refuses with 401."""
+    body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
+    presented = body.get('token')
+    admin_pw = request.headers.get('X-Admin-Pw', '')
+    is_admin = False
+    if admin_pw:
+        try:
+            from master.api._admin_auth import _get_admin_password
+            import hmac
+            is_admin = hmac.compare_digest(admin_pw.encode(), _get_admin_password().encode())
+        except Exception:
+            is_admin = False
     with _lock:
+        token_match = isinstance(presented, int) and presented == _active_token and _active_token > 0
+        if not (is_admin or token_match):
+            return jsonify({'error': 'token mismatch'}), 401
         _active_token = 0
     return '', 204
 

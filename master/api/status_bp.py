@@ -669,6 +669,28 @@ def system_estop():
             reg.uart.send('D', '0.0')
         except Exception:
             pass
+    # Audit finding Drive Safety H-1 2026-05-15: server-side E-STOP
+    # was leaving audio (mpg123 on Slave) and lights (Teeces) running
+    # — frontend emergencyStop() compensated with a separate /audio/stop
+    # call, but BT-gamepad E-STOP, automation, or a crashed WebView
+    # left them ON indefinitely. The contract is "freeze the robot"
+    # — audio + lights are part of the robot.
+    if reg.uart:
+        try:
+            reg.uart.send('S', 'STOP')
+        except Exception:
+            pass
+    try:
+        if reg.audio_playing:
+            reg.audio_playing = False
+            reg.audio_current  = ''
+    except Exception:
+        pass
+    if reg.teeces:
+        try:
+            reg.teeces.off()
+        except Exception:
+            pass
     reg.estop_active = True
     return jsonify({'status': 'estop_sent'})
 

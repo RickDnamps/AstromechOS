@@ -302,15 +302,31 @@ class VescDriver(BaseDriver):
             param, val = parts[0], parts[1]
             if param == 'scale':
                 # 0.0 = drive disabled (motors stopped); 1.0 = full power.
-                # Used to be clamped at 0.1 floor which silently coerced
-                # "disable propulsion" into "10% power" — confusing UX.
+                # Audit finding Motion M-8 2026-05-15: reject NaN/Inf
+                # before clamp — `min(1.0, max(0.0, nan))` returns NaN
+                # in Python, multiplied into ERPM crashes set_rpm_direct.
+                import math
                 requested = float(val)
+                if not math.isfinite(requested):
+                    log.warning("VESC scale rejected: not finite (%r)", val)
+                    return
                 self._power_scale = max(0.0, min(1.0, requested))
                 if requested != self._power_scale:
                     log.warning("VESC power scale clamped: requested %.2f → %.2f", requested, self._power_scale)
                 log.info(f"VESC power scale: {self._power_scale:.2f}")
             elif param == 'erpm':
-                self._max_erpm = max(1000, int(float(val)))
+                # Audit finding Motion H-6 2026-05-15: upper-bound the
+                # max ERPM. Was just `max(1000, ...)` so an attacker /
+                # tester could set 9999999999 → int(0.85 * 9999999999)
+                # overflows 32-bit signed (CRC-16 packet expects int32).
+                # 250 000 ERPM = ~24000 RPM at 21-pole — well beyond
+                # any sane R2 build.
+                import math
+                _raw_erpm = float(val)
+                if not math.isfinite(_raw_erpm):
+                    log.warning("VESC max ERPM rejected: not finite (%r)", val)
+                    return
+                self._max_erpm = max(1000, min(250_000, int(_raw_erpm)))
                 log.info(f"VESC max ERPM: {self._max_erpm}")
             elif param == 'mode':
                 self._duty_mode = (val.lower() == 'duty')

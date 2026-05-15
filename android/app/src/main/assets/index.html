@@ -38,7 +38,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Audiowide&family=Electrolize&family=Exo+2:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="css/style.css">
   <!-- PWA -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <meta name="theme-color" content="#00aaff">
@@ -218,8 +218,12 @@
   </button>
   <div class="tab-spacer"></div>
   <button id="admin-toggle-btn" class="admin-gear-btn admin-toggle-btn" onclick="adminGuard.toggleFromHeader()" title="Admin mode">
-    <!-- Gear icon matches the ADMIN ACCESS modal — same shape both
-         states; locked/unlocked color signalled by body.admin-unlocked. -->
+    <!-- User feedback 2026-05-15: match the gear icon used in the
+         ADMIN ACCESS modal (above the password input). The two SVGs
+         (admin-lock-closed / admin-lock-open) are kept for CSS toggle
+         compatibility but share the same gear shape — locked/unlocked
+         state is signalled by the body.admin-unlocked color change
+         (var(--text-dim) → var(--orange)). -->
     <svg id="admin-lock-closed" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
       <circle cx="8" cy="8" r="2.5"/>
       <path d="M8 1.5 L9.2 3.5 L11.5 2.5 L12.5 4.8 L10.5 6 L11.5 8 L9.5 8 L9.5 10 L6.5 10 L6.5 8 L4.5 8 L5.5 6 L3.5 4.8 L4.5 2.5 L6.8 3.5 Z"/>
@@ -325,12 +329,6 @@
 ================================================================ -->
 <div class="tab-content active" id="tab-drive">
 
-  <!-- VESC safety banner — shown when drive is blocked -->
-  <div id="vesc-safety-banner" class="vesc-safety-banner" style="display:none">
-    <span class="vesc-safety-icon">⚠</span>
-    <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
-  </div>
-
   <!-- Lock button — top-left of Drive tab -->
   <button id="drive-lock-btn" class="drive-lock-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
     <svg class="lock-svg lock-open" width="21" height="24" viewBox="0 0 14 16">
@@ -348,10 +346,22 @@
 
   <div class="drive-wrapper">
 
+    <!-- VESC safety banner — shown when drive is blocked. INSIDE the
+         wrapper so it consumes part of the flex column instead of
+         being added on top of a fixed-height container (which used to
+         push the bottom bar off-screen — reported 2026-05-14). -->
+    <div id="vesc-safety-banner" class="vesc-safety-banner" style="display:none">
+      <span class="vesc-safety-icon">⚠</span>
+      <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
+    </div>
+
     <div class="drive-main">
 
       <!-- Left joystick — Propulsion -->
       <div class="joystick-panel joystick-panel-left">
+        <!-- Shortcuts pad — populated by shortcutsRunner.render() from
+             /shortcuts. Auto-split: first half of configured shortcuts
+             land here, rest on the right pad. -->
         <div class="shortcut-pad shortcut-pad-left" id="shortcut-pad-left"></div>
         <div class="joystick-label">PROPULSION</div>
         <div class="joystick-ring" id="js-left-ring">
@@ -382,18 +392,22 @@
 
           <!-- HUD overlays -->
           <!-- Speed arc — top-left -->
+          <!-- Theme-aware HUD: arc track uses rgba(var(--blue-rgb), .12) and
+               the moving arc starts in the theme's --blue accent. JS swaps
+               to var(--amber) / var(--red) as speed crosses thresholds. -->
           <div class="cam-hud-speed">
             <svg width="74" height="42" viewBox="0 0 74 42">
               <path d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="rgba(0,170,255,0.12)" stroke-width="4" stroke-linecap="round"/>
-              <path id="cam-speed-arc" d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="#00aaff" stroke-width="4" stroke-linecap="round" stroke-dasharray="101" stroke-dashoffset="101"/>
+              <path id="cam-speed-arc" d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="var(--blue, #00aaff)" stroke-width="4" stroke-linecap="round" stroke-dasharray="101" stroke-dashoffset="101"/>
             </svg>
             <span id="cam-speed-val" class="cam-speed-val">0%</span>
           </div>
 
-          <!-- Direction arrow — center -->
+          <!-- Direction arrow — center. Uses var(--cyan-rgb) so themes
+               can recolor; falls back to the original rgba if unset. -->
           <div id="cam-dir-wrap" class="cam-dir-wrap" style="opacity:0">
             <svg width="36" height="36" viewBox="0 0 36 36">
-              <polygon id="cam-dir-poly" points="18,3 30,28 18,22 6,28" fill="rgba(0,255,200,0.75)" stroke="none"/>
+              <polygon id="cam-dir-poly" points="18,3 30,28 18,22 6,28" fill="rgba(var(--cyan-rgb, 0 255 200), 0.75)" stroke="none"/>
             </svg>
           </div>
 
@@ -935,7 +949,8 @@
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
       <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
-      <button class="settings-nav-item" data-panel="system"    onclick="switchSettingsPanel('system')">🖥️ System</button>
+      <button class="settings-nav-item" data-panel="system"       onclick="switchSettingsPanel('system')">🖥️ System</button>
+      <button class="settings-nav-item" data-panel="diagnostics" onclick="switchSettingsPanel('diagnostics')">🔍 Diagnostics</button>
     </nav>
 
     <!-- Content panels -->
@@ -1375,7 +1390,7 @@
       <div class="settings-panel" id="spanel-battery">
         <section class="card settings-card">
           <h2 class="card-title">BATTERY</h2>
-          <p class="settings-note">Number of LiPo cells — sets min/max voltage for all battery gauges.</p>
+          <p class="settings-note">Cells set the voltage gauges; chemistry sets the undervoltage abort threshold for choreographies.</p>
           <div class="form-group">
             <label>Cell count</label>
             <select id="battery-cells" class="input-text" style="width:120px">
@@ -1383,6 +1398,13 @@
               <option value="6">6S — 21.0 – 25.2 V</option>
               <option value="7">7S — 24.5 – 29.4 V</option>
               <option value="8">8S — 28.0 – 33.6 V</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Chemistry</label>
+            <select id="battery-chemistry" class="input-text" style="width:160px">
+              <option value="liion">Li-ion / LiPo (3.5 V/cell abort)</option>
+              <option value="lifepo4">LiFePO4 (3.0 V/cell abort)</option>
             </select>
           </div>
           <button class="btn" onclick="saveBatteryCells()">APPLY</button>
@@ -1398,6 +1420,7 @@
             Macro buttons that appear on the <b>Drive</b> tab — one tap fires an action (toggle arm, play sound, play choreo…).
             Auto-balanced: half on the left (above propulsion joystick), half on the right (above dome joystick).
           </p>
+
           <div class="form-group" style="display:flex;align-items:center;gap:14px">
             <label style="min-width:130px">How many buttons?</label>
             <input type="range" id="shortcuts-count" min="0" max="12" value="0"
@@ -1405,13 +1428,20 @@
                    oninput="shortcutsEditor.onCountChange(this.value)">
             <span id="shortcuts-count-val" style="font-family:var(--font-data);min-width:30px">0</span>
           </div>
+
           <div id="shortcuts-list" style="margin-top:10px"></div>
+
           <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
             <button class="btn btn-active" onclick="shortcutsEditor.save()">SAVE SHORTCUTS</button>
             <div class="settings-status" id="shortcuts-status"></div>
           </div>
+
           <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+
           <h3 style="font-size:12px;letter-spacing:.1em;color:var(--text-dim);margin:0 0 8px 0">PREVIEW · Drive tab layout</h3>
+          <p class="settings-note" style="margin-top:0">
+            Aperçu de l'emplacement des boutons sur l'onglet Drive. Drag-drop pour repositionner libre — bientôt (v2).
+          </p>
           <div id="shortcuts-preview" class="shortcuts-preview">
             <div class="shortcuts-preview-pad left" id="sc-preview-left"></div>
             <div class="shortcuts-preview-center">
@@ -1554,7 +1584,7 @@
             <button class="btn btn-active" onclick="applyWifi()">CONNECT wlan1</button>
           </section>
           <section class="card settings-card">
-            <h2 class="card-title">HOTSPOT R2-D2 (wlan0)</h2>
+            <h2 class="card-title">HOTSPOT (wlan0)</h2>
             <div class="settings-status" id="hotspot-status">Loading...</div>
             <div class="form-group">
               <label>Hotspot SSID</label>
@@ -1714,10 +1744,22 @@
                   <div class="theme-preview-mini">
                     <div class="theme-preview-topbar">⚙ AstromechOS<span>R2-D2 ●</span></div>
                     <div class="theme-preview-tabs">
-                      <div class="theme-preview-tab active">DRIVE</div>
-                      <div class="theme-preview-tab">AUDIO</div>
-                      <div class="theme-preview-tab">CHOREO</div>
-                      <div class="theme-preview-tab">SETTINGS</div>
+                      <div class="theme-preview-tab active">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>
+                        DRIVE
+                      </div>
+                      <div class="theme-preview-tab">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="4" width="4" height="6" rx="1" fill="currentColor"/><path d="M5 4 L10 1 L10 13 L5 10 Z" fill="currentColor"/></svg>
+                        AUDIO
+                      </div>
+                      <div class="theme-preview-tab">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="8" height="2" rx="1" fill="currentColor"/><rect x="1" y="10" width="10" height="2" rx="1" fill="currentColor"/></svg>
+                        SEQUENCES
+                      </div>
+                      <div class="theme-preview-tab">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><path d="M7 1 L8.5 5 L13 5.5 L9.5 8.5 L10.5 13 L7 10.5 L3.5 13 L4.5 8.5 L1 5.5 L5.5 5 Z" fill="currentColor"/></svg>
+                        SETTINGS
+                      </div>
                     </div>
                     <div class="theme-preview-body">
                       <div class="theme-preview-card">
@@ -1803,18 +1845,47 @@
             <label class="settings-label">Slave servo HAT addresses (I2C)</label>
             <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41, 0x42, ..." maxlength="60">
           </div>
-          <p class="settings-note admin-only">⚠️ Never use 0x40 for Slave HATs — reserved for the Motor HAT.</p>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave Motor HAT address (I2C)</label>
+            <input type="text" id="slave-motor-hat-input" class="settings-input" placeholder="0x40" maxlength="10">
+          </div>
+          <p class="settings-note admin-only">⚠️ Never put the Motor HAT address in Slave servo HATs — this protects the motor driver from servo commands.</p>
+          <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
+          <div class="settings-status" id="hardware-config-status"></div>
+
+          <div class="settings-divider"></div>
+          <h3 class="settings-sub-title admin-only">UART LATENCY (LIVE — NO REBOOT)</h3>
           <div class="settings-row admin-only">
             <label class="settings-label">Body servo UART latency (ms)</label>
             <input type="number" id="body-uart-lat-input" class="settings-input" min="0" max="200" step="1" placeholder="25">
+            <span id="body-uart-lat-saved" style="margin-left:8px;font-family:var(--font-data);font-size:0.78em;color:var(--ok, #00cc66);opacity:0;transition:opacity 0.3s">✓ saved</span>
           </div>
-          <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
-          <div class="settings-status" id="hardware-config-status"></div>
+
+          <!-- UART RTT calibration tool — measures heartbeat round-trip and
+               proposes a tuned body_servo_uart_lat based on the median latency.
+               APPLY & SAVE persists immediately and hot-swaps the live value. -->
+          <div class="settings-row admin-only" style="flex-direction:column;align-items:stretch;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="settings-label" style="margin:0">UART RTT calibration</span>
+              <span id="uart-rtt-fit" style="font-family:var(--font-data);font-size:0.85em;color:var(--text-dim)">— idle —</span>
+            </div>
+            <div id="uart-rtt-stats" style="font-family:var(--font-data);font-size:0.78em;color:var(--text-dim);line-height:1.5">
+              Click MEASURE to sample the last 40 seconds of heartbeat round-trips.
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <button class="btn" onclick="measureUartRtt()">MEASURE</button>
+              <button class="btn btn-primary" id="uart-rtt-apply-btn" onclick="applyUartRttRecommendation()" disabled>APPLY &amp; SAVE</button>
+            </div>
+          </div>
+          <p class="settings-note admin-only">Run with no choreography active for a clean reading. Edits to the latency above auto-save on blur. Hot-swap takes effect at the next choreo play().</p>
           <div class="settings-divider"></div>
-          <div class="btn-group-v">
-            <button class="btn btn-warn" onclick="confirmAction('Reboot Master?', '/system/reboot')">REBOOT MASTER</button>
-            <button class="btn btn-warn" onclick="confirmAction('Reboot Slave?', '/system/reboot_slave')">REBOOT SLAVE</button>
-            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master?', '/system/shutdown')">SHUTDOWN MASTER</button>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot Master?',            '/system/reboot')">REBOOT MASTER</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master?',           '/system/shutdown')">SHUTDOWN MASTER</button>
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot Slave?',              '/system/reboot_slave')">REBOOT SLAVE</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Slave?',            '/system/shutdown_slave')">SHUTDOWN SLAVE</button>
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot both Master + Slave?',   '/system/reboot_both')">REBOOT BOTH</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN both Master + Slave?', '/system/shutdown_both')">SHUTDOWN BOTH</button>
           </div>
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
@@ -1832,6 +1903,36 @@
           </div>
           <button class="btn btn-primary" onclick="adminChangePassword()">CHANGE PASSWORD</button>
           <div class="settings-status" id="admin-pwd-status"></div>
+        </section>
+      </div>
+
+      <div class="settings-panel" id="spanel-diagnostics">
+        <section class="card settings-card">
+          <h2 class="card-title">DIAGNOSTICS</h2>
+
+          <h3 class="settings-sub-title">MASTER LOG</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
+            <button class="btn btn-sm diag-filter-btn active" data-filter="ALL"     onclick="diagPanel.setFilter('ALL')">ALL</button>
+            <button class="btn btn-sm diag-filter-btn"        data-filter="WARNING" onclick="diagPanel.setFilter('WARNING')">WARNING+</button>
+            <button class="btn btn-sm diag-filter-btn"        data-filter="ERROR"   onclick="diagPanel.setFilter('ERROR')">ERROR</button>
+            <button class="btn btn-sm" style="margin-left:auto" onclick="diagPanel.loadLogs()">↻ REFRESH</button>
+          </div>
+          <div id="diag-log-status" class="settings-status" style="margin:2px 0 4px"></div>
+          <div id="diag-log-output" class="diag-log-box">—</div>
+
+          <div class="settings-divider"></div>
+
+          <h3 class="settings-sub-title">UART STATS</h3>
+          <div id="diag-stats-output" class="diag-stats-box">—</div>
+          <button class="btn btn-sm" style="margin-top:6px" onclick="diagPanel.loadStats()">↻ REFRESH STATS</button>
+
+          <div class="settings-divider"></div>
+
+          <h3 class="settings-sub-title">CONNECTIVITY</h3>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="btn btn-secondary" onclick="diagPanel.ping()">PING SLAVE</button>
+            <span id="diag-ping-result" style="font-family:var(--font-data);font-size:13px"></span>
+          </div>
         </section>
       </div>
 
@@ -1863,11 +1964,11 @@
 <!-- Toast notifications -->
 <div id="toast" class="toast"></div>
 
-<script src="/static/vendor/sortable.min.js"></script>
-<script src="/static/js/app.js"></script>
+<script src="vendor/sortable.min.js"></script>
+<script src="js/app.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js')
+    navigator.serviceWorker.register('sw.js')
       .then(r => console.log('SW registered'))
       .catch(e => console.log('SW error:', e));
   }
