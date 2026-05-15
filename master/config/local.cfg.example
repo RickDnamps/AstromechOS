@@ -105,12 +105,12 @@ slave_hats = 0x41
 # Startup sequence — plays a choreo after boot
 startup_enabled  = true
 startup_delay    = 5
-startup_choreo   = startup.chor
+startup_choreo   = startup
 
 # ALIVE mode — idle reactions after inactivity
 alive_enabled       = false
 idle_timeout_min    = 10
 idle_mode           = choreo
 idle_audio_category = happy
-idle_choreo_list    = startup.chor
+idle_choreo_list    = patrol,celebrate
 dome_auto_on_alive  = true

@@ -10023,8 +10023,27 @@ const choreoEditor = (() => {
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       const name = _chor.meta.name;
       if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
-      const resp = await fetch(`/choreo/${encodeURIComponent(name)}`, { method: 'DELETE' });
-      if (!resp.ok) { toast(`Delete failed (${resp.status})`, 'error'); return; }
+      // Audit findings CR-4 + CR-5 2026-05-15: was using raw fetch
+      // which bypasses adminGuard's X-Admin-Pw header injection → every
+      // delete 401'd silently. Now goes through api() (header attached
+      // automatically) AND uses a raw fetch wrapper to surface the
+      // server's 409 "currently playing — stop it first" message
+      // instead of a generic "Delete failed (409)".
+      try {
+        const headers = {};
+        const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+        if (tok) headers['X-Admin-Pw'] = tok;
+        const resp = await fetch(`/choreo/${encodeURIComponent(name)}`, { method: 'DELETE', headers });
+        if (!resp.ok) {
+          let detail = '';
+          try { detail = (await resp.json()).error || ''; } catch {}
+          toast(`Delete failed: ${detail || resp.status}`, 'error');
+          return;
+        }
+      } catch (e) {
+        toast(`Delete failed: ${e.message || e}`, 'error');
+        return;
+      }
       _chor = null; _dirty = false; _selected = null; _clearInspectorTitle();
       _renderAllTracks();
       const names = await api('/choreo/list');

@@ -97,8 +97,15 @@ class BehaviorEngine:
             if not enabled:
                 return
             delay = self._cfg.getfloat('behavior', 'startup_delay', fallback=5.0)
-            choreo_name = self._cfg.get('behavior', 'startup_choreo', fallback='startup.chor')
-            choreo_path = os.path.join(self._choreo_dir, choreo_name)
+            choreo_name = self._cfg.get('behavior', 'startup_choreo', fallback='startup')
+            # Audit finding CR-6 2026-05-15: tolerate legacy '.chor'
+            # suffix in the cfg value. behavior_bp's regex rejects it
+            # at save time, so freshly-saved values won't have it, but
+            # historical local.cfg ships with .chor — strip if present
+            # so the file lookup still works.
+            if choreo_name.endswith('.chor'):
+                choreo_name = choreo_name[:-5]
+            choreo_path = os.path.join(self._choreo_dir, choreo_name + '.chor')
 
             if not os.path.isfile(choreo_path):
                 log.warning("Startup choreo not found: %s — skipping", choreo_path)
@@ -222,13 +229,23 @@ class BehaviorEngine:
         """Pick a random choreo from idle_choreo_list and play it."""
         try:
             raw = self._cfg.get('behavior', 'idle_choreo_list', fallback='')
-            choreo_list = [c.strip() for c in raw.split(',') if c.strip()]
+            # Audit finding CR-6: tolerate legacy '.chor' suffix per
+            # entry. Strip on parse so the file lookup works regardless
+            # of which historical format the cfg holds.
+            choreo_list = []
+            for c in raw.split(','):
+                c = c.strip()
+                if not c:
+                    continue
+                if c.endswith('.chor'):
+                    c = c[:-5]
+                choreo_list.append(c)
             if not choreo_list:
                 log.warning("idle_choreo_list is empty — nothing to play")
                 return
 
             choreo_name = random.choice(choreo_list)
-            choreo_path = os.path.join(self._choreo_dir, choreo_name)
+            choreo_path = os.path.join(self._choreo_dir, choreo_name + '.chor')
             if not os.path.isfile(choreo_path):
                 log.warning("ALIVE choreo not found: %s", choreo_path)
                 return

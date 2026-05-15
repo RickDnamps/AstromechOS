@@ -614,31 +614,47 @@ def choreo_rename():
         cascade_rename('play_choreo', old_name, new_name)
     except Exception:
         log.exception("cascade_rename failed for choreo %s → %s", old_name, new_name)
+    # Audit finding CR-7 2026-05-15: also cascade into behavior config
+    # so startup_choreo + idle_choreo_list follow the rename. Was the
+    # exact same gap shortcuts had pre-batch-1.
+    try:
+        from master.api.behavior_bp import cascade_rename as behavior_cascade_rename
+        behavior_cascade_rename('play_choreo', old_name, new_name)
+    except Exception:
+        log.exception("behavior cascade_rename failed for choreo %s → %s", old_name, new_name)
     log.info(f"Choreo renamed: {old_name} → {new_name}")
     return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
 
 
 @choreo_bp.get('/choreo/load')
 def choreo_load():
+    """Read a .chor file. LAN-open (read-only). Audit finding CR-3
+    2026-05-15: the legacy audio2 migration used to write-back to
+    disk from this read endpoint, opening a non-admin side-effect
+    path. The migration now stays in-memory only — the on-disk file
+    is rewritten on the next /choreo/save (admin-gated) instead."""
     name = request.args.get('name', '')
     if not name:
         return jsonify({'error': 'name required'}), 400
     path, err = _safe_choreo_path(name)
     if err:
         return err
-    if not os.path.exists(path):
-        return jsonify({'error': 'not found'}), 404
     with _chor_file_lock:
-        with open(path, encoding='utf-8') as f:
-            chor = json.load(f)
-        # Migrate legacy audio2 track → unified audio track with ch=1.
-        # Persist the migrated file back to disk so the next load doesn't
-        # re-run the migration. Was previously stateless: every load
-        # re-merged audio2 in memory but never wrote back, so the same
-        # legacy file kept paying the migration cost forever AND the
-        # client-side migration in app.js also re-ran on every load
-        # (setting _dirty=true before load() finished resetting it,
-        # confusing the save-on-play heuristic).
+        # Open inside the lock so a delete racing between the prior
+        # exists() and open() returns 404 (FileNotFoundError handled
+        # below) instead of 500. Audit M-7 2026-05-15.
+        try:
+            with open(path, encoding='utf-8') as f:
+                chor = json.load(f)
+        except FileNotFoundError:
+            return jsonify({'error': 'not found'}), 404
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning("choreo_load(%s) failed: %s", name, e)
+            return jsonify({'error': 'load failed'}), 500
+        # Legacy audio2 → audio migration is now IN-MEMORY ONLY. The
+        # client gets the migrated dict and will save it back through
+        # the admin-gated /choreo/save the next time the operator
+        # edits the choreo. No write side-effect on this read path.
         tracks = chor.get('tracks', {})
         audio2 = tracks.pop('audio2', [])
         if audio2:
@@ -646,28 +662,100 @@ def choreo_load():
             for ev in audio2:
                 audio.append({**ev, 'ch': 1})
             tracks['audio'].sort(key=lambda e: e.get('t', 0))
-            try:
-                _atomic_write_chor(path, chor)
-                log.info("Migrated legacy audio2 track on disk: %s", name)
-            except Exception:
-                log.exception("Failed to persist audio2 migration for %s — will retry next load", name)
     return jsonify(chor)
 
 
+# ─── Save-time schema validation (audit CR-2 2026-05-15) ─────────
+# Previously /choreo/save persisted ANY truthy dict with a 'meta'
+# key — opened the door to t=1e300, tracks="not a dict", or audio
+# files pointing at /etc/passwd. These helpers reject malformed
+# chors before they ever hit disk.
+
+_VALID_TRACK_NAMES = {
+    'audio', 'lights', 'dome_servos', 'body_servos', 'arm_servos',
+    'servos', 'dome', 'propulsion', 'markers',
+    # Legacy / accepted for migration:
+    'audio2',
+}
+_MAX_EVENTS_PER_TRACK = 5000
+_MAX_DURATION_SECONDS = 3600  # 1 hour upper bound
+
+def _validate_chor_schema(chor: dict) -> tuple[bool, str]:
+    """Return (ok, error_message). Conservative — reject anything
+    structurally wrong; tolerate missing optional fields."""
+    import math
+    if not isinstance(chor, dict):
+        return False, 'chor must be an object'
+    meta = chor.get('meta')
+    if not isinstance(meta, dict):
+        return False, 'meta must be an object'
+    # meta.name: required string, regex-safe (will be re-validated by
+    # _safe_choreo_path on the save path)
+    name = meta.get('name')
+    if not isinstance(name, str) or not name:
+        return False, 'meta.name required'
+    # meta.duration: required finite non-negative number
+    try:
+        dur = float(meta.get('duration', 0))
+    except (TypeError, ValueError):
+        return False, 'meta.duration must be a number'
+    if not math.isfinite(dur) or dur < 0 or dur > _MAX_DURATION_SECONDS:
+        return False, f'meta.duration must be 0..{_MAX_DURATION_SECONDS}'
+    # tracks: required dict
+    tracks = chor.get('tracks')
+    if not isinstance(tracks, dict):
+        return False, 'tracks must be an object'
+    for tname, events in tracks.items():
+        if tname not in _VALID_TRACK_NAMES:
+            return False, f'unknown track: {tname!r}'
+        if not isinstance(events, list):
+            return False, f'tracks.{tname} must be a list'
+        if len(events) > _MAX_EVENTS_PER_TRACK:
+            return False, f'tracks.{tname}: too many events (>{_MAX_EVENTS_PER_TRACK})'
+        for i, ev in enumerate(events):
+            if not isinstance(ev, dict):
+                return False, f'tracks.{tname}[{i}] must be an object'
+            t = ev.get('t', 0)
+            try:
+                t = float(t)
+            except (TypeError, ValueError):
+                return False, f'tracks.{tname}[{i}].t must be a number'
+            if not math.isfinite(t) or t < 0 or t > _MAX_DURATION_SECONDS:
+                return False, f'tracks.{tname}[{i}].t must be 0..{_MAX_DURATION_SECONDS}'
+            # Audio events: file is the only string that flows to the
+            # slave's mpg123 — gate against traversal at save time so a
+            # malicious admin POST can't plant '../../etc/passwd' for
+            # later UART forwarding. Allowlist matches _SOUND_NAME_RE
+            # used by audio_bp at the read path.
+            if tname == 'audio' or tname == 'audio2':
+                f = ev.get('file', '')
+                if f and (not isinstance(f, str) or not _re.match(r'^[A-Za-z0-9_]{1,80}$', f)):
+                    return False, f'tracks.{tname}[{i}].file: invalid filename'
+    return True, ''
+
+
 @choreo_bp.post('/choreo/save')
+@require_admin
 def choreo_save():
+    """Save a .chor file. Audit findings CR-1 + CR-2 2026-05-15:
+    was the only mutation endpoint without @require_admin AND
+    accepted any client dict verbatim. Now gated + validated."""
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     chor = data.get('chor')
-    if not chor or 'meta' not in chor:
+    if not isinstance(chor, dict) or 'meta' not in chor:
         return jsonify({'error': 'invalid chor'}), 400
-    name = chor['meta'].get('name', 'untitled')
+    ok, err_msg = _validate_chor_schema(chor)
+    if not ok:
+        log.warning("choreo_save schema rejected: %s", err_msg)
+        return jsonify({'error': f'schema: {err_msg}'}), 400
+    name = chor['meta']['name']
     path, err = _safe_choreo_path(name)
     if err:
         return err
     os.makedirs(_CHOREO_DIR, exist_ok=True)
     with _chor_file_lock:
         _atomic_write_chor(path, chor)
-    log.info(f"Choreo saved: {name}")
+    log.info("Choreo saved: %s", name)
     return jsonify({'status': 'ok', 'name': name})
 
 
@@ -703,6 +791,14 @@ def choreo_delete(name: str):
                 cascade_delete('play_choreo', name)
             except Exception:
                 log.exception("cascade_delete failed for choreo %s", name)
+            # Audit finding CR-7 2026-05-15: also drop from behavior
+            # config so startup_choreo + idle_choreo_list don't keep
+            # pointing at a dead name.
+            try:
+                from master.api.behavior_bp import cascade_delete as behavior_cascade_delete
+                behavior_cascade_delete('play_choreo', name)
+            except Exception:
+                log.exception("behavior cascade_delete failed for choreo %s", name)
             log.info(f"Choreo deleted: {name}")
             return jsonify({'status': 'ok', 'name': name})
         except OSError as e:

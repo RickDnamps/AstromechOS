@@ -66,12 +66,97 @@ import re as _re
 _CHOREO_NAME_RE = _re.compile(r'^[A-Za-z0-9][A-Za-z0-9_\- ]{0,63}$')
 
 
+def _strip_chor_ext(name: str) -> str:
+    """Strip a trailing '.chor' so cfg values that historically shipped
+    with the extension still validate. Audit finding CR-6 2026-05-15:
+    local.cfg.example shipped 'startup.chor' but the frontend select
+    uses bare names, so save would reject the shipped defaults."""
+    if isinstance(name, str) and name.endswith('.chor'):
+        return name[:-5]
+    return name
+
+
 def _valid_choreo_name(name: str) -> bool:
     """True if `name` is a syntactically valid choreo name AND a matching
-    .chor file exists in the choreo directory."""
+    .chor file exists in the choreo directory. Tolerates a trailing
+    '.chor' extension for backward-compat with shipped configs."""
+    name = _strip_chor_ext(name)
     if not name or not _CHOREO_NAME_RE.match(name):
         return False
     return os.path.isfile(os.path.join(_CHOREO_DIR, name + '.chor'))
+
+
+# ─── Cascade helpers (audit CR-7 2026-05-15) ─────────────────────
+# Called by choreo_bp on choreo rename/delete so behavior config
+# stays consistent. Without this, renaming patrol.chor would silently
+# break the operator's idle rotation — engine logs "ALIVE choreo
+# not found" and skips that pass forever.
+
+def _rewrite_behavior_choreo(transform) -> int:
+    """Apply `transform(name) -> new_name_or_None` to startup_choreo
+    and every entry in idle_choreo_list. None drops the entry.
+    Returns the number of values changed."""
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    changed = 0
+    with _cfg_write_lock:
+        parser = _get_cfg()
+        if not parser.has_section('behavior'):
+            return 0
+        # startup_choreo
+        cur = _strip_chor_ext(parser.get('behavior', 'startup_choreo', fallback=''))
+        if cur:
+            new = transform(cur)
+            if new is None:
+                parser.set('behavior', 'startup_choreo', '')
+                parser.set('behavior', 'startup_enabled', 'false')
+                changed += 1
+            elif new != cur:
+                parser.set('behavior', 'startup_choreo', new)
+                changed += 1
+        # idle_choreo_list
+        raw = parser.get('behavior', 'idle_choreo_list', fallback='')
+        if raw:
+            items = []
+            list_changed = False
+            for c in raw.split(','):
+                c = _strip_chor_ext(c.strip())
+                if not c:
+                    continue
+                new = transform(c)
+                if new is None:
+                    list_changed = True
+                    continue
+                if new != c:
+                    list_changed = True
+                items.append(new)
+            if list_changed:
+                parser.set('behavior', 'idle_choreo_list', ','.join(items))
+                changed += 1
+        if changed:
+            write_cfg_atomic(parser, _CFG_PATH)
+            # Invalidate the mtime cache so the next read picks up the change
+            _BEHAVIOR_CFG_CACHE['mtime'] = 0.0
+            _log.info("behavior_bp cascade: %d values rewritten", changed)
+    return changed
+
+
+def cascade_rename(action_type: str, old_target: str, new_target: str) -> int:
+    """Update behavior config when a choreo is renamed."""
+    if action_type != 'play_choreo':
+        return 0
+    return _rewrite_behavior_choreo(
+        lambda n: new_target if n == old_target else n
+    )
+
+
+def cascade_delete(action_type: str, target: str) -> int:
+    """Drop deleted choreo from startup + idle list."""
+    if action_type != 'play_choreo':
+        return 0
+    return _rewrite_behavior_choreo(
+        lambda n: None if n == target else n
+    )
 
 
 def _get_cfg() -> configparser.ConfigParser:
