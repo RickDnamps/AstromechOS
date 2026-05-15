@@ -301,7 +301,12 @@ def _get_index() -> dict:
     B-12: narrow exception clauses — OSError for file-not-found /
     permission, JSONDecodeError for malformed JSON. Anything else
     propagates so a real bug surfaces in journalctl instead of
-    silently degrading to an empty index."""
+    silently degrading to an empty index.
+
+    Audit finding M-3 2026-05-15: _INDEX_CACHE + _INDEX_MTIME were
+    written outside the lock. A reader could see the new MTIME with
+    the OLD CACHE (or vice versa) for a tick. Both writes now happen
+    under _audio_state_lock as a single critical section."""
     global _INDEX_CACHE, _INDEX_MTIME
     try:
         mtime = os.path.getmtime(_INDEX_FILE)
@@ -309,15 +314,39 @@ def _get_index() -> dict:
         # File missing — keep whatever we have cached (possibly empty).
         return _INDEX_CACHE
     if mtime > _INDEX_MTIME or not _INDEX_CACHE:
-        try:
-            with open(_INDEX_FILE, encoding='utf-8') as f:
-                _INDEX_CACHE = json.load(f)
-            _INDEX_MTIME = mtime
-        except (OSError, json.JSONDecodeError) as e:
-            log.warning('_get_index: failed to reload — %s', e)
-            if not _INDEX_CACHE:
-                _INDEX_CACHE = {}
+        with _audio_state_lock:
+            # Re-check under the lock — another thread may have just
+            # refreshed it while we were waiting.
+            if mtime > _INDEX_MTIME or not _INDEX_CACHE:
+                try:
+                    with open(_INDEX_FILE, encoding='utf-8') as f:
+                        _INDEX_CACHE = json.load(f)
+                    _INDEX_MTIME = mtime
+                except (OSError, json.JSONDecodeError) as e:
+                    log.warning('_get_index: failed to reload — %s', e)
+                    if not _INDEX_CACHE:
+                        _INDEX_CACHE = {}
     return _INDEX_CACHE
+
+
+def _atomic_write_index(index: dict) -> None:
+    """Atomically replace sounds_index.json: tmp + fsync + os.replace.
+
+    Audit finding M-2 2026-05-15: Path(_INDEX_FILE).write_text used
+    open-truncate-write, so a crash mid-write left a half-written
+    file → next /audio/upload silently rebuilt the index empty,
+    losing the entire catalog (the documented 'recovery procedures'
+    scenario in CLAUDE.md). This helper is the same pattern as
+    write_cfg_atomic / _atomic_write_chor."""
+    tmp = _INDEX_FILE + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(index, f, indent=2, ensure_ascii=False)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            pass   # not all FS support fsync
+    os.replace(tmp, _INDEX_FILE)
 
 
 def _valid_sound(sound: str) -> bool:
@@ -635,12 +664,21 @@ def upload_sound():
     with _upload_lock:
         # Load the index BEFORE writing, so we can resolve name collisions
         # against both disk presence AND any category in the index.
+        # Audit finding M-1 2026-05-15: silently substituting an empty
+        # index on parse failure caused upload to REBUILD it with only
+        # the new file — losing the entire pre-corruption catalog.
+        # Fail-closed: refuse the upload, point operator at the recovery
+        # script. The catalog is too valuable to silently overwrite.
         try:
             index = json.loads(Path(_INDEX_FILE).read_text(encoding='utf-8'))
-        except (OSError, json.JSONDecodeError):
-            # Narrow catch: missing file or corrupt JSON is recoverable.
-            # Unknown exceptions propagate so they surface in journalctl.
+        except FileNotFoundError:
             index = {'categories': {}}
+        except (OSError, json.JSONDecodeError) as e:
+            log.error("Upload refused: sounds_index.json corrupted: %s", e)
+            return jsonify({
+                'ok': False,
+                'error': 'sound index corrupted — run scripts/fix_slave_sounds_index.py first',
+            }), 503
         cats = index.setdefault('categories', {})
 
         # Auto-rename on collision (user feedback 2026-05-15: prefer
@@ -669,7 +707,7 @@ def upload_sound():
         if final_stem not in sounds:
             sounds.append(final_stem)
             sounds.sort()
-        Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
+        _atomic_write_index(index)
         with _audio_state_lock:
             global _INDEX_CACHE, _INDEX_MTIME
             _INDEX_CACHE = index  # refresh in-memory cache
@@ -723,7 +761,7 @@ def create_category():
         if name in cats:
             return jsonify({'ok': False, 'error': f'Category "{name}" already exists'}), 409
         cats[name] = []
-        Path(_INDEX_FILE).write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding='utf-8')
+        _atomic_write_index(index)
         with _audio_state_lock:
             global _INDEX_CACHE, _INDEX_MTIME
             _INDEX_CACHE = index

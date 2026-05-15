@@ -770,7 +770,13 @@ def admin_verify():
     attempts in 60s the IP gets a 5-min lockout (429 Too Many
     Requests). Resets across Master reboots.
     """
-    ip = request.headers.get('X-Forwarded-For') or request.remote_addr or 'unknown'
+    # Audit finding M-3 2026-05-15: trusting X-Forwarded-For let any
+    # attacker bypass the rate limit by spoofing a new IP per request.
+    # AstromechOS runs Flask directly on the LAN (no reverse proxy),
+    # so remote_addr is authoritative and X-Forwarded-For should be
+    # ignored. If a proxy is ever introduced, the gateway sets the
+    # header and the proxy itself must enforce the limit upstream.
+    ip = request.remote_addr or 'unknown'
     allowed, retry = _verify_rate_check(ip)
     if not allowed:
         log.warning("admin verify rate-limited: %s (retry in %.0fs)", ip, retry)
@@ -804,6 +810,12 @@ def admin_change_password():
         return jsonify({'error': 'Incorrect current password'}), 401
     if len(new_pwd) < 4:
         return jsonify({'error': 'New password must be at least 4 characters'}), 400
+    # Audit finding M-4 2026-05-15: cap at 128 chars. Without this a
+    # 1 MB password bloats local.cfg and every admin call compares
+    # against a multi-megabyte string. 128 chars is plenty for any
+    # human-typeable secret + leaves room for paste-from-manager.
+    if len(new_pwd) > 128:
+        return jsonify({'error': 'New password too long (max 128 chars)'}), 400
 
     _write_key('admin', 'password', new_pwd)
     log.info("Admin password changed")

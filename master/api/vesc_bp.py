@@ -228,6 +228,7 @@ def invert_motor():
 
 
 @vesc_bp.get('/can/scan')
+@require_admin
 def can_scan():
     """
     Starts a CAN bus scan via UART → Slave → VESC 1 USB.

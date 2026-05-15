@@ -161,6 +161,11 @@ def create_app() -> Flask:
 
     @app.errorhandler(500)
     def server_error(e):
+        # Audit finding M-3 2026-05-15: without log.exception, an
+        # unhandled blueprint exception turned into a silent generic
+        # 500 — operator + journalctl saw nothing, debugging was
+        # blind. Log the full traceback so genuine bugs surface.
+        log.exception("Unhandled 500: %s", e)
         return jsonify({'error': 'Internal server error'}), 500
 
     log.info("Flask app created — blueprints: audio, motion, servo, status, teeces, settings, vesc, bt, choreo, camera, behavior, diagnostics")

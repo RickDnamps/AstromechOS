@@ -327,21 +327,20 @@ def get_status():
         'app_hb_age_ms': app_watchdog.last_hb_age_ms,
         # Aggregate stats over BOTH sides — but skip stale frames so a
         # disconnected VESC stops contributing voltage/temp values after
-        # the 2s staleness threshold. Was previously serving the last
-        # received frame indefinitely (visible bug 2026-05-14 — Left VESC
-        # unplugged, top bar still showed battery + temp values).
-        'battery_voltage':  next(
-            (t['v_in'] for t in [_fresh_telem('L'), _fresh_telem('R')]
-             if t and t.get('v_in')), None
-        ),
-        'vesc_temp': max(
-            (t['temp'] for t in [_fresh_telem('L'), _fresh_telem('R')]
-             if t and t.get('temp') is not None), default=None
-        ),
-        'vesc_duty': max(
-            (abs(t['duty']) for t in [_fresh_telem('L'), _fresh_telem('R')]
-             if t and t.get('duty') is not None), default=None
-        ),
+        # the 2s staleness threshold. Audit finding M-1 2026-05-15:
+        # we used to call _fresh_telem six separate times in this dict
+        # literal, so a UART RX callback updating reg.vesc_telem
+        # between reads could land battery_voltage from frame N and
+        # vesc_temp from frame N+1 on the SAME /status response.
+        # Snapshot once, reuse three times.
+        **(lambda L=_fresh_telem('L'), R=_fresh_telem('R'): {
+            'battery_voltage':
+                next((t['v_in']  for t in (L, R) if t and t.get('v_in')),  None),
+            'vesc_temp':
+                max((t['temp']   for t in (L, R) if t and t.get('temp') is not None), default=None),
+            'vesc_duty':
+                max((abs(t['duty']) for t in (L, R) if t and t.get('duty') is not None), default=None),
+        })(),
         'teeces_ready':     bool(reg.teeces     and reg.teeces.is_ready()),
         'vesc_ready':       bool(reg.vesc       and reg.vesc.is_ready()),
         'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),

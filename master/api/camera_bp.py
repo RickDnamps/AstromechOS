@@ -115,7 +115,11 @@ def _write_cam_env(resolution: str, fps: int, quality: int) -> None:
             pass
     os.replace(tmp, _ENV_PATH)
     try:
-        os.chmod(_ENV_PATH, 0o644)   # readable by camera-start.sh
+        # Audit finding M-3 2026-05-15: camera-start.sh runs under
+        # User=artoo (same as the master service), so 0o600 still
+        # works — drops world+group read so future camera tokens
+        # added to this file are owner-only. Matches write_cfg_atomic.
+        os.chmod(_ENV_PATH, 0o600)
     except OSError:
         pass
 

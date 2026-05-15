@@ -227,6 +227,13 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
             os.fsync(f.fileno())
         except OSError:
             pass
+    # Audit finding M-7 2026-05-15: matches write_cfg_atomic chmod
+    # 0o600 — these JSON files hold operator-set labels which are
+    # config-grade content, not just opaque servo angles.
+    try:
+        os.chmod(tmp, 0o600)
+    except OSError:
+        pass
     os.replace(tmp, filepath)
 
 
@@ -411,19 +418,45 @@ def _servo_close(name: str, cfg: dict) -> None:
 
 
 def _arm_open_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
-    """Open panel → wait delay → open arm (runs in its own thread)."""
-    if panel:
-        _servo_open(panel, cfg)
-        time.sleep(delay)
-    _servo_open(arm, cfg)
+    """Open panel → wait delay → open arm (runs in its own thread).
+
+    Audit findings M-3 + M-4 2026-05-15: previously silently ignored
+    stow_in_progress (could write conflicting body-servo angles while
+    safe-home was running) and swallowed driver errors (operator saw
+    half-open arm with no error in UI). Now bails on stow and logs
+    failures with full stack trace."""
+    try:
+        if getattr(reg, 'stow_in_progress', False):
+            log.info("arm_open(%s) skipped — stow_in_progress", arm)
+            return
+        if panel:
+            _servo_open(panel, cfg)
+            time.sleep(delay)
+        # Re-check stow after the delay — the safe-home stow may
+        # have started between the two writes.
+        if getattr(reg, 'stow_in_progress', False):
+            log.info("arm_open(%s) aborted mid-sequence — stow_in_progress", arm)
+            return
+        _servo_open(arm, cfg)
+    except Exception:
+        log.exception("arm_open_sequence(arm=%s, panel=%s) failed", arm, panel)
 
 
 def _arm_close_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
     """Close arm → wait delay → close panel (runs in its own thread)."""
-    _servo_close(arm, cfg)
-    if panel:
-        time.sleep(delay)
-        _servo_close(panel, cfg)
+    try:
+        if getattr(reg, 'stow_in_progress', False):
+            log.info("arm_close(%s) skipped — stow_in_progress", arm)
+            return
+        _servo_close(arm, cfg)
+        if panel:
+            time.sleep(delay)
+            if getattr(reg, 'stow_in_progress', False):
+                log.info("arm_close(%s) aborted mid-sequence — stow_in_progress", arm)
+                return
+            _servo_close(panel, cfg)
+    except Exception:
+        log.exception("arm_close_sequence(arm=%s, panel=%s) failed", arm, panel)
 
 
 def _launch_arm_sequences(arms_cfg: dict, cfg: dict, action: str) -> None:

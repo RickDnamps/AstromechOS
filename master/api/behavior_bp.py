@@ -59,7 +59,11 @@ _CFG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'local.cfg')
 # string, and the BehaviorEngine later tries to load it.
 _CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
 import re as _re
-_CHOREO_NAME_RE = _re.compile(r'^[A-Za-z0-9_.\- ]+$')
+# Audit finding M-6 2026-05-15: the previous regex allowed leading-
+# dot files (.hidden.chor) and weird multi-dot names. on_disk check
+# already blocks the worst, but tighten anyway: first char alphanum,
+# 64-char cap, no leading dots.
+_CHOREO_NAME_RE = _re.compile(r'^[A-Za-z0-9][A-Za-z0-9_\- ]{0,63}$')
 
 
 def _valid_choreo_name(name: str) -> bool:
