@@ -1193,7 +1193,13 @@ class VirtualJoystick {
     // confusing UX). Also exit early when this is the propulsion joystick
     // and lockMgr has drive locked, mirroring the onMove guard.
     if (typeof _estopTripped !== 'undefined' && _estopTripped) return;
-    if (typeof _choreoLocked !== 'undefined' && _choreoLocked) return;
+    // Per-axis choreo gate: refuse pointerdown on the LEFT (propulsion)
+    // joystick only when the active choreo uses propulsion. The right
+    // joystick stays grabbable even during a dome-locked choreo
+    // because the Y axis (future camera control in v2) remains free —
+    // X is clamped to 0 inside the onMove handler instead.
+    if (typeof _choreoPropLocked !== 'undefined' && _choreoPropLocked
+        && this.ring && this.ring.id === 'js-left-ring') return;
     this._pointerId = e.pointerId;
     try { this.ring.setPointerCapture(e.pointerId); } catch {}
     this._start(e);
@@ -2387,28 +2393,45 @@ function _flushDriveHUD() {
 
 let _estopTripped = false;
 
-// Choreo lockout — true while a choreography is running on the server.
-// Updated by the StatusPoller from data.choreo_playing. Drives the
-// disabled overlay on the joystick panels + gates keyboard motion +
-// force-releases active drags on the rising edge (same pattern as
-// E-STOP). BT gamepad is gated server-side in bt_controller_driver.
+// Per-axis choreo lockout — split so a panel/sound-only choreo
+// leaves both joysticks free, while a choreo that DRIVES (propulsion
+// track) or ROTATES THE DOME (dome track) locks only that axis. Set
+// from data.choreo_uses_propulsion / data.choreo_uses_dome each
+// status tick. Rising edge force-releases the matching joystick.
+let _choreoPropLocked = false;
+let _choreoDomeLocked = false;
+// Legacy alias kept so older call sites compile — true if EITHER
+// axis is locked, which approximates the previous "is anything in
+// the choreo grabbing motion?" question.
 let _choreoLocked = false;
 
-function _setChoreoLockUI(locked, choreoName) {
-  const wasLocked = _choreoLocked;
-  _choreoLocked = locked;
-  document.body.classList.toggle('choreo-locked', locked);
+function _setChoreoLockUI(propLocked, domeLocked, choreoName) {
+  const wasProp = _choreoPropLocked;
+  const wasDome = _choreoDomeLocked;
+  _choreoPropLocked = propLocked;
+  _choreoDomeLocked = domeLocked;
+  _choreoLocked = propLocked || domeLocked;
+  document.body.classList.toggle('choreo-locked',      _choreoLocked);
+  document.body.classList.toggle('choreo-prop-locked', propLocked);
+  document.body.classList.toggle('choreo-dome-locked', domeLocked);
   const lbl = el('choreo-lock-label');
   if (lbl) lbl.textContent = choreoName || '';
-  if (locked && !wasLocked) {
-    // Same force-release dance as E-STOP: a finger holding the knob
-    // does not get a synthetic pointerup, so without forceRelease()
-    // the knob stays visually deflected even though the server has
-    // started refusing /motion/* with 503 choreo_active.
-    if (typeof jsLeft  !== 'undefined' && jsLeft.forceRelease)  jsLeft.forceRelease();
+  // Force-release only the joystick whose axis newly locked. A
+  // dome-track choreo doesn't touch propulsion, so the user can keep
+  // driving without their left joystick snapping back unexpectedly.
+  if (propLocked && !wasProp) {
+    if (typeof jsLeft !== 'undefined' && jsLeft.forceRelease) jsLeft.forceRelease();
+    if (typeof _keys !== 'undefined') {
+      // Only clear propulsion keys (WASD); keep arrow keys for dome
+      // since dome is locked separately.
+      ['w','a','s','d','W','A','S','D'].forEach(k => delete _keys[k]);
+      if (typeof _updateKbdUI === 'function') _updateKbdUI();
+    }
+  }
+  if (domeLocked && !wasDome) {
     if (typeof jsRight !== 'undefined' && jsRight.forceRelease) jsRight.forceRelease();
     if (typeof _keys !== 'undefined') {
-      for (const k of Object.keys(_keys)) delete _keys[k];
+      ['ArrowLeft','ArrowRight'].forEach(k => delete _keys[k]);
       if (typeof _updateKbdUI === 'function') _updateKbdUI();
     }
   }
@@ -2550,7 +2573,7 @@ const jsLeft = new VirtualJoystick(
     // when _estopTripped, but a poll-based E-STOP that fires AFTER the user
     // started dragging would otherwise let onMove continue spamming.
     if (_estopTripped) return;
-    if (_choreoLocked) return;             // Choreo owns motion
+    if (_choreoPropLocked) return;         // Choreo owns propulsion track
     if (lockMgr.isDriveLocked()) return;   // Child Lock : joystick gauche bloqué
     if (!_vescDriveSafe) return;           // VESC offline/fault
     _leftActive = true;
@@ -2576,7 +2599,12 @@ const jsRight = new VirtualJoystick(
   'js-right-ring', 'js-right-knob',
   (x, y) => {
     if (_estopTripped) return;
-    if (_choreoLocked) return;
+    // Per-axis gate: only the X axis (dome rotation) is owned by
+    // 'dome' tracks. Y axis is reserved for the camera in v2 — when
+    // that ships, it will read x freely while dome is choreo-locked.
+    // For now we simply clamp x to 0 when dome-locked so the operator
+    // can already prep for the v2 split.
+    if (_choreoDomeLocked) x = 0;
     const DEADZONE = 0.06;
     const vx = el('js-right-x'); if (vx) vx.textContent = x.toFixed(2);
     const vy = el('js-right-y'); if (vy) vy.textContent = y.toFixed(2);
@@ -2649,13 +2677,14 @@ function _handleKeys() {
     if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
     return;
   }
-  // Choreo lockout — same logic as E-STOP: while a choreo is
-  // playing, motion is owned by the playback. Refusing keys here
-  // saves the 503 round-trip and keeps the HUD coherent.
-  if (_choreoLocked) {
-    if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
-    if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
-    return;
+  // Per-axis choreo lockout. Block WASD only when the choreo owns
+  // propulsion; block ←/→ only when it owns dome. A panel-only
+  // choreo doesn't reach this branch at all (both flags false).
+  if (_choreoPropLocked && _propKeyWasActive) {
+    _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0);
+  }
+  if (_choreoDomeLocked && _domeKeyWasActive) {
+    _domeKeyWasActive = false; domeStop();
   }
   // User-reported 2026-05-15: WASD used to drive the motors regardless
   // of which tab was active. Operator typing into Settings → VESC was
@@ -2686,7 +2715,7 @@ function _handleKeys() {
     // Without this, holding W with an offline VESC kept POSTing arcade
     // calls (server refuses 503 but client spammed). Stop any in-flight
     // motion first so a release-of-W doesn't fire an extra driveStop.
-    if (!_vescDriveSafe || lockMgr.isDriveLocked()) {
+    if (!_vescDriveSafe || lockMgr.isDriveLocked() || _choreoPropLocked) {
       if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
     } else {
       _propKeyWasActive = true;
@@ -2706,8 +2735,12 @@ function _handleKeys() {
   const domeL = _keys['ArrowLeft'];
   const domeR = _keys['ArrowRight'];
   if (domeL || domeR) {
-    _domeKeyWasActive = true;
-    _postMotion('/motion/dome/turn', { speed: domeR ? 0.4 : -0.4 });
+    if (_choreoDomeLocked) {
+      if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
+    } else {
+      _domeKeyWasActive = true;
+      _postMotion('/motion/dome/turn', { speed: domeR ? 0.4 : -0.4 });
+    }
   } else if (_domeKeyWasActive) {
     _domeKeyWasActive = false;
     domeStop();
@@ -6009,13 +6042,16 @@ class StatusPoller {
     this._lastData = data;
     if (typeof shortcutsRunner !== 'undefined') shortcutsRunner.updateFromStatus(data);
 
-    // Choreo motion lockout — disables joysticks/keyboard while a
-    // choreography owns motion. BT gamepad is silenced server-side
-    // in bt_controller_driver. Resumes the instant the playback
-    // ends (data.choreo_playing flips back to false).
-    if (data.choreo_playing !== undefined && data.choreo_playing !== _choreoLocked) {
-      _setChoreoLockUI(!!data.choreo_playing, data.choreo_name);
-    } else if (data.choreo_playing && data.choreo_name) {
+    // Choreo motion lockout — per axis. A panel/sound-only choreo
+    // leaves both joysticks free; a 'propulsion' track locks left;
+    // a 'dome' track locks right horizontal. BT gamepad applies the
+    // same per-axis filter server-side. Resumes immediately when
+    // the matching track stops.
+    const wantProp = !!(data.choreo_playing && data.choreo_uses_propulsion);
+    const wantDome = !!(data.choreo_playing && data.choreo_uses_dome);
+    if (wantProp !== _choreoPropLocked || wantDome !== _choreoDomeLocked) {
+      _setChoreoLockUI(wantProp, wantDome, data.choreo_name);
+    } else if ((wantProp || wantDome) && data.choreo_name) {
       const lbl = el('choreo-lock-label');
       if (lbl && lbl.textContent !== data.choreo_name) lbl.textContent = data.choreo_name;
     }

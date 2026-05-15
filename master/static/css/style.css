@@ -1087,21 +1087,26 @@ body[data-lock-mode="2"] #js-left-ring::after {
   position: relative;
 }
 
-/* ─── Choreo motion lockout overlay ───────────────────────────────
- * When body.choreo-locked is set (status poller saw choreo_playing
- * flip on), every joystick panel gets a semi-transparent veil with
- * a "CHOREO PLAYING" label across both knobs. pointer-events:auto
- * on the veil itself absorbs taps so a finger landing on the knob
- * area does not start a phantom drag underneath. The JS still
- * defense-in-depths via _choreoLocked checks in the pointerdown
- * and onMove handlers.
+/* ─── Choreo per-axis lockout overlay ────────────────────────────
+ * Per-axis classes: a choreo that uses 'propulsion' track sets
+ * body.choreo-prop-locked → veil over LEFT joystick only. Same
+ * for 'dome' → right joystick. A panel/sound-only choreo sets
+ * neither, so both joysticks remain free. The veil greyscales the
+ * affected ring + lays a '🎬 CHOREO' label over it.
  */
-body.choreo-locked .joystick-ring {
+body.choreo-prop-locked .joystick-panel-left  .joystick-ring,
+body.choreo-dome-locked .joystick-panel-right .joystick-ring {
   filter: grayscale(0.6) brightness(0.55);
+}
+body.choreo-prop-locked .joystick-panel-left  .joystick-ring {
   pointer-events: none;
 }
-body.choreo-locked .joystick-panel::after {
-  content: '🎬 CHOREO PLAYING';
+/* Right joystick: keep pointer-events ON when only dome is locked
+ * because the Y axis (camera tilt, v2) is still usable. JS clamps
+ * X to 0 inside the onMove handler. */
+body.choreo-prop-locked .joystick-panel-left::after,
+body.choreo-dome-locked .joystick-panel-right::after {
+  content: '🎬 CHOREO';
   position: absolute;
   top: 50%;
   left: 50%;

@@ -249,12 +249,18 @@ class ChoreoPlayer:
         self._arm_timers_lock = threading.Lock()
         self._status_lock = threading.Lock()
         self._status = {
-            'playing':      False,
-            'name':         None,
-            't_now':        0.0,
-            'duration':     0.0,
-            'abort_reason': None,
-            'telem':        None,
+            'playing':         False,
+            'name':            None,
+            't_now':           0.0,
+            'duration':        0.0,
+            'abort_reason':    None,
+            'telem':           None,
+            # Per-axis motion ownership flags — set by _run() from
+            # the chor's tracks dict so the frontend can selectively
+            # disable joystick axes (propulsion / dome) rather than
+            # all motion at once.
+            'uses_propulsion': False,
+            'uses_dome':       False,
         }
 
     def _resolve_servo_id(self, name: str) -> str:
@@ -384,7 +390,12 @@ class ChoreoPlayer:
         if self._thread and self._thread is not threading.current_thread():
             self._thread.join(timeout=2.0)
         with self._status_lock:
-            self._status.update({'playing': False, 't_now': 0.0})
+            self._status.update({
+                'playing':         False,
+                't_now':           0.0,
+                'uses_propulsion': False,
+                'uses_dome':       False,
+            })
 
     def _launch_servo_slew(self, driver, name: str, target_angle: float,
                            dur_s: float, easing: str) -> None:
@@ -569,8 +580,23 @@ class ChoreoPlayer:
 
         ev_idx = 0
 
+        # Detect which motion axes this choreo will own. The frontend
+        # uses these flags to grey out *only* the relevant joystick
+        # axis (propulsion vs dome rotation) instead of locking
+        # everything. User-reported 2026-05-15: 'on pourrait le faire
+        # seulement si le choreo contient des déplacements drive ...
+        # même chose pour le dome'.
+        uses_propulsion = bool(tracks.get('propulsion'))
+        uses_dome       = bool(tracks.get('dome'))
         with self._status_lock:
-            self._status.update({'playing': True, 'name': name, 'duration': duration, 't_now': 0.0})
+            self._status.update({
+                'playing':         True,
+                'name':            name,
+                'duration':        duration,
+                't_now':           0.0,
+                'uses_propulsion': uses_propulsion,
+                'uses_dome':       uses_dome,
+            })
 
         t_start = time.monotonic()
 
@@ -629,10 +655,12 @@ class ChoreoPlayer:
         self._safe_stop_all()
         with self._status_lock:
             self._status.update({
-                'playing':      False,
-                't_now':        0.0,
-                'abort_reason': self._abort_reason,
-                'telem':        self._last_telem,
+                'playing':         False,
+                't_now':           0.0,
+                'abort_reason':    self._abort_reason,
+                'telem':           self._last_telem,
+                'uses_propulsion': False,
+                'uses_dome':       False,
             })
 
     def _release_slot(self, i: int) -> None:

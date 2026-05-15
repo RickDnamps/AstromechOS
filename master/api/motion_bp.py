@@ -101,13 +101,14 @@ def _drive_gate():
     if getattr(reg, 'stow_in_progress', False):
         return jsonify({'status': 'blocked', 'reason': 'stow_in_progress'}), 503
     if reg.choreo and reg.choreo.is_playing():
-        # Choreo is taking over motion (propulsion + dome). Refuse
-        # manual drive so the operator can't fight the playback —
-        # covers web joysticks, keyboard, and (via the same gate in
-        # bt_controller_driver) the BT gamepad. User-reported
-        # 2026-05-15: 'si on est en train de jouer une choreo il
-        # faut désactiver les joysticks le temps que ça finisse'.
-        return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
+        # Per-axis gate: a choreo only blocks PROPULSION when its
+        # 'propulsion' track has events. A panel/sound/light-only
+        # choreo (e.g. Angry → dome panels + sounds) leaves the
+        # propulsion joystick free so the operator can drive around
+        # while the show plays. User-refined 2026-05-15.
+        st = reg.choreo.get_status() or {}
+        if st.get('uses_propulsion'):
+            return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
     if is_drive_ramp_active():
         return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
     if reg.lock_mode == 2:
@@ -126,7 +127,13 @@ def _dome_gate():
     if getattr(reg, 'stow_in_progress', False):
         return jsonify({'status': 'blocked', 'reason': 'stow_in_progress'}), 503
     if reg.choreo and reg.choreo.is_playing():
-        return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
+        # Same per-axis logic for dome rotation. Note: only HORIZONTAL
+        # dome rotation is gated. Vertical (Y-axis) is reserved for
+        # the camera control planned in v2 — frontend already routes
+        # Y to a different endpoint, so this gate is correct.
+        st = reg.choreo.get_status() or {}
+        if st.get('uses_dome'):
+            return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
     if is_dome_ramp_active():
         return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
     if reg.lock_mode == 2:

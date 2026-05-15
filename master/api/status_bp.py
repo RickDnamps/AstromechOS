@@ -305,8 +305,14 @@ def get_status():
     # treated as 'no cards running' and cleared every highlight for
     # one tick. Compute the pair atomically here.
     _choreo_playing = bool(reg.choreo and reg.choreo.is_playing())
-    _choreo_name    = (reg.choreo.get_status().get('name')
-                       if _choreo_playing else None)
+    _choreo_status  = reg.choreo.get_status() if _choreo_playing else {}
+    _choreo_name    = _choreo_status.get('name') if _choreo_playing else None
+    # Per-axis motion ownership flags. Frontend uses these to grey out
+    # only the joystick axes the choreo actually drives, leaving the
+    # operator free to drive/dome manually when the playback doesn't
+    # touch those tracks.
+    _choreo_uses_prop = bool(_choreo_status.get('uses_propulsion')) if _choreo_playing else False
+    _choreo_uses_dome = bool(_choreo_status.get('uses_dome'))       if _choreo_playing else False
     return jsonify({
         'robot_name':        _robot_name(),
         'robot_icon':        _robot_icon(),
@@ -340,8 +346,10 @@ def get_status():
         'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),
         'servo_ready':      bool(reg.servo      and reg.servo.is_ready()),
         'dome_servo_ready': bool(reg.dome_servo and reg.dome_servo.is_ready()),
-        'choreo_playing':  _choreo_playing,
-        'choreo_name':     _choreo_name,
+        'choreo_playing':         _choreo_playing,
+        'choreo_name':            _choreo_name,
+        'choreo_uses_propulsion': _choreo_uses_prop,
+        'choreo_uses_dome':       _choreo_uses_dome,
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
         'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # consecutive invalid CRC on Master side
         # ms since the last heartbeat ACK from the Slave; None until first ACK.
