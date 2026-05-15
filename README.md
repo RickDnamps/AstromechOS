@@ -8,11 +8,11 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%204B-C51A4A?logo=raspberry-pi&logoColor=white)](https://www.raspberrypi.com/)
 [![Android](https://img.shields.io/badge/Android-App%20included-3DDC84?logo=android&logoColor=white)](android/compiled/)
-[![Sounds](https://img.shields.io/badge/Sounds-317%20R2--D2%20audio%20files-blueviolet)](slave/sounds/)
-[![Sequences](https://img.shields.io/badge/Sequences-40%20behavioral-blue)](master/sequences/)
+[![Sounds](https://img.shields.io/badge/Sounds-324%20R2--D2%20audio%20files-blueviolet)](slave/sounds/)
+[![Sequences](https://img.shields.io/badge/Sequences-48%20behavioral-blue)](master/choreographies/)
 [![API](https://img.shields.io/badge/API-60%2B%20endpoints-orange)](master/api/)
 
-*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 40 expressive sequences · Choreography timeline editor*
+*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 324 authentic sounds · 48 expressive sequences · Choreography timeline editor*
 
 </div>
 
@@ -30,10 +30,10 @@ If you're building a full-scale R2-D2 and you want a control system actually wor
 
 ## What is this?
 
-A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 40 expressive behavioral sequences that give R2-D2 a real personality.
+A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 48 expressive behavioral sequences that give R2-D2 a real personality.
 
 - **Master Pi 4B 4GB** (dome, rotates) — Flask REST API, web dashboard, dome servos & panels, LED logics, visual editors, BT gamepad. 4GB headroom for future local AI (face detection, voice recognition — all on-device, no cloud)
-- **Slave Pi 4B 2GB** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 317-sound audio system, RP2040 diagnostic LCD. Kept deliberately lightweight — only real-time I/O, no AI workloads
+- **Slave Pi 4B 2GB** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 324-sound audio system, RP2040 diagnostic LCD. Kept deliberately lightweight — only real-time I/O, no AI workloads
 - If the UART link drops for more than 500ms, drive motors **cut immediately** — no runaway robot, ever
 
 ---
@@ -53,7 +53,7 @@ Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction
 <td align="center" width="50%">
 
 ### 🔊 Audio
-317 sounds · 14 mood categories · Animated waveform · Perceptual volume curve · Drag-and-drop upload (admin)
+324 sounds · 14 mood categories · Animated waveform · Perceptual volume curve · Drag-and-drop upload (admin)
 
 ![Audio Interface](Screenshots/Audio.png)
 
@@ -81,7 +81,7 @@ All motion blocked — R2 on display safely, lights & sounds still work
 <td align="center" width="50%">
 
 ### 🎬 Sequences
-40 behavioral sequences · Pill categories · Emoji picker · Loop mode · Admin drag-to-reorder
+48 behavioral sequences · Pill categories · Emoji picker · Loop mode · Admin drag-to-reorder
 
 ![Sequences Interface](Screenshots/Sequences.png)
 
@@ -163,10 +163,10 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 
 | | |
 |---|---|
-| 🎭 **40 behavioral sequences** | One-click coordinated performances — sound · dome · panels · lights · loop mode |
+| 🎭 **48 behavioral sequences** | One-click coordinated performances — sound · dome · panels · lights · loop mode |
 | 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC · audio · servos · lights · admin-guarded Save/Delete |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo direct to Pi · zero lag · battery % · RSSI · fully remappable |
-| 🔊 **317 authentic R2-D2 sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
+| 🔊 **324 authentic R2-D2 sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included |
 | 🛡️ **Triple safety watchdog** | App 600ms · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
 | 🚨 **VESC safety lock** | Blocks drive when ESC offline or faulted · bench mode bypass for bench testing |
@@ -181,7 +181,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 
 ## 🎭 Built-in Behavioral Sequences
 
-40 `.scr` sequences in the **SEQUENCES tab** — organised in pill categories, each with a custom emoji. One-click launch of coordinated emotional performances. **Loop mode** keeps sequences running continuously.
+48 `.chor` sequences in the **SEQUENCES tab** — organised in pill categories, each with a custom emoji. One-click launch of coordinated emotional performances. **Loop mode** keeps sequences running continuously. (The `.chor` JSON timeline format superseded the legacy `.scr` script format inherited from r2_control — see Credits.)
 
 | Sequence | What R2 does |
 |----------|-------------|
@@ -241,7 +241,7 @@ All three trigger a **graceful decel ramp** — never an abrupt stop that could 
 │  │  Choreography player     │   │  Body servos PCA9685 @0x41    │  │
 │  │  Dome servos @0x40       │   │  Dome motor TB6612 @0x40      │  │
 │  │  Lights plugin           │   │  Drive VESCs (USB+CAN, ERPM)  │  │
-│  │  BT Controller (evdev)   │   │  Audio mpg123 (317 sounds)    │  │
+│  │  BT Controller (evdev)   │   │  Audio mpg123 (324 sounds)    │  │
 │  │  Deploy controller       │   │  RP2040 GC9A01 LCD (USB)      │  │
 │  └──────────────────────────┘   └───────────────────────────────┘  │
 │              │                               │                      │
@@ -268,7 +268,7 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 | **Motors** | — | 2× 250W hub motors via 2× FSESC Mini 6.7 PRO |
 | **Dome motor** | — | DC motor via TB6612 HAT @ I2C 0x40 |
 | **LEDs** | Teeces32 or AstroPixels+ via USB | — |
-| **Audio** | — | 317 MP3 sounds · 3.5mm jack · mpg123 |
+| **Audio** | — | 324 MP3 sounds · 3.5mm jack · mpg123 |
 | **Display** | — | RP2040 Waveshare 1.28" 240×240 round LCD |
 | **Power** | 5V/10A Tobsun buck → GPIO 2&4 | 5V/10A + 12V/10A Tobsun bucks |
 | **Battery** | ← 24V via slip ring (3 wires parallel) | 6S LiPo 22.2V — XT90-S anti-spark |
@@ -317,7 +317,7 @@ Or press the physical dome button (short press). Updates itself over-the-air —
 |-------|-------------|--------|
 | **1** | UART + CRC · heartbeat watchdog · audio · Teeces32 · RP2040 display · auto-deploy | ✅ |
 | **2** | VESCs · dome motor · MG90S servo panels with speed ramp | ✅ |
-| **3** | Script engine — 40 expressive behavioral sequences | ✅ |
+| **3** | Choreography engine — 48 expressive behavioral sequences (`.chor`) | ✅ |
 | **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel + theme system + HAT/screen diagnostic | ✅ |
 | **4+** | Universal VESC safety helper · Slave boot banner config resync · paired-side CAN liveness · E-STOP/Reset E-STOP separation with kid-safe stow · event-driven choreo scheduler · UART RTT calibration tool with hot-swap · service worker cache versioned per deploy | ✅ |
 | **5** | Vision — person tracking · face detection · contextual AI responses (on-device) | 🔄 |
