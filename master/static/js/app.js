@@ -2755,31 +2755,42 @@ function estopReset() {
   // wait for server confirmation. _estopBusy prevents double-fire during
   // the round-trip.
   _estopBusy = true;
+  // User-reported 2026-05-15: STOWING text used to appear ONLY at the
+  // next status poll (≤2s lag), so the servos were already moving
+  // before the operator saw the indicator. Now: optimistic — the
+  // button text + a fast 500ms watch loop fire IMMEDIATELY on click,
+  // so the visual lines up with the physical motion start.
+  const txt = el('estop-toggle-text');
+  if (txt) txt.textContent = 'STOWING…';
   api('/system/estop_reset', 'POST').then(r => {
     if (r && r.status === 'reset') {
-      // User-reported 2026-05-15: previous toast 'servos re-armed' was
-      // BOTH misleading (servos are still stowing, not yet armed) AND
-      // visually covered the E-STOP button so the operator couldn't
-      // see the STOWING… text appearing on it. Honest short message
-      // that clears fast (the STOWING button text is the real status).
       toast('Stowing servos…', 'info');
       _setEstopUI(false);
-      // Watch for stow_in_progress to flip false then announce ready.
-      // The status poller already updates the button text; this just
-      // gives the operator a "ready" confirmation toast at the end.
+      // Don't immediately overwrite STOWING — _setEstopUI sets text to
+      // 'EMERGENCY STOP' but we want STOWING until the actual stow ends.
+      if (txt) txt.textContent = 'STOWING…';
+      // 500ms watch: catches the stow_in_progress=false transition
+      // way before the 2s status poller does, so the button reverts
+      // to EMERGENCY STOP exactly when the slew actually finishes.
       const _stowWatch = setInterval(async () => {
         const s = await api('/status');
         if (!s || !s.stow_in_progress) {
           clearInterval(_stowWatch);
+          if (txt) txt.textContent = 'EMERGENCY STOP';
           if (s) toast('R2 ready — drive armed', 'ok');
         }
       }, 500);
       // Safety: stop polling after 15s no matter what
       setTimeout(() => clearInterval(_stowWatch), 15000);
     } else {
+      // Restore the button on failure
+      if (txt) txt.textContent = 'RESET E-STOP';
       toast('Reset failed', 'error');
     }
-  }).catch(() => toast('Reset failed', 'error'))
+  }).catch(() => {
+    if (txt) txt.textContent = 'RESET E-STOP';
+    toast('Reset failed', 'error');
+  })
     .finally(() => { _estopBusy = false; });
 }
 
