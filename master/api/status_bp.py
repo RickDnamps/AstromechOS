@@ -255,6 +255,14 @@ def get_status():
     heartbeat_ok = app_watchdog.is_connected
     # BT controller status
     bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
+    # B-10 (audit 2026-05-15): snapshot choreo state ONCE — two
+    # is_playing() calls used to race a concurrent stop, producing
+    # {choreo_playing:True, choreo_name:None} which the frontend
+    # treated as 'no cards running' and cleared every highlight for
+    # one tick. Compute the pair atomically here.
+    _choreo_playing = bool(reg.choreo and reg.choreo.is_playing())
+    _choreo_name    = (reg.choreo.get_status().get('name')
+                       if _choreo_playing else None)
     return jsonify({
         'robot_name':        _robot_name(),
         'robot_icon':        _robot_icon(),
@@ -288,8 +296,8 @@ def get_status():
         'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),
         'servo_ready':      bool(reg.servo      and reg.servo.is_ready()),
         'dome_servo_ready': bool(reg.dome_servo and reg.dome_servo.is_ready()),
-        'choreo_playing':  bool(reg.choreo and reg.choreo.is_playing()),
-        'choreo_name':     (reg.choreo.get_status().get('name') if reg.choreo and reg.choreo.is_playing() else None),
+        'choreo_playing':  _choreo_playing,
+        'choreo_name':     _choreo_name,
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
         'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # consecutive invalid CRC on Master side
         # ms since the last heartbeat ACK from the Slave; None until first ACK.

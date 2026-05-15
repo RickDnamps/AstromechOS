@@ -111,7 +111,13 @@ class BehaviorEngine:
             choreo_data = self._load_choreo(choreo_path)
             if choreo_data:
                 log.info("Playing startup choreo: %s", choreo_name)
-                self._reg.choreo.play(choreo_data)
+                # B-8: route through choreo_bp.safe_play so concurrent
+                # Sequences-tab clicks and behavior triggers contend on
+                # the same _play_lock. Lazy import — choreo_bp imports
+                # the registry which holds reg.behavior_engine, so a
+                # top-level import would be circular.
+                from master.api.choreo_bp import safe_play
+                safe_play(choreo_data, log_label='behavior')
         except Exception:
             log.exception("Startup sequence error")
 
@@ -230,7 +236,13 @@ class BehaviorEngine:
             choreo_data = self._load_choreo(choreo_path)
             if choreo_data:
                 log.info("ALIVE choreo: %s", choreo_name)
-                self._reg.choreo.play(choreo_data)
+                # B-8: route through choreo_bp.safe_play so concurrent
+                # Sequences-tab clicks and behavior triggers contend on
+                # the same _play_lock. Lazy import — choreo_bp imports
+                # the registry which holds reg.behavior_engine, so a
+                # top-level import would be circular.
+                from master.api.choreo_bp import safe_play
+                safe_play(choreo_data, log_label='behavior')
         except Exception:
             log.exception("ALIVE choreo trigger failed")
 

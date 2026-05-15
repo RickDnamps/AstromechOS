@@ -472,9 +472,39 @@ def choreo_rename():
             return jsonify({'error': f'"{new_name}" already exists'}), 409
         with open(old_path, encoding='utf-8') as f:
             chor = json.load(f)
-        chor.setdefault('meta', {})['name'] = new_name
+        meta = chor.setdefault('meta', {})
+        # B-11 (audit 2026-05-15): rename also clears any auto-derived
+        # label so the displayed name follows the new filename. If the
+        # operator had explicitly set a custom label that differs from
+        # the auto-derived one (UPPERCASE name with underscores → spaces),
+        # we PRESERVE it — they meant that custom string. Heuristic:
+        # auto-label = old_name.upper().replace('_',' '). If the current
+        # label matches that pattern, drop it so the new auto-label
+        # kicks in; otherwise keep it untouched.
+        auto_label_old = old_name.upper().replace('_', ' ')
+        current_label  = meta.get('label', '').strip()
+        if current_label == '' or current_label == auto_label_old:
+            meta['label'] = ''   # frontend renders the new auto-label
+        meta['name'] = new_name
         _atomic_write_chor(new_path, chor)
         os.remove(old_path)
+        # F-5 (audit 2026-05-15): if the renamed sequence is currently
+        # playing, the in-memory ChoreoPlayer keeps the OLD name in its
+        # status. /status then reports the old name, the frontend looks
+        # up `seq-card-<oldname>` (which no longer exists), and the
+        # running highlight disappears until the choreo finishes. Patch
+        # the live status so the highlight follows the rename.
+        if reg.choreo and reg.choreo.is_playing():
+            cur = reg.choreo.get_status()
+            if cur.get('name') == old_name:
+                # Direct attribute write — no public setter exists, but
+                # this is a single-key update on a dict that's only ever
+                # mutated from the player's own thread plus this one
+                # rename event; the GIL keeps the assignment atomic.
+                try:
+                    reg.choreo._status['name'] = new_name
+                except (AttributeError, KeyError):
+                    pass
     log.info(f"Choreo renamed: {old_name} → {new_name}")
     return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
 
@@ -679,6 +709,40 @@ def _reset_servos():
 
 
 @choreo_bp.post('/choreo/play')
+def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> bool:
+    """Stop any in-flight choreo, reset servos, start the new one — all
+    under _play_lock. Returns True on success, False on lock timeout
+    or player rejection.
+
+    B-8 (audit 2026-05-15): single entry point for any code wanting
+    'safely transition to playing this chor'. behavior_engine used to
+    call reg.choreo.play() DIRECTLY, bypassing this lock — a user
+    clicking Play in the Sequences tab while the idle behavior fired
+    its scheduled choreo could race, and the second silently lost. The
+    helper centralises the documented stop → reset → play sequence so
+    no caller can accidentally skip the safety dance again.
+    """
+    if not reg.choreo:
+        return False
+    if not _play_lock.acquire(timeout=5.0):
+        log.warning("safe_play(%s): play queue busy", log_label)
+        return False
+    try:
+        if reg.choreo.is_playing():
+            log.info("Choreo already playing — stopping and resetting servos before starting '%s'", log_label)
+            reg.choreo.stop()
+            try:
+                _reset_servos()
+            except Exception:
+                log.exception("Servo reset failed — continuing with choreo start anyway")
+            # Short tail buffer — dome threads joined fully but the
+            # body/arm UART queue on the Slave may still be draining.
+            time.sleep(_SERVO_RESET_TAIL)
+        return bool(reg.choreo.play(chor, loop=loop))
+    finally:
+        _play_lock.release()
+
+
 def choreo_play():
     if not reg.choreo:
         return jsonify({'error': 'choreo player not available'}), 503
@@ -693,33 +757,14 @@ def choreo_play():
         return jsonify({'error': f'choreography not found: {name}'}), 404
     with open(path, encoding='utf-8') as f:
         chor = json.load(f)
-
-    # Coalesce concurrent play requests: a second request waits for the first
-    # to finish stopping/starting before deciding what to do.
-    if not _play_lock.acquire(timeout=5.0):
-        return jsonify({'error': 'play queue busy'}), 503
-    try:
-        # If a choreo is already playing: stop it, reset all servos, then start the new one
-        if reg.choreo.is_playing():
-            log.info("Choreo already playing — stopping and resetting servos before starting '%s'", name)
-            reg.choreo.stop()
-            try:
-                _reset_servos()  # parallel dispatch — joins internally per thread
-            except Exception:
-                log.exception("Servo reset failed — continuing with choreo start anyway")
-            # Short tail buffer — the dome joins fully but the body/arm UART
-            # queue on the Slave may still be draining when our threads
-            # returned. Keep this tight so we don't undo the parallelization
-            # gains. Was 1.5s on top of the old ~6s sequential reset.
-            time.sleep(_SERVO_RESET_TAIL)
-
-        loop = bool(data.get('loop', False))
-        ok = reg.choreo.play(chor, loop=loop)
-        if not ok:
-            return jsonify({'error': 'already playing'}), 409
-        return jsonify({'status': 'ok', 'name': name, 'duration': chor['meta']['duration']})
-    finally:
-        _play_lock.release()
+    loop = bool(data.get('loop', False))
+    if not safe_play(chor, loop=loop, log_label=name):
+        return jsonify({'error': 'play queue busy or already playing'}), 503
+    # B-9 (audit 2026-05-15): defensive .get for duration. The list
+    # endpoint already used .get('duration', 0); play used bracket
+    # access which 500'd for any older .chor missing the field.
+    return jsonify({'status': 'ok', 'name': name,
+                    'duration': chor.get('meta', {}).get('duration', 0)})
 
 
 @choreo_bp.post('/choreo/stop')

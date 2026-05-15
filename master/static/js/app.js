@@ -4246,7 +4246,14 @@ class ScriptEngine {
   _savePillOrder() {
     const pills = el('seq-pills').querySelectorAll('.seq-pill[data-cat]');
     const order = [...pills].map(p => p.dataset.cat).filter(id => id !== 'all');
-    api('/choreo/categories', 'POST', { action: 'reorder', order });
+    // F-9 (audit 2026-05-15): surface failure. Previously fire-and-forget
+    // — a 401 (admin lock expired mid-drag) or 5xx silently kept the
+    // server-side order stale; the next 15s reload snapped pills back
+    // to their old positions with no explanation.
+    api('/choreo/categories', 'POST', { action: 'reorder', order })
+      .then(d => {
+        if (!d) toast('Reorder failed — admin re-auth may be needed', 'error');
+      });
   }
 
   selectCategory(catId) {
@@ -4314,7 +4321,11 @@ class ScriptEngine {
       card.className = 'seq-card' + (isRunning ? ' running' : '') + (isLooping ? ' looping' : '');
       card.id = 'seq-card-' + s.name;
       card.dataset.name = s.name;
-      card.dataset.duration = String(s.duration || 5);
+      // F-4 (audit 2026-05-15): use ?? not || so a sequence with a real
+      // 0-duration (e.g. just-saved empty .chor) doesn't get the 5s
+      // placeholder — the progress bar would otherwise fill to 100%
+      // over 5s for a sequence that actually finishes instantly.
+      card.dataset.duration = String(s.duration ?? 5);
 
       if (isAdmin) {
         const handle = document.createElement('div');
@@ -4521,14 +4532,26 @@ class ScriptEngine {
     labelEl.replaceWith(input);
     input.focus(); input.select();
 
+    // F-10 (audit 2026-05-15): one-shot guard. Pressing Enter calls
+    // save() AND fires blur on the focused input → save() fires twice.
+    // Backend serialises both via _chor_file_lock so no data is lost,
+    // but the second `await this.load()` resolves AFTER the first and
+    // briefly flickers the grid. The flag short-circuits the second
+    // path without changing the keyboard-only/blur-only UX.
+    let saving = false;
     const save = async () => {
+      if (saving) return;
+      saving = true;
       const newLabel = input.value.trim();
       await api('/choreo/set-label', 'POST', { name, label: newLabel });
       await this.load();
     };
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') save();
-      if (e.key === 'Escape') this.load();
+      if (e.key === 'Escape') {
+        saving = true;   // suppress the impending blur-save
+        this.load();
+      }
     });
     input.addEventListener('blur', save);
   }
@@ -4547,9 +4570,16 @@ class ScriptEngine {
     }
     api('/choreo/play', 'POST', { name, loop }).then(d => {
       if (!d) {
+        // F-6 (audit 2026-05-15): surface play failure to the operator.
+        // Previously the rollback was silent — operator clicked Play,
+        // the running highlight flashed, then disappeared, with no
+        // hint about why. A 503 from the backend (play queue busy,
+        // VESC offline, etc.) deserves a toast so the user knows to
+        // retry rather than assume the click didn't register.
         this._running.delete(name);
         this._looping.delete(name);
         if (card) { card.classList.remove('running', 'looping'); }
+        toast(`Failed to start ${name.toUpperCase()} — see logs`, 'error');
       } else {
         toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
         poller.poll();
@@ -4558,11 +4588,24 @@ class ScriptEngine {
   }
 
   stop(name) {
-    api('/choreo/stop', 'POST').then(() => {
-      this._running.delete(name);
-      this._looping.delete(name);
-      const card = el(`seq-card-${name}`);
-      if (card) { card.classList.remove('running', 'looping'); }
+    // F-7 (audit 2026-05-15): clear EVERY running card class, not just
+    // the one the user clicked. The single-instance ChoreoPlayer means
+    // only one sequence is ever actually playing — but if the running
+    // highlight had drifted to a different card (e.g. after a rename
+    // race or a status poll lag), clicking 'stop' on the visible-but-
+    // wrong card used to leave the actually-playing card stuck visually.
+    // Now we clear the whole _running/_looping state and let the next
+    // status poll re-add the correct entry if anything is still going.
+    api('/choreo/stop', 'POST').then(d => {
+      if (!d) {
+        // F-6 mirror — never silently swallow a stop failure.
+        toast('Failed to stop — see logs', 'error');
+        return;
+      }
+      this._running.clear();
+      this._looping.clear();
+      document.querySelectorAll('.seq-card.running, .seq-card.looping')
+        .forEach(c => c.classList.remove('running', 'looping'));
       toast(`${name.toUpperCase()} stopped`, 'ok');
     });
   }
@@ -6738,8 +6781,17 @@ async function init() {
   // Start polling
   poller.start(2000);
 
-  // Refresh scripts periodically — skip if a card drag is in progress
-  setInterval(() => { if (!scriptEngine._dragActive) scriptEngine.load(); }, 15000);
+  // F-8 (audit 2026-05-15): only refresh while the Sequences tab is
+  // actually visible. Old code fired /choreo/list + /choreo/categories
+  // every 15s regardless of which tab the operator was on — wasted
+  // bandwidth on Pi 4B and competed with motion commands during drive.
+  // The drag guard stays for the case where the user is mid-drag and
+  // the timer ticks.
+  setInterval(() => {
+    if (document.querySelector('.tab.active')?.dataset.tab !== 'sequences') return;
+    if (scriptEngine._dragActive) return;
+    scriptEngine.load();
+  }, 15000);
 
   // Sync ALIVE button state from server
   api('/behavior/status').then(d => {
