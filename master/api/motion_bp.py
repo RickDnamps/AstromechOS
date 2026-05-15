@@ -275,10 +275,18 @@ def dome_stop():
 
 @motion_bp.post('/dome/random')
 def dome_random():
-    """Dome random mode. Body: {"enabled": bool}"""
+    """Dome random mode. Body: {"enabled": bool}.
+    Audit finding L-5 2026-05-15: enabling random dome motion now
+    runs through _dome_gate() — was bypassing E-STOP / stow /
+    choreo lockout entirely. Disabling is always allowed (operator
+    needs an off-switch even from a blocked state)."""
     body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     enabled = bool(body.get('enabled', False))
-    if not enabled:
+    if enabled:
+        gate = _dome_gate()
+        if gate is not None:
+            return gate
+    else:
         motion_watchdog.clear_dome()
     if reg.dome:
         reg.dome.set_random(enabled)

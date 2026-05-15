@@ -186,6 +186,12 @@ class BTControllerDriver:
         return bool(self._cfg.get('enabled', True))
 
     def set_enabled(self, enabled: bool) -> None:
+        # Audit finding L-4 2026-05-15: skip-if-unchanged. Each
+        # save_cfg does a full tmp+rename+fsync — at 100ms keypress
+        # repeats on the BT enable toggle that's fsync churn for no
+        # state change. Only write if the value actually flips.
+        if bool(self._cfg.get('enabled', True)) == bool(enabled):
+            return
         self._cfg['enabled'] = enabled
         save_cfg(self._cfg)
         if not enabled:

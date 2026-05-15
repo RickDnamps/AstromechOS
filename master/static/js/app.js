@@ -574,22 +574,43 @@ class ToastManager {
   // toast and runs onClick(). Null/undefined action = plain toast.
   show(msg, type = 'info', action = null) {
     const t = this._el;
+    t.replaceChildren();   // wipe previous content
     if (action && action.label) {
-      const safeLbl = String(action.label)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-      t.innerHTML = `<span class="toast-msg"></span>` +
-        `<button type="button" class="toast-action" style="margin-left:10px;padding:2px 9px;` +
-        `background:rgba(0,200,255,.18);border:1px solid var(--blue);border-radius:3px;` +
-        `color:var(--blue);cursor:pointer;font-family:var(--font-data);font-size:10px;` +
-        `letter-spacing:1.2px;text-transform:uppercase">${safeLbl}</button>`;
-      t.querySelector('.toast-msg').textContent = msg;
-      const btn = t.querySelector('.toast-action');
+      // Audit finding L-1 2026-05-15: was innerHTML with `${safeLbl}`
+      // interpolated. The local escapeHtml-like sub didn't escape `'`
+      // (a known sink — see CLAUDE.md). Today every caller passes
+      // the constant string 'UNDO', so no live XSS, but a future
+      // caller could pass user input as action.label. Build the
+      // button via createElement so the surface is permanently
+      // closed.
+      const span = document.createElement('span');
+      span.className = 'toast-msg';
+      span.textContent = msg;
+      t.appendChild(span);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      Object.assign(btn.style, {
+        marginLeft: '10px', padding: '2px 9px',
+        background: 'rgba(0,200,255,.18)',
+        border: '1px solid var(--blue)',
+        borderRadius: '3px',
+        color: 'var(--blue)',
+        cursor: 'pointer',
+        fontFamily: 'var(--font-data)',
+        fontSize: '10px',
+        letterSpacing: '1.2px',
+        textTransform: 'uppercase',
+      });
+      btn.textContent = String(action.label);
       btn.addEventListener('click', () => {
         try { action.onClick(); } finally {
           clearTimeout(this._timer);
           t.classList.remove('show');
         }
       });
+      t.appendChild(btn);
     } else {
       t.textContent = msg;
     }

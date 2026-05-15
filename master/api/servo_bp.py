@@ -619,7 +619,13 @@ def arms_config_save():
     import logging
     log = logging.getLogger(__name__)
     data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    count  = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
+    # Audit finding L-2 2026-05-15: int() on a non-numeric body
+    # value used to raise ValueError → 500 with stack trace to the
+    # client. Other servo endpoints return 400 with a clear message.
+    try:
+        count = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'count must be an integer'}), 400
     servos = data.get('servos', [])
     panels = data.get('panels', [])
     delays = data.get('delays', [])

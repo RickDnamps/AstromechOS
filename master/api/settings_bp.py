@@ -508,6 +508,11 @@ def set_hotspot():
         return jsonify({'error': 'SSID required'}), 400
     if password and len(password) < 8:
         return jsonify({'error': 'Hotspot password: minimum 8 characters (WPA2)'}), 400
+    # Audit finding L-2 2026-05-15: WPA2 max PSK is 63 chars per
+    # IEEE 802.11i. A 1 MB password would bloat local.cfg and fail
+    # nmcli anyway. Cap at the standard limit.
+    if password and len(password) > 63:
+        return jsonify({'error': 'Hotspot password: maximum 63 characters (WPA2 limit)'}), 400
 
     # Save
     _write_key('hotspot', 'ssid', ssid)

@@ -68,6 +68,8 @@ def _save_vesc_cfg(**kwargs) -> None:
     """Persist one or more keys to local.cfg [vesc] under the shared
     cross-blueprint cfg-write lock."""
     from master.api.settings_bp import _cfg_write_lock
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
     with _cfg_write_lock:
         cfg = configparser.ConfigParser()
         if os.path.exists(_LOCAL_CFG):
@@ -77,6 +79,12 @@ def _save_vesc_cfg(**kwargs) -> None:
         for k, v in kwargs.items():
             cfg.set('vesc', k, str(v))
         write_cfg_atomic(cfg, _LOCAL_CFG)
+    # Audit finding L-3 2026-05-15: log every VESC config change so
+    # journalctl carries an audit trail (who changed power_scale to
+    # 0.3 at 14:32 — invaluable when debugging unexpected drive
+    # behavior). Don't log the value itself if it's a secret, but
+    # VESC settings aren't secrets.
+    _log.info("VESC cfg saved: %s", kwargs)
 
 vesc_bp = Blueprint('vesc', __name__, url_prefix='/vesc')
 
@@ -180,7 +188,15 @@ def set_bench_mode():
     UART so vesc_driver can bypass its can_lost guard too.
     """
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    enabled = bool(body.get('enabled', False))
+    # Audit finding L-4 2026-05-15: bool("false") is True in Python
+    # (non-empty string is truthy). Operator POSTing {"enabled":
+    # "false"} from a misbehaving form would have toggled bench
+    # mode ON. Accept genuine bools + the common string variants.
+    raw = body.get('enabled', False)
+    if isinstance(raw, str):
+        enabled = raw.strip().lower() in ('1', 'true', 'yes', 'on')
+    else:
+        enabled = bool(raw)
     reg.vesc_bench_mode = enabled
     _save_vesc_cfg(bench_mode='1' if enabled else '0')
     # Propagate to slave so vesc_driver.drive() can bypass _can_lost.
