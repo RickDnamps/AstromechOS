@@ -137,6 +137,13 @@ class VescDriver(BaseDriver):
         # (instead of waiting for the 2s staleness check).
         self._can_lost = False
         self._SYNTHETIC_FAULT_CAN_LOST = 99
+        # Bench mode flag — set via UART VCFG:bench:1/0 from Master.
+        # When True, drive() bypasses the can_lost refusal so the
+        # operator can test a single-VESC bench setup (only one wheel
+        # plugged in). Master-side safety gate also bypasses in bench
+        # mode, so the full drive chain is unblocked. Reverts to
+        # normal multi-VESC paranoia when bench:0.
+        self._bench_mode = False
 
     # ------------------------------------------------------------------
     # BaseDriver
@@ -234,10 +241,18 @@ class VescDriver(BaseDriver):
         """
         if not self._ready:
             return
-        if self._can_lost:
+        if self._can_lost and not self._bench_mode:
             # One wheel only would spin the robot in place — refuse the command.
             # The Slave has already stopped the motors and is emitting synthetic
             # TR fault telemetry; Master's safety gate will block further input.
+            #
+            # 2026-05-15: bench mode bypasses this refusal so a single-VESC
+            # setup (e.g. only left plugged in for hardware verification)
+            # can receive drive commands. Master-side safety also bypasses
+            # in bench mode, so the full path is unblocked. The send loop
+            # below tolerates `vr is None` already via the set_*_can helpers
+            # silently no-op'ing when CAN ID 2 doesn't respond — only the
+            # set_*_direct path on USB will produce visible motor activity.
             return
         # Multiplicative scaling: power_scale is a true ceiling multiplier.
         # Drive speed × power_scale = effective power (e.g. 50% × 50% = 25%).
@@ -300,6 +315,21 @@ class VescDriver(BaseDriver):
             elif param == 'mode':
                 self._duty_mode = (val.lower() == 'duty')
                 log.info(f"VESC drive mode: {'DUTY' if self._duty_mode else 'RPM'}")
+            elif param == 'bench':
+                # User-reported 2026-05-15: when only ONE VESC is
+                # physically connected (e.g. left via USB, right
+                # unplugged), the can_lost guard in drive() refuses
+                # every command — making it impossible to test the
+                # single-VESC setup on the bench. The Master
+                # signals bench mode via this UART command; when
+                # set, drive() bypasses the can_lost refusal and
+                # sends commands to whatever side IS reachable.
+                # The Master-side safety gate (vesc_safety) ALSO
+                # bypasses in bench mode, so the full path is
+                # unblocked. Reverts to normal multi-VESC paranoia
+                # when bench:0.
+                self._bench_mode = (val == '1')
+                log.info(f"VESC bench mode: {'ON' if self._bench_mode else 'off'}")
             else:
                 log.warning(f"Unknown VCFG parameter: {param!r}")
         except (ValueError, IndexError) as e:

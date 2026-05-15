@@ -162,11 +162,23 @@ def get_config():
 @vesc_bp.post('/bench_mode')
 @require_admin
 def set_bench_mode():
-    """Enables/disables bench mode (bypasses VESC safety lock when no telem). Persisted to local.cfg."""
+    """Enables/disables bench mode (bypasses VESC safety lock when no telem). Persisted to local.cfg.
+
+    User-reported 2026-05-15: bench mode previously only bypassed the
+    MASTER's safety gate (vesc_safety.is_drive_safe()). The SLAVE's
+    vesc_driver.drive() has its own can_lost guard that refuses to
+    send any drive command when one VESC is unreachable over CAN —
+    which made bench-testing a single-VESC setup (e.g. only left USB)
+    impossible. The Master now propagates bench mode to the slave via
+    UART so vesc_driver can bypass its can_lost guard too.
+    """
     body = request.get_json(silent=True) or {}
     enabled = bool(body.get('enabled', False))
     reg.vesc_bench_mode = enabled
     _save_vesc_cfg(bench_mode='1' if enabled else '0')
+    # Propagate to slave so vesc_driver.drive() can bypass _can_lost.
+    if reg.uart:
+        reg.uart.send('VCFG', f'bench:{"1" if enabled else "0"}')
     return jsonify({'status': 'ok', 'bench_mode': enabled})
 
 
