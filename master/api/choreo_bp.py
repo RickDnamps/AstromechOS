@@ -116,7 +116,13 @@ def _load_categories() -> list:
     try:
         with open(_CATEGORIES_PATH, encoding='utf-8') as f:
             return json.load(f)
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as e:
+        # B-17 (audit 2026-05-15): regenerate the file when corrupt so
+        # subsequent reads see the defaults instead of silently returning
+        # the in-memory defaults forever (which masks the corruption and
+        # loses any user-created categories on the next save attempt).
+        log.warning("Categories file unreadable (%s) — regenerating defaults", e)
+        _save_categories(defaults)
         return defaults
 
 
@@ -212,34 +218,95 @@ def _safe_choreo_path(name):
     return candidate, None
 
 
-@choreo_bp.get('/choreo/list')
-def choreo_list():
-    os.makedirs(_CHOREO_DIR, exist_ok=True)
-    result = []
+# B-16 (audit 2026-05-15): /choreo/list cache. Old code opened all ~48
+# .chor files on EVERY request — multiply by 15s reload × N clients and
+# you get a constant trickle of I/O that competes with motion. Cache by
+# the choreo directory's mtime, plus a per-file mtime fingerprint so we
+# only re-read files that actually changed. The whole-dir mtime catches
+# adds/removes/renames; per-file mtime catches edits.
+_LIST_CACHE: dict = {'dir_mtime': 0.0, 'rows': None}
+_LIST_FILE_MTIMES: dict = {}   # {name: mtime}
+
+
+def _build_list_rows() -> list:
+    rows = []
+    new_mtimes: dict = {}
     for fname in sorted(os.listdir(_CHOREO_DIR)):
         if not fname.endswith('.chor'):
             continue
         name = fname[:-5]
         if name.startswith('__'):
-            continue  # skip temp/preview files (e.g. __preview__)
+            continue
+        fpath = os.path.join(_CHOREO_DIR, fname)
         try:
-            with open(os.path.join(_CHOREO_DIR, fname), encoding='utf-8') as f:
+            ft = os.path.getmtime(fpath)
+        except OSError:
+            continue
+        new_mtimes[name] = ft
+        # Reuse cached row if neither the file mtime nor the dir mtime
+        # moved. Falls through to a re-read otherwise.
+        cached = (_LIST_CACHE.get('rows') or {}).get(name) if isinstance(
+            _LIST_CACHE.get('rows'), dict) else None
+        if cached and _LIST_FILE_MTIMES.get(name) == ft:
+            rows.append(cached)
+            continue
+        try:
+            with open(fpath, encoding='utf-8') as f:
                 meta = json.load(f).get('meta', {})
-        except Exception:
+        except (OSError, json.JSONDecodeError):
             meta = {}
-        result.append({
+        rows.append({
             'name':     name,
             'label':    meta.get('label', '') or '',
             'category': meta.get('category', '') or _SYSTEM_CATEGORY,
             'emoji':    meta.get('emoji', '') or _auto_emoji(name),
             'duration': meta.get('duration', 0),
         })
-    return jsonify(result)
+    return rows, new_mtimes
+
+
+@choreo_bp.get('/choreo/list')
+def choreo_list():
+    os.makedirs(_CHOREO_DIR, exist_ok=True)
+    try:
+        dir_mtime = os.path.getmtime(_CHOREO_DIR)
+    except OSError:
+        dir_mtime = 0.0
+    cached_rows = _LIST_CACHE.get('rows')
+    if (isinstance(cached_rows, list)
+            and _LIST_CACHE.get('dir_mtime') == dir_mtime):
+        # Dir mtime didn't move → no adds/removes; but a single file
+        # edit could still have happened. _build_list_rows compares
+        # per-file mtimes too and reuses unchanged rows.
+        rows, new_mtimes = _build_list_rows()
+        _LIST_FILE_MTIMES.clear(); _LIST_FILE_MTIMES.update(new_mtimes)
+        # Also store the by-name dict for fast lookup next call.
+        _LIST_CACHE['rows'] = {r['name']: r for r in rows}
+        return jsonify(rows)
+    # Cold path: rebuild everything.
+    rows, new_mtimes = _build_list_rows()
+    _LIST_CACHE['dir_mtime'] = dir_mtime
+    _LIST_CACHE['rows']      = {r['name']: r for r in rows}
+    _LIST_FILE_MTIMES.clear(); _LIST_FILE_MTIMES.update(new_mtimes)
+    return jsonify(rows)
+
+
+# B-15: /choreo/categories cache. Same pattern but trivially small file
+# (a few hundred bytes). One-line mtime check — no per-row dance needed.
+_CATS_CACHE: dict = {'mtime': 0.0, 'rows': None}
 
 
 @choreo_bp.get('/choreo/categories')
 def get_categories():
+    try:
+        mtime = os.path.getmtime(_CATEGORIES_PATH)
+    except OSError:
+        mtime = 0.0
+    if _CATS_CACHE.get('rows') is not None and _CATS_CACHE.get('mtime') == mtime:
+        return jsonify(_CATS_CACHE['rows'])
     cats = sorted(_load_categories(), key=lambda c: c.get('order', 99))
+    _CATS_CACHE['mtime'] = mtime
+    _CATS_CACHE['rows']  = cats
     return jsonify(cats)
 
 
@@ -313,24 +380,34 @@ def manage_categories():
 
         elif action == 'reorder':
             new_order_raw = data.get('order', [])
-            # Normalize each id; silently drop anything that fails the
-            # allowlist instead of erroring — the action is benign and
-            # the reorder still succeeds with the recognised ids.
             new_order = [_norm_cat_id(x) for x in new_order_raw if isinstance(x, str)]
             new_order = [x for x in new_order if x]
             cat_map = {c['id']: c for c in cats}
+            # B-19 (audit 2026-05-15): detect stale-snapshot reorders.
+            # If the client's `order` is missing categories that exist
+            # server-side, the client was working from an old view (a
+            # different tab/admin created a category since their last
+            # fetch). We DON'T silently drop those server-side cats —
+            # we still append them at the end so the user's partial
+            # reorder applies AND no data is lost, but we return a
+            # `conflict` flag so the frontend can refresh and warn.
+            missing_ids = [c['id'] for c in cats if c['id'] not in new_order]
             reordered = []
             for i, cat_id in enumerate(new_order):
                 if cat_id in cat_map:
                     cat_map[cat_id]['order'] = i
                     reordered.append(cat_map[cat_id])
-            # Add any missing cats at end so a stale-snapshot client
-            # doesn't accidentally drop categories created in another tab.
-            for c in cats:
-                if c['id'] not in new_order:
-                    reordered.append(c)
+            # Append leftover cats with order numbers continuing the
+            # sequence so they end up after the explicitly-ordered ones.
+            for j, cat_id in enumerate(missing_ids):
+                cat_map[cat_id]['order'] = len(new_order) + j
+                reordered.append(cat_map[cat_id])
             _save_categories(reordered)
-            return jsonify({'status': 'ok'})
+            return jsonify({
+                'status': 'ok',
+                'conflict': bool(missing_ids),
+                'missing':  missing_ids,
+            })
 
         elif action == 'delete':
             cat_id = _norm_cat_id(data.get('id', ''))
@@ -569,6 +646,19 @@ def choreo_delete(name: str):
     path, err = _safe_choreo_path(name)
     if err:
         return err
+    # B-12 (audit 2026-05-15): refuse to delete a sequence that's
+    # currently playing. Old code would happily unlink the file out
+    # from under the in-memory ChoreoPlayer — playback continued (the
+    # chor dict is already in RAM) but /choreo/status reported a name
+    # that no longer had a card on the grid, leaving the running
+    # highlight orphaned forever. Stopping first then deleting is the
+    # operator's intent anyway.
+    if reg.choreo and reg.choreo.is_playing():
+        cur = reg.choreo.get_status().get('name')
+        if cur == name:
+            return jsonify({
+                'error': 'sequence is currently playing — stop it first',
+            }), 409
     with _chor_file_lock:
         if not os.path.exists(path):
             return jsonify({'error': 'not found'}), 404
@@ -769,8 +859,13 @@ def choreo_play():
 
 @choreo_bp.post('/choreo/stop')
 def choreo_stop():
-    if reg.choreo:
-        reg.choreo.stop()
+    # B-21 (audit 2026-05-15): mirror /choreo/play's 503 when no player
+    # is wired. Old code returned 'ok' regardless — operator clicking
+    # Stop on a misconfigured Master got a green toast while nothing
+    # actually happened. 503 lets the frontend surface the failure.
+    if not reg.choreo:
+        return jsonify({'error': 'choreo player not available'}), 503
+    reg.choreo.stop()
     return jsonify({'status': 'ok'})
 
 

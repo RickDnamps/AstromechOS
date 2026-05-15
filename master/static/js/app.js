@@ -4148,15 +4148,29 @@ class ScriptEngine {
   // ── Data loading ─────────────────────────────────────────────
 
   async load() {
-    const [scripts, cats] = await Promise.all([
-      api('/choreo/list'),
-      api('/choreo/categories'),
-    ]);
-    this._scripts    = scripts    || [];
-    this._categories = (cats || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
-    this._renderPills();
-    this._renderGrid();
-    this._syncAdminMode();
+    // F-17 (audit 2026-05-15): single-in-flight slot. load() is called
+    // from init(), every tab switch to 'sequences', every 15s, and on
+    // reconnect — rapid tab thrash or a brief offline blip used to
+    // multiply requests. If a load is already in flight, return its
+    // promise so callers still get a resolution. The promise clears
+    // itself in the finally block.
+    if (this._loadInFlight) return this._loadInFlight;
+    this._loadInFlight = (async () => {
+      try {
+        const [scripts, cats] = await Promise.all([
+          api('/choreo/list'),
+          api('/choreo/categories'),
+        ]);
+        this._scripts    = scripts    || [];
+        this._categories = (cats || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
+        this._renderPills();
+        this._renderGrid();
+        this._syncAdminMode();
+      } finally {
+        this._loadInFlight = null;
+      }
+    })();
+    return this._loadInFlight;
   }
 
   // ── Pills ─────────────────────────────────────────────────────
@@ -4268,17 +4282,44 @@ class ScriptEngine {
     if (!cat) return;
     emojiPicker.open(cat.emoji, async (emoji) => {
       if (!emoji) return;
-      await api('/choreo/categories', 'POST', { action: 'update', id: catId, emoji });
+      // F-14 (audit 2026-05-15): surface success/failure so the
+      // operator gets feedback. Previously the only signal was the
+      // grid eventually re-rendering (or not, on failure).
+      const d = await api('/choreo/categories', 'POST', { action: 'update', id: catId, emoji });
+      if (!d) {
+        toast('Failed to change emoji — admin re-auth may be needed', 'error');
+        return;
+      }
+      toast(`Emoji updated for ${escapeHtml(cat.label || catId)}`, 'ok');
       await this.load();
     });
   }
 
   async createCategory() {
-    const label = prompt('Category name:');
+    const label = (prompt('Category name:') || '').trim();
     if (!label) return;
+    // F-11 (audit 2026-05-15): client-side validation of the derived id
+    // before opening the emoji picker. A label of '日本語' or '!!' used
+    // to produce an empty id; backend then returned 400 but the user
+    // had already clicked through the picker — wasted UI step.
     const id = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    if (!id) {
+      toast('Category name needs at least one a-z 0-9 _ character', 'error');
+      return;
+    }
+    // F-12 (audit 2026-05-15): collision check before the picker.
+    if (this._categories.some(c => c.id === id)) {
+      toast(`Category id "${id}" already exists`, 'error');
+      return;
+    }
     emojiPicker.open('📦', async (emoji) => {
-      await api('/choreo/categories', 'POST', { action: 'create', id, label, emoji: emoji || '📦' });
+      const d = await api('/choreo/categories', 'POST',
+                          { action: 'create', id, label, emoji: emoji || '📦' });
+      if (!d) {
+        toast('Create category failed — admin re-auth may be needed', 'error');
+        return;
+      }
+      toast(`Category "${label}" created`, 'ok');
       await this.load();
     });
   }
@@ -4291,7 +4332,16 @@ class ScriptEngine {
       ? `Delete "${cat.label}"? ${count} sequence(s) will move to New Choreo.`
       : `Delete "${cat.label}"?`;
     if (!confirm(msg)) return;
-    await api('/choreo/categories', 'POST', { action: 'delete', id: catId });
+    // F-13 (audit 2026-05-15): inspect the response so admin failures
+    // (401, 403) don't silently no-op. The await was already present
+    // but the return value was discarded — null returns flowed through
+    // to the success path.
+    const d = await api('/choreo/categories', 'POST', { action: 'delete', id: catId });
+    if (!d) {
+      toast(`Failed to delete "${cat.label}" — admin re-auth may be needed`, 'error');
+      return;
+    }
+    toast(`Category "${cat.label}" deleted`, 'ok');
     if (this._activeCategory === catId) this._activeCategory = 'all';
     await this.load();
   }
@@ -4403,38 +4453,73 @@ class ScriptEngine {
         card.addEventListener('pointerdown', (e) => this._onPointerDown(e, name));
         card.addEventListener('pointerup',   (e) => this._onPointerUp(e, name));
         card.addEventListener('pointermove', (e) => this._onPointerMove(e));
-        card.addEventListener('pointercancel', () => this._clearLongPress());
+        card.addEventListener('pointercancel', (e) => this._clearLongPress(e));
       }
     });
   }
 
   // ── Long press (normal mode) ──────────────────────────────────
 
+  // F-15 / F-16 (audit 2026-05-15): long-press state is now tracked
+  // per-pointer in a single Map instead of a shared _longPressTimer.
+  // F-15: 1px touchscreen jitter used to cancel the long-press
+  // immediately — we now require an 8px movement threshold before
+  // cancelling, matching the admin-mode drag threshold below.
+  // F-16: a second pointerdown on a different card (multi-finger
+  // touch) used to overwrite the shared timer reference, leaking
+  // the first card's pending fire and silently dropping its
+  // long-press. The Map keyed by pointerId makes each touch
+  // independent.
   _onPointerDown(e, name) {
-    this._longPressTimer = setTimeout(() => {
-      this._longPressTimer = null;
-      this.play(e, name, true);
-    }, 500);
+    if (!this._longPress) this._longPress = new Map();
+    const state = {
+      timer: setTimeout(() => {
+        state.timer = null;
+        this.play(e, name, true);
+      }, 500),
+      startX: e.clientX,
+      startY: e.clientY,
+      name,
+    };
+    this._longPress.set(e.pointerId, state);
   }
 
   _onPointerUp(e, name) {
-    if (this._longPressTimer) {
-      clearTimeout(this._longPressTimer);
-      this._longPressTimer = null;
+    const state = this._longPress && this._longPress.get(e.pointerId);
+    if (!state) return;
+    this._longPress.delete(e.pointerId);
+    if (state.timer) {
+      clearTimeout(state.timer);
       if (this._running.has(name)) this.stop(name);
       else this.play(e, name, false);
     }
   }
 
   _onPointerMove(e) {
-    if (this._longPressTimer) {
-      clearTimeout(this._longPressTimer);
-      this._longPressTimer = null;
+    const state = this._longPress && this._longPress.get(e.pointerId);
+    if (!state || !state.timer) return;
+    const dx = Math.abs(e.clientX - state.startX);
+    const dy = Math.abs(e.clientY - state.startY);
+    if (dx > 8 || dy > 8) {
+      clearTimeout(state.timer);
+      state.timer = null;
     }
   }
 
-  _clearLongPress() {
-    if (this._longPressTimer) { clearTimeout(this._longPressTimer); this._longPressTimer = null; }
+  _clearLongPress(e) {
+    // Called on pointercancel — if `e` isn't passed (e.g. legacy
+    // callers), nuke every pending timer.
+    if (!this._longPress) return;
+    if (e && e.pointerId !== undefined) {
+      const state = this._longPress.get(e.pointerId);
+      if (state && state.timer) clearTimeout(state.timer);
+      this._longPress.delete(e.pointerId);
+    } else {
+      for (const [, st] of this._longPress) {
+        if (st.timer) clearTimeout(st.timer);
+      }
+      this._longPress.clear();
+    }
   }
 
   // ── Admin drag to pill ────────────────────────────────────────
@@ -4465,8 +4550,20 @@ class ScriptEngine {
       const target = document.elementFromPoint(dropX, dropY);
       const pill = target?.closest('.seq-pill[data-cat]');
       if (pill && pill.dataset.cat !== 'all') {
+        // F-24 (audit 2026-05-15): use human label not raw id in toast.
+        // F-13-style failure handling: surface errors instead of
+        // silently failing.
+        const cat = this._categories.find(c => c.id === pill.dataset.cat);
+        const display = cat?.label || pill.dataset.cat;
         api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
-          .then(() => { toast(`Moved to ${pill.dataset.cat}`, 'ok'); this.load(); });
+          .then(d => {
+            if (!d) {
+              toast(`Failed to move to ${display} — admin re-auth may be needed`, 'error');
+              return;
+            }
+            toast(`Moved to ${display}`, 'ok');
+            this.load();
+          });
       }
     };
 
@@ -4512,8 +4609,20 @@ class ScriptEngine {
       const target = document.elementFromPoint(dropX, dropY);
       const pill = target?.closest('.seq-pill[data-cat]');
       if (pill && pill.dataset.cat !== 'all') {
+        // F-24 (audit 2026-05-15): use human label not raw id in toast.
+        // F-13-style failure handling: surface errors instead of
+        // silently failing.
+        const cat = this._categories.find(c => c.id === pill.dataset.cat);
+        const display = cat?.label || pill.dataset.cat;
         api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
-          .then(() => { toast(`Moved to ${pill.dataset.cat}`, 'ok'); this.load(); });
+          .then(d => {
+            if (!d) {
+              toast(`Failed to move to ${display} — admin re-auth may be needed`, 'error');
+              return;
+            }
+            toast(`Moved to ${display}`, 'ok');
+            this.load();
+          });
       }
     });
 
@@ -4550,7 +4659,14 @@ class ScriptEngine {
       if (e.key === 'Enter') save();
       if (e.key === 'Escape') {
         saving = true;   // suppress the impending blur-save
-        this.load();
+        // F-20 (audit 2026-05-15): restore the original label client-
+        // side without re-fetching /choreo/list + /choreo/categories.
+        // The old `this.load()` did a full network round-trip to undo
+        // a single character of typing.
+        const restored = document.createElement('span');
+        restored.className = 'seq-card-label';
+        restored.textContent = current;
+        input.replaceWith(restored);
       }
     });
     input.addEventListener('blur', save);
