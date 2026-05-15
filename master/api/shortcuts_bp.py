@@ -279,6 +279,63 @@ def _persist_state() -> None:
         _atomic_write_json(_SHORTCUTS_FILE, data)
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Cascade helpers — other blueprints call these when they rename or
+# delete a resource that a shortcut might target (choreo, sound,
+# category). Keeps shortcuts.json consistent so the runner doesn't
+# fail a trigger on a stale name. User-reported 2026-05-15: 'quand
+# j'ai changé le nom d'une choreo le shortcut était cassé ... il
+# faut que cela soit blindé'.
+# ─────────────────────────────────────────────────────────────────────
+
+def cascade_rename(action_type: str, old_target: str, new_target: str) -> int:
+    """Update every shortcut whose action matches (type, old_target)
+    to point at new_target. Atomic write under _SHORTCUTS_LOCK.
+    Returns the number of shortcuts updated."""
+    if not action_type or not old_target or not new_target:
+        return 0
+    if old_target == new_target:
+        return 0
+    with _SHORTCUTS_LOCK:
+        data = _read_shortcuts()
+        changed = 0
+        for sc in data.get('shortcuts', []):
+            act = sc.get('action') or {}
+            if act.get('type') == action_type and act.get('target') == old_target:
+                act['target'] = new_target
+                sc['action'] = act
+                changed += 1
+        if changed:
+            _atomic_write_json(_SHORTCUTS_FILE, data)
+    if changed:
+        log.info("Shortcuts cascade rename: %s '%s'→'%s' updated %d entries",
+                 action_type, old_target, new_target, changed)
+    return changed
+
+
+def cascade_delete(action_type: str, target: str) -> int:
+    """Neutralize every shortcut whose action matches (type, target)
+    by switching its action to 'none' (preserves label/icon so the
+    operator notices and reconfigures, vs silently dropping the
+    button). Returns the number of shortcuts neutralized."""
+    if not action_type or not target:
+        return 0
+    with _SHORTCUTS_LOCK:
+        data = _read_shortcuts()
+        changed = 0
+        for sc in data.get('shortcuts', []):
+            act = sc.get('action') or {}
+            if act.get('type') == action_type and act.get('target') == target:
+                sc['action'] = {'type': 'none', 'target': ''}
+                changed += 1
+        if changed:
+            _atomic_write_json(_SHORTCUTS_FILE, data)
+    if changed:
+        log.info("Shortcuts cascade delete: %s '%s' neutralized %d entries",
+                 action_type, target, changed)
+    return changed
+
+
 # Seed state on module import so a fresh Master boot remembers the
 # last persisted on/off per shortcut.
 _seed_state_from_disk(_read_shortcuts())

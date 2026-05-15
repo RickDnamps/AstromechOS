@@ -708,20 +708,35 @@ class LockManager {
   }
   onKeyUp(e) { this._updateCapsHint(e); }
 
-  submitModal() {
+  async submitModal() {
     const pwd = el('lock-pwd-input').value;
-    if (pwd === 'deetoo') {
-      el('lock-modal').classList.add('hidden');
-      this._applyMode(0);
-    } else {
-      el('lock-pwd-error').classList.remove('hidden');
-      const inp = el('lock-pwd-input');
-      inp.value = '';
-      inp.classList.remove('shake');
-      void inp.offsetWidth;
-      inp.classList.add('shake');
-      inp.focus();
+    // Server-side password verification (audit finding CR-1
+    // 2026-05-15: 'deetoo' was hardcoded client-side, so anyone
+    // reading app.js could bypass Child Lock). The endpoint reuses
+    // the admin password via hmac.compare_digest and also persists
+    // the lock_mode change to local.cfg [security] so a Master
+    // reboot keeps the operator's choice.
+    try {
+      const res = await fetch('/lock/unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pwd, mode: 0 }),
+      });
+      if (res.ok) {
+        el('lock-modal').classList.add('hidden');
+        this._applyMode(0);
+        return;
+      }
+    } catch {
+      // network error — fall through to the visual error
     }
+    el('lock-pwd-error').classList.remove('hidden');
+    const inp = el('lock-pwd-input');
+    inp.value = '';
+    inp.classList.remove('shake');
+    void inp.offsetWidth;
+    inp.classList.add('shake');
+    inp.focus();
   }
 
   _applyMode(mode) {

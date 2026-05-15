@@ -216,6 +216,21 @@ def main() -> None:
     reg.vesc_invert_R    = cfg.getboolean('vesc', 'invert_r',    fallback=False)
     reg.vesc_bench_mode  = cfg.getboolean('vesc', 'bench_mode',  fallback=False)
 
+    # Lock mode + Kids speed cap restored from local.cfg [security].
+    # Without this a Master reboot silently dropped Child Lock back
+    # to Normal — audit finding CR-2 2026-05-15. Clamped to the
+    # documented 3-tier range.
+    try:
+        _saved_lock = cfg.getint('security', 'lock_mode', fallback=0)
+        reg.lock_mode = _saved_lock if _saved_lock in (0, 1, 2) else 0
+    except (ValueError, TypeError):
+        reg.lock_mode = 0
+    try:
+        _saved_kids = cfg.getfloat('security', 'kids_speed_limit', fallback=0.5)
+        reg.kids_speed_limit = max(0.0, min(1.0, _saved_kids))
+    except (ValueError, TypeError):
+        reg.kids_speed_limit = 0.5
+
     # ------------------------------------------------------------------
     # Phase 2 — Propulsion / dome / servo drivers
     # ------------------------------------------------------------------
@@ -323,9 +338,17 @@ def main() -> None:
                 uart.send('VCFG', f'scale:{reg.vesc_power_scale:.2f}')
                 uart.send('VINV', f"L:{1 if reg.vesc_invert_L else 0}")
                 uart.send('VINV', f"R:{1 if reg.vesc_invert_R else 0}")
+                # Audit finding CR-7 (2026-05-15): bench_mode was NOT
+                # re-pushed on Slave reboot. Master kept its state but
+                # Slave defaulted back to bench=False, so drive() would
+                # refuse on _can_lost while Master's vesc_safety still
+                # said OK → silent no-op. Re-push so both sides stay
+                # consistent.
+                bench = bool(getattr(reg, 'vesc_bench_mode', False))
+                uart.send('VCFG', f'bench:{1 if bench else 0}')
                 log.info(
-                    "VESC config resynced — scale=%.2f invert_L=%s invert_R=%s",
-                    reg.vesc_power_scale, reg.vesc_invert_L, reg.vesc_invert_R
+                    "VESC config resynced — scale=%.2f invert_L=%s invert_R=%s bench=%s",
+                    reg.vesc_power_scale, reg.vesc_invert_L, reg.vesc_invert_R, bench
                 )
             except Exception as exc:
                 log.error("VESC resync failed: %s", exc)

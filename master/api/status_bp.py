@@ -416,18 +416,90 @@ def system_update():
     return jsonify({'status': 'ok', 'message': 'Update in progress...'})
 
 
+def _persist_lock_mode(mode: int, kids_limit: float | None) -> None:
+    """Write lock_mode + kids_speed_limit to local.cfg [security] under
+    the shared _cfg_write_lock so a Master reboot preserves the state.
+    Audit finding CR-2 (2026-05-15): lock mode lived only in memory."""
+    try:
+        from master.api.settings_bp import _cfg_write_lock
+        from master.config.config_loader import LOCAL_CFG, write_cfg_atomic
+        import configparser
+        with _cfg_write_lock:
+            cfg = configparser.ConfigParser()
+            cfg.read(LOCAL_CFG)
+            if not cfg.has_section('security'):
+                cfg.add_section('security')
+            cfg.set('security', 'lock_mode', str(mode))
+            if kids_limit is not None:
+                cfg.set('security', 'kids_speed_limit', f'{kids_limit:.3f}')
+            write_cfg_atomic(LOCAL_CFG, cfg)
+    except Exception:
+        log.exception("Failed to persist lock_mode to local.cfg")
+
+
 @status_bp.post('/lock/set')
 @require_admin
 def lock_set():
-    """Sets the lock mode: 0=Normal, 1=Kids, 2=ChildLock."""
-    body = request.get_json(silent=True) or {}
-    mode = int(body.get('mode', 0))
+    """Sets the lock mode: 0=Normal, 1=Kids, 2=ChildLock.
+    Requires admin auth — this is the admin-driven path (Settings →
+    Lock Mode panel). The OPERATOR-driven unlock-via-password path
+    lives at /lock/unlock and only requires the lock password."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'expected JSON object'}), 400
+    try:
+        mode = int(body.get('mode', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'mode must be an integer'}), 400
     if mode not in (0, 1, 2):
         return jsonify({'error': 'invalid mode'}), 400
     reg.lock_mode = mode
+    kids = None
     if 'kids_speed_limit' in body:
-        reg.kids_speed_limit = max(0.0, min(1.0, float(body.get('kids_speed_limit', 0.5))))
+        try:
+            kids = max(0.0, min(1.0, float(body.get('kids_speed_limit', 0.5))))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'kids_speed_limit must be a number'}), 400
+        reg.kids_speed_limit = kids
+    _persist_lock_mode(mode, kids)
     return jsonify({'status': 'ok', 'mode': mode})
+
+
+@status_bp.post('/lock/unlock')
+def lock_unlock():
+    """Operator-facing unlock endpoint — used by the lock modal to
+    drop out of Kids or Child Lock mode by supplying the admin
+    password. Server verifies the password (NOT a client-side
+    string compare — audit finding CR-1 2026-05-15: 'deetoo' was
+    hardcoded in app.js). On success, sets reg.lock_mode = mode
+    (default 0 = Normal) and persists to local.cfg."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'expected JSON object'}), 400
+    provided = str(body.get('password') or '')
+    try:
+        target_mode = int(body.get('mode', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'mode must be an integer'}), 400
+    if target_mode not in (0, 1, 2):
+        return jsonify({'error': 'invalid mode'}), 400
+    # Reuse the admin password as the lock password — same secret,
+    # same hmac.compare_digest pattern as /settings/admin/verify.
+    try:
+        from master.api.settings_bp import _get_admin_password
+        import hmac
+        expected = _get_admin_password()
+        if not provided or not hmac.compare_digest(
+                provided.encode('utf-8'), expected.encode('utf-8')):
+            return jsonify({'error': 'invalid password'}), 401
+    except Exception:
+        log.exception("lock_unlock password check failed")
+        return jsonify({'error': 'auth check failed'}), 500
+    reg.lock_mode = target_mode
+    _persist_lock_mode(target_mode, None)
+    log.info("Lock unlock: mode=%d via password from %s",
+             target_mode, request.remote_addr)
+    return jsonify({'status': 'ok', 'mode': target_mode})
 
 
 @status_bp.post('/system/rollback')

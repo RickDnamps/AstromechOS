@@ -82,18 +82,79 @@ def bt_enable():
     return jsonify({'status': 'ok', 'enabled': enabled})
 
 
+# Allowed gamepad types (mirrors BT driver's _SUPPORTED_GAMEPADS).
+_VALID_GAMEPAD_TYPES = {'ps4', 'ps5', 'xbox', 'xbox_one', 'generic', 'auto'}
+
+# Allowed actions a mapping can fire — keeps a typo / malicious POST
+# from silently disabling the gamepad E-STOP. Audit finding CR-3
+# 2026-05-15: mappings = {"estop": "BOGUS"} would have left the
+# operator with a non-functional safety button until they noticed.
+_VALID_BT_MAPPING_ACTIONS = {
+    'estop', 'lock_toggle', 'dome_left', 'dome_right',
+    'random_sound', 'play_choreo', 'open_arms', 'close_arms',
+    'open_panels', 'close_panels', 'speed_up', 'speed_down',
+    'none',
+}
+# Button code allowlist — evdev codes like BTN_A, BTN_TR, ABS_X plus
+# the synthetic 'dpad_*'. Conservative regex catches the realistic
+# universe without enumerating every code.
+import re as _re_bt
+_VALID_BT_BUTTON_RE = _re_bt.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,31}$')
+
+
 @bt_bp.post('/config')
 @require_admin
 def bt_config():
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'expected JSON object'}), 400
     if not reg.bt_ctrl:
         return jsonify({'error': 'BTController not available'}), 503
 
     patch = {}
-    if 'gamepad_type'       in body: patch['gamepad_type']       = str(body['gamepad_type'])
-    if 'deadzone'           in body: patch['deadzone']           = float(body['deadzone'])
-    if 'inactivity_timeout' in body: patch['inactivity_timeout'] = int(body['inactivity_timeout'])
-    if 'mappings'           in body: patch['mappings']           = dict(body['mappings'])
+    # gamepad_type — must be in the allowed set
+    if 'gamepad_type' in body:
+        gt = str(body['gamepad_type']).strip().lower()
+        if gt not in _VALID_GAMEPAD_TYPES:
+            return jsonify({'error': f'invalid gamepad_type (allowed: {sorted(_VALID_GAMEPAD_TYPES)})'}), 400
+        patch['gamepad_type'] = gt
+
+    # deadzone — finite float clamped to [0, 0.5]
+    if 'deadzone' in body:
+        try:
+            dz = float(body['deadzone'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'deadzone must be a number'}), 400
+        import math
+        if not math.isfinite(dz):
+            return jsonify({'error': 'deadzone must be finite'}), 400
+        patch['deadzone'] = max(0.0, min(0.5, dz))
+
+    # inactivity_timeout — int clamped to [0, 3600] seconds. 0 = off.
+    if 'inactivity_timeout' in body:
+        try:
+            it = int(body['inactivity_timeout'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'inactivity_timeout must be an integer'}), 400
+        patch['inactivity_timeout'] = max(0, min(3600, it))
+
+    # mappings — allowlist both keys (button codes) and values (actions).
+    # An invalid entry rejects the WHOLE patch so the operator sees
+    # the typo instead of getting a half-applied config.
+    if 'mappings' in body:
+        raw = body['mappings']
+        if not isinstance(raw, dict):
+            return jsonify({'error': 'mappings must be an object'}), 400
+        clean = {}
+        for btn, action in raw.items():
+            btn_s = str(btn)
+            act_s = str(action).strip().lower()
+            if not _VALID_BT_BUTTON_RE.match(btn_s):
+                return jsonify({'error': f'invalid button code: {btn_s!r}'}), 400
+            if act_s not in _VALID_BT_MAPPING_ACTIONS:
+                return jsonify({'error': f'invalid mapping action: {act_s!r}'}), 400
+            clean[btn_s] = act_s
+        patch['mappings'] = clean
 
     ok = reg.bt_ctrl.update_cfg(patch)
     return jsonify({'status': 'ok' if ok else 'error', 'cfg': reg.bt_ctrl.get_cfg()})

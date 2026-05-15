@@ -1061,7 +1061,18 @@ class ChoreoPlayer:
                 if not self._vesc:
                     return
                 if ev.get('action') == 'stop':
-                    self._vesc.drive(0.0, 0.0)
+                    # Audit finding CR-6 (2026-05-15): writing (0,0)
+                    # directly to vesc.drive races the anti-tip safety
+                    # ramp's own 50Hz writes — two concurrent writers
+                    # is exactly the tipping hazard the ramp guards
+                    # against. If a ramp is in progress, let it land
+                    # naturally (ramps from current speed to 0 already).
+                    try:
+                        from master.safe_stop import is_drive_ramp_active
+                    except ImportError:
+                        is_drive_ramp_active = lambda: False
+                    if not is_drive_ramp_active():
+                        self._vesc.drive(0.0, 0.0)
                     self._drive_fail_count = 0
                 else:
                     # VESC safety gate: refuse propulsion if either side is offline,

@@ -605,6 +605,15 @@ def choreo_rename():
                     reg.choreo._status['name'] = new_name
                 except (AttributeError, KeyError):
                     pass
+    # Cascade the rename into shortcuts.json so any Drive-tab macro
+    # button targeting the old name follows the move. User-reported
+    # 2026-05-15: renaming a choreo left stale shortcuts pointing at
+    # a non-existent file. Lazy import to avoid circular dep.
+    try:
+        from master.api.shortcuts_bp import cascade_rename
+        cascade_rename('play_choreo', old_name, new_name)
+    except Exception:
+        log.exception("cascade_rename failed for choreo %s → %s", old_name, new_name)
     log.info(f"Choreo renamed: {old_name} → {new_name}")
     return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
 
@@ -687,6 +696,13 @@ def choreo_delete(name: str):
             return jsonify({'error': 'not found'}), 404
         try:
             os.remove(path)
+            # Neutralize any shortcut still pointing at this name —
+            # better than leaving it as a silent 'off' button.
+            try:
+                from master.api.shortcuts_bp import cascade_delete
+                cascade_delete('play_choreo', name)
+            except Exception:
+                log.exception("cascade_delete failed for choreo %s", name)
             log.info(f"Choreo deleted: {name}")
             return jsonify({'status': 'ok', 'name': name})
         except OSError as e:
@@ -835,6 +851,18 @@ def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> boo
     no caller can accidentally skip the safety dance again.
     """
     if not reg.choreo:
+        return False
+    # Audit finding CR-5 (2026-05-15): safe_play() had no E-STOP or
+    # stow-in-progress gate, so a scheduled trigger (behavior_engine,
+    # shortcut, HTTP race) within the ~50ms window between an E-STOP
+    # firing and the player's .stop() completing could start a fresh
+    # playback that owns servos during the freeze. Refuse both states
+    # — operator must clear them first.
+    if getattr(reg, 'estop_active', False):
+        log.warning("safe_play(%s): refused — estop_active", log_label)
+        return False
+    if getattr(reg, 'stow_in_progress', False):
+        log.warning("safe_play(%s): refused — stow_in_progress", log_label)
         return False
     if not _play_lock.acquire(timeout=5.0):
         log.warning("safe_play(%s): play queue busy", log_label)
