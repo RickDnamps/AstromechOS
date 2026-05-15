@@ -1002,7 +1002,15 @@ function switchTab(tabId) {
   if (tabId === 'audio') loadAudioCategories();
 
   // Stop VESC fast poll when leaving settings/vesc panel
-  if (tabId !== 'settings') _stopVescTabPoll();
+  if (tabId !== 'settings') {
+    _stopVescTabPoll();
+    // User-reported 2026-05-15: VESC Drive Test Mode should be a
+    // context-scoped feature — leaving the Settings/VESC panel
+    // (here: leaving Settings entirely) immediately disables it so a
+    // forgotten test mode can't bite the next visitor of the page.
+    // Sends /motion/stop and resets the UI as part of toggle().
+    if (typeof vescTest !== 'undefined' && vescTest._active) vescTest.toggle();
+  }
 
   // Reset choreo session unlock when leaving the choreo tab. Also pause
   // the _chorMon rAF loop — its dot animations don't auto-pause on
@@ -1027,7 +1035,13 @@ function switchSettingsPanel(panelId) {
 
   // VESC fast poll only while VESC panel is visible
   if (panelId === 'vesc') _startVescTabPoll();
-  else                    _stopVescTabPoll();
+  else {
+    _stopVescTabPoll();
+    // Same scoping logic as the outer-tab switch above: leaving the
+    // VESC sub-panel (even while staying in Settings) disables Drive
+    // Test Mode. User-reported 2026-05-15.
+    if (typeof vescTest !== 'undefined' && vescTest._active) vescTest.toggle();
+  }
 
   // Lazy-load panel data when opening
   if (panelId === 'network' || panelId === 'deploy' || panelId === 'system') loadSettings();
