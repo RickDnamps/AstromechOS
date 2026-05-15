@@ -67,12 +67,24 @@ def _resolve_slave_ssh_target() -> str:
     host = _read_cfg().get('slave', 'host', fallback='r2-slave.local')
     return f'artoo@{host}'
 _ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
-# B-82 (audit 2026-05-15): .svg removed. SVG can carry <script> /
-# event handlers / data: URLs, and the /icons/<path> route serves them
-# same-origin → would have been a stored XSS sink even with B-39's
-# DOM-safe rendering (since SVG executes as document, not as image).
-# Operator who needs a vector icon can convert to PNG.
-_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+# User-reported 2026-05-15: post-B-82 the pre-shipped SVG icons
+# (bb8.svg, c3po.svg, ig11.svg, k2so.svg, r2d2_blue.svg, r5d4.svg)
+# disappeared from the picker. Split the allowed-extensions sets:
+#
+# _ALLOWED_LIST_EXT  — what /settings/icons GET returns + serves
+#   Includes .svg for backward compat. Pre-shipped + admin-SCP'd
+#   files are trusted (operator deliberately placed them).
+#
+# _ALLOWED_UPLOAD_EXT — what /settings/icons/upload accepts
+#   Excludes .svg per B-82's threat model: an operator's web upload
+#   is a potentially untrusted path (admin password could leak →
+#   attacker uploads SVG with <script> → XSS via /icons/<path>
+#   served same-origin). PNG/WEBP/etc. parse as raster images and
+#   can't carry executable content.
+_ALLOWED_LIST_EXT   = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+_ALLOWED_UPLOAD_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+# Backward-compat alias for old call sites that referenced _ALLOWED_EXT
+_ALLOWED_EXT = _ALLOWED_UPLOAD_EXT
 INTERNET_CON = 'r2d2-internet'
 HOTSPOT_CON  = 'r2d2-hotspot'
 
@@ -783,10 +795,12 @@ def list_icons():
     used to surface in the picker; this matches upload_icon's reject
     of leading-dot filenames."""
     os.makedirs(_ICONS_DIR, exist_ok=True)
+    # B-82 follow-up: list both the upload-allowed formats AND any
+    # pre-shipped / SCP'd .svg files. Upload itself stays restricted.
     files = sorted(
         f for f in os.listdir(_ICONS_DIR)
         if not f.startswith('.')
-        and os.path.splitext(f)[1].lower() in _ALLOWED_EXT
+        and os.path.splitext(f)[1].lower() in _ALLOWED_LIST_EXT
     )
     return jsonify({'icons': files})
 
@@ -800,8 +814,11 @@ def upload_icon():
     f = request.files['file']
     fname = f.filename or ''
     ext = os.path.splitext(fname)[1].lower()
-    if ext not in _ALLOWED_EXT:
-        return jsonify({'error': f'unsupported format (allowed: {", ".join(_ALLOWED_EXT)})'}), 400
+    if ext not in _ALLOWED_UPLOAD_EXT:
+        return jsonify({
+            'error': f'unsupported format (allowed: {", ".join(sorted(_ALLOWED_UPLOAD_EXT))}). '
+                     f'SVG uploads blocked for security — convert to PNG.'
+        }), 400
     # Sanitize filename — keep only safe chars
     safe = ''.join(c for c in os.path.basename(fname) if c.isalnum() or c in '._- ')
     # B-55 (audit 2026-05-15): reject leading dot to block .htaccess /

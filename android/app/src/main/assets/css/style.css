@@ -4764,11 +4764,26 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   padding: 10px 20px;
   font-size: 18px;
   color: var(--text-dim);
-  letter-spacing: 1px;
+  /* User feedback 2026-05-15: match the real .tab styling so what
+     the preview shows == what the live dashboard renders. Old
+     preview missed letter-spacing + active text-shadow + tab icons,
+     making the user think colors didn't apply correctly. */
+  letter-spacing: 1.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  border-bottom: 2px solid transparent;
 }
+.theme-preview-tab .tab-icon { opacity: 0.6; }
 .theme-preview-tab.active {
   color: var(--blue);
   border-bottom: 3px solid var(--blue);
+  text-shadow: 0 0 8px var(--blue);
+}
+.theme-preview-tab.active .tab-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 4px var(--blue));
 }
 .theme-preview-body { padding: 16px; background: var(--bg); }
 .theme-preview-card {

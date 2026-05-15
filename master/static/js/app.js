@@ -405,7 +405,12 @@ function _renderThemePicker() {
     const btn = document.createElement('button');
     btn.className = 'theme-btn' + (t.id === _activeTheme ? ' active' : '');
     btn.dataset.theme = t.id;
-    btn.onclick = () => openThemeEditor(t.id);
+    // User-reported 2026-05-15: clicking a custom theme used to open
+    // the editor instead of applying it — so the .active border never
+    // moved from "Default" because applyTheme() was never called.
+    // Now: click = apply (like built-in themes). Edit pencil + delete X
+    // (below) handle their respective actions via stopPropagation.
+    btn.onclick = () => applyTheme(t.id);
     // B-44 mirror — custom theme labels are the real XSS sink. DOM
     // build with textContent for the label.
     const csw = document.createElement('span');
