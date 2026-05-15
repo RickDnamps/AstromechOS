@@ -527,13 +527,32 @@ def _next_available_stem(base: str, cats: dict) -> str:
     moins que le système s'assure que le nouveau son n'a pas le même nom
     qu'un son existant déjà si oui il renomme en ajoutant un chiffre'.
 
+    **Case-insensitive collision check.** New uploads are uppercased by
+    the sanitizer, but the built-in library has mixed-case filenames
+    (birthday.mp3, Theme003.mp3, ALARM001.mp3). Linux treats those as
+    different files so a naive case-sensitive check let `BIRTHDAY` upload
+    next to existing `birthday.mp3`, leaving the operator with two
+    files they perceive as the same sound. Comparing in lower-case
+    catches that.
+
     Why both disk + index? Files in slave/sounds/ that aren't indexed
     (orphans from a deleted category, or built-ins not yet registered)
     must still block the name — overwriting them would break behaviors
     that reference them by stem."""
-    indexed: set[str] = set()
+    # Index reservations (case-insensitive).
+    indexed_lower: set[str] = set()
     for sounds in cats.values():
-        indexed.update(sounds)
+        indexed_lower.update(s.lower() for s in sounds)
+    # Disk reservations (case-insensitive). Single listdir is cheaper
+    # than os.path.exists per candidate when the loop iterates.
+    disk_lower: set[str] = set()
+    try:
+        for entry in os.listdir(_SOUNDS_DIR):
+            if entry.lower().endswith('.mp3'):
+                disk_lower.add(Path(entry).stem.lower())
+    except OSError:
+        pass
+
     for n in range(1, 1000):
         candidate = base if n == 1 else f'{base}_{n}'
         # Stay within the same regex the rest of the pipeline enforces —
@@ -541,8 +560,8 @@ def _next_available_stem(base: str, cats: dict) -> str:
         # a string >80 chars (impossible: base ≤80, _999 = 4 chars).
         if not _SOUND_NAME_RE.match(candidate):
             return base
-        path = os.path.join(_SOUNDS_DIR, candidate + '.mp3')
-        if not os.path.exists(path) and candidate not in indexed:
+        cand_lower = candidate.lower()
+        if cand_lower not in disk_lower and cand_lower not in indexed_lower:
             return candidate
     # Ridiculously unlikely fallback (1000 collisions on the same stem).
     return f'{base}_OVERFLOW'
