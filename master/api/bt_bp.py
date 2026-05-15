@@ -143,6 +143,15 @@ def bt_config():
             return jsonify({'error': 'inactivity_timeout must be an integer'}), 400
         patch['inactivity_timeout'] = max(0, min(3600, it))
 
+    # audio_category — must match the strict category regex used by
+    # audio_bp + exist in the slave's sound index. Audit reclass R4
+    # 2026-05-15.
+    if 'audio_category' in body:
+        cat = str(body['audio_category']).strip().lower()
+        if not _re_bt.match(r'^[a-z0-9_]{1,32}$', cat):
+            return jsonify({'error': 'audio_category must be lowercase a-z0-9_ ≤32 chars'}), 400
+        patch['audio_category'] = cat
+
     # mappings — shape is {action_name: button_code}. Both sides
     # allowlisted so a typo can't silently disable the gamepad E-STOP.
     if 'mappings' in body:

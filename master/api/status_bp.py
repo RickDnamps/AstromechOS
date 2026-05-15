@@ -51,6 +51,7 @@ from master.api._admin_auth import require_admin
 import master.registry as reg
 from master.app_watchdog import app_watchdog
 from master.vesc_safety import is_drive_safe
+from master.safe_stop import is_drive_ramp_active, is_dome_ramp_active
 
 from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, VERSION_FILE, SCRIPTS_DIR
 
@@ -366,6 +367,12 @@ def get_status():
         # button flips back to 'EMERGENCY STOP' immediately on Reset
         # while servos are still slewing — operator confusion.
         'stow_in_progress':  bool(getattr(reg, 'stow_in_progress', False)),
+        # Audit reclass R1 2026-05-15: surface anti-tip ramp state
+        # so the joystick UI can show a visual hint during the 400ms
+        # ramp-down (operator release → re-press immediately gets a
+        # silent 503 'safety_ramp' otherwise → "joystick broken?").
+        'drive_ramp_active': bool(is_drive_ramp_active()),
+        'dome_ramp_active':  bool(is_dome_ramp_active()),
         'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
         'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),

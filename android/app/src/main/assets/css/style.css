@@ -1136,6 +1136,23 @@ body.choreo-prop-locked .joystick-panel-left  .joystick-ring {
  * because the Y axis (camera tilt, v2) is still usable. JS clamps
  * X to 0 inside the onMove handler. */
 .joystick-ring { position: relative; }   /* anchor for the ::after */
+
+/* Audit reclass R1 2026-05-15: anti-tip ramp visual cue. During the
+ * 400ms ramp-down after operator releases the joystick, re-pressing
+ * gets a silent 503 'safety_ramp'. Visible pulse on the ring tells
+ * operator "the robot is stopping safely, your input is queued —
+ * not broken". Driven by body.drive-ramping / body.dome-ramping
+ * from the status poller.
+ */
+body.drive-ramping .joystick-panel-left  .joystick-ring,
+body.dome-ramping  .joystick-panel-right .joystick-ring {
+  animation: joystick-ramp-pulse 0.4s ease-out;
+  box-shadow: 0 0 14px rgba(var(--amber, 255 170 68), 0.4) inset;
+}
+@keyframes joystick-ramp-pulse {
+  0%   { box-shadow: 0 0 22px rgba(var(--amber, 255 170 68), 0.6) inset; }
+  100% { box-shadow: 0 0 0   rgba(var(--amber, 255 170 68), 0)   inset; }
+}
 /* Audit finding Drive UX M-5 2026-05-15: was on .joystick-panel-*
  * which positions the badge at the centre of the FULL panel (incl.
  * the shortcut pad above the ring). Now anchored to .joystick-ring

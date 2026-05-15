@@ -1191,6 +1191,15 @@ function switchTab(tabId) {
     if (typeof _chorMon !== 'undefined' && _chorMon.pause) _chorMon.pause();
   }
 
+  // Audit reclass R2 2026-05-15: pause/resume the camera stream on
+  // Drive tab enter/leave. Saves bandwidth + tablet battery during
+  // the time the operator is in another tab.
+  if (tabId === 'drive') {
+    if (typeof _resumeCameraStream === 'function') _resumeCameraStream();
+  } else {
+    if (typeof _pauseCameraStream === 'function') _pauseCameraStream();
+  }
+
   if (tabId === 'choreo') choreoEditor.init();
 }
 
@@ -2454,6 +2463,32 @@ function _startCamPoll() {
       setTimeout(() => _takeCameraStream(), 1000);
     }
   }, 3000);
+}
+
+// Audit reclass R2 2026-05-15: pause the camera stream when the
+// operator leaves the Drive tab. Saves bandwidth + tablet battery
+// for the entire time they're in Settings/Audio/Sequences/etc.
+// Resumed automatically when they switch back. Called from switchTab.
+function _pauseCameraStream() {
+  const img = el('cam-stream');
+  if (img && img.src) {
+    img.src = '';   // forces the browser to drop the MJPEG socket
+  }
+  if (_camPollTimer) { clearInterval(_camPollTimer); _camPollTimer = null; }
+  // Tell server we're releasing so the next viewer can claim.
+  if (_camToken) {
+    fetch(_camBase() + '/camera/release', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: _camToken }),
+      keepalive: true,
+    }).catch(() => {});
+    _camToken = null;
+  }
+}
+
+function _resumeCameraStream() {
+  if (_camEnabled && !_camToken) _takeCameraStream();
 }
 
 function _toggleCamera() {
@@ -6324,6 +6359,13 @@ class StatusPoller {
     // E-STOP overlay — sync from server state (survives page reload)
     if (data.estop_active !== undefined && data.estop_active !== _estopTripped)
       _setEstopUI(data.estop_active);
+
+    // Audit reclass R1 2026-05-15: anti-tip ramp visual cue. Toggle
+    // body classes so the joystick ring pulses amber during the
+    // ~400ms ramp-down — operator sees "robot is stopping safely"
+    // instead of "I pressed but nothing happens" silent 503.
+    document.body.classList.toggle('drive-ramping', !!data.drive_ramp_active);
+    document.body.classList.toggle('dome-ramping',  !!data.dome_ramp_active);
 
     // Audit finding Safety L-5 2026-05-15: surface stow_in_progress
     // on the E-STOP button text. While the safe-home is mid-stow,

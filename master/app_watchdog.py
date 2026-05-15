@@ -131,11 +131,38 @@ class AppWatchdog:
 
     def _emergency_stop(self) -> None:
         log.warning(
-            "AppWatchdog: app heartbeat lost (>%.0fms) — gradual stop",
+            "AppWatchdog: app heartbeat lost (>%.0fms) — gradual stop + freeze",
             TIMEOUT_S * 1000
         )
         stop_drive()   # proportional ramp — no abrupt braking
         stop_dome()
+        # Audit reclass R3 2026-05-15: also freeze servos on link loss.
+        # Previously only motors stopped; servos stayed at last command
+        # → could droop under load or hold a dangerous mid-air pose.
+        # E-STOP semantics is "hold position with full torque" — link
+        # loss should do the same.
+        try:
+            import master.registry as reg
+            if reg.dome_servo:
+                try: reg.dome_servo.freeze()
+                except Exception: pass
+            if reg.uart:
+                try: reg.uart.send('FREEZE', '1')
+                except Exception: pass
+            # Also stop audio + lights so a runaway sequence doesn't
+            # keep going while the operator is unreachable. Matches
+            # the E-STOP server-side fix from earlier batch.
+            if reg.uart:
+                try: reg.uart.send('S', 'STOP')
+                except Exception: pass
+            if reg.teeces:
+                try: reg.teeces.off()
+                except Exception: pass
+            if reg.bt_ctrl and hasattr(reg.bt_ctrl, 'clear_drive_state'):
+                try: reg.bt_ctrl.clear_drive_state()
+                except Exception: pass
+        except Exception:
+            log.exception("AppWatchdog freeze hook failed")
 
 
 # Singleton global

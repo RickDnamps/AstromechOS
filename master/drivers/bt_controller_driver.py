@@ -66,6 +66,9 @@ _DEFAULT_CFG = {
     'gamepad_type':       'ps',
     'deadzone':           0.10,
     'inactivity_timeout': 30,
+    # Audit reclass R4 2026-05-15: operator-configurable BT audio
+    # button category. Default 'happy' preserves legacy behavior.
+    'audio_category':     'happy',
     'mappings': {
         'throttle':   'ABS_Y',
         'steer':      'ABS_X',
@@ -669,9 +672,17 @@ class BTControllerDriver:
         # Random sound (rising edge)
         elif _is(m.get('audio', 'BTN_EAST')):
             if pressed and reg.uart:
-                log.info("BT: S:RANDOM:happy")
-                try: reg.uart.send('S', 'RANDOM:happy')
-                except Exception as e: log.warning(f"audio send: {e}")
+                # Audit reclass R4 2026-05-15: was hard-coded
+                # 'happy' — operator could config their gamepad audio
+                # button via mappings but always got happy category.
+                # New bt_config key `audio_category` defaults to
+                # 'happy' but operator can override (e.g. 'scared',
+                # 'cantina'). Validated against _CATEGORY_NAME_RE
+                # by bt_bp at save time.
+                cat = self._cfg.get('audio_category', 'happy')
+                log.info("BT: S:RANDOM:%s", cat)
+                try: reg.uart.send('S', f'RANDOM:{cat}')
+                except OSError as e: log.warning(f"audio send: {e}")
 
     def _trigger_estop(self, reg) -> None:
         log.warning("E-STOP triggered from BT gamepad")
