@@ -422,7 +422,8 @@ def _persist_lock_mode(mode: int, kids_limit: float | None) -> None:
     Audit finding CR-2 (2026-05-15): lock mode lived only in memory."""
     try:
         from master.api.settings_bp import _cfg_write_lock
-        from master.config.config_loader import LOCAL_CFG, write_cfg_atomic
+        from master.config.config_loader import write_cfg_atomic
+        from shared.paths import LOCAL_CFG
         import configparser
         with _cfg_write_lock:
             cfg = configparser.ConfigParser()
@@ -432,7 +433,8 @@ def _persist_lock_mode(mode: int, kids_limit: float | None) -> None:
             cfg.set('security', 'lock_mode', str(mode))
             if kids_limit is not None:
                 cfg.set('security', 'kids_speed_limit', f'{kids_limit:.3f}')
-            write_cfg_atomic(LOCAL_CFG, cfg)
+            # write_cfg_atomic signature is (cfg, path) — NOT (path, cfg).
+            write_cfg_atomic(cfg, LOCAL_CFG)
     except Exception:
         log.exception("Failed to persist lock_mode to local.cfg")
 
