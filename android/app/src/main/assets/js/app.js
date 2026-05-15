@@ -6716,12 +6716,17 @@ const shortcutsEditor = {
       this._cats   = idx?.categories || {};
       this._sounds = Object.values(this._cats).flat();
     }
-    // Decide whether each saved shortcut's icon was auto-derived
-    // (so future type/target changes can refresh it) or hand-picked
-    // (preserve as-is). Heuristic: if the icon matches the type's
-    // current default, it's auto; otherwise the operator changed it.
-    this._shortcuts.forEach(sc => {
-      sc._iconAuto = (sc.icon === this._defaultIconFor(sc.action));
+    // Decide whether each saved shortcut's icon/label was auto-
+    // derived (so future type/target changes can refresh it) or
+    // hand-picked (preserve as-is). Heuristic: if the saved value
+    // matches the type's current default, it's auto. The 'BTN N'
+    // placeholder also counts as auto so the user's never-touched
+    // shortcuts pick up nice labels at the first target selection.
+    this._shortcuts.forEach((sc, i) => {
+      sc._iconAuto  = (sc.icon  === this._defaultIconFor(sc.action));
+      const defLbl  = this._defaultLabelFor(sc);
+      const isStock = /^BTN\s+\d+$/.test(sc.label || '');
+      sc._labelAuto = (sc.label === defLbl) || isStock;
     });
     const slider = el('shortcuts-count');
     if (slider) { slider.max = this._max; slider.value = this._shortcuts.length; }
@@ -6742,7 +6747,8 @@ const shortcutsEditor = {
         icon:   '⚡',
         color:  '',
         action: { type: 'none', target: '' },
-        _iconAuto: true,   // editor-only flag — overwritten by emojiPicker
+        _iconAuto:  true,   // editor-only flag — overwritten by emojiPicker
+        _labelAuto: true,   // editor-only flag — overwritten by typing in label input
       });
     }
     if (this._shortcuts.length > n) this._shortcuts.length = n;
@@ -6779,6 +6785,34 @@ const shortcutsEditor = {
     if (!sc._iconAuto) return;
     const def = this._defaultIconFor(sc.action);
     if (def && def !== sc.icon) sc.icon = def;
+  },
+
+  // Default label, mirroring the icon logic. User-reported 2026-05-15:
+  // 'le nom devrait s'autofill aussi par défaut avec le nom du choreo
+  // choisi à la place de rester BTN6'. play_choreo reuses the
+  // Sequences-side display label, other types fall back to the target
+  // text or a type-specific generic.
+  _defaultLabelFor(sc) {
+    const type   = sc.action?.type || 'none';
+    const target = sc.action?.target || '';
+    if (!target && type !== 'none') return `BTN ${this._shortcuts.indexOf(sc) + 1}`;
+    if (type === 'play_choreo') {
+      const ch = (this._scripts || []).find(s => s.name === target);
+      return (ch && ch.label) ? ch.label : (target || 'CHOREO');
+    }
+    if (type === 'play_sound')        return target || 'SOUND';
+    if (type === 'play_random_audio') return target ? `Random ${target}` : 'Random';
+    if (type === 'arms_toggle')       return this._armLabel(parseInt(target, 10) || 1);
+    if (type === 'body_panel_toggle' || type === 'dome_panel_toggle') {
+      return this._panelLabel(target);
+    }
+    return `BTN ${this._shortcuts.indexOf(sc) + 1}`;
+  },
+
+  _maybeAutoFillLabel(sc) {
+    if (!sc._labelAuto) return;
+    const def = this._defaultLabelFor(sc);
+    if (def && def !== sc.label) sc.label = def;
   },
 
   _render() {
@@ -6821,7 +6855,11 @@ const shortcutsEditor = {
       lblInp.value = sc.label || '';
       lblInp.maxLength = 32;
       lblInp.placeholder = 'Label';
-      lblInp.addEventListener('input', () => { sc.label = lblInp.value; this._renderPreview(); });
+      lblInp.addEventListener('input', () => {
+        sc.label = lblInp.value;
+        sc._labelAuto = false;   // operator typed — lock it
+        this._renderPreview();
+      });
       row.appendChild(lblInp);
 
       const typeSel = document.createElement('select');
@@ -6835,9 +6873,11 @@ const shortcutsEditor = {
       });
       typeSel.addEventListener('change', () => {
         sc.action = { type: typeSel.value, target: '' };
-        // Re-derive the default icon for the new type (will be
-        // refined again once a target is auto-selected by mkSelect).
+        // Re-derive defaults for the new type. They'll be refined
+        // again when mkSelect prefills the first valid target on
+        // the upcoming render.
         this._maybeAutoFillIcon(sc);
+        this._maybeAutoFillLabel(sc);
         this._render();
       });
       row.appendChild(typeSel);
@@ -6925,16 +6965,17 @@ const shortcutsEditor = {
         sel.value = firstValid;
         sc.action.target = firstValid;
         // Newly auto-selected target may have a richer default icon
-        // (e.g. a choreo's own emoji) — refresh.
+        // and label (e.g. a choreo's own emoji + Sequences display
+        // label) — refresh both if not yet locked by the operator.
         this._maybeAutoFillIcon(sc);
+        this._maybeAutoFillLabel(sc);
       }
       sel.addEventListener('change', () => {
         sc.action.target = sel.value;
-        if (sc._iconAuto) {
-          this._maybeAutoFillIcon(sc);
-          // Re-render so the icon button visually updates.
-          this._render();
-        }
+        let dirty = false;
+        if (sc._iconAuto)  { this._maybeAutoFillIcon(sc);  dirty = true; }
+        if (sc._labelAuto) { this._maybeAutoFillLabel(sc); dirty = true; }
+        if (dirty) this._render();
       });
       return sel;
     };
@@ -7027,10 +7068,11 @@ const shortcutsEditor = {
         if (tok) headers['X-Admin-Pw'] = tok;
       }
       const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
-      // Strip editor-only state (_iconAuto) before sending. Backend
-      // rejects unknown fields silently anyway, but cleaner this way.
+      // Strip editor-only state (_iconAuto, _labelAuto) before
+      // sending. Backend rejects unknown fields silently anyway, but
+      // cleaner this way.
       const payload = this._shortcuts.map(sc => {
-        const { _iconAuto, ...rest } = sc;
+        const { _iconAuto, _labelAuto, ...rest } = sc;
         return rest;
       });
       const res = await fetch(base + '/shortcuts', {
