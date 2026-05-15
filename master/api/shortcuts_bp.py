@@ -350,6 +350,18 @@ def _act_dome_panel_toggle(target: str, current: str) -> str:
 
 
 def _act_play_choreo(target: str, current: str) -> str:
+    # Toggle: if THIS choreo is currently playing, a second press kills
+    # it (operator wants to abort without going through Sequences).
+    # User-reported 2026-05-15.
+    if reg.choreo and reg.choreo.is_playing():
+        status = reg.choreo.get_status() or {}
+        if status.get('name') == target:
+            reg.choreo.stop()
+            return 'off'
+        # A *different* choreo is running — refuse this press rather
+        # than racing two playbacks. The runner already shows the
+        # currently-playing choreo's button green.
+        return 'off'
     if not reg.choreo:
         return 'off'
     from master.api.choreo_bp import safe_play
@@ -360,17 +372,28 @@ def _act_play_choreo(target: str, current: str) -> str:
     except (OSError, json.JSONDecodeError):
         return 'off'
     safe_play(chor, loop=False, log_label=f'shortcut:{target}')
-    return 'fired'   # transient — frontend flashes the indicator briefly
+    return 'fired'
 
 
 def _act_play_sound(target: str, current: str) -> str:
+    # Toggle: re-pressing while THIS sound is playing stops it.
+    # reg.audio_current is set by audio_bp to either the sound name
+    # (plain play) or '🎲 <category>' (random play). Match exactly so
+    # a random shortcut doesn't kill a named-sound shortcut.
     if reg.uart:
+        if reg.audio_playing and reg.audio_current == target:
+            reg.uart.send('S', 'STOP')
+            return 'off'
         reg.uart.send('S', target)
     return 'fired'
 
 
 def _act_play_random_audio(target: str, current: str) -> str:
     if reg.uart:
+        tagged = f'🎲 {target}'
+        if reg.audio_playing and reg.audio_current == tagged:
+            reg.uart.send('S', 'STOP')
+            return 'off'
         reg.uart.send('S', f'RANDOM:{target}')
     return 'fired'
 

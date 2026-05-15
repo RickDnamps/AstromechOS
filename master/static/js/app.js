@@ -1193,6 +1193,7 @@ class VirtualJoystick {
     // confusing UX). Also exit early when this is the propulsion joystick
     // and lockMgr has drive locked, mirroring the onMove guard.
     if (typeof _estopTripped !== 'undefined' && _estopTripped) return;
+    if (typeof _choreoLocked !== 'undefined' && _choreoLocked) return;
     this._pointerId = e.pointerId;
     try { this.ring.setPointerCapture(e.pointerId); } catch {}
     this._start(e);
@@ -2386,6 +2387,33 @@ function _flushDriveHUD() {
 
 let _estopTripped = false;
 
+// Choreo lockout — true while a choreography is running on the server.
+// Updated by the StatusPoller from data.choreo_playing. Drives the
+// disabled overlay on the joystick panels + gates keyboard motion +
+// force-releases active drags on the rising edge (same pattern as
+// E-STOP). BT gamepad is gated server-side in bt_controller_driver.
+let _choreoLocked = false;
+
+function _setChoreoLockUI(locked, choreoName) {
+  const wasLocked = _choreoLocked;
+  _choreoLocked = locked;
+  document.body.classList.toggle('choreo-locked', locked);
+  const lbl = el('choreo-lock-label');
+  if (lbl) lbl.textContent = choreoName || '';
+  if (locked && !wasLocked) {
+    // Same force-release dance as E-STOP: a finger holding the knob
+    // does not get a synthetic pointerup, so without forceRelease()
+    // the knob stays visually deflected even though the server has
+    // started refusing /motion/* with 503 choreo_active.
+    if (typeof jsLeft  !== 'undefined' && jsLeft.forceRelease)  jsLeft.forceRelease();
+    if (typeof jsRight !== 'undefined' && jsRight.forceRelease) jsRight.forceRelease();
+    if (typeof _keys !== 'undefined') {
+      for (const k of Object.keys(_keys)) delete _keys[k];
+      if (typeof _updateKbdUI === 'function') _updateKbdUI();
+    }
+  }
+}
+
 function _setEstopUI(tripped) {
   const wasTripped = _estopTripped;
   _estopTripped = tripped;
@@ -2522,6 +2550,7 @@ const jsLeft = new VirtualJoystick(
     // when _estopTripped, but a poll-based E-STOP that fires AFTER the user
     // started dragging would otherwise let onMove continue spamming.
     if (_estopTripped) return;
+    if (_choreoLocked) return;             // Choreo owns motion
     if (lockMgr.isDriveLocked()) return;   // Child Lock : joystick gauche bloqué
     if (!_vescDriveSafe) return;           // VESC offline/fault
     _leftActive = true;
@@ -2547,6 +2576,7 @@ const jsRight = new VirtualJoystick(
   'js-right-ring', 'js-right-knob',
   (x, y) => {
     if (_estopTripped) return;
+    if (_choreoLocked) return;
     const DEADZONE = 0.06;
     const vx = el('js-right-x'); if (vx) vx.textContent = x.toFixed(2);
     const vy = el('js-right-y'); if (vy) vy.textContent = y.toFixed(2);
@@ -2615,6 +2645,14 @@ function _handleKeys() {
   // E-STOP would keep posting /motion/arcade (server refuses 403 'estop'
   // but we still spam logs + network).
   if (_estopTripped) {
+    if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
+    if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
+    return;
+  }
+  // Choreo lockout — same logic as E-STOP: while a choreo is
+  // playing, motion is owned by the playback. Refusing keys here
+  // saves the 503 round-trip and keeps the HUD coherent.
+  if (_choreoLocked) {
     if (_propKeyWasActive) { _propKeyWasActive = false; driveStop(); _updateDriveHUD(0, 0); }
     if (_domeKeyWasActive) { _domeKeyWasActive = false; domeStop(); }
     return;
@@ -5970,6 +6008,17 @@ class StatusPoller {
     // indicateur ... savoir qu'il est toujours en train de jouer'.
     this._lastData = data;
     if (typeof shortcutsRunner !== 'undefined') shortcutsRunner.updateFromStatus(data);
+
+    // Choreo motion lockout — disables joysticks/keyboard while a
+    // choreography owns motion. BT gamepad is silenced server-side
+    // in bt_controller_driver. Resumes the instant the playback
+    // ends (data.choreo_playing flips back to false).
+    if (data.choreo_playing !== undefined && data.choreo_playing !== _choreoLocked) {
+      _setChoreoLockUI(!!data.choreo_playing, data.choreo_name);
+    } else if (data.choreo_playing && data.choreo_name) {
+      const lbl = el('choreo-lock-label');
+      if (lbl && lbl.textContent !== data.choreo_name) lbl.textContent = data.choreo_name;
+    }
 
     // Cockpit pills — always updated (panel may be closed)
     this._setCockpitHbPill(data.heartbeat_ok);

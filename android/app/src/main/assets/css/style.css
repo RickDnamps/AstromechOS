@@ -1084,6 +1084,45 @@ body[data-lock-mode="2"] #js-left-ring::after {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  position: relative;
+}
+
+/* ─── Choreo motion lockout overlay ───────────────────────────────
+ * When body.choreo-locked is set (status poller saw choreo_playing
+ * flip on), every joystick panel gets a semi-transparent veil with
+ * a "CHOREO PLAYING" label across both knobs. pointer-events:auto
+ * on the veil itself absorbs taps so a finger landing on the knob
+ * area does not start a phantom drag underneath. The JS still
+ * defense-in-depths via _choreoLocked checks in the pointerdown
+ * and onMove handlers.
+ */
+body.choreo-locked .joystick-ring {
+  filter: grayscale(0.6) brightness(0.55);
+  pointer-events: none;
+}
+body.choreo-locked .joystick-panel::after {
+  content: '🎬 CHOREO PLAYING';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--blue);
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 2px;
+  padding: 6px 12px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  text-shadow: 0 0 8px var(--blue);
+  white-space: nowrap;
+  z-index: 5;
+  pointer-events: auto;
+  animation: choreo-lock-pulse 1.6s ease-in-out infinite;
+}
+@keyframes choreo-lock-pulse {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; box-shadow: 0 0 12px rgba(var(--blue-rgb), 0.6); }
 }
 
 .joystick-label {

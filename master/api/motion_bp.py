@@ -100,6 +100,14 @@ def _drive_gate():
         return jsonify({'status': 'blocked', 'reason': 'estop'}), 403
     if getattr(reg, 'stow_in_progress', False):
         return jsonify({'status': 'blocked', 'reason': 'stow_in_progress'}), 503
+    if reg.choreo and reg.choreo.is_playing():
+        # Choreo is taking over motion (propulsion + dome). Refuse
+        # manual drive so the operator can't fight the playback —
+        # covers web joysticks, keyboard, and (via the same gate in
+        # bt_controller_driver) the BT gamepad. User-reported
+        # 2026-05-15: 'si on est en train de jouer une choreo il
+        # faut désactiver les joysticks le temps que ça finisse'.
+        return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
     if is_drive_ramp_active():
         return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
     if reg.lock_mode == 2:
@@ -117,6 +125,8 @@ def _dome_gate():
         return jsonify({'status': 'blocked', 'reason': 'estop'}), 403
     if getattr(reg, 'stow_in_progress', False):
         return jsonify({'status': 'blocked', 'reason': 'stow_in_progress'}), 503
+    if reg.choreo and reg.choreo.is_playing():
+        return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
     if is_dome_ramp_active():
         return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
     if reg.lock_mode == 2:

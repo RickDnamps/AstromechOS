@@ -678,6 +678,11 @@ class BTControllerDriver:
         # mid-ramp (which would re-arm it and resume the cut drive).
         if is_drive_ramp_active() or getattr(reg, 'stow_in_progress', False):
             return
+        # Same choreo-priority gate as motion_bp._drive_gate: while a
+        # choreo is playing it owns propulsion, so the BT gamepad is
+        # silenced. Resumes the moment the choreo finishes.
+        if reg.choreo and reg.choreo.is_playing():
+            return
         cancel_ramp()
         motion_watchdog.feed_drive(left, right)
         if reg.vesc:
@@ -697,6 +702,8 @@ class BTControllerDriver:
         from master.motion_watchdog import motion_watchdog
         from master.safe_stop import is_dome_ramp_active
         if is_dome_ramp_active() or getattr(reg, 'stow_in_progress', False):
+            return
+        if reg.choreo and reg.choreo.is_playing():
             return
         if abs(speed) > 0.01:
             motion_watchdog.feed_dome(speed)
