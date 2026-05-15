@@ -6708,7 +6708,12 @@ const shortcutsEditor = {
   },
 
   _panelLabel(servoId) {
-    const labels = (window._servoSettings && window._servoSettings.panels) || {};
+    // Source-of-truth is the module-level _servoCfg, populated by
+    // loadServoSettings(): { panels: { Servo_M0: {label, open, close, speed}, … } }.
+    // (Earlier draft incorrectly used window._servoSettings which
+    // never existed.) Reflects whatever the user typed in
+    // Settings → Calibration for that servo.
+    const labels = (typeof _servoCfg !== 'undefined' && _servoCfg.panels) || {};
     const lbl = labels[servoId]?.label;
     return (lbl && lbl !== servoId) ? `${lbl} (${servoId})` : servoId;
   },
@@ -6768,9 +6773,21 @@ const shortcutsEditor = {
     if (type === 'body_panel_toggle' || type === 'dome_panel_toggle') {
       const prefix = type === 'body_panel_toggle' ? 'Servo_S' : 'Servo_M';
       const options = [{value: '', text: '(pick a servo)'}];
-      for (let i = 0; i < 32; i++) {
-        const id = prefix + i;
-        options.push({value: id, text: this._panelLabel(id)});
+      // Pull the configured panels from _servoCfg instead of dumping
+      // all 32 possible slots. Keeps the dropdown short and only
+      // exposes servos the operator actually wired + labelled.
+      const allPanels = (typeof _servoCfg !== 'undefined' && _servoCfg.panels) || {};
+      const ids = Object.keys(allPanels)
+        .filter(id => id.startsWith(prefix))
+        .sort((a, b) => {
+          // Natural numeric sort by trailing index
+          const na = parseInt(a.replace(prefix, ''), 10);
+          const nb = parseInt(b.replace(prefix, ''), 10);
+          return (isNaN(na) ? 0 : na) - (isNaN(nb) ? 0 : nb);
+        });
+      ids.forEach(id => options.push({value: id, text: this._panelLabel(id)}));
+      if (ids.length === 0) {
+        options.push({value: '', text: '(none configured in Calibration)', disabled: true});
       }
       return mkSelect(options, sc.action.target);
     }
