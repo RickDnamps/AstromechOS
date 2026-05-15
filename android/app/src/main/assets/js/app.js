@@ -5055,6 +5055,19 @@ class ScriptEngine {
       saving = true;
       const newLabel = input.value.trim();
       await api('/choreo/set-label', 'POST', { name, label: newLabel });
+      // Audit finding Frontend L-C 2026-05-15: keep the editor's
+      // in-memory _chor.meta.label in sync if the same choreo is
+      // currently open in the editor. Without this, the editor's
+      // next Save POSTs the old label and the rename is silently
+      // reverted.
+      try {
+        if (typeof choreoEditor !== 'undefined' && choreoEditor._chorRef) {
+          const ref = choreoEditor._chorRef();
+          if (ref && ref.meta && ref.meta.name === name) {
+            ref.meta.label = newLabel;
+          }
+        }
+      } catch {}
       await this.load();
     };
     input.addEventListener('keydown', e => {
@@ -8749,13 +8762,25 @@ const choreoEditor = (() => {
 
 
   // ── Ruler ─────────────────────────────────────────────────────────
+  // Audit finding Perf L-G/L-10 2026-05-15: skip rebuild if the
+  // ruler fingerprint (px-per-second + total seconds) didn't change.
+  // Rebuilding ~1400 tick divs for a 1400s sequence on every
+  // _refreshLayout (called per drag / drop / prop edit) was waste —
+  // the ruler only needs updating when the zoom or duration changes.
+  let _rulerFp = null;
   function _renderRuler(duration) {
     const ruler = document.getElementById('chor-ruler');
     if (!ruler) return;
-    ruler.innerHTML = '';
-    const fullW  = _liquidWidth(duration);
-    // Ticks cover the full liquid width so grid never leaves a blank strip
-    const total  = Math.ceil(_sec(fullW));
+    const fullW = _liquidWidth(duration);
+    const total = Math.ceil(_sec(fullW));
+    const fp = `${_pxPerSec}|${total}`;
+    if (fp === _rulerFp && ruler.children.length === total + 1) {
+      const canvas = document.getElementById('chor-canvas');
+      if (canvas) canvas.style.width = fullW + 'px';
+      return;
+    }
+    _rulerFp = fp;
+    ruler.replaceChildren();
     for (let s = 0; s <= total; s++) {
       const major = s % 5 === 0;
       const tick  = document.createElement('div');
@@ -9248,7 +9273,17 @@ const choreoEditor = (() => {
 
   // ── Drag + resize ─────────────────────────────────────────────────
   function _attachBlockEvents(block, track, idx) {
-    block.addEventListener('mousedown', e => {
+    // Audit finding Frontend M-1 2026-05-15: migrate from mousedown
+    // to pointerdown so multi-touch on tablets doesn't lose track of
+    // the drag. _startDrag and _startResize internally still use
+    // document mouse/pointermove listeners — pointer-events surface
+    // both 'mousemove' AND 'pointermove' so the existing implementation
+    // continues to work; this entry point just upgrades pointer tracking.
+    block.addEventListener('pointerdown', e => {
+      // Capture so we get all subsequent move/up events even if the
+      // pointer leaves the block (essential when dragging into the
+      // gutter or past the timeline edge for soft-delete).
+      try { block.setPointerCapture(e.pointerId); } catch {}
       e.target.dataset.resize ? _startResize(e, block, track, idx) : _startDrag(e, block, track, idx);
       _selectBlock(track, idx);
       e.preventDefault();
@@ -9997,11 +10032,32 @@ const choreoEditor = (() => {
     }
   }
 
+  let _connLostFails = 0;
   function _startPolling() {
     _stopPolling();
+    _connLostFails = 0;
     _pollTimer = setInterval(async () => {
       const status = await api('/choreo/status');
-      if (!status) return;
+      // Audit finding Perf M-6 2026-05-15: connection lost mid-
+      // playback used to leave the poll loop spinning at 200ms
+      // hammering the Master with failed requests and giving the
+      // operator no indication that anything was wrong. Now we
+      // track consecutive failures; after 5 (≈1s) we show a
+      // banner. The poll keeps running so we can recover.
+      if (status === null) {
+        _connLostFails += 1;
+        if (_connLostFails === 5) {
+          const banner = document.getElementById('chor-conn-banner');
+          if (banner) banner.style.display = 'block';
+          else toast('Connection lost — playback continues on robot', 'warn');
+        }
+        return;
+      }
+      if (_connLostFails > 0) {
+        _connLostFails = 0;
+        const banner = document.getElementById('chor-conn-banner');
+        if (banner) banner.style.display = 'none';
+      }
       const ph = document.getElementById('chor-playhead');
       if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
       const tc = document.getElementById('chor-timecode');
@@ -10074,11 +10130,69 @@ const choreoEditor = (() => {
         // produced N keydown handlers, so a single Delete press deleted N
         // blocks in succession.
         document.addEventListener('keydown', e => {
-          if (!_selected) return;
+          // Skip keys when typing in form fields — operator might be
+          // editing a label, choreo name, etc.
           if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+          // Only fire while the Choreo tab is the active outer tab.
+          if (document.querySelector('.tab.active')?.dataset.tab !== 'choreo') return;
+
+          // Space → play / stop the current choreo (DAW convention).
+          // Audit finding Perf M-2 + WOW feature 2026-05-15.
+          if (e.key === ' ' || e.code === 'Space') {
+            e.preventDefault();
+            if (_chor && _chor.meta && _chor.meta.name) {
+              // If a choreo is currently playing the player, stop it;
+              // otherwise start the one loaded in the editor.
+              api('/choreo/status').then(s => {
+                if (s && s.playing) {
+                  api('/choreo/stop', 'POST');
+                } else {
+                  choreoEditor.play();
+                }
+              });
+            }
+            return;
+          }
+
+          if (!_selected) return;
+
+          // Delete / Backspace removes the selected block.
           if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
             _deleteBlock(_selected.track, _selected.idx);
+            return;
+          }
+
+          // Arrow Left / Right nudge the selected event's t by the
+          // current snap value. Shift-arrow = 10× nudge for coarse
+          // moves. Audit finding Perf M-2 + WOW feature.
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            e.preventDefault();
+            const dir = e.key === 'ArrowRight' ? 1 : -1;
+            const step = (_snapVal || 0.1) * (e.shiftKey ? 10 : 1);
+            const item = _chor && _chor.tracks[_selected.track]?.[_selected.idx];
+            if (item) {
+              const newT = Math.max(0, _snap((item.t || 0) + dir * step));
+              item.t = newT;
+              _dirty = true;
+              _renderTrack(_selected.track);
+              _refreshLayout();
+              _selectBlock(_selected.track, _selected.idx);
+            }
+            return;
+          }
+
+          // Arrow Up / Down cycle through events in the current
+          // track (selected ± 1).
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            const dir = e.key === 'ArrowDown' ? 1 : -1;
+            const evs = _chor && _chor.tracks[_selected.track];
+            if (Array.isArray(evs) && evs.length > 0) {
+              const next = Math.max(0, Math.min(evs.length - 1, _selected.idx + dir));
+              _selectBlock(_selected.track, next);
+            }
+            return;
           }
         });
 
@@ -10159,6 +10273,10 @@ const choreoEditor = (() => {
     hasUnsavedChanges() {
       return !!(_dirty && _chor && _chor.meta && _chor.meta.name);
     },
+
+    // Live ref to the in-memory chor. Used by Sequences-tab inline
+    // rename to keep the editor's cached label in sync (audit L-C).
+    _chorRef() { return _chor; },
 
     // Dirty-flag guard for the chor-select dropdown. Audit finding
     // Frontend H-3 2026-05-15: switching choreos via the dropdown
@@ -10472,8 +10590,18 @@ const choreoEditor = (() => {
         let chor;
         try { chor = JSON.parse(await file.text()); } catch { toast('Invalid .chor file', 'error'); return; }
         if (!chor?.meta?.name) { toast('Invalid .chor: missing meta.name', 'error'); return; }
-        const result = await api('/choreo/save', 'POST', { chor });
-        if (!result) return;
+        // Audit finding Perf L-8 2026-05-15: confirm overwrite if the
+        // target name already exists on disk. Was silently stomping
+        // the existing file with no warning.
+        const existing = await api('/choreo/list');
+        if (Array.isArray(existing) && existing.some(e => (e.name || e) === chor.meta.name)) {
+          if (!confirm(`"${chor.meta.name}" already exists. Overwrite it?`)) {
+            toast('Import cancelled', 'info');
+            return;
+          }
+        }
+        const r = await apiDetail('/choreo/save', 'POST', { chor });
+        if (!r.ok) { toast(`Import failed: ${r.error}`, 'error'); return; }
         // Refresh dropdown and load the imported choreo
         const names = await api('/choreo/list');
         const sel   = document.getElementById('chor-select');

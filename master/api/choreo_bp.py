@@ -480,11 +480,22 @@ def manage_categories():
                     try:
                         with open(fpath, encoding='utf-8') as f:
                             chor = json.load(f)
-                    except (OSError, json.JSONDecodeError) as e:
-                        log.warning(
-                            "delete category: skipped unreadable %s: %s",
-                            fname, e,
-                        )
+                    except json.JSONDecodeError as e:
+                        # Audit finding Schema M-2 2026-05-15: corrupt
+                        # .chor files used to be silently skipped,
+                        # leaving them on disk with stale category id
+                        # and invisible in any pill. Quarantine to
+                        # .corrupt suffix so operator can find them
+                        # in the file manager + the listing endpoint
+                        # stops picking them up.
+                        try:
+                            os.rename(fpath, fpath + '.corrupt')
+                            log.error("delete category: quarantined corrupt %s: %s", fname, e)
+                        except OSError:
+                            log.error("delete category: corrupt %s, could not quarantine: %s", fname, e)
+                        continue
+                    except OSError as e:
+                        log.warning("delete category: unreadable %s: %s", fname, e)
                         continue
                     if chor.get('meta', {}).get('category') != cat_id:
                         continue

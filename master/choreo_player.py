@@ -1203,34 +1203,45 @@ class ChoreoPlayer:
             temp    = data.get('temp', 0.0)
             current = abs(data.get('current', 0.0))
 
+            # Audit finding Player M-2 2026-05-15: was `return`ing on
+            # the first abort condition hit, so the OTHER side never
+            # got checked and the log only mentioned one side even
+            # when both were faulted. Now: collect the abort, mark
+            # the side as faulted (don't count as healthy), and
+            # continue scanning so the log captures the full picture
+            # of which sides exceeded which thresholds. The
+            # `_stop_flag.set()` is sticky so the player still
+            # aborts at the same point.
+            side_faulted = False
             if v_in < self._vesc_min_voltage:
                 log.error(
                     f"ChoreoPlayer: ABORT — undervoltage VESC {side}: "
                     f"{v_in}V < {self._vesc_min_voltage}V"
                 )
-                self._abort_reason = 'undervoltage'
+                self._abort_reason = self._abort_reason or 'undervoltage'
                 self._stop_flag.set()
-                return
+                side_faulted = True
 
             if temp > self._vesc_max_temp:
                 log.error(
                     f"ChoreoPlayer: ABORT — overheat VESC {side}: "
                     f"{temp}°C > {self._vesc_max_temp}°C"
                 )
-                self._abort_reason = 'overheat'
+                self._abort_reason = self._abort_reason or 'overheat'
                 self._stop_flag.set()
-                return
+                side_faulted = True
 
             if current > self._vesc_max_current:
                 log.error(
                     f"ChoreoPlayer: ABORT — overcurrent VESC {side}: "
                     f"{current}A > {self._vesc_max_current}A"
                 )
-                self._abort_reason = 'overcurrent'
+                self._abort_reason = self._abort_reason or 'overcurrent'
                 self._stop_flag.set()
-                return
+                side_faulted = True
 
-            healthy_sides += 1
+            if not side_faulted:
+                healthy_sides += 1
 
         # If at least one side reported fresh, in-threshold telemetry, the
         # UART pipe is alive and the VESCs are reachable. Clear any transient
