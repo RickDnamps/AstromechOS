@@ -155,6 +155,30 @@ if [ -d "$ANGLES_BACKUP" ]; then
 fi
 
 # ──────────────────────────────────────────────
+# 1c. Ensure runtime apt deps that newer code requires.
+# Idempotent: dpkg-query exits 0 if installed, then we skip the apt call.
+# Currently:
+#   - python3-mutagen → frame-accurate MP3 duration in master/api/audio_bp.py
+#     (added 2026-05-15 to fix wrong UI timing on non-192-kbps sounds).
+# ──────────────────────────────────────────────
+step "1c/7" "Runtime dependencies"
+NEED_APT=()
+for pkg in python3-mutagen; do
+    if ! dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q 'install ok installed'; then
+        NEED_APT+=("$pkg")
+    fi
+done
+if [ ${#NEED_APT[@]} -gt 0 ]; then
+    if sudo apt-get install -y -qq "${NEED_APT[@]}" 2>&1 | tail -2; then
+        ok "Installed: ${NEED_APT[*]}"
+    else
+        warn "apt install failed for: ${NEED_APT[*]} — duration will fall back to header parser"
+    fi
+else
+    ok "All runtime deps present"
+fi
+
+# ──────────────────────────────────────────────
 # 2. Check the Slave
 # ──────────────────────────────────────────────
 step "2/7" "Slave connection"

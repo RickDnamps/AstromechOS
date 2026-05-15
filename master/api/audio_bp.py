@@ -104,19 +104,29 @@ _CATEGORY_NAME_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 
 
 # B-14: duration cache. _get_sound_duration_ms is called on every /play
-# AND on every choreo audio block dispatch. Re-stat-ing the file each time
-# is fine for 317 files but the math has to use the FILE'S OWN bitrate —
-# the user uses a mix of 128/192/320 kbps sounds, so a single hard-coded
-# assumption is ~30-70% off for the wrong bitrate. Cache by (path, mtime)
-# so a re-encoded file invalidates automatically.
+# AND on every choreo audio block dispatch. Mutagen.MP3 walks the file
+# frame-by-frame to compute exact duration (handles VBR, ID3v1/v2/APEv2,
+# embedded album art, padding) — accurate to the millisecond. Cache by
+# (path, mtime) so a re-encoded file invalidates automatically.
 #
 # 2026-05-14 user-reported bug: birthday.mp3 is 320 kbps CBR (39s real
-# duration), our 192 kbps assumption estimated 67s, the UI kept showing
-# 'playing' for 28 extra seconds after mpg123 actually finished.
+# duration), the previous 192 kbps file-size approximation estimated 67s,
+# the UI kept showing 'playing' for 28 extra seconds after mpg123 finished.
+# 2026-05-15: switched primary source to mutagen for ms-accurate duration
+# across the whole library (CBR, VBR, mixed bitrates). Header-parse
+# fallback retained for the case where mutagen isn't installed yet.
 _DURATION_CACHE: dict = {}   # {path: (mtime, ms)}
+
+try:
+    from mutagen.mp3 import MP3 as _MutagenMP3
+    _HAVE_MUTAGEN = True
+except ImportError:
+    _MutagenMP3 = None
+    _HAVE_MUTAGEN = False
 
 
 # MPEG1 Layer III bitrate table (kbps). bitrate_idx 0 = free, 15 = invalid.
+# Used only by the fallback estimator when mutagen is unavailable.
 _MPEG1_L3_BITRATES = [0, 32, 40, 48, 56, 64, 80, 96, 112,
                        128, 160, 192, 224, 256, 320, 0]
 # MPEG2 / MPEG2.5 Layer III (low-sample-rate variants — rare for R2 sounds).
@@ -125,33 +135,30 @@ _MPEG2_L3_BITRATES = [0, 8, 16, 24, 32, 40, 48, 56, 64,
 
 
 def _parse_mp3_bitrate(path: str) -> int | None:
-    """Read the first MPEG frame header and return the bitrate in kbps.
-    Returns None if the file doesn't look like a valid MP3 (no MPEG sync
-    found within the first 64 KB after any ID3v2 tag). CBR-accurate;
-    Xing/VBRI VBR headers fall through to per-frame bitrate which is OK
-    for the user's R2 sound library (mostly CBR exports)."""
+    """Fallback bitrate reader (no mutagen). Reads the first MPEG frame
+    header and returns the bitrate in kbps. Skips any leading ID3v2 tag.
+    CBR-accurate; VBR files report the first-frame bitrate which differs
+    from the file average — that's why mutagen is the preferred path."""
     try:
         with open(path, 'rb') as f:
             head = f.read(10)
             if len(head) < 10:
                 return None
-            # Skip ID3v2 tag if present (28-bit synchsafe size).
             if head[:3] == b'ID3':
                 size = ((head[6] & 0x7F) << 21) | ((head[7] & 0x7F) << 14) \
                      | ((head[8] & 0x7F) << 7)  | (head[9] & 0x7F)
                 f.seek(10 + size)
             else:
                 f.seek(0)
-            # Scan for MPEG frame sync (0xFFE or 0xFFF) in next 64 KB.
             buf = f.read(65536)
             for i in range(len(buf) - 4):
                 if buf[i] == 0xFF and (buf[i + 1] & 0xE0) == 0xE0:
                     b1, b2 = buf[i + 1], buf[i + 2]
-                    mpeg_ver    = (b1 >> 3) & 0x03   # 0=2.5, 2=2, 3=1
-                    layer       = (b1 >> 1) & 0x03   # 1=III, 2=II, 3=I
+                    mpeg_ver    = (b1 >> 3) & 0x03
+                    layer       = (b1 >> 1) & 0x03
                     bitrate_idx = (b2 >> 4) & 0x0F
                     if layer != 1 or bitrate_idx in (0, 15):
-                        continue   # not Layer III or bad bitrate index
+                        continue
                     table = _MPEG1_L3_BITRATES if mpeg_ver == 3 else _MPEG2_L3_BITRATES
                     return table[bitrate_idx]
             return None
@@ -160,16 +167,27 @@ def _parse_mp3_bitrate(path: str) -> int | None:
 
 
 def _estimate_duration_ms(path: str, fallback_ms: int = 60000) -> int:
-    """File-size-based duration estimate using the FILE'S OWN bitrate
-    parsed from the first MPEG frame header. Falls back to 192 kbps
-    if header parsing fails (e.g. non-MP3 file with .mp3 extension).
-    +500ms tail for the mpg123 cold-start latency on the slave."""
+    """Returns the duration of an MP3 in ms.
+
+    Primary: mutagen.MP3.info.length — frame-counted, ms-accurate, handles
+    VBR + Xing/VBRI + ID3v1/v2/APEv2 + album art + padding. Adds the
+    +500ms mpg123 cold-start tail used by the audio_playing flag.
+
+    Fallback: header-parse + size/bitrate. Only hit if mutagen failed to
+    install (Trixie apt didn't have python3-mutagen yet, or a corrupt
+    file mutagen refuses)."""
+    if _HAVE_MUTAGEN:
+        try:
+            info = _MutagenMP3(path).info
+            if info and info.length > 0:
+                return int(info.length * 1000) + 500
+        except Exception:
+            pass   # fall through to size-based fallback
     try:
         size = os.path.getsize(path)
     except OSError:
         return fallback_ms
     bitrate_kbps = _parse_mp3_bitrate(path) or 192
-    # bytes * 8 bits / bitrate_kbps → seconds, ×1000 → ms.
     return int(size * 8 / bitrate_kbps) + 500
 
 

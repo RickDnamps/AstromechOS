@@ -94,7 +94,7 @@ info "Step 1/8 — Updating system..."
 apt-get update -qq
 apt-get upgrade -y -qq
 apt-get install -y -qq \
-    python3-pip python3-serial python3-evdev \
+    python3-pip python3-serial python3-evdev python3-mutagen \
     git rsync avahi-daemon
 ok "Packages installed"
 
