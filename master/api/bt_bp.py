@@ -82,24 +82,26 @@ def bt_enable():
     return jsonify({'status': 'ok', 'enabled': enabled})
 
 
-# Allowed gamepad types (mirrors BT driver's _SUPPORTED_GAMEPADS).
-_VALID_GAMEPAD_TYPES = {'ps4', 'ps5', 'xbox', 'xbox_one', 'generic', 'auto'}
-
-# Allowed actions a mapping can fire — keeps a typo / malicious POST
-# from silently disabling the gamepad E-STOP. Audit finding CR-3
-# 2026-05-15: mappings = {"estop": "BOGUS"} would have left the
-# operator with a non-functional safety button until they noticed.
+# Mapping shape is {action_name: button_code}. The action_name is the
+# semantic role ('throttle', 'estop', etc.) and the button_code is the
+# evdev identifier ('BTN_MODE', 'ABS_Y', ...). Allowlist BOTH so a
+# typo or malicious POST can't silently disable the gamepad E-STOP.
+# Audit finding CR-3 2026-05-15: previously the endpoint accepted any
+# dict with no validation. Mirrors the action names actually consumed
+# by _handle_button + _handle_axis in bt_controller_driver.
 _VALID_BT_MAPPING_ACTIONS = {
-    'estop', 'lock_toggle', 'dome_left', 'dome_right',
-    'random_sound', 'play_choreo', 'open_arms', 'close_arms',
-    'open_panels', 'close_panels', 'speed_up', 'speed_down',
-    'none',
+    'throttle', 'steer', 'dome',
+    'panel_dome', 'panel_body',
+    'audio', 'estop', 'turbo',
 }
-# Button code allowlist — evdev codes like BTN_A, BTN_TR, ABS_X plus
-# the synthetic 'dpad_*'. Conservative regex catches the realistic
-# universe without enumerating every code.
 import re as _re_bt
-_VALID_BT_BUTTON_RE = _re_bt.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,31}$')
+# Button code = evdev BTN_*, ABS_*, KEY_*, or generic alphanumeric
+# (covers 'dpad_up' style synthetic codes too). Bounded to 32 chars.
+_VALID_BT_BUTTON_RE = _re_bt.compile(r'^[A-Za-z][A-Za-z0-9_]{0,31}$')
+
+# gamepad_type is free-form metadata used only for the UI label —
+# allow any short printable string but bound the length.
+_GAMEPAD_TYPE_MAX = 32
 
 
 @bt_bp.post('/config')
@@ -112,12 +114,12 @@ def bt_config():
         return jsonify({'error': 'BTController not available'}), 503
 
     patch = {}
-    # gamepad_type — must be in the allowed set
+    # gamepad_type — free-form label, length-bounded, printable only.
     if 'gamepad_type' in body:
-        gt = str(body['gamepad_type']).strip().lower()
-        if gt not in _VALID_GAMEPAD_TYPES:
-            return jsonify({'error': f'invalid gamepad_type (allowed: {sorted(_VALID_GAMEPAD_TYPES)})'}), 400
-        patch['gamepad_type'] = gt
+        gt = str(body['gamepad_type']).strip()
+        if not gt or len(gt) > _GAMEPAD_TYPE_MAX or not gt.isprintable():
+            return jsonify({'error': 'gamepad_type must be 1..32 printable chars'}), 400
+        patch['gamepad_type'] = gt.lower()
 
     # deadzone — finite float clamped to [0, 0.5]
     if 'deadzone' in body:
@@ -138,22 +140,24 @@ def bt_config():
             return jsonify({'error': 'inactivity_timeout must be an integer'}), 400
         patch['inactivity_timeout'] = max(0, min(3600, it))
 
-    # mappings — allowlist both keys (button codes) and values (actions).
-    # An invalid entry rejects the WHOLE patch so the operator sees
-    # the typo instead of getting a half-applied config.
+    # mappings — shape is {action_name: button_code}. Both sides
+    # allowlisted so a typo can't silently disable the gamepad E-STOP.
     if 'mappings' in body:
         raw = body['mappings']
         if not isinstance(raw, dict):
             return jsonify({'error': 'mappings must be an object'}), 400
         clean = {}
-        for btn, action in raw.items():
-            btn_s = str(btn)
+        for action, btn in raw.items():
             act_s = str(action).strip().lower()
+            btn_s = str(btn).strip()
+            if act_s not in _VALID_BT_MAPPING_ACTIONS:
+                return jsonify({
+                    'error': f'invalid mapping action: {act_s!r} '
+                             f'(allowed: {sorted(_VALID_BT_MAPPING_ACTIONS)})',
+                }), 400
             if not _VALID_BT_BUTTON_RE.match(btn_s):
                 return jsonify({'error': f'invalid button code: {btn_s!r}'}), 400
-            if act_s not in _VALID_BT_MAPPING_ACTIONS:
-                return jsonify({'error': f'invalid mapping action: {act_s!r}'}), 400
-            clean[btn_s] = act_s
+            clean[act_s] = btn_s
         patch['mappings'] = clean
 
     ok = reg.bt_ctrl.update_cfg(patch)
