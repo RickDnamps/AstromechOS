@@ -99,6 +99,13 @@ _CHOREO_DIR = os.path.join(os.path.dirname(__file__), '..', 'choreographies')
 _CATEGORIES_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'choreo_categories.json')
 _SYSTEM_CATEGORY = 'newchoreo'
 
+# B-28 (audit 2026-05-15): named the magic 'order' fallback used when a
+# category record is missing the field. 999 is large enough that an
+# unordered category sorts to the END behind explicitly-ordered ones
+# (manage_categories' create action uses max(existing_orders)+1, which
+# in practice is far below 999).
+_ORDER_FALLBACK = 999
+
 
 def _load_categories() -> list:
     """Load categories from JSON, creating defaults if missing."""
@@ -127,10 +134,19 @@ def _load_categories() -> list:
 
 
 def _save_categories(cats: list) -> None:
+    """Atomically persist the categories list.
+
+    B-24 (audit 2026-05-15): fsync before os.replace so a power-cut
+    between the write and the inode flush can't leave a 0-byte file
+    that _load_categories has to regenerate from defaults (silently
+    losing user-created categories). Cheap on a Pi 4B's SD card; the
+    file is a few hundred bytes."""
     os.makedirs(os.path.dirname(_CATEGORIES_PATH), exist_ok=True)
     tmp = _CATEGORIES_PATH + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(cats, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
     os.replace(tmp, _CATEGORIES_PATH)
 
 
@@ -304,7 +320,7 @@ def get_categories():
         mtime = 0.0
     if _CATS_CACHE.get('rows') is not None and _CATS_CACHE.get('mtime') == mtime:
         return jsonify(_CATS_CACHE['rows'])
-    cats = sorted(_load_categories(), key=lambda c: c.get('order', 99))
+    cats = sorted(_load_categories(), key=lambda c: c.get('order', _ORDER_FALLBACK))
     _CATS_CACHE['mtime'] = mtime
     _CATS_CACHE['rows']  = cats
     return jsonify(cats)
@@ -426,7 +442,14 @@ def manage_categories():
             # the orphan instead of silently losing it.
             with _chor_file_lock:
                 for fname in os.listdir(_CHOREO_DIR):
-                    if not fname.endswith('.chor'):
+                    # B-26 (audit 2026-05-15): skip vim swap files,
+                    # macOS resource forks, and any other hidden temp
+                    # files that aren't real .chor sequences. Without
+                    # this, an editor leaving `.foo.chor.swp` next to
+                    # `foo.chor` would trip the JSON parse and (now
+                    # that we log warnings instead of bare-except'ing)
+                    # spam the slave logs.
+                    if not fname.endswith('.chor') or fname.startswith('.'):
                         continue
                     fpath = os.path.join(_CHOREO_DIR, fname)
                     try:

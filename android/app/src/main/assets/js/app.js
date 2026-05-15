@@ -4396,7 +4396,13 @@ class ScriptEngine {
     scripts.forEach(s => {
       const isRunning = this._running.has(s.name);
       const isLooping = this._looping.has(s.name);
-      const label = s.label || s.name.toUpperCase().replace(/_/g, ' ');
+      // F-29 (audit 2026-05-15): preserve the operator's original
+      // casing when no custom label is set. Old code uppercased
+      // EVERYTHING (Theme001 → THEME001) which lost information that
+      // sometimes encoded meaning (digits at the end of an otherwise
+      // mixed-case name). Now only the underscore→space transform is
+      // applied; mixed-case input stays mixed-case.
+      const label = s.label || s.name.replace(/_/g, ' ');
 
       const card = document.createElement('div');
       card.className = 'seq-card' + (isRunning ? ' running' : '') + (isLooping ? ' looping' : '');
@@ -4710,7 +4716,15 @@ class ScriptEngine {
         // retry rather than assume the click didn't register.
         this._running.delete(name);
         this._looping.delete(name);
-        if (card) { card.classList.remove('running', 'looping'); }
+        if (card) {
+          card.classList.remove('running', 'looping');
+          // F-30 (audit 2026-05-15): also reset the progress bar so it
+          // doesn't keep filling toward 100% as if the sequence were
+          // playing. Without this, a failed play left a phantom
+          // progress fill animating for the next dur seconds.
+          const fill = el(`seq-prog-${name}`);
+          if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+        }
         toast(`Failed to start ${name.toUpperCase()} — see logs`, 'error');
       } else {
         toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
@@ -4773,19 +4787,35 @@ class ScriptEngine {
   updateRunning(running) {
     const names = new Set(running.map(s => s.name));
     this._running = names;
+    // F-39 (audit 2026-05-15): the `_looping` set used to accumulate
+    // names whose cards were hidden by the current category filter
+    // (the visible-card forEach below couldn't clean them up). Reset
+    // it from the server-reported running list which is authoritative:
+    // anything actually playing AND looping will be re-added by the
+    // poller's next /choreo/status query; anything else gets dropped.
+    // We keep _looping membership for currently-running names so the
+    // looping CSS class survives the poll round-trip.
+    for (const stale of [...this._looping]) {
+      if (!names.has(stale)) this._looping.delete(stale);
+    }
     document.querySelectorAll('.seq-card').forEach(card => {
       const name = card.dataset.name;
       const isRunning = names.has(name);
       card.classList.toggle('running', isRunning);
       if (!isRunning) {
-        this._looping.delete(name);
         card.classList.remove('looping');
-        const fill = el(`seq-prog-${name}`);
+        // F-40 (audit 2026-05-15): the progress fill is a CHILD of the
+        // card we're already iterating — querySelector inside the card
+        // is faster than another getElementById walk of the document.
+        const fill = card.querySelector('.seq-card-progress-fill');
         if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
       }
     });
+    // F-33 (audit 2026-05-15): the single-instance ChoreoPlayer means
+    // `running` always has 0 or 1 entry. Drop the `.join(', ')` since
+    // it implied a multi-running case that never happens.
     const list = el('running-scripts');
-    if (list) list.textContent = running.length ? running.map(s => s.name).join(', ') : '—';
+    if (list) list.textContent = running.length ? running[0].name : '—';
   }
 
   _syncAdminMode() {
