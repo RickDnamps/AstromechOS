@@ -64,6 +64,7 @@ import master.registry as reg
 from master.motion_watchdog import motion_watchdog
 from master.safe_stop import cancel_ramp, is_drive_ramp_active, is_dome_ramp_active
 from master.vesc_safety import is_drive_safe, block_reason
+from master.api._admin_auth import require_admin
 
 motion_bp = Blueprint('motion', __name__, url_prefix='/motion')
 
