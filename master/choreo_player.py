@@ -334,6 +334,20 @@ class ChoreoPlayer:
         with self._status_lock:
             return dict(self._status)
 
+    def update_running_name(self, new_name: str) -> bool:
+        """Patch the in-memory 'name' field if a choreo is currently
+        playing. Used by choreo_bp.choreo_rename so /status keeps
+        reporting the new name while the player is mid-playback.
+        Audit finding Backend M-4 2026-05-15: was reaching into the
+        private _status dict from the blueprint, fragile to refactor.
+        Public method preserves that decoupling. No-op if not playing
+        or if the current name doesn't match."""
+        with self._status_lock:
+            if self._status.get('playing') and self._status.get('name'):
+                self._status['name'] = new_name
+                return True
+        return False
+
     def play(self, chor: dict, loop: bool = False) -> bool:
         """Start playback of a chor dict. Returns False if already playing."""
         if self.is_playing():
@@ -778,7 +792,17 @@ class ChoreoPlayer:
                             'duration':   duration,
                         }
                         if duration:
-                            t = threading.Timer(float(duration), self._release_slot, args=(slot,))
+                            # Audit finding Player M-3 2026-05-15: audio
+                            # events fire EARLIER than their nominal t by
+                            # _audio_startup_lat to compensate for mpg123
+                            # cold-start. The slot-release Timer used the
+                            # raw `duration` though, so the slot was freed
+                            # ~50ms before the sound actually ended audibly
+                            # → back-to-back queued sound could pre-empt
+                            # 50ms early. Extend the slot duration by lat
+                            # so the release lines up with the audible end.
+                            slot_dur = float(duration) + self._audio_startup_lat
+                            t = threading.Timer(slot_dur, self._release_slot, args=(slot,))
                             t.daemon = True
                             self._audio_timers[slot] = t
                             t.start()
@@ -876,8 +900,15 @@ class ChoreoPlayer:
                             return
                         servo, panel, arm_delay = arm_entries[arm_idx - 1]
                     else:
-                        # Legacy format: servo ID + panel from arm_panel_map, default delay
-                        panel     = getattr(self, '_arm_panel_map', {}).get(servo)
+                        # Legacy format: servo ID + panel from arm_panel_map, default delay.
+                        # Audit finding Player M-1 2026-05-15: was reading the
+                        # cached _arm_panel_map (loaded at play start + loop
+                        # boundary). New arm: events re-read on every dispatch
+                        # via _read_arm_entries — legacy servo: events should
+                        # be consistent. Re-read here too so a mid-playback
+                        # Arms config save takes effect on the next event.
+                        live_map = _read_arm_panel_map()
+                        panel     = live_map.get(servo)
                         arm_delay = _ARM_PANEL_DELAY
 
                     # Per-segment durations + override delay (timeline inspector)
@@ -1203,6 +1234,11 @@ class ChoreoPlayer:
 
     def _safe_stop_all(self) -> None:
         # NOTE: self._audio is UARTController — use send(), NEVER .stop() (that closes serial)
+        # Audit finding Player M-5 2026-05-15: bare `except: pass`
+        # used to swallow every error during teardown. Defensible at
+        # shutdown (don't crash on the way out) but lost the stack
+        # trace. log.exception keeps the trace for post-mortem AND
+        # still keeps the loop going (next fn() runs).
         for fn in [
             *[
                 (lambda cmd=('S' if i == 0 else f'S{i+1}'): self._audio.send(cmd, 'STOP') if self._audio else None)
@@ -1216,7 +1252,7 @@ class ChoreoPlayer:
             try:
                 fn()
             except Exception:
-                pass
+                log.exception("_safe_stop_all: subtask failed")
 
     # ── SCR export ────────────────────────────────────────────────────────────
 

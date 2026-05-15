@@ -100,6 +100,15 @@ def create_app() -> Flask:
     app.register_blueprint(diagnostics_bp)
     app.register_blueprint(shortcuts_bp)
 
+    # Audit finding Schema M-3 2026-05-15: sweep orphan .chor.tmp
+    # files left over from interrupted atomic writes. Cheap (single
+    # dir scan, ~48 files) and only runs at boot.
+    try:
+        from master.api.choreo_bp import cleanup_stale_tmp_files
+        cleanup_stale_tmp_files()
+    except Exception:
+        log.exception("cleanup_stale_tmp_files failed at startup")
+
     # ------------------------------------------------------------------
     # Activity tracking — update last_activity on user-driven POSTs.
     # /heartbeat fires every 200ms from the dashboard polling loop and would

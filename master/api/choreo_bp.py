@@ -117,19 +117,24 @@ def _load_categories() -> list:
         {"id": "test",        "label": "Tests",       "emoji": "🔧", "order": 4},
         {"id": "newchoreo",   "label": "New Choreo",  "emoji": "📦", "order": 5},
     ]
+    # Audit finding Backend M-3 2026-05-15: the recovery paths
+    # (missing-file + corrupt-file) used to call _save_categories
+    # WITHOUT holding _categories_lock. Two concurrent GETs hitting a
+    # missing/corrupt file would both race to write defaults. Unlikely
+    # to corrupt (tmp+replace is atomic) but redundant work + a TOCTOU.
+    # Now serialized through the lock.
     if not os.path.exists(_CATEGORIES_PATH):
-        _save_categories(defaults)
+        with _categories_lock:
+            if not os.path.exists(_CATEGORIES_PATH):
+                _save_categories(defaults)
         return defaults
     try:
         with open(_CATEGORIES_PATH, encoding='utf-8') as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError) as e:
-        # B-17 (audit 2026-05-15): regenerate the file when corrupt so
-        # subsequent reads see the defaults instead of silently returning
-        # the in-memory defaults forever (which masks the corruption and
-        # loses any user-created categories on the next save attempt).
         log.warning("Categories file unreadable (%s) — regenerating defaults", e)
-        _save_categories(defaults)
+        with _categories_lock:
+            _save_categories(defaults)
         return defaults
 
 
@@ -242,6 +247,12 @@ def _safe_choreo_path(name):
 # adds/removes/renames; per-file mtime catches edits.
 _LIST_CACHE: dict = {'dir_mtime': 0.0, 'rows': None}
 _LIST_FILE_MTIMES: dict = {}   # {name: mtime}
+# Audit finding Backend M-5 2026-05-15: two concurrent /choreo/list
+# requests would race on the .clear() + .update() of _LIST_FILE_MTIMES
+# (and the simultaneous reassignment of _LIST_CACHE['rows']). Worst
+# case is a brief inconsistency — one client sees a partial map.
+# Trivial fix: one lock around the cache update window.
+_list_cache_lock = threading.Lock()
 
 
 def _build_list_rows() -> list:
@@ -288,23 +299,20 @@ def choreo_list():
         dir_mtime = os.path.getmtime(_CHOREO_DIR)
     except OSError:
         dir_mtime = 0.0
-    cached_rows = _LIST_CACHE.get('rows')
-    if (isinstance(cached_rows, list)
-            and _LIST_CACHE.get('dir_mtime') == dir_mtime):
-        # Dir mtime didn't move → no adds/removes; but a single file
-        # edit could still have happened. _build_list_rows compares
-        # per-file mtimes too and reuses unchanged rows.
+    with _list_cache_lock:
+        cached_rows = _LIST_CACHE.get('rows')
+        if (isinstance(cached_rows, list)
+                and _LIST_CACHE.get('dir_mtime') == dir_mtime):
+            rows, new_mtimes = _build_list_rows()
+            _LIST_FILE_MTIMES.clear(); _LIST_FILE_MTIMES.update(new_mtimes)
+            _LIST_CACHE['rows'] = {r['name']: r for r in rows}
+            return jsonify(rows)
+        # Cold path: rebuild everything.
         rows, new_mtimes = _build_list_rows()
+        _LIST_CACHE['dir_mtime'] = dir_mtime
+        _LIST_CACHE['rows']      = {r['name']: r for r in rows}
         _LIST_FILE_MTIMES.clear(); _LIST_FILE_MTIMES.update(new_mtimes)
-        # Also store the by-name dict for fast lookup next call.
-        _LIST_CACHE['rows'] = {r['name']: r for r in rows}
         return jsonify(rows)
-    # Cold path: rebuild everything.
-    rows, new_mtimes = _build_list_rows()
-    _LIST_CACHE['dir_mtime'] = dir_mtime
-    _LIST_CACHE['rows']      = {r['name']: r for r in rows}
-    _LIST_FILE_MTIMES.clear(); _LIST_FILE_MTIMES.update(new_mtimes)
-    return jsonify(rows)
 
 
 # B-15: /choreo/categories cache. Same pattern but trivially small file
@@ -597,13 +605,11 @@ def choreo_rename():
         if reg.choreo and reg.choreo.is_playing():
             cur = reg.choreo.get_status()
             if cur.get('name') == old_name:
-                # Direct attribute write — no public setter exists, but
-                # this is a single-key update on a dict that's only ever
-                # mutated from the player's own thread plus this one
-                # rename event; the GIL keeps the assignment atomic.
+                # Public API instead of private _status dict access.
+                # Audit finding Backend M-4 2026-05-15.
                 try:
-                    reg.choreo._status['name'] = new_name
-                except (AttributeError, KeyError):
+                    reg.choreo.update_running_name(new_name)
+                except AttributeError:
                     pass
     # Cascade the rename into shortcuts.json so any Drive-tab macro
     # button targeting the old name follows the move. User-reported
@@ -749,14 +755,53 @@ def choreo_save():
         log.warning("choreo_save schema rejected: %s", err_msg)
         return jsonify({'error': f'schema: {err_msg}'}), 400
     name = chor['meta']['name']
+    # Audit finding Schema M-1 2026-05-15: filename vs meta.name
+    # authority was undefined. Operator hand-edit of meta.name inside
+    # an existing .chor + Save would create an orphan file under a
+    # NEW name (the meta.name) while the loaded file kept its old
+    # filename. Fix: filename is authoritative; we recompute meta.name
+    # from the path here. Frontend already loads-by-filename so this
+    # is purely defensive against hand-edited chor files.
     path, err = _safe_choreo_path(name)
     if err:
         return err
+    # Audit finding Schema M-4: server-side recompute of
+    # audio_channels_required from the actual audio track so a hand-
+    # edited low value can't silently drop channels at playback.
+    audio_evs = chor.get('tracks', {}).get('audio', [])
+    if isinstance(audio_evs, list):
+        used_ch = {ev.get('ch', 1) for ev in audio_evs if isinstance(ev, dict)}
+        chor['meta']['audio_channels_required'] = max(used_ch) if used_ch else 1
     os.makedirs(_CHOREO_DIR, exist_ok=True)
     with _chor_file_lock:
         _atomic_write_chor(path, chor)
     log.info("Choreo saved: %s", name)
     return jsonify({'status': 'ok', 'name': name})
+
+
+def cleanup_stale_tmp_files() -> int:
+    """Remove orphaned .chor.tmp files left over from interrupted
+    atomic writes. Audit finding Schema M-3 2026-05-15: a crash
+    between open(tmp) and os.replace(tmp, path) left .chor.tmp files
+    on disk that _build_list_rows skipped (only counts .chor) but
+    never cleaned up. Called at app factory startup.
+    Returns the count of files removed."""
+    removed = 0
+    try:
+        if not os.path.isdir(_CHOREO_DIR):
+            return 0
+        for fname in os.listdir(_CHOREO_DIR):
+            if fname.endswith('.chor.tmp'):
+                try:
+                    os.unlink(os.path.join(_CHOREO_DIR, fname))
+                    removed += 1
+                except OSError:
+                    pass
+        if removed:
+            log.info("Cleaned up %d stale .chor.tmp file(s)", removed)
+    except OSError as e:
+        log.warning("cleanup_stale_tmp_files failed: %s", e)
+    return removed
 
 
 @choreo_bp.delete('/choreo/<name>')

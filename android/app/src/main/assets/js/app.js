@@ -4856,6 +4856,12 @@ class ScriptEngine {
         card.addEventListener('pointerup',   (e) => this._onPointerUp(e, name));
         card.addEventListener('pointermove', (e) => this._onPointerMove(e));
         card.addEventListener('pointercancel', (e) => this._clearLongPress(e));
+        // Audit finding Frontend M-3 2026-05-15: pointerleave on
+        // browsers that don't fire pointercancel when a finger slides
+        // off the card (Chrome variant behavior). Without this, the
+        // 500ms long-press timer can fire after the user's finger has
+        // already left the card → unwanted play(name, loop=true).
+        card.addEventListener('pointerleave', (e) => this._clearLongPress(e));
       }
     });
   }
@@ -8198,6 +8204,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // ================================================================
 
 function _chorSelectOptions(names) {
+  // Audit finding Frontend M-5 2026-05-15: filename + label + emoji
+  // were interpolated into an option HTML string. Filename is regex-
+  // validated server-side so today safe, but createElement+textContent
+  // is the documented project pattern. Returns innerHTML-compatible
+  // for backward compat with the 3 callers, but every dynamic value
+  // is now escaped both for the attribute AND the text content.
   return names.map(n => {
     const v   = n.name || n;
     const raw = v.replace(/\.chor$/, '');
@@ -8205,7 +8217,7 @@ function _chorSelectOptions(names) {
     const emj = (typeof n === 'object' && n.emoji) ? n.emoji + ' ' : '';
     const diff = lbl.toLowerCase().replace(/\s+/g,'_') !== raw.toLowerCase();
     const display = `${emj}${lbl}${diff ? ' (' + raw + ')' : ''}`;
-    return `<option value="${v}">${escapeHtml(display)}</option>`;
+    return `<option value="${escapeHtml(v)}">${escapeHtml(display)}</option>`;
   }).join('');
 }
 
@@ -9683,36 +9695,52 @@ const choreoEditor = (() => {
 
   function _validateAudioOverflow() {
     if (!_chor) return;
-    const events = (_chor.tracks.audio || []).filter(e => e.action === 'play' && e.duration > 0);
+    const allAudio = _chor.tracks.audio || [];
+    // Keep the original index so we can map back into `_audioOverflowIdxs`.
+    const events = [];
+    allAudio.forEach((e, i) => {
+      if (e.action === 'play' && e.duration > 0)
+        events.push({ start: e.t, end: e.t + (e.duration || 0), idx: i });
+    });
 
-    // Collect all time boundary points (start + end of every event)
-    const timepoints = new Set();
+    // Audit finding Perf H-1 2026-05-15: previously O(N²·T) — for each
+    // of the 2N timepoints we ran events.filter(...) twice. A 1000-
+    // event chor meant ~6M comparisons per keystroke in the inspector
+    // (the function runs after every drop, drag, prop edit, load, save).
+    // Sweep-line algorithm: O(N log N).
+    //   - Build a boundary list of {t, delta:+1|-1, idx}
+    //   - Sort by t (ends BEFORE starts at equal t — no double-count
+    //     for back-to-back events)
+    //   - Walk left-to-right; `active` is the running count, `live`
+    //     tracks indices currently overlapping. peak = max(active).
+    //   - On a start event, if active > N channels, the just-arrived
+    //     event is the one that overflows.
+    const bounds = [];
     events.forEach(e => {
-      timepoints.add(e.t);
-      timepoints.add(e.t + (e.duration || 0));
+      bounds.push({ t: e.start, delta: +1, idx: e.idx });
+      bounds.push({ t: e.end,   delta: -1, idx: e.idx });
     });
+    bounds.sort((a, b) => a.t - b.t || a.delta - b.delta);   // ends (-1) before starts (+1)
 
-    // Peak simultaneous events (all priorities)
     let peak = 0;
-    timepoints.forEach(tp => {
-      const count = events.filter(e => e.t <= tp && (e.t + (e.duration || 0)) > tp).length;
-      if (count > peak) peak = count;
-    });
-    if (_chor.meta) _chor.meta.audio_channels_required = peak || 0;
-
-    // Flag overflow: events where more than N overlap at any point
+    let active = 0;
+    const live = new Set();
     const overflow = new Set();
-    timepoints.forEach(tp => {
-      const active = events.filter(e => e.t <= tp && (e.t + (e.duration || 0)) > tp);
-      if (active.length > _audioChannelsConfig) {
-        // Sort by start time — events added later (higher t) are the ones dropped
-        const sorted = [...active].sort((a, b) => a.t - b.t);
-        sorted.slice(_audioChannelsConfig).forEach(e => {
-          const idx = (_chor.tracks.audio || []).indexOf(e);
-          if (idx >= 0) overflow.add(idx);
-        });
+    for (const b of bounds) {
+      if (b.delta > 0) {
+        active += 1;
+        live.add(b.idx);
+        if (active > peak) peak = active;
+        if (active > _audioChannelsConfig) {
+          // The just-arrived event is the overflowing one.
+          overflow.add(b.idx);
+        }
+      } else {
+        active -= 1;
+        live.delete(b.idx);
       }
-    });
+    }
+    if (_chor.meta) _chor.meta.audio_channels_required = peak || 0;
 
     // Skip the redraw if the overflow set hasn't changed since the last
     // call. Most edits don't shift events into/out of overflow — the old
@@ -9911,8 +9939,26 @@ const choreoEditor = (() => {
     const modal = document.getElementById('modal-chor-abort');
     const label = document.getElementById('chor-abort-reason');
     if (!modal) return;
-    const msgs = { uart_loss:'UART LOSS', undervoltage:'UNDERVOLTAGE', overheat:'OVERHEAT', overcurrent:'OVERCURRENT' };
-    if (label) label.textContent = msgs[reason] || reason.toUpperCase().replace(/_/g,' ');
+    // Audit finding Perf M-4 2026-05-15: the player can set
+    // abort_reason to anything _vesc_block_reason() returns
+    // (vesc_unsafe, drive_unsafe, L_stale, R_fault=99, estop_active,
+    // stow_in_progress, …) plus the four hand-mapped reasons here.
+    // Extend the label dict so the common cases get human-readable
+    // text instead of falling back to UPPERCASE-WITH-SPACES.
+    const msgs = {
+      uart_loss:        'UART LOSS — Slave unreachable',
+      undervoltage:     'UNDERVOLTAGE — battery low',
+      overheat:         'OVERHEAT — VESC too hot',
+      overcurrent:      'OVERCURRENT — drive load too high',
+      vesc_unsafe:      'VESC UNSAFE — check VESC config / connection',
+      drive_unsafe:     'DRIVE UNSAFE — VESC fault',
+      estop_active:     'E-STOP ACTIVE — reset to resume',
+      stow_in_progress: 'STOW IN PROGRESS — wait for servos to settle',
+    };
+    if (label) {
+      label.textContent = msgs[reason]
+        || (typeof reason === 'string' ? reason.toUpperCase().replace(/_/g,' ') : 'ABORTED');
+    }
     modal.style.display = 'flex';
   }
 
