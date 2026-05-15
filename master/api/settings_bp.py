@@ -60,7 +60,12 @@ def _resolve_slave_ssh_target() -> str:
     host = _read_cfg().get('slave', 'host', fallback='r2-slave.local')
     return f'artoo@{host}'
 _ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
-_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
+# B-82 (audit 2026-05-15): .svg removed. SVG can carry <script> /
+# event handlers / data: URLs, and the /icons/<path> route serves them
+# same-origin → would have been a stored XSS sink even with B-39's
+# DOM-safe rendering (since SVG executes as document, not as image).
+# Operator who needs a vector icon can convert to PNG.
+_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 INTERNET_CON = 'r2d2-internet'
 HOTSPOT_CON  = 'r2d2-hotspot'
 
@@ -493,13 +498,84 @@ def set_config():
         'battery.cells', 'battery.chemistry',
     }
 
+    # B-78 / B-79 / B-80 (audit 2026-05-15): validate values per-key
+    # BEFORE persisting. Old code wrote whatever string the client sent,
+    # then clamped/normalised at read time — meaning the file held
+    # bogus values like 'cells=99' until next save, and `slave.host=''`
+    # would lock the deploy chain. Per-key normalisers below return the
+    # validated string OR None to reject with 400.
+    _VALID_CELLS  = {'4', '6', '7', '8'}
+    _VALID_CHEM   = {'liion', 'lifepo4', 'lipo'}
+
+    def _normalise(dotkey, raw):
+        s = str(raw if raw is not None else '').strip()
+        if dotkey == 'audio.channels':
+            try:
+                n = max(1, min(12, int(s)))
+                return str(n)
+            except ValueError:
+                return None
+        if dotkey in ('audio.profile_convention', 'audio.profile_maison',
+                      'audio.profile_exterieur'):
+            try:
+                return str(max(0, min(100, int(s))))
+            except ValueError:
+                return None
+        if dotkey == 'battery.cells':
+            return s if s in _VALID_CELLS else None
+        if dotkey == 'battery.chemistry':
+            return s.lower() if s.lower() in _VALID_CHEM else None
+        if dotkey == 'slave.host':
+            # Non-empty hostname — bare IP, hostname, or .local. Cap
+            # length so a 5KB host can't bloat the cfg.
+            return s if (s and len(s) <= 253) else None
+        if dotkey == 'github.repo_url':
+            # Light validation — must look like a URL (http/https/git@)
+            if not s:
+                return None
+            if not (s.startswith('http://') or s.startswith('https://') or s.startswith('git@')):
+                return None
+            return s if len(s) <= 512 else None
+        if dotkey == 'github.branch':
+            # No spaces, no slashes-of-doom; up to 64 chars.
+            if not s or len(s) > 64 or any(c in s for c in ' \t\n\r'):
+                return None
+            return s
+        if dotkey == 'github.auto_pull_on_boot':
+            return 'true' if s.lower() in ('true', '1', 'yes', 'on') else 'false'
+        if dotkey == 'choreo.body_servo_uart_lat':
+            try:
+                return str(max(0.0, min(1.0, float(s))))
+            except ValueError:
+                return None
+        if dotkey == 'choreo.audio_startup_lat':
+            try:
+                return str(max(0.0, min(1.0, float(s))))
+            except ValueError:
+                return None
+        if dotkey == 'lights.backend':
+            return s if s in ('astropixels', 'teeces', 'none') else None
+        # I2C HAT keys handled separately below; pass through.
+        return s
+
     updated = []
+    rejected = []
     for dotkey, value in data.items():
-        if dotkey in allowed:
-            if dotkey not in _SLAVE_HAT_KEYS:
-                section, key = dotkey.split('.', 1)
-                _write_key(section, key, str(value))
+        if dotkey not in allowed:
+            continue
+        if dotkey in _SLAVE_HAT_KEYS:
             updated.append(dotkey)
+            continue
+        norm = _normalise(dotkey, value)
+        if norm is None:
+            rejected.append(dotkey)
+            continue
+        section, key = dotkey.split('.', 1)
+        _write_key(section, key, norm)
+        updated.append(dotkey)
+    if rejected:
+        log.warning("set_config rejected invalid values for: %s", rejected)
+        return jsonify({'error': f'invalid value(s): {", ".join(rejected)}'}), 400
 
     # Slave HAT keys go to slave.cfg (not local.cfg) and trigger a Slave
     # restart — but ONLY if the new values genuinely differ from what the
@@ -656,11 +732,15 @@ def admin_change_password():
 
 @settings_bp.get('/settings/icons')
 def list_icons():
-    """Returns list of image files available in the icons/ folder."""
+    """Returns list of image files available in the icons/ folder.
+    B-81 (audit 2026-05-15): skip dotfiles. A planted '.hidden.png'
+    used to surface in the picker; this matches upload_icon's reject
+    of leading-dot filenames."""
     os.makedirs(_ICONS_DIR, exist_ok=True)
     files = sorted(
         f for f in os.listdir(_ICONS_DIR)
-        if os.path.splitext(f)[1].lower() in _ALLOWED_EXT
+        if not f.startswith('.')
+        and os.path.splitext(f)[1].lower() in _ALLOWED_EXT
     )
     return jsonify({'icons': files})
 

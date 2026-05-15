@@ -5664,79 +5664,84 @@ const diagPanel = {
     this.loadLogs();
   },
 
-  loadLogs() {
+  async loadLogs() {
     const box    = el('diag-log-output');
     const status = el('diag-log-status');
     if (!box) return;
     box.textContent = 'Loading...';
-    fetch(`/diagnostics/logs?filter=${this._filter}`)
-      .then(r => r.json())
-      .then(data => {
-        if (!data.lines || data.lines.length === 0) {
-          box.innerHTML = '<span style="color:var(--dim)">— no entries —</span>';
-          if (status) status.textContent = '';
-          return;
-        }
-        box.innerHTML = data.lines.map(l => {
-          const cls = /error|critical|exception|traceback/i.test(l) ? 'diag-line-err'
-                    : /warning/i.test(l)                             ? 'diag-line-warn'
-                    : 'diag-line-info';
-          return `<div class="${cls}">${escapeHtml(l)}</div>`;
-        }).join('');
-        box.scrollTop = box.scrollHeight;
-        if (status) status.textContent = `${data.lines.length} lines`;
-      })
-      .catch(e => {
-        box.textContent = `Error: ${e}`;
-        if (status) status.textContent = '';
-      });
+    // B-114 (audit 2026-05-15): route through api() so X-Admin-Pw is
+    // attached. /diagnostics/logs is admin-only since B-64; raw fetch
+    // would silently 401.
+    const data = await api(`/diagnostics/logs?filter=${encodeURIComponent(this._filter)}`);
+    if (!data) {
+      box.innerHTML = '<span class="cockpit-err">Error — admin re-auth may be needed</span>';
+      if (status) status.textContent = '';
+      return;
+    }
+    if (!data.lines || data.lines.length === 0) {
+      box.innerHTML = '<span style="color:var(--dim)">— no entries —</span>';
+      if (status) status.textContent = '';
+      return;
+    }
+    box.innerHTML = data.lines.map(l => {
+      const cls = /error|critical|exception|traceback/i.test(l) ? 'diag-line-err'
+                : /warning/i.test(l)                             ? 'diag-line-warn'
+                : 'diag-line-info';
+      return `<div class="${cls}">${escapeHtml(l)}</div>`;
+    }).join('');
+    box.scrollTop = box.scrollHeight;
+    if (status) status.textContent = `${data.lines.length} lines`;
   },
 
-  loadStats() {
+  async loadStats() {
     const box = el('diag-stats-output');
     if (!box) return;
-    fetch('/diagnostics/stats')
-      .then(r => r.json())
-      .then(data => {
-        const m = data.master || {};
-        const s = data.slave  || {};
-        const row = (lbl, val) =>
-          `<div class="cockpit-row"><span class="cockpit-row-lbl">${lbl}</span><span class="cockpit-row-val">${val}</span></div>`;
-        const ok   = v => `<span class="cockpit-ok">${v}</span>`;
-        const warn = v => `<span class="cockpit-warn">${v}</span>`;
-        const err  = v => `<span class="cockpit-err">${v}</span>`;
-        const dim  = v => `<span class="cockpit-dim">${v}</span>`;
-        box.innerHTML =
-          row('Master UART',   m.uart_ready ? ok('✓ open') : err('✗ closed')) +
-          row('CRC errors',    m.crc_errors > 0 ? warn(m.crc_errors) : ok('0')) +
-          row('App HB age',    m.hb_age_ms != null ? `${m.hb_age_ms} ms` : dim('—')) +
-          row('Slave reach',   s.reachable  ? ok('✓ OK') : warn('⚠ unreachable')) +
-          row('UART quality',  s.health_pct != null ? `${s.health_pct}%` : dim('—')) +
-          row('UART errors',   s.errors != null ? (s.errors > 0 ? warn(s.errors) : ok(s.errors)) : dim('—')) +
-          row('Slave CPU',     s.cpu_pct  != null ? `${s.cpu_pct}%`  : dim('—')) +
-          row('Slave temp',    s.cpu_temp != null ? `${s.cpu_temp}°C` : dim('—'));
-      })
-      .catch(e => { box.innerHTML = err(`Error: ${e}`); });
+    // B-115 (audit 2026-05-15): route through api() — /diagnostics/stats
+    // is the only diag endpoint not yet admin-protected (info-only),
+    // but using api() also handles R2D2_API_BASE for Android WebView.
+    const data = await api('/diagnostics/stats');
+    if (!data) {
+      box.innerHTML = '<span class="cockpit-err">Error fetching stats</span>';
+      return;
+    }
+    const m = data.master || {};
+    const s = data.slave  || {};
+    const row = (lbl, val) =>
+      `<div class="cockpit-row"><span class="cockpit-row-lbl">${lbl}</span><span class="cockpit-row-val">${val}</span></div>`;
+    const ok   = v => `<span class="cockpit-ok">${v}</span>`;
+    const warn = v => `<span class="cockpit-warn">${v}</span>`;
+    const err  = v => `<span class="cockpit-err">${v}</span>`;
+    const dim  = v => `<span class="cockpit-dim">${v}</span>`;
+    box.innerHTML =
+      row('Master UART',   m.uart_ready ? ok('✓ open') : err('✗ closed')) +
+      row('CRC errors',    m.crc_errors > 0 ? warn(m.crc_errors) : ok('0')) +
+      row('App HB age',    m.hb_age_ms != null ? `${m.hb_age_ms} ms` : dim('—')) +
+      row('Slave reach',   s.reachable  ? ok('✓ OK') : warn('⚠ unreachable')) +
+      row('UART quality',  s.health_pct != null ? `${s.health_pct}%` : dim('—')) +
+      row('UART errors',   s.errors != null ? (s.errors > 0 ? warn(s.errors) : ok(s.errors)) : dim('—')) +
+      row('Slave CPU',     s.cpu_pct  != null ? `${s.cpu_pct}%`  : dim('—')) +
+      row('Slave temp',    s.cpu_temp != null ? `${s.cpu_temp}°C` : dim('—'));
   },
 
-  ping() {
+  async ping() {
     const result = el('diag-ping-result');
     if (result) { result.style.color = 'var(--dim)'; result.textContent = 'Pinging…'; }
-    fetch('/diagnostics/ping_slave', { method: 'POST' })
-      .then(r => r.json())
-      .then(data => {
-        if (!result) return;
-        if (data.ok) {
-          result.style.color = 'var(--green)';
-          result.textContent = `✓ ${data.ms} ms`;
-        } else {
-          result.style.color = 'var(--red)';
-          result.textContent = `✗ ${data.error || 'timeout'} (${data.ms} ms)`;
-        }
-      })
-      .catch(e => {
-        if (result) { result.style.color = 'var(--red)'; result.textContent = `Error: ${e}`; }
-      });
+    // B-115: api() for consistency + admin header attach (/diagnostics/
+    // ping_slave is admin-only since B-65).
+    const data = await api('/diagnostics/ping_slave', 'POST');
+    if (!result) return;
+    if (!data) {
+      result.style.color = 'var(--red)';
+      result.textContent = '✗ Error (admin re-auth may be needed)';
+      return;
+    }
+    if (data.ok) {
+      result.style.color = 'var(--green)';
+      result.textContent = `✓ ${data.ms} ms`;
+    } else {
+      result.style.color = 'var(--red)';
+      result.textContent = `✗ ${data.error || 'timeout'} (${data.ms} ms)`;
+    }
   },
 };
 
@@ -6498,6 +6503,12 @@ async function applyWifi() {
   const ssid     = (el('wifi-ssid')?.value || '').trim();
   const password = el('wifi-password')?.value || '';
   if (!ssid) { toast('SSID required', 'error'); return; }
+  // B-92 (audit 2026-05-15): confirm before the NM delete+add cycle.
+  // The backend deletes the existing wlan1 connection, then recreates
+  // it — wlan1 drops for a few seconds even on a name typo. Confirm
+  // step mirrors what applyHotspot already does (and tasks like
+  // network rename should have warning UX).
+  if (!confirm(`Switch wlan1 to "${ssid}"?\n\nThe current wlan1 connection will be dropped during reconnect.`)) return;
   toast('Connecting...', 'info');
   const data = await api('/settings/wifi', 'POST', { ssid, password });
   if (!data)       { toast('Network error', 'error'); return; }
@@ -6832,6 +6843,21 @@ async function uploadIcon(input) {
   const status = el('icon-upload-status');
   const file = input.files[0];
   if (!file) return;
+  // B-89 (audit 2026-05-15): cap upload size client-side at 2 MB.
+  // An icon is typically <100KB; anything bigger is either a mistake
+  // (someone dragged a photo) or abuse. Server-side cap belongs in a
+  // future Flask MAX_CONTENT_LENGTH setting; this gate gives users
+  // instant feedback without hitting the network.
+  const MAX_SIZE = 2 * 1024 * 1024;
+  if (file.size > MAX_SIZE) {
+    if (status) {
+      status.textContent = `Too large (${(file.size/1024/1024).toFixed(1)}MB > 2MB)`;
+      status.style.color = 'var(--warn)';
+    }
+    input.value = '';
+    setTimeout(() => { if (status) status.textContent = ''; }, 4000);
+    return;
+  }
   if (status) status.textContent = 'Uploading…';
 
   const form = new FormData();

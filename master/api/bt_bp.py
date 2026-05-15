@@ -42,6 +42,7 @@ Endpoints:
   POST /bt/unpair            {"address": "AA:BB:CC:DD:EE:FF"} → remove
 """
 
+import logging
 import re
 import subprocess
 import threading
@@ -50,6 +51,8 @@ import time
 from flask import Blueprint, request, jsonify
 from master.api._admin_auth import require_admin
 import master.registry as reg
+
+log = logging.getLogger(__name__)
 
 # ── Internal scan state ───────────────────────────────────────────
 _scan_lock    = threading.Lock()
@@ -168,8 +171,11 @@ def _all_devices() -> dict[str, str]:
 
 def _scan_worker(duration: int):
     global _scan_active, _scan_devices
+    proc = None
     try:
-        # Start scan via stdin pipe (without reading stdout — block-buffered without TTY)
+        # Start scan via stdin pipe. stdout/stderr go to DEVNULL so the
+        # pipe buffer can't fill (B-85 was already addressed by DEVNULL,
+        # confirmed during MEDIUM audit pass 2026-05-15).
         proc = subprocess.Popen(
             ['bluetoothctl'],
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
@@ -177,7 +183,6 @@ def _scan_worker(duration: int):
         )
         proc.stdin.write('scan on\n'); proc.stdin.flush()
 
-        # Poll bluetoothctl devices every 2s for the scan duration
         deadline = time.time() + duration
         while time.time() < deadline:
             time.sleep(2)
@@ -187,10 +192,26 @@ def _scan_worker(duration: int):
 
         proc.stdin.write('scan off\n'); proc.stdin.flush()
         time.sleep(0.5)
-        proc.terminate()
-    except Exception:
-        pass
+    except (OSError, BrokenPipeError) as e:
+        # B-86 (audit 2026-05-15): narrow except + log. Was bare
+        # `except Exception: pass` which swallowed every scan failure
+        # silently — operator got zero feedback when BT stack errored.
+        log.warning("BT scan worker error: %s", e)
     finally:
+        # B-85 / B-86: always terminate + reap the child so zombie
+        # bluetoothctl processes can't accumulate over repeated scans.
+        if proc is not None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    pass
+            except OSError:
+                pass
         with _scan_lock:
             _scan_active = False
 

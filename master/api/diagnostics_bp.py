@@ -63,17 +63,27 @@ def diag_logs():
     """Last 50 lines of astromech-master journal, optionally filtered by severity.
     B-64 (audit 2026-05-15): admin-only. Journal lines can leak paths,
     MACs, IPs, serial numbers, and stack traces — not for guests."""
+    # B-83 (audit 2026-05-15): tighter timeout (5s → 2s) so a stuck
+    # journalctl doesn't pin a Flask worker thread. The 50-line read
+    # finishes in <100ms on a healthy Pi; 2s covers the slow-disk case.
+    # If a real outage drives journalctl beyond 2s, the user gets an
+    # empty list and an error message rather than a hung tab.
     level = request.args.get('filter', 'ALL').upper()
+    if level not in ('ALL', 'WARNING', 'ERROR'):
+        level = 'ALL'   # B-64 reinforced: silent fallback on unknown filter
     cmd = ['journalctl', '-u', 'astromech-master', '-n', '50', '--no-pager', '--output=short-iso']
     if level == 'ERROR':
         cmd += ['--priority=err']
     elif level == 'WARNING':
         cmd += ['--priority=warning']
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         lines = result.stdout.strip().splitlines()
         return jsonify({'lines': lines, 'filter': level})
-    except Exception as e:
+    except subprocess.TimeoutExpired:
+        log.warning("journalctl timed out (>2s)")
+        return jsonify({'lines': [], 'filter': level, 'error': 'journalctl timeout'}), 504
+    except OSError as e:
         log.warning("journalctl error: %s", e)
         return jsonify({'lines': [], 'filter': level, 'error': str(e)}), 500
 
