@@ -916,7 +916,27 @@ class BTControllerDriver:
         released = (event.value == 0)
         m        = self._cfg.get('mappings', {})
 
-        log.debug(f"BTN codes={code_names} pressed={pressed} released={released}")
+        # Edge detection 2026-05-16: _prev_btns was initialised but
+        # never consulted, so every value=1 event (initial press AND
+        # any spurious repeat the BT stack / bouncy switch produces
+        # within the next 150ms+ window) triggered the action. For
+        # play_choreo / play_sound the toggle-stop semantics meant the
+        # second 'press' on a held/bouncy button would STOP the choreo
+        # that the first press just started. User symptom: 'press A,
+        # YeahShow2 starts, sound briefly, then stops dead'.
+        # Track per-canonical-code state, fire actions on rising edge
+        # only. Don't update on EV_KEY value=2 (autorepeat synth) —
+        # the physical button is still held, prev state shouldn't flip.
+        edge_key = code_names[0] if code_names else None
+        prev_pressed = self._prev_btns.get(edge_key, False) if edge_key else False
+        rising_edge  = pressed and not prev_pressed
+        if edge_key and event.value in (0, 1):
+            self._prev_btns[edge_key] = pressed
+
+        log.debug(
+            "BTN codes=%s value=%s pressed=%s edge=%s released=%s",
+            code_names, event.value, pressed, rising_edge, released
+        )
 
         # CAPTURE MODE — operator is binding a button to a custom mapping.
         # H1 fix 2026-05-16: under _capture_lock so concurrent get_capture_state
@@ -926,7 +946,9 @@ class BTControllerDriver:
         # the tuple, refuse to capture (don't just check code_names[0]).
         # Prevents dead-button footgun on controllers that emit E-STOP as
         # an aliased keycode.
-        if self._capture_mode and pressed and event.type == ecodes.EV_KEY:
+        # Edge-only so a held button doesn't latch twice (capture would
+        # immediately re-arm + capture the next held tick).
+        if self._capture_mode and rising_edge and event.type == ecodes.EV_KEY:
             estop_code = m.get('estop', 'BTN_MODE')
             with self._capture_lock:
                 if self._capture_mode and code_names and estop_code not in code_names:
@@ -954,8 +976,11 @@ class BTControllerDriver:
         # CUSTOM MAPPINGS — operator-defined per-device. Only action
         # dispatch path remaining since 2026-05-16 (legacy panel_dome /
         # panel_body / audio branches removed — operator binds those
-        # via 🎯 CAPTURE NEW BUTTON instead). Rising-edge only.
-        if pressed and self._active_device_mac:
+        # via 🎯 CAPTURE NEW BUTTON instead). RISING EDGE only — held
+        # buttons and bouncy switches previously toggle-stopped the
+        # very choreo they just started (see edge-detection comment
+        # above _prev_btns update).
+        if rising_edge and self._active_device_mac:
             profile = (self._cfg.get('device_profiles', {}) or {}).get(self._active_device_mac, {})
             custom = profile.get('custom_button_mappings', []) or []
             for cm in custom:
@@ -1007,14 +1032,33 @@ class BTControllerDriver:
             return
         try:
             # Lazy import to dodge circular import at module load time.
-            from master.api.shortcuts_bp import dispatch_action
-            new_state, err, _http = dispatch_action(sid, a_type, a_target)
+            from master.api.shortcuts_bp import dispatch_action, _state_dict
+            # 2026-05-16 fix: read PREVIOUS state from the shared
+            # reg.shortcut_states dict (same store shortcut buttons use)
+            # and pass it to dispatch_action. Without this, current
+            # defaulted to 'off' on every press → arms_toggle /
+            # body_panel_toggle / dome_panel_toggle always computed
+            # new_action='open', so the button OPENED the arm/panel
+            # every time and never closed it. User symptom: 'arm goes
+            # out, re-press → arm stays out'. State key is the BT sid
+            # ('btmap:<mapping_id>') so it doesn't collide with shortcut
+            # ids; multiple BT mappings to the same arm get independent
+            # state (intentional — each button is a self-contained
+            # toggle, last action wins on the hardware).
+            state = _state_dict()
+            current = state.get(sid, 'off')
+            new_state, err, _http = dispatch_action(sid, a_type, a_target, current)
             if err:
                 log.warning("BT custom mapping refused: %s (%s/%s)",
                             err, a_type, a_target)
             else:
-                log.info("BT custom mapping fired: %s/%s → %s",
-                         a_type, a_target, new_state)
+                # 'fired' is transient (one-shot actions like play_choreo
+                # / play_sound) — persist as 'off' so next press isn't
+                # treated as 'currently on' (which would mean the
+                # toggle-stop branch fires before the start branch).
+                state[sid] = 'off' if new_state == 'fired' else new_state
+                log.info("BT custom mapping fired: %s/%s → %s (was %s)",
+                         a_type, a_target, new_state, current)
         except Exception:
             log.exception("BT custom mapping dispatch crashed")
         finally:
