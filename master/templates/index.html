@@ -1224,25 +1224,33 @@
         </div>
 
         <section class="card settings-card" style="margin-top:10px">
-          <h2 class="card-title">CONTROLLER PAIRING</h2>
-          <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 12px">
-            Put your controller in discovery mode (hold BT button), then click SCAN.
-          </p>
-          <div class="btn-group">
-            <button class="btn btn-active" id="bt-scan-btn" onclick="btPairing.startScan()">
-              <span id="bt-scan-label">&#x1F50D; SCAN (15s)</span>
-            </button>
-            <button class="btn" onclick="btPairing.refresh()">&#x21BB; REFRESH</button>
-          </div>
-          <div id="bt-scan-status" style="font-size:11px;color:var(--txt-dim);margin:6px 0;min-height:16px"></div>
-          <div class="section-label" style="margin-top:12px;font-size:10px">DISCOVERED DEVICES</div>
-          <div id="bt-discovered-list" style="min-height:40px;margin-top:4px">
-            <div style="color:var(--txt-dim);font-size:11px">— Run a scan —</div>
-          </div>
-          <div class="section-label" style="margin-top:14px;font-size:10px">PAIRED DEVICES</div>
-          <div id="bt-paired-list" style="min-height:40px;margin-top:4px">
-            <div style="color:var(--txt-dim);font-size:11px">— None —</div>
-          </div>
+          <details class="bt-pairing-details">
+            <summary class="bt-pairing-summary">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l6 5-6 5V3z"/><path d="M5 8h6"/></svg>
+              CONTROLLER PAIRING
+              <span class="bt-pairing-hint">— scan + pair new BT devices</span>
+            </summary>
+            <div class="bt-pairing-body">
+              <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 12px">
+                Put your controller in discovery mode (hold BT button), then click SCAN.
+              </p>
+              <div class="btn-group">
+                <button class="btn btn-active" id="bt-scan-btn" onclick="btPairing.startScan()">
+                  <span id="bt-scan-label">&#x1F50D; SCAN (15s)</span>
+                </button>
+                <button class="btn" onclick="btPairing.refresh()">&#x21BB; REFRESH</button>
+              </div>
+              <div id="bt-scan-status" style="font-size:11px;color:var(--txt-dim);margin:6px 0;min-height:16px"></div>
+              <div class="section-label" style="margin-top:12px;font-size:10px">DISCOVERED DEVICES</div>
+              <div id="bt-discovered-list" style="min-height:40px;margin-top:4px">
+                <div style="color:var(--txt-dim);font-size:11px">— Run a scan —</div>
+              </div>
+              <div class="section-label" style="margin-top:14px;font-size:10px">PAIRED DEVICES</div>
+              <div id="bt-paired-list" style="min-height:40px;margin-top:4px">
+                <div style="color:var(--txt-dim);font-size:11px">— None —</div>
+              </div>
+            </div>
+          </details>
         </section>
       </div>
 

@@ -2532,6 +2532,46 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 .vesc-info-box strong { color: var(--cyan); }
 
 /* CAN Bus Wizard — inside collapsible <details> */
+/* BT Pairing collapsible — mirrors .vesc-can-details pattern, used to
+   hide the rarely-touched pairing UI behind a dropdown. */
+.bt-pairing-details {
+  border: 1px solid rgba(0,180,255,.12);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.bt-pairing-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.bt-pairing-summary::-webkit-details-marker { display: none; }
+.bt-pairing-summary::after {
+  content: '▶';
+  margin-left: auto;
+  font-size: 9px;
+  transition: transform .2s;
+}
+.bt-pairing-details[open] .bt-pairing-summary::after { transform: rotate(90deg); }
+.bt-pairing-summary:hover { color: var(--accent); background: rgba(var(--blue-rgb),.05); }
+.bt-pairing-details[open] { padding-bottom: 8px; }
+.bt-pairing-hint {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  opacity: 0.6;
+  text-transform: none;
+  font-size: 10px;
+  margin-left: 6px;
+}
+.bt-pairing-body { padding: 0 12px 8px; }
+
 .vesc-can-details {
   border: 1px solid rgba(0,180,255,.12);
   border-radius: 8px;
