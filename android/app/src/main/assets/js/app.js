@@ -9192,26 +9192,63 @@ async function loadAudioCategories() {
 function startAppHeartbeat() {
   const base = () => (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
 
-  // POST /heartbeat every 200ms while the tab is visible.
+  // 2026-05-15 (bug fix): heartbeat moved to a Web Worker. User-reported
+  // that loading a heavy choreo (lots of blocks → long sync render)
+  // blocked the main thread long enough that the 600ms AppWatchdog
+  // window expired → R3 fix fired E-STOP → operator saw "E-STOP active"
+  // appear unexpectedly after a routine choreo load.
   //
-  // Visibility-awareness is intentional safety: when the tab is hidden the
-  // user cannot see the joystick or the camera stream, so the AppWatchdog
-  // SHOULD cut motion. Browsers throttle setInterval to ~1s for hidden tabs
-  // (already > the 600ms watchdog window), so we make this explicit by
-  // stopping the interval entirely on visibilitychange. This avoids the
-  // grey-area where throttled timers fire unpredictably and motion is
-  // intermittently allowed/blocked.
-  let _hbInterval = null;
+  // Root cause: setInterval callbacks can't fire while the main thread
+  // is blocked by synchronous work. So a 1.2s _renderAllTracks() =
+  // 6 missed heartbeats in a row = watchdog fires.
+  //
+  // Fix: heartbeat runs in a Worker on its own thread. Main thread can
+  // block 5s for render, the worker keeps posting. Safety semantics
+  // preserved (worker stops on visibilitychange + page close).
+  let _hbWorker = null;
+
   function _hbStart() {
-    if (_hbInterval !== null) return;
-    _hbInterval = setInterval(() => {
-      fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
-    }, 200);
+    if (_hbWorker) return;
+    try {
+      // Inline worker — no separate .js file to ship.
+      const workerSrc = `
+        let _url = '';
+        let _timer = null;
+        self.onmessage = function(e) {
+          const d = e.data || {};
+          if (d.type === 'start') {
+            _url = d.url;
+            if (_timer) clearInterval(_timer);
+            _timer = setInterval(() => {
+              fetch(_url, { method: 'POST' }).catch(() => {});
+            }, 200);
+          } else if (d.type === 'stop') {
+            if (_timer) { clearInterval(_timer); _timer = null; }
+          }
+        };
+      `;
+      const blob = new Blob([workerSrc], { type: 'application/javascript' });
+      _hbWorker = new Worker(URL.createObjectURL(blob));
+      _hbWorker.postMessage({ type: 'start', url: base() + '/heartbeat' });
+    } catch (e) {
+      // Fallback to main-thread interval if Worker creation fails (very
+      // old browsers / CSP blocking blob: workers). Less robust but
+      // better than no heartbeat at all.
+      console.warn('Heartbeat worker unavailable, falling back to setInterval', e);
+      _hbWorker = { _fallback: setInterval(() => {
+        fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
+      }, 200) };
+    }
   }
   function _hbStop() {
-    if (_hbInterval === null) return;
-    clearInterval(_hbInterval);
-    _hbInterval = null;
+    if (!_hbWorker) return;
+    if (_hbWorker._fallback) {
+      clearInterval(_hbWorker._fallback);
+    } else {
+      try { _hbWorker.postMessage({ type: 'stop' }); _hbWorker.terminate(); }
+      catch {}
+    }
+    _hbWorker = null;
   }
 
   document.addEventListener('visibilitychange', () => {
