@@ -573,10 +573,22 @@ def system_update():
     return jsonify({'status': 'ok', 'message': 'Update in progress...'})
 
 
-def _persist_lock_mode(mode: int, kids_limit: float | None) -> None:
+# E3 fix 2026-05-16: serialize mutation of reg.lock_mode +
+# reg.kids_speed_limit + the cfg write so two concurrent admins (web
+# tab + script + BT button) can't interleave and leave inconsistent
+# state. Module-level threading.Lock — cheap, no contention except
+# during a real mode change.
+import threading as _threading_lock
+_lock_state_lock = _threading_lock.Lock()
+
+
+def _persist_lock_mode(mode: int, kids_limit: float | None) -> bool:
     """Write lock_mode + kids_speed_limit to local.cfg [security] under
     the shared _cfg_write_lock so a Master reboot preserves the state.
-    Audit finding CR-2 (2026-05-15): lock mode lived only in memory."""
+    Audit finding CR-2 (2026-05-15): lock mode lived only in memory.
+    Returns True on successful persist, False on any error (B5 fix
+    2026-05-16: caller must surface persistence failure instead of
+    silently swallowing it)."""
     try:
         from master.api.settings_bp import _cfg_write_lock
         from master.config.config_loader import write_cfg_atomic
@@ -592,73 +604,171 @@ def _persist_lock_mode(mode: int, kids_limit: float | None) -> None:
                 cfg.set('security', 'kids_speed_limit', f'{kids_limit:.3f}')
             # write_cfg_atomic signature is (cfg, path) — NOT (path, cfg).
             write_cfg_atomic(cfg, LOCAL_CFG)
+        return True
     except Exception:
         log.exception("Failed to persist lock_mode to local.cfg")
+        return False
 
 
 @status_bp.post('/lock/set')
-@require_admin
 def lock_set():
     """Sets the lock mode: 0=Normal, 1=Kids, 2=ChildLock.
-    Requires admin auth — this is the admin-driven path (Settings →
-    Lock Mode panel). The OPERATOR-driven unlock-via-password path
-    lives at /lock/unlock and only requires the lock password."""
+
+    B3 fix 2026-05-16: keyless ESCALATION ONLY. Going TOWARD a more
+    restrictive mode (0→1, 0→2, 1→2) requires no auth — operator
+    quickly hands the tablet to a kid and locks via the top-right
+    button. Going TOWARD a less restrictive mode (1→0, 2→0, 2→1) is
+    rejected here — operator must use /lock/unlock with password.
+
+    Also allows kids_speed_limit mutation under admin auth (slider in
+    Settings panel). Without admin token: keyless mode change accepted
+    but kids_speed_limit ignored.
+    """
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({'error': 'expected JSON object'}), 400
+    # E12 fix: bool is subclass of int — reject explicitly
+    raw_mode = body.get('mode', 0)
+    if isinstance(raw_mode, bool):
+        return jsonify({'error': 'mode must be an integer (got bool)'}), 400
     try:
-        mode = int(body.get('mode', 0))
+        mode = int(raw_mode)
     except (TypeError, ValueError):
         return jsonify({'error': 'mode must be an integer'}), 400
     if mode not in (0, 1, 2):
         return jsonify({'error': 'invalid mode'}), 400
-    reg.lock_mode = mode
-    kids = None
-    if 'kids_speed_limit' in body:
-        try:
-            kids = max(0.0, min(1.0, float(body.get('kids_speed_limit', 0.5))))
-        except (TypeError, ValueError):
-            return jsonify({'error': 'kids_speed_limit must be a number'}), 400
-        reg.kids_speed_limit = kids
-    _persist_lock_mode(mode, kids)
-    return jsonify({'status': 'ok', 'mode': mode})
+    # B3 fix: keyless escalation only. Relaxation requires password.
+    with _lock_state_lock:
+        cur_mode = int(getattr(reg, 'lock_mode', 0) or 0)
+        if mode < cur_mode:
+            return jsonify({
+                'error': 'use /lock/unlock with password to reduce lock level',
+                'current_mode': cur_mode,
+            }), 403
+        # kids_speed_limit requires admin (slider in Settings)
+        kids = None
+        if 'kids_speed_limit' in body:
+            from master.api._admin_auth import _check_admin
+            if not _check_admin(request):
+                return jsonify({'error': 'admin auth required to change kids_speed_limit'}), 401
+            try:
+                raw = body.get('kids_speed_limit', 0.5)
+                if isinstance(raw, bool):
+                    raise ValueError('bool not accepted')
+                kids = float(raw)
+                import math
+                if not math.isfinite(kids):
+                    raise ValueError('not finite')
+                # E15 fix: clamp to a SANE Kids ceiling matching UI range
+                # (5%-60%) instead of 0-100% which made Kids mode equivalent
+                # to Normal at 100%.
+                kids = max(0.05, min(0.60, kids))
+            except (TypeError, ValueError):
+                return jsonify({'error': 'kids_speed_limit must be a finite number (0.05-0.60)'}), 400
+            reg.kids_speed_limit = kids
+        reg.lock_mode = mode
+        persisted = _persist_lock_mode(mode, kids)
+    if not persisted:
+        # B5 fix: surface persistence failure so operator sees the issue
+        return jsonify({
+            'status': 'ok_volatile',
+            'mode': mode,
+            'kids_speed_limit': reg.kids_speed_limit,
+            'persisted': False,
+            'warning': 'mode applied in memory but failed to persist — will revert on reboot',
+        }), 200
+    return jsonify({
+        'status': 'ok',
+        'mode': mode,
+        'kids_speed_limit': reg.kids_speed_limit,
+        'persisted': True,
+    })
 
 
 @status_bp.post('/lock/unlock')
 def lock_unlock():
-    """Operator-facing unlock endpoint — used by the lock modal to
-    drop out of Kids or Child Lock mode by supplying the admin
-    password. Server verifies the password (NOT a client-side
-    string compare — audit finding CR-1 2026-05-15: 'deetoo' was
-    hardcoded in app.js). On success, sets reg.lock_mode = mode
-    (default 0 = Normal) and persists to local.cfg."""
+    """Operator-facing unlock endpoint — drops out of Kids or Child Lock
+    mode by supplying the admin password.
+
+    B1 fix 2026-05-16: rate-limited per-IP, same window as /settings/
+    admin/verify (10 tries/60s → 5min lockout). Was: unlimited brute
+    force on the SAME admin password that admin_verify protects.
+
+    B2 fix 2026-05-16: only allows mode=0 target. Endpoint name + intent
+    is 'unlock', not 'set any mode with password'. Escalation
+    (Normal→Kids/Lock) goes through /lock/set without auth.
+
+    Server verifies the password (NOT a client-side string compare —
+    audit finding CR-1 2026-05-15: 'deetoo' was hardcoded in app.js).
+    Persists to local.cfg on success."""
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({'error': 'expected JSON object'}), 400
-    provided = str(body.get('password') or '')
+    # B1 fix: rate-limit using same bucket pattern as admin_verify
     try:
-        target_mode = int(body.get('mode', 0))
+        from master.api.settings_bp import _verify_rate_check
+        ip = request.remote_addr or 'unknown'
+        allowed, retry = _verify_rate_check(ip)
+        if not allowed:
+            log.warning("lock_unlock rate-limited: %s (retry in %.0fs)", ip, retry)
+            return jsonify({
+                'error': 'too many attempts',
+                'retry_after_s': int(retry),
+            }), 429
+    except Exception:
+        log.exception("lock_unlock rate-limit init failed — failing closed")
+        return jsonify({'error': 'rate-limit unavailable'}), 503
+    # E10 fix: strip whitespace from password — iOS/Android keyboards
+    # autocorrect occasionally inserts trailing spaces which silently
+    # rejected with no operator hint.
+    provided = str(body.get('password') or '').strip()
+    if not provided:
+        # B13 fix: empty password should not consume a rate-limit slot
+        # OR get a generic 'invalid' message — be explicit
+        return jsonify({'error': 'password required'}), 400
+    # B2 fix: only accept mode=0 (true unlock). Escalation must use
+    # /lock/set (keyless).
+    raw_mode = body.get('mode', 0)
+    if isinstance(raw_mode, bool):
+        return jsonify({'error': 'mode must be an integer'}), 400
+    try:
+        target_mode = int(raw_mode)
     except (TypeError, ValueError):
         return jsonify({'error': 'mode must be an integer'}), 400
-    if target_mode not in (0, 1, 2):
-        return jsonify({'error': 'invalid mode'}), 400
+    if target_mode != 0:
+        return jsonify({
+            'error': '/lock/unlock only accepts mode=0 (use /lock/set for escalation)',
+        }), 400
     # Reuse the admin password as the lock password — same secret,
     # same hmac.compare_digest pattern as /settings/admin/verify.
     try:
         from master.api.settings_bp import _get_admin_password
         import hmac
         expected = _get_admin_password()
-        if not provided or not hmac.compare_digest(
+        if not hmac.compare_digest(
                 provided.encode('utf-8'), expected.encode('utf-8')):
             return jsonify({'error': 'invalid password'}), 401
     except Exception:
         log.exception("lock_unlock password check failed")
         return jsonify({'error': 'auth check failed'}), 500
-    reg.lock_mode = target_mode
-    _persist_lock_mode(target_mode, None)
+    # B1 fix: clear this IP's bucket on success (parity with admin_verify)
+    try:
+        from master.api.settings_bp import _verify_attempts
+        _verify_attempts.pop(request.remote_addr or 'unknown', None)
+    except Exception:
+        pass
+    # E3 fix: serialize the mutation triplet
+    with _lock_state_lock:
+        reg.lock_mode = target_mode
+        persisted = _persist_lock_mode(target_mode, None)
     log.info("Lock unlock: mode=%d via password from %s",
              target_mode, request.remote_addr)
-    return jsonify({'status': 'ok', 'mode': target_mode})
+    return jsonify({
+        'status': 'ok',
+        'mode': target_mode,
+        'kids_speed_limit': getattr(reg, 'kids_speed_limit', 0.5),
+        'persisted': persisted,
+    })
 
 
 @status_bp.post('/system/rollback')

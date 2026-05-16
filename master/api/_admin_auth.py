@@ -85,6 +85,23 @@ def get_json_object():
     return body if isinstance(body, dict) else None
 
 
+def _check_admin(req) -> bool:
+    """Non-decorator admin auth check — for endpoints where some payload
+    paths require admin but others don't (e.g. /lock/set: keyless mode
+    change, admin-only kids_speed_limit change).
+
+    Returns True if the request carries a valid X-Admin-Pw header.
+    Does NOT log on failure (caller decides whether to log/reject)."""
+    provided = req.headers.get(_ADMIN_HEADER, '')
+    if not provided:
+        return False
+    try:
+        expected = _get_admin_password()
+        return bool(hmac.compare_digest(provided.encode(), expected.encode()))
+    except Exception:
+        return False
+
+
 def require_admin(view):
     """Decorator: 401 unless `X-Admin-Pw` matches local.cfg [admin] password.
 

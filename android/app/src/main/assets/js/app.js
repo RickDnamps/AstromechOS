@@ -929,28 +929,47 @@ class LockManager {
   onKeyUp(e) { this._updateCapsHint(e); }
 
   async submitModal() {
-    const pwd = el('lock-pwd-input').value;
-    // Server-side password verification (audit finding CR-1
-    // 2026-05-15: 'deetoo' was hardcoded client-side, so anyone
-    // reading app.js could bypass Child Lock). The endpoint reuses
-    // the admin password via hmac.compare_digest and also persists
-    // the lock_mode change to local.cfg [security] so a Master
-    // reboot keeps the operator's choice.
-    // LOW polish 2026-05-15: route through api() for consistency
-    // (LAN-open endpoint so X-Admin-Pw header isn't needed, but the
-    // api() helper handles timeouts, AbortController, and base URL
-    // resolution uniformly — raw fetch bypassed all of that).
+    // E7 fix 2026-05-16: in-flight guard — double-tap on UNLOCK fired
+    // two POSTs; second one wasted a rate-limit slot.
+    if (this._unlockInFlight) return;
+    const pwd = (el('lock-pwd-input').value || '').trim();
+    // B13 fix 2026-05-16: client-side empty password guard so we don't
+    // burn a server rate-limit attempt on an obvious oops.
+    if (!pwd) {
+      const inp = el('lock-pwd-input');
+      inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+      inp.focus();
+      return;
+    }
+    this._unlockInFlight = true;
+    // W2 fix 2026-05-16: disable button + spinner cue
+    const submitBtn = document.querySelector('#lock-modal .btn.btn-active');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.dataset._origText = submitBtn.textContent; submitBtn.textContent = '…'; }
     try {
-      const res = await api('/lock/unlock', 'POST', { password: pwd, mode: 0 });
-      if (res && res.status === 'ok') {
+      // apiDetail returns full response shape so we can distinguish 429
+      // (rate-limit lockout from batch 1 server fix) from 401 (wrong pw).
+      const res = await apiDetail('/lock/unlock', 'POST', { password: pwd, mode: 0 });
+      if (res.ok) {
         el('lock-modal').classList.add('hidden');
         this._applyMode(0);
         return;
       }
+      // W3 fix 2026-05-16: 429 lockout — show retry countdown
+      if (res.status === 429) {
+        this._showLockoutCountdown(res.data?.retry_after_s || 300);
+        return;
+      }
+      // Other failures: shake + error msg
+      el('lock-pwd-error').classList.remove('hidden');
+      el('lock-pwd-error').textContent = res.error || 'Incorrect password';
     } catch {
-      // network error — fall through to the visual error
+      // network error — generic visual error
+      el('lock-pwd-error').classList.remove('hidden');
+      el('lock-pwd-error').textContent = 'Network error';
+    } finally {
+      this._unlockInFlight = false;
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = submitBtn.dataset._origText || 'UNLOCK'; }
     }
-    el('lock-pwd-error').classList.remove('hidden');
     const inp = el('lock-pwd-input');
     inp.value = '';
     inp.classList.remove('shake');
@@ -959,8 +978,50 @@ class LockManager {
     inp.focus();
   }
 
+  // W3 fix 2026-05-16: live countdown when server returns 429 lockout
+  _showLockoutCountdown(seconds) {
+    const errEl = el('lock-pwd-error');
+    const inp   = el('lock-pwd-input');
+    const submitBtn = document.querySelector('#lock-modal .btn.btn-active');
+    if (!errEl) return;
+    if (inp)       inp.disabled = true;
+    if (submitBtn) submitBtn.disabled = true;
+    errEl.classList.remove('hidden');
+    let remaining = seconds;
+    const tick = () => {
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      errEl.textContent = `Too many attempts — retry in ${m}:${String(s).padStart(2,'0')}`;
+      if (remaining <= 0) {
+        clearInterval(this._lockoutTimer);
+        this._lockoutTimer = null;
+        if (inp)       inp.disabled = false;
+        if (submitBtn) submitBtn.disabled = false;
+        errEl.textContent = 'Try again';
+        return;
+      }
+      remaining--;
+    };
+    if (this._lockoutTimer) clearInterval(this._lockoutTimer);
+    tick();
+    this._lockoutTimer = setInterval(tick, 1000);
+  }
+
   _applyMode(mode) {
+    // W9/B3 fix 2026-05-16: relaxation (going TOWARD less restrictive)
+    // requires the password modal. Was: Settings panel buttons could
+    // skip the password gate entirely by clicking "Normal" while in
+    // ChildLock. Now: detect relax direction and route through the
+    // unlock modal instead.
     const prev = this._mode;
+    if (mode < prev) {
+      // Operator wants to relax — must enter password
+      this._showUnlockModal();
+      return;
+    }
+    // B8 fix 2026-05-16: no-op if already in this mode (saves a
+    // useless POST + persist cycle)
+    if (mode === prev) return;
     this._mode = mode;
     document.body.dataset.lockMode = mode;
 
