@@ -9274,6 +9274,22 @@ class StatusPoller {
     cockpitPanel.updateBtn(data);
     if (cockpitPanel.isOpen) cockpitPanel.update(data);
 
+    // BT Gamepad panel: auto-refresh custom mappings UI when the active
+    // device MAC changes (controller paired/unpaired/reconnected) AND the
+    // panel is visible. Without this, pairing a new controller while the
+    // BT panel is open shows 'no controller paired yet' until manual reload.
+    try {
+      const btPanel = el('spanel-bluetooth');
+      if (btPanel && btPanel.classList.contains('active') &&
+          typeof btCustomMappings !== 'undefined') {
+        const curMac = data.active_device_mac || null;
+        if (this._lastBtMac !== curMac) {
+          this._lastBtMac = curMac;
+          btCustomMappings.load();
+        }
+      }
+    } catch {}
+
     // VESC tab has its own 500ms poll via _startVescTabPoll() — no refresh needed here
   }
 

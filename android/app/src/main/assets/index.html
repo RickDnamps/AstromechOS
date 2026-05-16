@@ -1204,6 +1204,7 @@
             <select id="bt-device-profile-select" class="input-text" onchange="btCustomMappings.onDeviceChange(this.value)">
               <option value="">— no controller connected —</option>
             </select>
+            <button class="btn btn-xs" onclick="btCustomMappings.load()" title="Re-fetch device profiles">↻ REFRESH</button>
             <button class="btn btn-xs btn-danger" id="bt-delete-profile-btn"
                     onclick="btCustomMappings.deleteProfile()" title="Forget this device's custom mappings"
                     style="display:none">🗑 DELETE PROFILE</button>
