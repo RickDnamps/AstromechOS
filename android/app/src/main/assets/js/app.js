@@ -9306,6 +9306,19 @@ class StatusPoller {
       audioBoard.loadCategories();
       scriptEngine.load();
       loadServoSettings();
+      // LOW-3 cleanup 2026-05-16 (review iter 2): reset BT MAC tracking
+      // so the next /status poll triggers a fresh load when the BT panel
+      // is visible. Without this, _lastBtMac kept its pre-downtime value
+      // and the auto-refresh hook didn't fire even though the controller
+      // may have reconnected during downtime.
+      this._lastBtMac = undefined;
+      try {
+        const btPanel = el('spanel-bluetooth');
+        if (btPanel && btPanel.classList.contains('active') &&
+            typeof btCustomMappings !== 'undefined') {
+          btCustomMappings.load();
+        }
+      } catch {}
     }
   }
 

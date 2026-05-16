@@ -66,9 +66,10 @@ _DEFAULT_CFG = {
     'gamepad_type':       'ps',
     'deadzone':           0.10,
     'inactivity_timeout': 30,
-    # Audit reclass R4 2026-05-15: operator-configurable BT audio
-    # button category. Default 'happy' preserves legacy behavior.
-    'audio_category':     'happy',
+    # LOW-1 cleanup 2026-05-16 (review iter 2): 'audio_category' removed
+    # — its only consumer (audio button branch in _handle_button) was
+    # deleted by commit 912d8ea. Field is silently stripped from
+    # bt_config.json at next save via _DEPRECATED_BT_CONFIG_KEYS.
     'mappings': {
         'throttle':   'ABS_Y',
         'steer':      'ABS_X',
@@ -78,9 +79,9 @@ _DEFAULT_CFG = {
         # but _handle_axis ignores this key until the hardware is
         # installed and the camera tilt servo channel is wired up.
         'camera':     'ABS_RY',
-        'panel_dome': 'BTN_WEST',
-        'panel_body': 'BTN_NORTH',
-        'audio':      'BTN_EAST',
+        # LOW-2 cleanup 2026-05-16: 'panel_dome'/'panel_body'/'audio'
+        # removed from defaults — dispatch was deleted by commit 912d8ea.
+        # See _DEPRECATED_BT_MAPPING_KEYS in bt_bp.py for silent strip.
         'estop':      'BTN_MODE',
         'turbo':      'BTN_TR',
     },

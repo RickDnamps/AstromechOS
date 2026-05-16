@@ -120,14 +120,19 @@ def bt_enable():
 # by _handle_button + _handle_axis in bt_controller_driver.
 _VALID_BT_MAPPING_ACTIONS = {
     'throttle', 'steer', 'dome',
-    'panel_dome', 'panel_body',
-    'audio', 'estop', 'turbo',
     # 'camera' = future feature (camera-on-servos tilt). 2026-05-16:
     # accept the key in the allowlist so the operator's chosen axis
     # persists in bt_config.json. No dispatch yet — _handle_axis ignores
     # this key until the camera-servo hardware is installed.
     'camera',
+    'estop', 'turbo',
 }
+# LOW-2 cleanup 2026-05-16 (review iter 2): keys whose dispatch was
+# removed by commit 912d8ea but kept in bt_config.json for backward
+# compat. POST /bt/config strips them silently with a warning log so
+# legacy clients don't 400, but operator illusion is removed (was:
+# silent acceptance into the saved cfg with no effect).
+_DEPRECATED_BT_MAPPING_KEYS = {'panel_dome', 'panel_body', 'audio'}
 # Mapping keys whose VALUE is allowed to be an empty string (= 'none').
 # Camera is the only one — operator might want to leave camera tilt
 # unmapped on a controller that doesn't have a free stick.
@@ -181,14 +186,17 @@ def bt_config():
             return jsonify({'error': 'inactivity_timeout must be an integer'}), 400
         patch['inactivity_timeout'] = max(0, min(3600, it))
 
-    # audio_category — must match the strict category regex used by
-    # audio_bp + exist in the slave's sound index. Audit reclass R4
-    # 2026-05-15.
+    # LOW-1 cleanup 2026-05-16 (review iter 2): audio_category dispatch
+    # was removed by commit 912d8ea (random audio button replaced by
+    # Custom Button Actions). Field is silently dropped here so legacy
+    # clients posting it don't 400; a warning hits journalctl.
     if 'audio_category' in body:
-        cat = str(body['audio_category']).strip().lower()
-        if not _re_bt.match(r'^[a-z0-9_]{1,32}$', cat):
-            return jsonify({'error': 'audio_category must be lowercase a-z0-9_ ≤32 chars'}), 400
-        patch['audio_category'] = cat
+        from logging import getLogger as _gl
+        _gl(__name__).warning(
+            "BT cfg field 'audio_category' is deprecated since 2026-05-16 — "
+            "use Custom Button Actions with action_type='play_random_audio' "
+            "instead. Stripping silently."
+        )
 
     # mappings — shape is {action_name: button_code}. Both sides
     # allowlisted so a typo can't silently disable the gamepad E-STOP.
@@ -200,6 +208,17 @@ def bt_config():
         for action, btn in raw.items():
             act_s = str(action).strip().lower()
             btn_s = str(btn).strip()
+            # LOW-2 cleanup: silently drop deprecated keys instead of
+            # 400-erroring, so existing bt_config.json files don't break
+            # on re-save. Warn so the operator sees it in journalctl.
+            if act_s in _DEPRECATED_BT_MAPPING_KEYS:
+                from logging import getLogger as _gl
+                _gl(__name__).warning(
+                    "BT mapping key %r is deprecated since 2026-05-16 — "
+                    "use Custom Button Actions instead. Stripping silently.",
+                    act_s,
+                )
+                continue
             if act_s not in _VALID_BT_MAPPING_ACTIONS:
                 return jsonify({
                     'error': f'invalid mapping action: {act_s!r} '
