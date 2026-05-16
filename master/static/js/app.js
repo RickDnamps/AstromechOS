@@ -7793,7 +7793,13 @@ function updateBtTimeoutPreview(val) {
 }
 
 // Charger les appareils jumelés au démarrage
-window.addEventListener('DOMContentLoaded', () => setTimeout(() => btPairing.refresh(), 1500));
+// Bug fix 2026-05-16: /bt/scan/devices is now admin-gated (B11 fix).
+// Skip the auto-refresh on initial page load — operator will see the
+// devices on next Settings → BT panel open (which only happens after
+// admin unlock). Was: 401 spam in console on every reload.
+window.addEventListener('DOMContentLoaded', () => setTimeout(() => {
+  if (typeof adminGuard !== 'undefined' && adminGuard._unlocked) btPairing.refresh();
+}, 1500));
 
 let _currentSpeedMode = 'normal';
 function setSpeedMode(mode) {
@@ -8770,8 +8776,12 @@ class StatusPoller {
       data.vesc_r_ok !== false,
     );
 
-    // Teeces / lights state
-    if (data.teeces_mode) {
+    // Teeces / lights state — _applyFLDMode was removed in Lights B3
+    // refactor (FLD/PSI buttons replaced by ANIMATIONS) but this caller
+    // was left behind → threw TypeError on every poll, which killed
+    // updateBtn(data) and cockpitPanel.update(data) below. Bug found
+    // when STATUS pill stayed green with bench_mode ON until clicked.
+    if (data.teeces_mode && typeof teecesController._applyFLDMode === 'function') {
       teecesController._applyFLDMode(data.teeces_mode);
     }
     if (data.lights_backend) {
