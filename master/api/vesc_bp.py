@@ -110,23 +110,28 @@ def _fault_str(code: int) -> str:
 
 @vesc_bp.get('/telemetry')
 def get_telemetry():
-    """Live telemetry for both VESCs + current power scale."""
-    import time as _time
-    telem = getattr(reg, 'vesc_telem', {'L': None, 'R': None})
-    scale = getattr(reg, 'vesc_power_scale', 1.0)
-    now   = _time.time()
+    """Live telemetry for both VESCs + current power scale.
 
-    # A side is considered live only if its last update was within 3 seconds
-    def _is_live(d):
-        return d is not None and (now - d.get('ts', 0)) < 3.0
+    B1 fix 2026-05-16: was using time.time() (wall-clock unix epoch
+    ~1.7e9) to compare against telem['ts'] (time.monotonic — uptime
+    seconds, typically <1e6). Difference always >>3s → endpoint
+    ALWAYS returned L/R as null even when fresh telem was present
+    → vescPanel always showed OFFLINE. Now delegates to canonical
+    vesc_safety.fresh_telem_pair() (monotonic + 2s gate) per
+    CLAUDE.md invariant 'JAMAIS lire reg.vesc_telem directement'.
+
+    B4 fix 2026-05-16: also fixes the direct-read anti-pattern."""
+    from master import vesc_safety
+    pair  = vesc_safety.fresh_telem_pair(max_age=3.0)
+    scale = getattr(reg, 'vesc_power_scale', 1.0)
 
     def _enrich(d):
-        if not _is_live(d):
+        if d is None:
             return None
         return {**d, 'fault_str': _fault_str(d.get('fault', 0))}
 
-    live_L = _enrich(telem.get('L'))
-    live_R = _enrich(telem.get('R'))
+    live_L = _enrich(pair.get('L'))
+    live_R = _enrich(pair.get('R'))
     connected = (live_L is not None or live_R is not None)
 
     return jsonify({
@@ -195,15 +200,10 @@ def set_bench_mode():
     UART so vesc_driver can bypass its can_lost guard too.
     """
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    # Audit finding L-4 2026-05-15: bool("false") is True in Python
-    # (non-empty string is truthy). Operator POSTing {"enabled":
-    # "false"} from a misbehaving form would have toggled bench
-    # mode ON. Accept genuine bools + the common string variants.
-    raw = body.get('enabled', False)
-    if isinstance(raw, str):
-        enabled = raw.strip().lower() in ('1', 'true', 'yes', 'on')
-    else:
-        enabled = bool(raw)
+    # Audit finding L-4 2026-05-15: bool("false") is True in Python.
+    # Use shared _coerce_bool helper (B2/B3 fix extended same pattern
+    # to /mode and /invert in 2026-05-16 audit).
+    enabled = _coerce_bool(body.get('enabled', False))
     reg.vesc_bench_mode = enabled
     _save_vesc_cfg(bench_mode='1' if enabled else '0')
     # Propagate to slave so vesc_driver.drive() can bypass _can_lost.
@@ -212,12 +212,22 @@ def set_bench_mode():
     return jsonify({'status': 'ok', 'bench_mode': enabled})
 
 
+def _coerce_bool(raw) -> bool:
+    """B2/B3 fix 2026-05-16: parity with bench_mode L-4 — bool('false')
+    is True (non-empty string). Accept genuine bools + common string
+    forms. Misbehaving form/script POSTing {'duty':'false'} otherwise
+    silently flipped to DUTY mode (dangerous open-loop direct PWM)."""
+    if isinstance(raw, str):
+        return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(raw)
+
+
 @vesc_bp.post('/mode')
 @require_admin
 def set_mode():
     """Switches drive mode. Body: {"duty": true/false}. Not persisted — resets on reboot."""
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
-    duty = bool(body.get('duty', False))
+    duty = _coerce_bool(body.get('duty', False))
     reg.vesc_duty_mode = duty
     if reg.uart:
         reg.uart.send('VCFG', f'mode:{"duty" if duty else "rpm"}')
@@ -235,7 +245,7 @@ def invert_motor():
     side = body.get('side', '').upper()
     if side not in ('L', 'R'):
         return jsonify({'error': 'side must be "L" or "R"'}), 400
-    state = bool(body.get('state', False))
+    state = _coerce_bool(body.get('state', False))
 
     if side == 'L':
         reg.vesc_invert_L = state
