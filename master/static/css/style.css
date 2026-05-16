@@ -4845,21 +4845,6 @@ body[data-lock-mode="2"] .drive-wrapper {
 .cam-status-offline { background: rgba(255,34,68,0.12); color: var(--err,#ff2244); border:1px solid var(--err,#ff2244); }
 .cam-status-unknown { background: rgba(80,80,80,0.2);   color: var(--text-dim,#888);  border:1px solid var(--text-dim,#888); }
 
-/* W3 — RESTART badge on fields that trigger camera service restart */
-.restart-badge {
-  display: inline-block;
-  font-size: 8px;
-  font-weight: bold;
-  background: rgba(255,170,0,0.18);
-  color: var(--warn, #ffaa00);
-  padding: 1px 5px;
-  border-radius: 3px;
-  letter-spacing: 0.5px;
-  margin-left: 6px;
-  vertical-align: middle;
-  border: 1px solid var(--warn, #ffaa00);
-}
-
 /* W5 — richer live preview block */
 .cam-bitrate-hint .cam-preview-now {
   font-size: 11px;
@@ -5106,20 +5091,6 @@ body[data-lock-mode="2"] .drive-wrapper {
   color: var(--err, #ff4444);
   font-weight: bold;
 }
-
-/* W6 — REBOOT + LIVE badges (per CLAUDE.md pattern) */
-.badge {
-  display: inline-block;
-  font-size: 8px;
-  font-weight: bold;
-  letter-spacing: 0.8px;
-  padding: 1px 5px;
-  border-radius: 3px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-.badge-reboot { background: rgba(255,170,68,0.18); color: var(--amber, #ffaa44); border: 1px solid var(--amber, #ffaa44); }
-.badge-live   { background: rgba(0,204,102,0.15); color: var(--ok, #00cc66); border: 1px solid var(--ok, #00cc66); }
 
 /* W10 — body_uart_lat saved pulse (unified visual w/ withSaveFeedback) */
 .hat-saved-pulse {

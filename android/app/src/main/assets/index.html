@@ -1770,7 +1770,7 @@
           <div id="cam-status-pill" class="cam-status-pill cam-status-unknown">● CHECKING…</div>
           <p class="settings-note">Live MJPEG stream from <span class="robot-name">R2-D2</span>'s USB camera. Each APPLY restarts the camera service (~5s blackout).</p>
           <div class="form-group">
-            <label class="ctrl-label">RESOLUTION <span class="restart-badge">RESTART</span></label>
+            <label class="ctrl-label">RESOLUTION</label>
             <select id="cam-resolution" class="input-text" style="width:200px" onchange="updateCameraBitrateHint()">
               <option value="640x480">640×480 — VGA</option>
               <option value="1280x720">1280×720 — HD 720p</option>
@@ -1778,14 +1778,14 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="ctrl-label">FRAMERATE <span class="restart-badge">RESTART</span></label>
+            <label class="ctrl-label">FRAMERATE</label>
             <select id="cam-fps" class="input-text" style="width:120px" onchange="updateCameraBitrateHint()">
               <option value="15">15 fps — battery-saver</option>
               <option value="30">30 fps — smooth (default)</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span> <span class="restart-badge">RESTART</span></label>
+            <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span></label>
             <input type="range" id="cam-quality" min="10" max="100" step="5" value="80"
                    oninput="el('cam-quality-val').textContent=this.value; updateCameraBitrateHint()" class="holo-slider">
           </div>
