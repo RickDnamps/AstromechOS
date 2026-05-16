@@ -170,6 +170,15 @@ def bt_config():
             if not _VALID_BT_BUTTON_RE.match(btn_s):
                 return jsonify({'error': f'invalid button code: {btn_s!r}'}), 400
             clean[act_s] = btn_s
+        # B14 fix 2026-05-16: reject same button bound to >1 action.
+        # Was: silent if/elif fallthrough at runtime — first action
+        # in the chain wins, the rest never fire (operator's binding
+        # looked saved but didn't work).
+        dupes = [b for b in clean.values() if list(clean.values()).count(b) > 1]
+        if dupes:
+            return jsonify({
+                'error': f'button(s) bound to multiple actions: {sorted(set(dupes))}',
+            }), 400
         patch['mappings'] = clean
 
     ok = reg.bt_ctrl.update_cfg(patch)
@@ -356,8 +365,14 @@ def bt_scan_start():
 
 
 @bt_bp.get('/scan/devices')
+@require_admin
 def bt_scan_devices():
-    """Returns discovered devices + already-paired devices."""
+    """Returns discovered devices + already-paired devices.
+    B11 fix 2026-05-16: was LAN-open → exposed paired MAC addresses +
+    sanitized names to anyone on the LAN. MAC addresses enable device
+    fingerprinting + controller names could leak operator's other
+    devices ('John's iPhone 15 Pro'). Admin-gate matches the mutation
+    endpoints in this blueprint."""
     with _scan_lock:
         discovered = [{'address': a, 'name': n} for a, n in _scan_devices.items()]
         scanning   = _scan_active

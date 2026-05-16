@@ -106,11 +106,20 @@ def _load_cfg() -> dict:
         return dict(_DEFAULT_CFG)
 
 
+# B3/E1 fix 2026-05-16: module-level lock for cfg mutation+save.
+# Was: update_cfg did self._cfg.update(...) + save_cfg without holding
+# any lock. Two concurrent admins (web + Android) hitting /bt/config
+# would race on the dict mutation AND on save_cfg's tmp+rename, losing
+# the second writer's mappings silently. Now serialize both paths.
+_cfg_save_lock = threading.Lock()
+
+
 def save_cfg(cfg: dict) -> bool:
     # B-50 (audit 2026-05-15): atomic write — tmp + os.replace + fsync.
-    # Non-atomic open(w) could leave bt_config.json truncated on crash;
-    # _load_cfg's bare-except would then return defaults at next boot,
-    # silently losing the operator's button mappings.
+    # B10 fix 2026-05-16: chmod 0o600 per CLAUDE.md invariant
+    # ("tout fichier disque écrit via tmp+os.replace+fsync+chmod 0o600").
+    # bt_config.json doesn't hold secrets today but consistency +
+    # defense-in-depth against future fields (BT PIN, MAC allowlist).
     try:
         os.makedirs(os.path.dirname(_CFG_PATH), exist_ok=True)
         tmp = _CFG_PATH + '.tmp'
@@ -119,6 +128,10 @@ def save_cfg(cfg: dict) -> bool:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, _CFG_PATH)
+        try:
+            os.chmod(_CFG_PATH, 0o600)
+        except OSError:
+            pass
         return True
     except OSError as e:
         log.error(f"Error saving bt_config: {e}")
@@ -180,10 +193,22 @@ class BTControllerDriver:
         return dict(self._cfg)
 
     def update_cfg(self, patch: dict) -> bool:
-        self._cfg.update(patch)
-        if 'mappings' in patch:
-            self._cfg['mappings'].update(patch['mappings'])
-        return save_cfg(self._cfg)
+        # B3/E1 fix 2026-05-16: hold both the cross-process save lock
+        # AND the instance lock around the mutation. Readers
+        # (_handle_button, _handle_axis) snapshot the mappings dict via
+        # .get(...) which is atomic, but the in-place .update() on the
+        # mappings sub-dict could be observed mid-iteration if a future
+        # caller adds .items() loop. Defense in depth.
+        with _cfg_save_lock:
+            with self._lock:
+                self._cfg.update(patch)
+                if 'mappings' in patch:
+                    # Replace mappings dict atomically vs mutating it.
+                    new_map = dict(self._cfg.get('mappings', {}))
+                    new_map.update(patch['mappings'])
+                    self._cfg['mappings'] = new_map
+                snapshot = dict(self._cfg)
+            return save_cfg(snapshot)
 
     def is_enabled(self) -> bool:
         return bool(self._cfg.get('enabled', True))
@@ -199,6 +224,14 @@ class BTControllerDriver:
         save_cfg(self._cfg)
         if not enabled:
             self._stop_motion()
+        else:
+            # B19 fix 2026-05-16: was leaving _last_input_t stale → re-
+            # enabling after a long pause immediately tripped the
+            # inactivity loop (time.time() - _last_input_t > timeout).
+            # Operator saw "BT idle" the moment they re-enabled, had to
+            # nudge the stick to clear it. Refresh the watermark.
+            self._last_input_t = time.time()
+            self._inactivity_pause = False
         log.info(f"BT controller {'enabled' if enabled else 'disabled'}")
 
     def get_status(self) -> dict:
@@ -253,6 +286,13 @@ class BTControllerDriver:
                         self._connected   = True
                         self._device_name = dev.name[:32]
                         self._prev_btns   = {}
+                    # B2 fix 2026-05-16: clear stale inactivity pause flag
+                    # left over from previous session (operator powered
+                    # down a paused controller — flag persisted across
+                    # the disconnect → UI lied about "BT idle" after
+                    # reconnect until next physical input timeout).
+                    self._inactivity_pause = False
+                    self._last_input_t = time.time()
                     log.info(f"Gamepad connected: {dev.name}")
                     self._poll_loop()   # blocking until disconnection
             self._stop_evt.wait(5)
@@ -278,13 +318,20 @@ class BTControllerDriver:
             for event in dev.read_loop():
                 if self._stop_evt.is_set():
                     break
-                if not self.is_enabled():
-                    continue
+                # B7 fix 2026-05-16: was `if not is_enabled(): continue` here,
+                # but _handle_button has a SAFETY branch (E-STOP) that must
+                # fire even when the controller is "disabled" via UI toggle
+                # (operator silenced a noisy controller during testing).
+                # is_enabled() now gates only axes/non-safety buttons inside
+                # _handle_axis / _handle_button — E-STOP always runs.
                 self._last_input_t = time.time()
+                enabled = self.is_enabled()
 
                 if event.type == ecodes.EV_ABS:
-                    self._handle_axis(event, abs_info)
+                    if enabled:
+                        self._handle_axis(event, abs_info)
                 elif event.type == ecodes.EV_KEY:
+                    # _handle_button itself checks is_enabled for non-E-STOP
                     self._handle_button(event)
 
         except Exception as e:
@@ -578,8 +625,13 @@ class BTControllerDriver:
     def _send_dome(self, val: float, reg) -> None:
         if getattr(reg, 'estop_active', False):
             return
-        # Web/Android priority for dome
-        if time.time() - getattr(reg, 'web_last_dome_t', 0) < 0.5:
+        # B1/E5 fix 2026-05-16: was time.time() but producer
+        # (motion_bp.dome_turn) writes time.monotonic(). The two clocks
+        # have completely different scales (unix epoch vs uptime), so
+        # the subtraction yielded a huge positive number → web-priority
+        # gate NEVER fired → BT keep-alive overrode web dome commands
+        # every 300ms. Match drive's monotonic + 1.0s window for parity.
+        if time.monotonic() - getattr(reg, 'web_last_dome_t', 0) < 1.0:
             return
         if abs(val) > 0.01:
             with self._lock:
@@ -617,10 +669,16 @@ class BTControllerDriver:
 
         log.debug(f"BTN codes={code_names} pressed={pressed} released={released}")
 
-        # E-Stop — always processed even if disabled
+        # E-Stop — always processed even if controller is "disabled"
+        # via UI toggle (B7 fix 2026-05-16: gate moved out of _poll_loop
+        # so this branch can still fire).
         if _is(m.get('estop', 'BTN_MODE')):
             if pressed:
                 self._trigger_estop(reg)
+            return
+
+        # B7 fix: all OTHER buttons (panels, audio) gated by is_enabled.
+        if not self.is_enabled():
             return
 
         # If E-Stop active → ignore everything else
@@ -690,19 +748,29 @@ class BTControllerDriver:
                 except OSError as e: log.warning(f"audio send: {e}")
 
     def _trigger_estop(self, reg) -> None:
+        """B4 fix 2026-05-16: delegate to the canonical /system/estop
+        path. Was setting reg.estop_active + dome.freeze() + UART
+        FREEZE directly — bypassed behavior engine pause + choreo
+        abort hook. If a choreo was running when operator hit BT MODE,
+        the choreo player kept emitting body servo events through UART
+        until its next tick. Parity with /bt/estop_reset which already
+        delegates to status_bp.system_estop_reset."""
         log.warning("E-STOP triggered from BT gamepad")
-        reg.estop_active = True
-        self._stop_motion()
-        # Freeze servos in place rather than shutdown() — shutdown() puts the
-        # PCA9685 to SLEEP and cuts PWM, which makes servos go limp and droop
-        # under load. freeze() keeps PWM at the last commanded angle so panels
-        # stay where they are with full holding torque.
-        if reg.dome_servo:
-            try: reg.dome_servo.freeze()
-            except Exception: pass
-        if reg.uart:
-            try: reg.uart.send('FREEZE', '1')   # body servos on Slave
-            except Exception: pass
+        try:
+            from master.api.status_bp import system_estop
+            system_estop()
+        except Exception as e:
+            log.warning("BT E-STOP fallback (system_estop failed: %s)", e)
+            # Defense-in-depth: if the canonical path fails, do the
+            # minimum freeze ourselves so the robot at least stops.
+            reg.estop_active = True
+            self._stop_motion()
+            if reg.dome_servo:
+                try: reg.dome_servo.freeze()
+                except Exception: pass
+            if reg.uart:
+                try: reg.uart.send('FREEZE', '1')
+                except Exception: pass
 
     # ------------------------------------------------------------------
     # Motion helpers
