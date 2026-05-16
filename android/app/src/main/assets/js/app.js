@@ -7729,8 +7729,15 @@ const btCustomMappings = {
 
   async _loadScripts() {
     if (this._scripts) return this._scripts;
+    // Fix 2026-05-16: /choreo/list returns a TOP-LEVEL ARRAY of 49
+    // entries, not {scripts:[...]} or {choreos:[...]}. The optimistic
+    // .scripts || .choreos fallback always evaluated to undefined →
+    // dropdown was permanently empty.
     const d = await api('/choreo/list');
-    this._scripts = (d && (d.scripts || d.choreos)) || [];
+    if (Array.isArray(d))       this._scripts = d;
+    else if (d && Array.isArray(d.scripts))  this._scripts = d.scripts;
+    else if (d && Array.isArray(d.choreos))  this._scripts = d.choreos;
+    else                                     this._scripts = [];
     return this._scripts;
   },
 
