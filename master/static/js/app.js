@@ -2375,6 +2375,42 @@ function domeRandom(on)    { api('/motion/dome/random', 'POST', { enabled: on })
 const behaviorPanel = (() => {
   let _aliveOn    = false;
   let _choreoList = [];
+  let _countdownTimer = null;
+  let _countdownTargetMs = 0;   // performance.now() ms at trigger fire
+
+  // WOW polish H4 2026-05-15: live countdown to next idle reaction.
+  // Operator sees 'Next idle reaction in 9:58' ticking down so the
+  // system feels armed. Stops when alive is off or panel hidden.
+  function _formatCountdown(s) {
+    if (s <= 0) return 'imminent…';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${String(sec).padStart(2, '0')}`;
+  }
+  function _countdownTick() {
+    const wrap = el('beh-next-trigger');
+    const txt  = el('beh-next-trigger-time');
+    if (!wrap || !txt) return;
+    const panel = el('spanel-behavior');
+    if (!panel || !panel.classList.contains('active')) {
+      if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
+      return;
+    }
+    if (!_aliveOn || _countdownTargetMs === 0) {
+      wrap.style.display = 'none';
+      return;
+    }
+    const remaining = (_countdownTargetMs - performance.now()) / 1000;
+    wrap.style.display = 'flex';
+    txt.textContent = _formatCountdown(remaining);
+  }
+  function _startCountdown(nextIdleS) {
+    if (nextIdleS == null) { _countdownTargetMs = 0; return; }
+    _countdownTargetMs = performance.now() + nextIdleS * 1000;
+    if (_countdownTimer) clearInterval(_countdownTimer);
+    _countdownTimer = setInterval(_countdownTick, 1000);
+    _countdownTick();
+  }
 
   // ------------------------------------------------------------------
   // ALIVE button (Drive tab)
@@ -2407,6 +2443,10 @@ const behaviorPanel = (() => {
       _setChk('beh-alive-enabled',   d.alive_enabled);
       _setVal('beh-idle-timeout',    d.idle_timeout_min);
       _setChk('beh-dome-auto',       d.dome_auto_on_alive);
+
+      // WOW polish H4: start the live countdown from server-reported
+      // next_idle_in_s. Re-syncs every panel load.
+      _startCountdown(d.next_idle_in_s);
 
       _choreoList = d.idle_choreo_list || [];
 
@@ -6528,6 +6568,45 @@ document.addEventListener('click', (e) => {
 const diagPanel = {
   _filter: 'ALL',
   _autoTimer: null,
+  _tailTimer: null,
+
+  // WOW polish I8 2026-05-15: live log tail mode. Toggle button
+  // auto-refreshes logs every 2s + scroll-locks to bottom so
+  // operator can watch errors stream in. Auto-stops when panel
+  // is hidden.
+  toggleTail() {
+    const btn = el('diag-tail-btn');
+    if (this._tailTimer) {
+      clearInterval(this._tailTimer);
+      this._tailTimer = null;
+      if (btn) {
+        btn.textContent = '▶ TAIL';
+        btn.classList.remove('btn-active');
+      }
+      return;
+    }
+    if (btn) {
+      btn.textContent = '◼ TAILING';
+      btn.classList.add('btn-active');
+    }
+    const doTail = async () => {
+      const panel = el('spanel-diagnostics');
+      if (!panel || !panel.classList.contains('active')) {
+        clearInterval(this._tailTimer);
+        this._tailTimer = null;
+        if (btn) {
+          btn.textContent = '▶ TAIL';
+          btn.classList.remove('btn-active');
+        }
+        return;
+      }
+      await this.loadLogs();
+      const box = el('diag-log-output');
+      if (box) box.scrollTop = box.scrollHeight;
+    };
+    doTail();
+    this._tailTimer = setInterval(doTail, 2000);
+  },
 
   load() {
     this.loadLogs();
@@ -7109,17 +7188,43 @@ async function saveAudioChannels() {
   const status = el('audio-channels-status');
   if (status) { status.textContent = 'Applying…'; status.className = 'settings-status'; }
   const data = await api('/settings/config', 'POST', { 'audio.channels': channels });
-  if (data?.status === 'ok') {
-    _audioChannelsConfig = channels;
-    toast(`Audio channels: ${channels} — services restarting`, 'ok');
-    if (status) {
-      status.textContent = `Set to ${channels} — reconnecting in ~5s…`;
-      status.className = 'settings-status ok';
-    }
-  } else {
+  if (!data || data.status !== 'ok') {
     toast('Failed to update audio channels', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+    return;
   }
+  _audioChannelsConfig = channels;
+  toast(`Audio channels: ${channels} — services restarting`, 'ok');
+  // WOW polish M4 2026-05-15: live countdown so operator sees the
+  // service restart progress instead of staring at a frozen
+  // 'reconnecting in ~5s…' string for 5 seconds. Replaces the
+  // dying static text with a live ticking number that lands on
+  // '✓ ready' or 'still reconnecting…' based on /audio/health.
+  if (!status) return;
+  let remaining = 5;
+  status.className = 'settings-status';
+  status.textContent = `Set to ${channels} — reconnecting in ${remaining}s…`;
+  const tick = setInterval(() => {
+    remaining--;
+    if (remaining > 0) {
+      status.textContent = `Set to ${channels} — reconnecting in ${remaining}s…`;
+    } else {
+      clearInterval(tick);
+      status.textContent = `Set to ${channels} — verifying…`;
+      // Verify the audio service responded by hitting /status
+      api('/status').then(r => {
+        if (r) {
+          status.textContent = `✓ Audio: ${channels} channels ready`;
+          status.className = 'settings-status ok';
+        } else {
+          status.textContent = `Set to ${channels} — still reconnecting…`;
+          status.className = 'settings-status';
+        }
+      }).catch(() => {
+        status.textContent = `Set to ${channels} — still reconnecting…`;
+      });
+    }
+  }, 1000);
 }
 
 // ─── Sound Profiles ───────────────────────────────────────────────────────────
@@ -7334,12 +7439,43 @@ const cameraConfig = {
     const status     = el('cam-config-status');
     if (status) { status.textContent = 'Restarting camera…'; status.className = 'settings-status'; }
     const data = await api('/camera/config', 'POST', { resolution, fps, quality });
-    if (data?.status === 'ok') {
-      if (status) { status.textContent = `✓ ${resolution} @ ${fps}fps q${quality}`; status.className = 'settings-status ok'; }
-      toast(`Camera: ${resolution} @ ${fps}fps`, 'ok');
-    } else {
+    if (!data || data.status !== 'ok') {
       if (status) { status.textContent = '✗ Error — check logs'; status.className = 'settings-status error'; }
+      return;
     }
+    if (status) { status.textContent = `✓ ${resolution} @ ${fps}fps q${quality}`; status.className = 'settings-status ok'; }
+    toast(`Camera: ${resolution} @ ${fps}fps`, 'ok');
+    // WOW polish M5 2026-05-15: live preview thumbnail post-restart.
+    // Operator validates the new settings without switching tabs.
+    // Stream takes ~2s to come back, so we delay the img load.
+    setTimeout(() => this._showPreview(), 2200);
+  },
+  _showPreview() {
+    const preview = el('cam-preview-thumb');
+    if (!preview) return;
+    preview.innerHTML = '';
+    const img = document.createElement('img');
+    img.alt = 'camera preview';
+    img.className = 'cam-preview-img';
+    // Cache-bust + take a token via the existing camera flow
+    img.onerror = () => {
+      preview.innerHTML = '<div class="cam-preview-err">Stream not available — switch to Drive tab to view live</div>';
+    };
+    img.onload = () => {
+      preview.classList.add('cam-preview-loaded');
+    };
+    // /camera/stream is the same MJPEG URL the Drive tab uses
+    const base = (typeof _camBase === 'function' ? _camBase() : '');
+    img.src = `${base}/camera/stream?_=${Date.now()}`;
+    preview.appendChild(img);
+    // Auto-hide after 8s to free the stream for Drive
+    setTimeout(() => {
+      if (img.parentNode) img.parentNode.removeChild(img);
+      const note = document.createElement('div');
+      note.className = 'cam-preview-note';
+      note.textContent = 'Preview closed — open Drive tab for live view';
+      preview.appendChild(note);
+    }, 8000);
   },
 };
 

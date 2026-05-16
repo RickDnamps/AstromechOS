@@ -201,17 +201,28 @@ def get_status():
     now = time.monotonic()
     last = reg.last_activity
     ago = round(now - last, 1) if last > 0 else None
+    # WOW polish H4 2026-05-15: compute time-until-next-idle-trigger
+    # so the Behavior panel can show 'Next idle reaction in 9:58'
+    # countdown. Operator sees the system is armed and how long
+    # before the next thing happens. None when alive disabled.
+    alive_enabled = cfg.getboolean('behavior', 'alive_enabled', fallback=False)
+    idle_timeout_min = cfg.getfloat('behavior', 'idle_timeout_min', fallback=10.0)
+    next_idle_s = None
+    if alive_enabled and last > 0:
+        idle_at = last + (idle_timeout_min * 60.0)
+        next_idle_s = max(0, round(idle_at - now, 1))
     return jsonify({
-        'alive_enabled':       cfg.getboolean('behavior', 'alive_enabled',       fallback=False),
+        'alive_enabled':       alive_enabled,
         'startup_enabled':     cfg.getboolean('behavior', 'startup_enabled',     fallback=False),
         'startup_delay':       cfg.getfloat  ('behavior', 'startup_delay',       fallback=5.0),
         'startup_choreo':      cfg.get       ('behavior', 'startup_choreo',      fallback='startup.chor'),
         'idle_mode':           cfg.get       ('behavior', 'idle_mode',           fallback='choreo'),
-        'idle_timeout_min':    cfg.getfloat  ('behavior', 'idle_timeout_min',    fallback=10.0),
+        'idle_timeout_min':    idle_timeout_min,
         'idle_audio_category': cfg.get       ('behavior', 'idle_audio_category', fallback='happy'),
         'idle_choreo_list':    [c.strip() for c in cfg.get('behavior', 'idle_choreo_list', fallback='').split(',') if c.strip()],
         'dome_auto_on_alive':  cfg.getboolean('behavior', 'dome_auto_on_alive',  fallback=True),
         'last_activity_ago_s': ago,
+        'next_idle_in_s':      next_idle_s,
     })
 
 

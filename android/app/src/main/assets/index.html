@@ -1280,6 +1280,14 @@
           <button class="btn btn-active" onclick="behaviorPanel.save()">SAVE</button>
           <div class="settings-status" id="beh-status"></div>
         </div>
+        <!-- WOW polish H4 2026-05-15: live countdown to next idle
+             reaction. Only visible when alive_enabled. Updated by
+             behaviorPanel._countdownTick every second. -->
+        <div id="beh-next-trigger" class="beh-next-trigger" style="display:none">
+          <span class="beh-next-trigger-icon">⏱</span>
+          <span class="beh-next-trigger-label">Next idle reaction in</span>
+          <span id="beh-next-trigger-time" class="beh-next-trigger-time">—</span>
+        </div>
       </div>
 
       <!-- 🔧 Servos -->
@@ -1641,6 +1649,8 @@
           <div id="cam-bitrate-hint" class="cam-bitrate-hint"></div>
           <button class="btn btn-warn" onclick="cameraConfig.save()">APPLY + RESTART CAMERA</button>
           <div class="settings-status" id="cam-config-status"></div>
+          <!-- WOW polish M5 2026-05-15: preview thumbnail post-restart -->
+          <div id="cam-preview-thumb" class="cam-preview-thumb"></div>
         </section>
       </div>
 
@@ -2038,7 +2048,10 @@
             <button class="btn btn-sm diag-filter-btn active" data-filter="ALL"     onclick="diagPanel.setFilter('ALL')">ALL</button>
             <button class="btn btn-sm diag-filter-btn"        data-filter="WARNING" onclick="diagPanel.setFilter('WARNING')">WARNING+</button>
             <button class="btn btn-sm diag-filter-btn"        data-filter="ERROR"   onclick="diagPanel.setFilter('ERROR')">ERROR</button>
-            <button class="btn btn-sm" style="margin-left:auto" onclick="diagPanel.loadLogs()">↻ REFRESH</button>
+            <!-- WOW polish I8 2026-05-15: tail mode toggle. When ON,
+                 logs auto-refresh every 2s and scroll-lock to bottom. -->
+            <button class="btn btn-sm" id="diag-tail-btn" onclick="diagPanel.toggleTail()" style="margin-left:auto">▶ TAIL</button>
+            <button class="btn btn-sm" onclick="diagPanel.loadLogs()">↻ REFRESH</button>
           </div>
           <div id="diag-log-status" class="settings-status" style="margin:2px 0 4px"></div>
           <div id="diag-log-output" class="diag-log-box">—</div>
