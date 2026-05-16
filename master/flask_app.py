@@ -144,11 +144,14 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     @app.get('/')
     def index():
-        return render_template('index.html')
+        # Pass commit version so HTML can cache-bust app.js / style.css —
+        # ensures hard reload reliably picks up new code instead of waiting
+        # for SW to activate on second navigation.
+        return render_template('index.html', version=_read_version())
 
     @app.get('/mobile')
     def mobile():
-        return render_template('mobile.html')
+        return render_template('mobile.html', version=_read_version())
 
     # Serve user-uploaded robot icons from the project-level icons/ folder
     icons_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'icons')

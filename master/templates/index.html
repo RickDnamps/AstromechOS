@@ -38,7 +38,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Audiowide&family=Electrolize&family=Exo+2:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css?v={{ version }}">
   <!-- PWA -->
   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
   <meta name="theme-color" content="#00aaff">
@@ -2345,7 +2345,7 @@
 <div id="toast" class="toast"></div>
 
 <script src="/static/vendor/sortable.min.js"></script>
-<script src="/static/js/app.js"></script>
+<script src="/static/js/app.js?v={{ version }}"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js')
