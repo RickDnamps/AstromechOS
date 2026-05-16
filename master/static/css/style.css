@@ -1944,9 +1944,17 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   border-color: var(--cyan);
   color: var(--cyan);
 }
+/* WOW M1-W 2026-05-15: Stop button visible by default (was hover-only).
+ * Operator on tablet has no hover — needed a visual cue that it's
+ * the danger action vs the other tiny grey ctrl icons. */
+.now-playing-ctrl-btn.now-playing-stop {
+  border-color: rgba(229, 51, 51, 0.5);
+  color: var(--red, #e53);
+}
 .now-playing-ctrl-btn.now-playing-stop:hover {
   border-color: var(--red, #e53);
   color: var(--red, #e53);
+  background: rgba(229, 51, 51, 0.12);
 }
 
 .now-playing-progress {

@@ -1319,7 +1319,13 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'servos')      loadServoSettings();
   if (panelId === 'arms')        armsConfig.load();
   if (panelId === 'behavior')    behaviorPanel.load();
-  if (panelId === 'audio')       { soundProfiles.load(); btSpeaker.refresh(); }
+  if (panelId === 'audio')       {
+    soundProfiles.load(); btSpeaker.refresh();
+    try {
+      const ch = document.getElementById('audio-channels');
+      if (ch) updateChannelsHint(ch.value);
+    } catch {}
+  }
   if (panelId === 'diagnostics') diagPanel.load();
   if (panelId === 'shortcuts')   shortcutsEditor.load();
   if (panelId === 'battery')     { try { updateBatteryPreview(); } catch {} }
@@ -4097,6 +4103,12 @@ class AudioBoard {
   playRandom(cat) {
     const c = cat || this._currentCat || 'happy';
     this._lastRandomCat = c;
+    // E5 fix 2026-05-15: if a sound is currently playing, surface a
+    // toast so operator knows the previous sound was interrupted
+    // (multichannel system but the WEB API addresses channel 0 only).
+    if (this._playing && this._timedSound) {
+      toast(`Interrupted ${this._timedSound}`, 'info');
+    }
     // WOW M4-W fix 2026-05-15: pulse the RANDOM button during the
     // ~500ms cold-start, parity with per-sound buttons. Operator gets
     // the same 'click registered' feedback regardless of trigger path.
@@ -4343,6 +4355,26 @@ class AudioBoard {
     if (newCatRow) newCatRow.style.display = show ? 'flex' : 'none';
   }
 
+  // L5-W fix 2026-05-15: Esc cancel — clears input + hides row.
+  cancelCreateCategory() {
+    const input = el('audio-new-cat-input');
+    if (input) input.value = '';
+    const dup = el('audio-new-cat-dup');
+    if (dup) dup.style.display = 'none';
+    this.toggleNewCatRow(false);
+  }
+
+  // L5-W fix 2026-05-15: live duplicate check using the cached
+  // category list — no round-trip needed.
+  checkDupCategory(raw) {
+    const name = (raw || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    const dup = el('audio-new-cat-dup');
+    if (!dup) return;
+    if (!name) { dup.style.display = 'none'; return; }
+    const exists = (this._fullIndex && this._fullIndex[name] !== undefined);
+    dup.style.display = exists ? 'inline' : 'none';
+  }
+
   async createCategory() {
     const input = el('audio-new-cat-input');
     if (!input) return;
@@ -4380,8 +4412,13 @@ class AudioBoard {
     // WOW polish 2026-05-15: clearer drag-over feedback — green glow,
     // scaled border, "DROP NOW" text replacement. Operator gets
     // unmissable confirmation that yes, dropping here will upload.
+    // P5 fix 2026-05-15: dragover fires at 60Hz while hovering, was
+    // calling classList.add repeatedly (idempotent at DOM level but
+    // triggers a wasted style recalc each time). Guard the add.
     const zone = el('audio-upload-zone');
-    if (zone) zone.classList.add('drag-active');
+    if (zone && !zone.classList.contains('drag-active')) {
+      zone.classList.add('drag-active');
+    }
   }
 
   uploadDragLeave(e) {
@@ -4479,7 +4516,19 @@ class AudioBoard {
         'error'
       );
     }
-    if (ok) await this.selectCategory(cat);  // refresh grid
+    if (ok) {
+      await this.selectCategory(cat);   // refresh grid
+      // E14 fix 2026-05-15: also refresh the global _audioIndex used
+      // by the choreo editor's audio dropdown. Otherwise a sound
+      // uploaded mid-session would be invisible to choreo audio
+      // blocks until full page reload.
+      try {
+        const r = await api('/audio/index');
+        if (r && r.categories && typeof _audioIndex !== 'undefined') {
+          _audioIndex = r.categories;
+        }
+      } catch {}
+    }
   }
 
   _uploadStatus(msg, type) {
@@ -7817,6 +7866,16 @@ async function saveBatteryCells() {
   }
 }
 
+// WOW M2-W 2026-05-15: Audio channels impact preview. Operator
+// picks 6 vs 12 with no idea of cost. Estimate ~8MB RAM per mpg123
+// instance (Slave Pi 2GB). Mirrors Camera bitrate hint pattern.
+function updateChannelsHint(val) {
+  const hint = document.getElementById('audio-channels-hint');
+  if (!hint) return;
+  const n = Math.max(1, Math.min(12, parseInt(val, 10) || 6));
+  hint.textContent = `~${n} simultaneous mpg123 instances · ~${n * 8} MB RAM on Slave`;
+}
+
 // WOW polish M3 2026-05-15: Camera bitrate / size impact preview.
 // Operator slides quality 100→50 — wants to know what that means
 // for bandwidth before applying. Computes a rough estimate from
@@ -9362,7 +9421,13 @@ function initVolume() {
   let _debounceTimer = null;
 
   slider.addEventListener('input', () => {
-    const sliderVal = parseInt(slider.value, 10);
+    let sliderVal = parseInt(slider.value, 10);
+    // L1-W fix 2026-05-15: snap to common detents within ±2% on
+    // tablet for easier landing on 25/50/75/100.
+    const snaps = [25, 50, 75, 100];
+    for (const s of snaps) {
+      if (Math.abs(sliderVal - s) <= 2) { sliderVal = s; slider.value = s; break; }
+    }
     label.textContent = sliderVal + '%';
     _updateSliderBg(slider);
     clearTimeout(_debounceTimer);

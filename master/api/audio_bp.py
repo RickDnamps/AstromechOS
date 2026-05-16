@@ -240,17 +240,32 @@ def _estimate_duration_ms(path: str, fallback_ms: int = 60000) -> int:
     return int(size * 8 / bitrate_kbps) + 500
 
 
+_DURATION_CACHE_CAP = 2048   # P3 fix: bound the cache
+
 def _get_sound_duration_ms(sound: str, fallback_ms: int = 60000) -> int:
-    """Returns the cached duration in ms, refreshing on file mtime change."""
+    """Returns the cached duration in ms, refreshing on file mtime change.
+
+    P3 fix 2026-05-15: cap _DURATION_CACHE at 2048 entries (FIFO
+    eviction) so deleted-file entries don't accumulate over multi-day
+    events. Also drop entries when stat raises OSError (deleted files).
+    """
     path = os.path.join(_SOUNDS_DIR, sound + '.mp3')
     try:
         mtime = os.path.getmtime(path)
     except OSError:
+        # Drop stale entry if the file disappeared
+        _DURATION_CACHE.pop(path, None)
         return fallback_ms
     cached = _DURATION_CACHE.get(path)
     if cached and cached[0] == mtime:
         return cached[1]
     dur_ms = _estimate_duration_ms(path, fallback_ms)
+    # FIFO eviction if at cap (drop oldest insertion). dict iteration
+    # order is insertion-order in 3.7+, so next(iter(...)) gives the
+    # oldest key.
+    if len(_DURATION_CACHE) >= _DURATION_CACHE_CAP:
+        try: del _DURATION_CACHE[next(iter(_DURATION_CACHE))]
+        except StopIteration: pass
     _DURATION_CACHE[path] = (mtime, dur_ms)
     return dur_ms
 
@@ -313,8 +328,10 @@ def _safe_sound_path(sound: str) -> str | None:
     if not isinstance(sound, str) or not _SOUND_NAME_RE.match(sound):
         return None
     candidate = os.path.realpath(os.path.join(_SOUNDS_DIR, sound + '.mp3'))
-    if not (candidate == _SOUNDS_DIR_REAL
-            or candidate.startswith(_SOUNDS_DIR_REAL + os.sep)):
+    # L1 fix 2026-05-15: drop dead `candidate == _SOUNDS_DIR_REAL`
+    # branch — candidate always ends in '.mp3', can never equal the
+    # directory itself. The startswith check is the real containment.
+    if not candidate.startswith(_SOUNDS_DIR_REAL + os.sep):
         return None
     return candidate
 
@@ -333,6 +350,14 @@ _INDEX_FILE = os.path.join(
 # to JSON parsing.
 _INDEX_CACHE: dict = {}
 _INDEX_MTIME: float = 0.0
+# P4 fix 2026-05-15: TTL cache for the mtime stat itself. Called
+# from /audio/play, /audio/random, choreo TICK every 50ms × 12
+# channels = lots of os.path.getmtime. 250ms TTL is fast enough to
+# catch new uploads (operator sees their new sound within 250ms)
+# and saves the syscall when called rapidly during a choreo.
+_INDEX_STAT_TS: float = 0.0
+_INDEX_STAT_VAL: float = 0.0
+_INDEX_STAT_TTL_S = 0.25
 
 
 def _get_index() -> dict:
@@ -348,12 +373,21 @@ def _get_index() -> dict:
     written outside the lock. A reader could see the new MTIME with
     the OLD CACHE (or vice versa) for a tick. Both writes now happen
     under _audio_state_lock as a single critical section."""
-    global _INDEX_CACHE, _INDEX_MTIME
-    try:
-        mtime = os.path.getmtime(_INDEX_FILE)
-    except OSError:
-        # File missing — keep whatever we have cached (possibly empty).
-        return _INDEX_CACHE
+    global _INDEX_CACHE, _INDEX_MTIME, _INDEX_STAT_TS, _INDEX_STAT_VAL
+    # P4 fix: TTL-cache the stat result. Choreo TICK can call
+    # _get_index hundreds of times per second; the file rarely
+    # changes (only on upload). 250ms is operator-imperceptible.
+    now = time.monotonic()
+    if now - _INDEX_STAT_TS < _INDEX_STAT_TTL_S and _INDEX_STAT_VAL > 0:
+        mtime = _INDEX_STAT_VAL
+    else:
+        try:
+            mtime = os.path.getmtime(_INDEX_FILE)
+            _INDEX_STAT_VAL = mtime
+            _INDEX_STAT_TS  = now
+        except OSError:
+            # File missing — keep whatever we have cached (possibly empty).
+            return _INDEX_CACHE
     if mtime > _INDEX_MTIME or not _INDEX_CACHE:
         with _audio_state_lock:
             # Re-check under the lock — another thread may have just
@@ -684,6 +718,19 @@ def upload_sound():
 
     if not f.filename.lower().endswith('.mp3'):
         return jsonify({'ok': False, 'error': 'Only .mp3 files accepted'}), 400
+
+    # L2 fix 2026-05-15: per-file 12MB server cap. Flask global
+    # MAX_CONTENT_LENGTH is 16MB, frontend UI rejects at 10MB. A
+    # curl/script client could push 10-16MB; clamp at 12MB so the
+    # server enforces what the UI promises (with a 2MB buffer).
+    if request.content_length and request.content_length > 12 * 1024 * 1024:
+        return jsonify({'ok': False, 'error': 'File too large (max 12MB)'}), 413
+
+    # E6 fix 2026-05-15: reject empty / near-empty MP3 (≤1KB = not a
+    # real audio file). mpg123 would exit instantly + the index would
+    # carry a 'sound' that's silence.
+    if request.content_length and request.content_length < 1024:
+        return jsonify({'ok': False, 'error': 'File too small to be a valid MP3'}), 400
 
     # Sanitize filename — uppercase, alphanumeric + underscore only.
     stem = re.sub(r'[^A-Za-z0-9_]', '_', Path(f.filename).stem).strip('_')
