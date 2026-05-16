@@ -314,7 +314,14 @@ def _sync_angles_json(panels: dict) -> None:
     # rapid Calibration saves (operator iterating angles) stacked
     # threads. The reload signal still fires on success — operator
     # sees the new angles take effect within ~1s of SCP completion.
+    # E10 fix 2026-05-16: track sync status in module-level dict so the
+    # next POST response can surface a warning if the Slave didn't get
+    # the file. Was: fire-and-forget log.warning only → operator drove
+    # the robot with stale Slave angles, never knew.
     def _bg_scp_and_reload():
+        global _last_slave_sync_status
+        import time as _t
+        _last_slave_sync_status = {'attempted': True, 'ok': False, 'error': 'running', 'ts': _t.time()}
         try:
             scp_result = subprocess.run(
                 ['scp', _SLAVE_ANGLES_FILE, f'{_slave_host()}:{_SLAVE_ANGLES_FILE}'],
@@ -322,16 +329,26 @@ def _sync_angles_json(panels: dict) -> None:
             )
         except (subprocess.TimeoutExpired, OSError) as e:
             log.warning("Sync servo_angles.json to Slave failed: %s", e)
+            _last_slave_sync_status = {'attempted': True, 'ok': False, 'error': str(e), 'ts': _t.time()}
             return
         if scp_result.returncode == 0:
             if reg.uart:
                 reg.uart.send('SRV', 'RELOAD')
+            _last_slave_sync_status = {'attempted': True, 'ok': True, 'error': None, 'ts': _t.time()}
         else:
+            err = scp_result.stderr.decode(errors='replace').strip()[:200] or f'rc={scp_result.returncode}'
             log.warning("SCP servo_angles.json to Slave failed (rc=%d) — Slave not reloaded",
                         scp_result.returncode)
+            _last_slave_sync_status = {'attempted': True, 'ok': False, 'error': err, 'ts': _t.time()}
 
     threading.Thread(target=_bg_scp_and_reload, daemon=True,
                      name='angles-sync').start()
+
+
+# Module-level state for E10 (last Slave SFTP sync result). Read by
+# servo_settings_save to surface a warning in the response when the
+# operator saves body servo angles but the Slave push silently failed.
+_last_slave_sync_status: dict = {'attempted': False, 'ok': True, 'error': None}
 
 
 def _panel_angle(name: str, direction: str, panels_cfg: dict) -> int:
@@ -871,6 +888,20 @@ def servo_close_all():
 # Calibration per-panel
 # ================================================================
 
+def _servo_settings_version() -> str:
+    """E1 fix 2026-05-16: max mtime across the two angles files = the
+    'version' a client compares to via If-Match on save. Mirrors the
+    X-Categories-Version pattern (project_optimistic_concurrency_token
+    memory). Returns '0' if neither file exists yet."""
+    mts = []
+    for fp in (_DOME_ANGLES_FILE, _SLAVE_ANGLES_FILE):
+        try:
+            mts.append(os.path.getmtime(fp))
+        except OSError:
+            pass
+    return str(max(mts) if mts else 0.0)
+
+
 @servo_bp.get('/settings')
 def servo_settings_get():
     data = _read_panels_cfg()
@@ -884,7 +915,9 @@ def servo_settings_get():
          'servos': [f'Servo_S{i * 16 + j}' for j in range(16)]}
         for i in range(len(_slave_hat_addrs))
     ]
-    return jsonify(data)
+    resp = jsonify(data)
+    resp.headers['X-Servo-Version'] = _servo_settings_version()
+    return resp
 
 
 _LABEL_ALLOWED_CHARS = set(
@@ -906,6 +939,24 @@ def _sanitize_label(raw: str, fallback: str) -> str:
 @servo_bp.post('/settings')
 @require_admin
 def servo_settings_save():
+    # E1 fix 2026-05-16: optimistic concurrency token. Client sends
+    # If-Match: <version> (from prior GET's X-Servo-Version header). If
+    # the file mtime has advanced since (another admin saved), return
+    # 409 instead of silently overwriting their changes. Optional —
+    # legacy clients without the header continue to work.
+    if_match = request.headers.get('If-Match')
+    if if_match:
+        try:
+            client_v = float(if_match)
+            server_v = float(_servo_settings_version())
+            if abs(client_v - server_v) > 0.001:   # FS precision tolerance
+                return jsonify({
+                    'error': 'version conflict',
+                    'message': 'Another admin changed servo settings — refresh and retry',
+                    'current_version': server_v,
+                }), 409
+        except (TypeError, ValueError):
+            pass   # malformed If-Match treated as absent (lenient)
     data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     panels = {}
     for name, vals in (data.get('panels') or {}).items():
@@ -922,4 +973,23 @@ def servo_settings_save():
         # E12: file was quarantined, refuse the save instead of writing
         # a fresh dict that would have wiped non-edited servos.
         return jsonify({'error': str(e), 'recoverable': False}), 503
-    return jsonify(_read_panels_cfg())
+    # E10 fix 2026-05-16: response itself can't include SCP result because
+    # SCP runs async in a thread that's still in-flight when this returns.
+    # Frontend polls /servo/sync_status ~1.5s after save to verify Slave
+    # got the file. See _last_slave_sync_status + GET /servo/sync_status.
+    resp = jsonify(_read_panels_cfg())
+    resp.headers['X-Servo-Version'] = _servo_settings_version()
+    return resp
+
+
+@servo_bp.get('/sync_status')
+def servo_sync_status():
+    """E10 fix 2026-05-16: report the result of the most recent Slave
+    SFTP push from a /servo/settings save. Frontend polls this ~1.5s
+    after save → if `attempted && !ok`, toast a warning so the operator
+    knows their body servo angles didn't reach the Slave.
+    Returns: {attempted, ok, error, age_s}."""
+    import time as _t
+    sync = dict(_last_slave_sync_status)
+    sync['age_s'] = round(_t.time() - sync.get('ts', 0), 2) if sync.get('ts') else None
+    return jsonify(sync)

@@ -3845,6 +3845,14 @@ class ServoPanel {
     this._apiPrefix = apiPrefix;  // e.g. '/servo/dome' or '/servo/body'
     this._state     = {};
     this._servos.forEach(n => this._state[n] = 'close');
+    // B4 fix 2026-05-16: track dirty fields so updateInputs() AFTER a
+    // save (or periodic reload) doesn't wipe values the operator is
+    // still typing in OTHER HATs. Also basis for P1 diff-aware save.
+    // Set of `${name}.${field}` strings (e.g. 'Servo_M0.label').
+    this._dirtyFields = new Set();
+    // E4 fix 2026-05-16: per-servo test debounce to block UART burst
+    // from spam-click. Maps name → timestamp of last test command.
+    this._lastTest = {};
     this.render();
   }
 
@@ -3880,11 +3888,13 @@ class ServoPanel {
       lblIn.value = panel.label || name;   // setter is attr-safe (no HTML parse)
       lblIn.placeholder = 'Label';
       lblIn.maxLength = 32;
+      // B4 fix: mark dirty on first user edit so updateInputs preserves it.
+      lblIn.addEventListener('input', () => this._dirtyFields.add(name + '.label'));
       row.appendChild(lblIn);
 
       const calibWrap = document.createElement('div');
       calibWrap.className = 'servo-calib-wrap';
-      const mkAngleField = (letter, idSuffix, min, max, val) => {
+      const mkAngleField = (letter, idSuffix, min, max, val, fieldKey) => {
         const lab = document.createElement('label');
         lab.className = 'servo-calib-label';
         lab.appendChild(document.createTextNode(letter));
@@ -3895,12 +3905,14 @@ class ServoPanel {
         inp.min = String(min);
         inp.max = String(max);
         inp.value = String(val);
+        // B4 fix: mark this servo+field dirty on first user edit.
+        inp.addEventListener('input', () => this._dirtyFields.add(name + '.' + fieldKey));
         lab.appendChild(inp);
         return lab;
       };
-      calibWrap.appendChild(mkAngleField('O', 'sc-open-',  10, 170, panel.open));
-      calibWrap.appendChild(mkAngleField('C', 'sc-close-', 10, 170, panel.close));
-      calibWrap.appendChild(mkAngleField('S', 'sc-speed-',  1,  10, panel.speed ?? 10));
+      calibWrap.appendChild(mkAngleField('O', 'sc-open-',  10, 170, panel.open,        'open'));
+      calibWrap.appendChild(mkAngleField('C', 'sc-close-', 10, 170, panel.close,       'close'));
+      calibWrap.appendChild(mkAngleField('S', 'sc-speed-',  1,  10, panel.speed ?? 10, 'speed'));
       row.appendChild(calibWrap);
 
       const openBtn = document.createElement('button');
@@ -3920,17 +3932,22 @@ class ServoPanel {
   }
 
   updateInputs() {
+    // B4 fix 2026-05-16: SKIP overwriting any field the operator has
+    // edited but not yet saved. Previous behaviour clobbered every
+    // input on every poll/save, which wiped HAT2's typing while HAT1
+    // saved. Dirty bits are cleared on saveAngles() success.
     this._servos.forEach(name => {
       const panel = (_servoCfg.panels || {})[name];
       if (!panel) return;
+      const dirty = this._dirtyFields;
       const lEl = el(`sc-label-${name}`);
       const oEl = el(`sc-open-${name}`);
       const cEl = el(`sc-close-${name}`);
       const sEl = el(`sc-speed-${name}`);
-      if (lEl) lEl.value = panel.label || name;
-      if (oEl) oEl.value = panel.open;
-      if (cEl) cEl.value = panel.close;
-      if (sEl) sEl.value = panel.speed ?? 10;
+      if (lEl && !dirty.has(name + '.label')) lEl.value = panel.label || name;
+      if (oEl && !dirty.has(name + '.open'))  oEl.value = panel.open;
+      if (cEl && !dirty.has(name + '.close')) cEl.value = panel.close;
+      if (sEl && !dirty.has(name + '.speed')) sEl.value = panel.speed ?? 10;
     });
   }
 
@@ -3938,15 +3955,27 @@ class ServoPanel {
     return `_hatPanels['${this._gridId}']`;
   }
 
+  // E4/B7 fix 2026-05-16: per-servo test throttle. Spam-clicking OPEN
+  // burst-queued POSTs → slave UART congestion → could starve heartbeat
+  // 200ms cadence. Cooldown = expected ramp duration so the operator
+  // can't fire a new command until the previous one is reasonably done.
+  _testThrottled(name, speed) {
+    const now = Date.now();
+    // Rough ramp time at this speed for 90° = (10-speed)*3ms × 45 steps
+    const rampMs = (10 - Math.max(1, Math.min(10, speed))) * 3 * 45 + 50;
+    if (now - (this._lastTest[name] || 0) < rampMs) return true;
+    this._lastTest[name] = now;
+    return false;
+  }
+
   open(name) {
     const label = el(`sc-label-${name}`)?.value || name;
+    const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
+    if (this._testThrottled(name, speed)) return;
     // WOW polish H2 2026-05-15: animate the fill bar over the actual
-    // slew duration instead of jumping to 100% instantly. The UI used
-    // to lie about state during the (10-speed)*3ms × steps slew. Now
-    // the fill animates in parallel with the physical motion.
+    // slew duration instead of jumping to 100% instantly.
     // 2026-05-16 user-reported: switch to apiDetail so 403/503 surface
     // the actual reason (E-STOP, stow, choreo) instead of silent fail.
-    const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
     const cur   = this._state[name] === 'open' ? 100 : 0;
     apiDetail(`${this._apiPrefix}/open`, 'POST', { name }).then(res => {
       if (res.ok) {
@@ -3962,6 +3991,7 @@ class ServoPanel {
   close(name) {
     const label = el(`sc-label-${name}`)?.value || name;
     const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
+    if (this._testThrottled(name, speed)) return;
     const cur   = this._state[name] === 'open' ? 100 : 0;
     apiDetail(`${this._apiPrefix}/close`, 'POST', { name }).then(res => {
       if (res.ok) {
@@ -3975,8 +4005,21 @@ class ServoPanel {
   }
 
   async saveAngles() {
+    // P1 fix 2026-05-16: only send servos that were actually edited
+    // (dirty set). Previously sent all 16 servos in the HAT every time
+    // → 16-row JSON RMW + SCP push for one knob change.
+    // Now: empty dirty set → no-op; non-empty → subset of changed servos.
     const panels = {};
-    this._servos.forEach(name => {
+    const editedNames = new Set();
+    this._dirtyFields.forEach(key => {
+      const name = key.split('.')[0];
+      if (this._servos.includes(name)) editedNames.add(name);
+    });
+    if (editedNames.size === 0) {
+      toast('No changes to save', 'info');
+      return;
+    }
+    editedNames.forEach(name => {
       const lEl = el(`sc-label-${name}`);
       const oEl = el(`sc-open-${name}`);
       const cEl = el(`sc-close-${name}`);
@@ -3990,11 +4033,66 @@ class ServoPanel {
         };
       }
     });
-    const data = await api('/servo/settings', 'POST', { panels });
-    if (!data) { toast('Network error', 'error'); return; }
+    // E1 fix 2026-05-16: optimistic concurrency token via If-Match
+    // header — server compares to current file mtime, returns 409 on
+    // mismatch. Falls back to no-header (legacy behavior) if version
+    // wasn't captured.
+    const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (typeof adminGuard !== 'undefined') {
+      const tok = adminGuard.getToken && adminGuard.getToken();
+      if (tok) headers['X-Admin-Pw'] = tok;
+    }
+    if (_servoCfgVersion) headers['If-Match'] = _servoCfgVersion;
+    let res;
+    try {
+      res = await fetch(base + '/servo/settings', {
+        method: 'POST', headers, body: JSON.stringify({ panels }),
+      });
+    } catch (e) {
+      toast('Network error — save failed', 'error');
+      return;
+    }
+    if (res.status === 409) {
+      toast('Another admin changed servo settings — refreshing', 'warn');
+      _servoCfgVersion = null;
+      await loadServoSettings();
+      return;
+    }
+    if (!res.ok) {
+      let err = 'Save failed';
+      try { err = (await res.json()).error || err; } catch {}
+      toast(err, 'error');
+      return;
+    }
+    const data = await res.json().catch(() => null);
+    if (!data) { toast('Save response malformed', 'error'); return; }
     _servoCfg = data;
-    this.updateInputs();
-    toast('Config saved', 'ok');
+    // Capture new version for next If-Match
+    _servoCfgVersion = res.headers.get('X-Servo-Version') || _servoCfgVersion;
+    // Clear dirty bits — server state now matches user input
+    editedNames.forEach(name => {
+      this._dirtyFields.delete(name + '.label');
+      this._dirtyFields.delete(name + '.open');
+      this._dirtyFields.delete(name + '.close');
+      this._dirtyFields.delete(name + '.speed');
+    });
+    // Propagate any server-side label sanitization to other HATs
+    Object.values(_hatPanels).forEach(p => p.updateInputs());
+    toast(`Saved ${editedNames.size} servo${editedNames.size === 1 ? '' : 's'}`, 'ok');
+    // E10 fix 2026-05-16: if any body servo was in the save, poll the
+    // sync_status endpoint ~1.5s later to verify the Slave actually got
+    // the SCP push. Was: silent success in UI even when SCP failed →
+    // operator drove the robot with stale Slave angles.
+    const editedBody = [...editedNames].some(n => /^Servo_S\d+$/.test(n));
+    if (editedBody) {
+      setTimeout(async () => {
+        const sync = await api('/servo/sync_status').catch(() => null);
+        if (sync && sync.attempted && !sync.ok && sync.error !== 'running') {
+          toast(`Slave sync failed: ${sync.error}. Body angles may be stale on Slave.`, 'warn');
+        }
+      }, 1500);
+    }
   }
 
   _setFill(name, pct) {
@@ -4109,13 +4207,54 @@ function renderCalibration() {
   _renderHatBlocks(el('body-servo-hats'), bodyHats, 'body', 'body');
 }
 
+// B5 + E1 fix 2026-05-16: in-flight guard + optimistic concurrency
+// version token. Multiple callers (switchTab→loadSettings, switch
+// SettingsPanel→servos, _applyLocationLabels poll) used to fire
+// loadServoSettings simultaneously → double renderCalibration() with
+// replaceChildren() destroying mid-typed inputs. Now: coalesce concurrent
+// calls + capture If-Match version header for save-side conflict check.
+let _loadServoInFlight = null;
+let _servoCfgVersion = null;   // X-Servo-Version header from last GET
+
 async function loadServoSettings() {
-  const data = await api('/servo/settings');
-  if (!data) return;
-  _servoCfg = data;
-  renderCalibration();
-  Object.values(_hatPanels).forEach(p => p.updateInputs());
+  if (_loadServoInFlight) return _loadServoInFlight;
+  _loadServoInFlight = (async () => {
+    try {
+      // Need raw fetch to read X-Servo-Version header (api() helper
+      // returns body only). Reuses adminGuard token attachment.
+      const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+      const headers = {};
+      if (typeof adminGuard !== 'undefined') {
+        const tok = adminGuard.getToken && adminGuard.getToken();
+        if (tok) headers['X-Admin-Pw'] = tok;
+      }
+      const res = await fetch(base + '/servo/settings', { headers }).catch(() => null);
+      if (!res || !res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (!data) return;
+      _servoCfg = data;
+      _servoCfgVersion = res.headers.get('X-Servo-Version') || null;
+      // B4 fix: do NOT call renderCalibration if grid already populated
+      // (replaceChildren destroys mid-typed inputs across all HATs).
+      // Only re-render if HAT layout changed (count/addresses), else
+      // updateInputs is enough.
+      const layoutKey = JSON.stringify([
+        (_servoCfg.dome_hats || []).map(h => h.addr),
+        (_servoCfg.body_hats || []).map(h => h.addr),
+      ]);
+      if (_lastHatLayout !== layoutKey) {
+        _lastHatLayout = layoutKey;
+        renderCalibration();
+      }
+      // updateInputs() preserves user's dirty edits — see _dirtyFields.
+      Object.values(_hatPanels).forEach(p => p.updateInputs());
+    } finally {
+      _loadServoInFlight = null;
+    }
+  })();
+  return _loadServoInFlight;
 }
+let _lastHatLayout = '';
 
 function updateServoDurationPreview() {
   const ms90 = parseInt(el('servo-ms90')?.value ?? 150);
