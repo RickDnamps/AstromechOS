@@ -8982,7 +8982,17 @@ class StatusPoller {
     this._inFlight = false;
   }
 
-  start(intervalMs = 2000) {
+  start(intervalMs = 1000) {
+    // 2026-05-16: was 2000ms. User-reported the joystick lockout
+    // reaction time when a propulsion choreo fired from BT button /
+    // Shortcuts overlay (non-optimistic paths) felt sluggish — worst
+    // case was 2s, average 1s. Halved to 1000ms → worst case 1s,
+    // average 500ms. Sequences-tab triggers (scriptEngine.play +
+    // choreoEditor.play) still apply the lockout optimistically at
+    // click time, so this only improves the poll-driven paths.
+    // Bandwidth doubles (was ~30 req/min, now ~60/min, /status is
+    // ~3KB) — well within Flask threadpool capacity on the Pi 4B.
+    // _inFlight guard prevents stacking if Flask is briefly slow.
     this.poll();
     this._interval = setInterval(() => this.poll(), intervalMs);
   }
@@ -10823,6 +10833,27 @@ const shortcutsRunner = {
 
   async _trigger(id, btn) {
     btn.disabled = true;
+    // 2026-05-16: optimistic joystick lock — mirror sequences-tab
+    // scriptEngine.play() behaviour so a play_choreo shortcut on the
+    // Drive overlay locks the joysticks AT CLICK time, not at the
+    // next /status tick (1s away). Without this the operator gets a
+    // 0.5–1s window where the joystick still drives, racing the
+    // choreo that's about to take propulsion. Rollback below if the
+    // backend refuses (busy / 503).
+    const sc0 = this._shortcuts.find(s => s.id === id);
+    let _optimisticLocked = false;
+    if (sc0 && sc0.action?.type === 'play_choreo') {
+      const target = sc0.action.target;
+      try {
+        if (typeof scriptEngine !== 'undefined' && scriptEngine._scripts) {
+          const meta = scriptEngine._scripts.find(s => s.name === target);
+          if (meta && (meta.uses_propulsion || meta.uses_dome)) {
+            _setChoreoLockUI(!!meta.uses_propulsion, !!meta.uses_dome, target);
+            _optimisticLocked = true;
+          }
+        }
+      } catch (_) { /* meta lookup is best-effort */ }
+    }
     try {
       // B19 fix 2026-05-16: use apiDetail to surface backend error
       // messages (busy: 409, refused: 503, debounced: 429) instead of
@@ -10833,11 +10864,14 @@ const shortcutsRunner = {
         const msg = res.error || 'Shortcut failed';
         const kind = res.status === 429 ? 'info' : 'error';
         toast(msg, kind);
+        // Rollback optimistic lock since the choreo never started.
+        if (_optimisticLocked) _setChoreoLockUI(false, false, '');
         return;
       }
       const d = res.data || {};
       if (d.error) {
         toast(`Shortcut: ${d.error}`, 'error');
+        if (_optimisticLocked) _setChoreoLockUI(false, false, '');
         return;
       }
       const state = d.state;
