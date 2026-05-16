@@ -188,16 +188,42 @@ class UARTController:
     # ------------------------------------------------------------------
 
     def _heartbeat_loop(self) -> None:
+        """Deadline-based scheduling — Batch 2 fix 2026-05-16.
+
+        Was: drift-accumulating loop ('start = monotonic; send; sleep
+        interval - elapsed'). If send() blocked >interval (UART buffer
+        full + concurrent SRV/VCFG traffic), elapsed > interval, sleep
+        skipped, NEXT iteration fires immediately, but the delay was
+        already absorbed. After 3 such ticks, cumulative drift could
+        exceed the 500ms Slave watchdog window → spurious VESC cutoff
+        mid-choreo.
+
+        Now: track next_deadline = previous_deadline + interval. If we're
+        behind schedule, log warning + resync deadline to NOW (don't
+        burst-fire to catch up — that would queue 5 HBs in one read on
+        Slave side).
+
+        Also B12 fix: _last_hb_send_t is set AFTER send() returns, so
+        RTT measurements don't include lock-wait time."""
+        next_deadline = time.monotonic()
         while self._running:
-            start = time.monotonic()
-            self._last_hb_send_t = start
+            next_deadline += self._heartbeat_interval
             ok = self.send('H', '1')
+            # B12 fix: timestamp AFTER send returns (was: before, which
+            # included lock-wait time in RTT measurements when send()
+            # blocked on _lock held by concurrent SRV/VCFG traffic).
+            self._last_hb_send_t = time.monotonic()
             if not ok:
                 log.warning("Failed to send heartbeat")
-            elapsed = time.monotonic() - start
-            sleep_time = self._heartbeat_interval - elapsed
+            sleep_time = next_deadline - time.monotonic()
             if sleep_time > 0:
                 time.sleep(sleep_time)
+            elif sleep_time < -0.1:
+                # >100ms behind schedule — likely UART/lock contention.
+                # Log + resync deadline so we don't burst-fire.
+                log.warning("Heartbeat loop %.0fms behind schedule — resyncing",
+                            -sleep_time * 1000)
+                next_deadline = time.monotonic()
 
     def _read_loop(self) -> None:
         buffer = ""

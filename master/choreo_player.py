@@ -1265,6 +1265,22 @@ class ChoreoPlayer:
         self._last_telem = telem
 
         healthy_sides = 0
+        # Batch 2 fix 2026-05-16: abort on stale telem for propulsion-using
+        # choreos. Was: data=None silently skipped (no fault recorded) →
+        # between propulsion events (panel/sound/light), telem could go
+        # stale for tens of seconds with NO abort. Now: stale L or R
+        # while uses_propulsion=True is an immediate abort.
+        if self._status.get('uses_propulsion'):
+            for side in ('L', 'R'):
+                if telem.get(side) is None:
+                    log.error(
+                        f"ChoreoPlayer: ABORT — VESC {side} telem stale/offline "
+                        f"during propulsion choreo"
+                    )
+                    self._abort_reason = self._abort_reason or f'vesc_{side.lower()}_stale'
+                    self._stop_flag.set()
+                    return
+
         for side in ('L', 'R'):
             data = telem.get(side)
             if data is None:

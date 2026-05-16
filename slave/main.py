@@ -103,10 +103,35 @@ def resume_vesc() -> None:
     # Phase 2: vesc_g.resume() + vesc_d.resume()
 
 
+# Batch 2 fix 2026-05-16: module-level driver refs populated by main()
+# so handle_reboot/shutdown can pre-stop motors before sudo reboot
+# (was: blind subprocess.run → motors kept last commanded ERPM during
+# the 3s sudo-reboot grace + systemd-stop window → robot lurched forward
+# until kernel-level USB tty close finally cut VESC comm-loss timeout).
+_vesc_ref = None
+_audio_ref = None
+_servo_ref = None
+
+
+def _safe_pre_shutdown():
+    """Stop motors + audio + freeze servos BEFORE sudo reboot/shutdown."""
+    log = logging.getLogger(__name__)
+    if _vesc_ref is not None:
+        try: _vesc_ref.stop()
+        except Exception as e: log.warning("pre-shutdown vesc.stop failed: %s", e)
+    if _audio_ref is not None:
+        try: _audio_ref.stop()
+        except Exception as e: log.warning("pre-shutdown audio.stop failed: %s", e)
+    if _servo_ref is not None:
+        try: _servo_ref.set_frozen(True)
+        except Exception as e: log.warning("pre-shutdown servo.freeze failed: %s", e)
+
+
 def handle_reboot(value: str) -> None:
     """REBOOT command received from Master — run in a thread to avoid blocking UART."""
-    logging.getLogger(__name__).info("REBOOT command received — rebooting in 3s")
+    logging.getLogger(__name__).info("REBOOT command received — pre-stop + reboot in 3s")
     def _do_reboot():
+        _safe_pre_shutdown()
         time.sleep(3)
         subprocess.run(['sudo', 'reboot'], check=False)
     threading.Thread(target=_do_reboot, daemon=True).start()
@@ -114,8 +139,9 @@ def handle_reboot(value: str) -> None:
 
 def handle_shutdown(value: str) -> None:
     """SHUTDOWN command received from Master — run in a thread to avoid blocking UART."""
-    logging.getLogger(__name__).info("SHUTDOWN command received — shutting down in 3s")
+    logging.getLogger(__name__).info("SHUTDOWN command received — pre-stop + shutdown in 3s")
     def _do_shutdown():
+        _safe_pre_shutdown()
         time.sleep(3)
         subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False)
     threading.Thread(target=_do_shutdown, daemon=True).start()
@@ -258,6 +284,13 @@ def main() -> None:
         log.warning("BodyServoDriver unavailable")
         display.boot_fail('SERVOS')
 
+    # Batch 2 fix 2026-05-16: expose driver refs for handle_reboot/shutdown
+    # so motors stop BEFORE the 3s sudo grace window.
+    global _vesc_ref, _audio_ref, _servo_ref
+    _vesc_ref  = vesc
+    _audio_ref = audio
+    _servo_ref = servo
+
     # ------------------------------------------------------------------
     # Health Monitor — HTTP port 5001, exposes UART stats to Master
     # ------------------------------------------------------------------
@@ -273,12 +306,20 @@ def main() -> None:
     # VESC config (scale, invert) instead of leaving the Slave at defaults.
     # ------------------------------------------------------------------
     def _send_boot_banner() -> None:
-        time.sleep(0.5)  # let UART listener settle before announcing
-        try:
-            uart.send('BOOT', 'READY')
-            log.info("BOOT:READY sent to Master")
-        except Exception as exc:
-            log.warning("Failed to send BOOT banner: %s", exc)
+        """Send BOOT:READY 3× spaced 200ms — slipring noise could corrupt
+        any single frame. Master's on_slave_boot handler is idempotent
+        (re-pushes same VCFG/VINV/bench config each time).
+        Batch 2 fix 2026-05-16: was single send → CRC corruption =
+        Master never re-pushed config → Slave ran with defaults forever."""
+        time.sleep(0.5)
+        for i in range(3):
+            try:
+                uart.send('BOOT', 'READY')
+                log.info(f"BOOT:READY sent to Master ({i+1}/3)")
+            except Exception as exc:
+                log.warning("Failed to send BOOT banner (%d/3): %s", i+1, exc)
+            if i < 2:
+                time.sleep(0.2)
     threading.Thread(target=_send_boot_banner, name='boot-banner', daemon=True).start()
 
     # ------------------------------------------------------------------

@@ -121,7 +121,13 @@ class VescDriver(BaseDriver):
         self._lock    = threading.Lock()
 
         # Config (adjustable at runtime)
-        self._power_scale = 1.0        # 0.1 – 1.0 — scales max ERPM / duty
+        # Batch 2 fix 2026-05-16: safe default 0.3 (was 1.0). Master
+        # re-pushes VCFG:scale:X within ~500ms of BOOT:READY, but if
+        # that frame is corrupted by slipring noise OR operator gives
+        # joystick input during the 500ms window, Slave would have
+        # driven at FULL POWER. Now defaults to gentle 30% until first
+        # VCFG arrives.
+        self._power_scale = 0.3        # 0.1 – 1.0 — scales max ERPM / duty
         self._max_erpm    = MAX_ERPM   # adjustable via VCFG:erpm:<value>
         self._invert_left  = False
         self._invert_right = False
