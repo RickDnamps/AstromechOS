@@ -20,6 +20,7 @@ TICK = 0.05  # 50ms loop — smooth enough for dome interpolation
 _SLEW_RATE_HZ = 25
 
 from shared.paths import DOME_ANGLES as _DOME_ANGLES_PATH, SLAVE_ANGLES as _BODY_ANGLES_PATH, LOCAL_CFG as _LOCAL_CFG
+from master.lights.base_controller import sanitize_lights_text as _sanitize_lights_text
 
 # Module-level imports of helper modules previously re-imported inside the
 # dispatch hot loop on every event. None of these modules touches Flask
@@ -864,7 +865,12 @@ class ChoreoPlayer:
                 # Text mode — scrolling message to logic displays
                 # display targets: fld_top | fld_bottom | fld_both | rld | all
                 if mode == 'text' and self._teeces:
-                    text_val = ev.get('text', '')[:20].upper()
+                    # B7/E9 fix 2026-05-16: strip control chars BEFORE
+                    # forwarding to UART. A .chor file (admin-editable
+                    # JSON) with text="HI\r0T19" would inject T19
+                    # (lightsaber) into the JawaLite stream mid-frame.
+                    # HTTP path was already sanitized; choreo path was not.
+                    text_val = _sanitize_lights_text(ev.get('text', '')).upper()
                     display  = ev.get('display', 'fld_top')
                     if hasattr(self._teeces, 'text'):
                         # AstroPixels+: full target support

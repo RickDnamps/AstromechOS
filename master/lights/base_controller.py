@@ -10,9 +10,22 @@ that still used the old TeecesController API.
 """
 
 from abc import ABC, abstractmethod
+import re as _re
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from shared.base_driver import BaseDriver
+
+# Strip every control char that JawaLite/AstroPixels interprets as a
+# frame delimiter or escape. Without this, `text="HI\r0T19"` injects
+# a fresh command (lightsaber) in the middle of the FLD scroll buffer.
+# Lives here so the HTTP path (teeces_bp) AND the choreo player (audit
+# B7/E9 2026-05-16) share a single sanitizer with no circular import.
+_TEXT_RE = _re.compile(r'[^ -~]')
+
+
+def sanitize_lights_text(raw: str, max_len: int = 20) -> str:
+    """Strip control characters + cap length (FLD line max 20-32)."""
+    return _TEXT_RE.sub('', str(raw))[:max_len]
 
 
 class BaseLightsController(BaseDriver, ABC):

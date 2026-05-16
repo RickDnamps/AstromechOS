@@ -47,18 +47,11 @@ import re
 from flask import Blueprint, request, jsonify
 import master.registry as reg
 from master.api._admin_auth import require_admin
+from master.lights.base_controller import sanitize_lights_text
 
 teeces_bp = Blueprint('teeces', __name__, url_prefix='/teeces')
 
 _mode = 'random'
-
-# Strip every control char that JawaLite/AstroPixels interprets as a
-# frame delimiter or escape — without this, `text="HI\r0T20"` would
-# embed a fresh command in the middle of the FLD scroll buffer
-# (audit finding H-3 2026-05-15). Whitelist printable ASCII only;
-# the firmware doesn't support extended chars and Unicode raises
-# anyway.
-_TEECES_TEXT_RE = re.compile(r'[^ -~]')
 
 # /teeces/raw command allowlist. Real JawaLite commands look like
 # `<addr>T<mode>` or `<addr>M<text>` etc. The firmware Teeces also
@@ -66,10 +59,48 @@ _TEECES_TEXT_RE = re.compile(r'[^ -~]')
 # actually sends. (Audit finding H-2 2026-05-15.)
 _TEECES_RAW_RE = re.compile(r'^[A-Za-z0-9 ,@#%&+*/.=:;_-]{1,32}$')
 
+# Frontend display vocabulary (modern: 5 values) + legacy 3 for
+# backwards-compat with old .chor files and bench scripts.
+# B1 fix 2026-05-16: backend used to only accept the legacy 3 →
+# every SEND from UI with FLD TOP/BOT/BOTH/ALL was silently 400.
+_DISPLAY_TARGETS = (
+    'fld_top', 'fld_bottom', 'fld_both', 'rld', 'all',   # modern (UI)
+    'fld', 'both',                                       # legacy
+)
+
 
 def _sanitize_text(raw: str) -> str:
-    """Strip control characters + cap length 20 (FLD line max)."""
-    return _TEECES_TEXT_RE.sub('', str(raw))[:20]
+    """Strip control characters + cap length 20 (FLD line max).
+    Kept as a thin wrapper for callers that import the symbol."""
+    return sanitize_lights_text(raw, 20)
+
+
+def _dispatch_text(text: str, display: str) -> None:
+    """Forward a text+display tuple to the active driver.
+
+    AstroPixels+ supports the full 5-value vocabulary natively
+    (@1M=FLD top, @2M=FLD bot, @3M=RLD). Teeces32 only has fld/rld/both
+    so we collapse:
+      fld_top | fld_bottom | fld_both  -> 'fld'
+      rld                              -> 'rld'
+      all                              -> 'both'
+    """
+    if not reg.teeces:
+        return
+    # Driver class name disambiguates without an isinstance import
+    # (avoids pulling AstroPixelsDriver at module load just for type check).
+    backend = type(reg.teeces).__name__
+    if 'AstroPixels' in backend:
+        reg.teeces.text(text, display)
+        return
+    # Teeces32 path
+    if display in ('fld_top', 'fld_bottom', 'fld_both'):
+        target = 'fld'
+    elif display == 'all':
+        target = 'both'
+    else:
+        target = display   # fld | rld | both
+    reg.teeces.text(text, target)
 
 
 @teeces_bp.post('/random')
@@ -115,11 +146,12 @@ def teeces_text():
     fresh JawaLite command (audit H-3 2026-05-15)."""
     body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     text    = _sanitize_text(body.get('text', ''))
-    display = str(body.get('display', 'fld')).lower()
-    if display not in ('fld', 'rld', 'both'):
-        return jsonify({'error': "display must be 'fld', 'rld', or 'both'"}), 400
-    if reg.teeces:
-        reg.teeces.text(text, display)
+    display = str(body.get('display', 'fld_top')).lower()
+    if display not in _DISPLAY_TARGETS:
+        return jsonify({
+            'error': "display must be one of: fld_top, fld_bottom, fld_both, rld, all (or legacy fld/both)",
+        }), 400
+    _dispatch_text(text, display)
     return jsonify({'status': 'ok', 'text': text, 'display': display})
 
 

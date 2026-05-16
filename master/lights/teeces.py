@@ -14,6 +14,7 @@ Port and baud read from [teeces] in config (port=/dev/ttyUSB0, baud=9600).
 import logging
 import serial
 import configparser
+import threading
 import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -34,6 +35,11 @@ class TeecesDriver(BaseLightsController):
         self._serial: serial.Serial | None = None
         self._ready  = False
         self._ok_timer = None
+        # E2 fix 2026-05-16: serial write lock — Flask + ChoreoPlayer
+        # both write to the same UART concurrently; without this two
+        # commands can interleave at the byte level → firmware parses
+        # garbage. Acquired per-_send so byte streams stay atomic.
+        self._lock   = threading.Lock()
 
     # ------------------------------------------------------------------
     # BaseDriver
@@ -70,7 +76,8 @@ class TeecesDriver(BaseLightsController):
             log.warning(f"TeecesDriver not ready, ignored: {cmd!r}")
             return False
         try:
-            self._serial.write(cmd.encode('ascii'))
+            with self._lock:
+                self._serial.write(cmd.encode('ascii'))
             log.debug(f"Teeces TX: {cmd!r}")
             return True
         except serial.SerialException as e:

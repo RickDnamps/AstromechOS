@@ -62,6 +62,11 @@ class AstroPixelsDriver(BaseLightsController):
         self._serial: serial.Serial | None = None
         self._ready  = False
         self._ok_timer: threading.Timer | None = None
+        # E2 fix 2026-05-16: serial write lock — Flask + ChoreoPlayer
+        # both write to the same UART concurrently; without this two
+        # commands can interleave at the byte level → firmware parses
+        # garbage. Acquired per-_send so byte streams stay atomic.
+        self._lock   = threading.Lock()
 
     # ------------------------------------------------------------------
     # BaseDriver
@@ -98,7 +103,8 @@ class AstroPixelsDriver(BaseLightsController):
             log.warning(f"AstroPixelsDriver not ready, ignored: {cmd!r}")
             return False
         try:
-            self._serial.write(cmd.encode('ascii'))
+            with self._lock:
+                self._serial.write(cmd.encode('ascii'))
             log.debug(f"AstroPixels+ TX: {cmd!r}")
             return True
         except Exception as e:

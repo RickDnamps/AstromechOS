@@ -1290,6 +1290,17 @@ function switchTab(tabId) {
   if (tabId === 'lights') loadLightSequences();
   if (tabId === 'audio') loadAudioCategories();
 
+  // B2/P1 fix 2026-05-16: pause/resume the _domeSim rAF loop on tab
+  // enter/leave. Without this it kept running 60Hz on all tabs (the
+  // dome sim DOM is display:none but rAF doesn't auto-pause for that).
+  if (typeof _domeSim !== 'undefined') {
+    if (tabId === 'lights') {
+      if (_domeSim.resume) _domeSim.resume();
+    } else {
+      if (_domeSim.pause)  _domeSim.pause();
+    }
+  }
+
   // Stop VESC fast poll when leaving settings/vesc panel
   if (tabId !== 'settings') {
     _stopVescTabPoll();
@@ -1861,6 +1872,12 @@ const _domeSim = (() => {
   let _mode = 'random';
   let _lastShort = 0;
   let _running = false;
+  // B2/P1 fix 2026-05-16: pause/resume gate. Without this the rAF
+  // loop kept firing 60Hz forever (~24k style writes/sec across 198
+  // dots) while the operator was on Drive/Audio/etc. — `display:none`
+  // does NOT auto-pause rAF (only browser-tab-hidden does). Mirrors
+  // the existing _chorMon pattern (L2326).
+  let _active = false;
   const _textState = {
     'fld-top': { buf:null, scroll:0, color:'#00ffea', active:false },
     'fld-bot': { buf:null, scroll:0, color:'#00aaff', active:false },
@@ -2050,6 +2067,10 @@ const _domeSim = (() => {
   };
 
   function _loop() {
+    // B2/P1 fix 2026-05-16: bail early when paused (operator not on
+    // Lights tab). Without this, 60Hz loop keeps writing styles on
+    // hidden DOM nodes for nothing.
+    if (!_active) return;
     _tick++;
     if (_mode === 'short') {
       if (_tick - _lastShort >= 3) { _modes.short(_tick); _lastShort = _tick; }
@@ -2073,7 +2094,11 @@ const _domeSim = (() => {
   return {
     /** Call once when the lights tab first loads */
     init() {
-      if (_running) return;
+      if (_running) {
+        // Already initialised; just resume the rAF loop if paused.
+        if (!_active) { _active = true; requestAnimationFrame(_loop); }
+        return;
+      }
       // Build dot grids
       Object.entries(CFG).forEach(([id, c]) => {
         const e = document.getElementById(id);
@@ -2090,7 +2115,18 @@ const _domeSim = (() => {
         }
       });
       _running = true;
+      _active  = true;
       _loop();
+    },
+    /** B2/P1 fix 2026-05-16: stop the rAF loop. Called by switchTab
+     *  when the operator leaves the Lights tab. */
+    pause() { _active = false; },
+    /** Resume the rAF loop. Called by switchTab when re-entering
+     *  Lights. Safe to call if already active (no double-loop). */
+    resume() {
+      if (!_running || _active) return;
+      _active = true;
+      requestAnimationFrame(_loop);
     },
 
     /** Set animation mode from a mode number (from playAnimation) */
