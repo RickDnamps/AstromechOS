@@ -4590,13 +4590,16 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   border-radius: 4px;
   color: var(--text);
   font-family: var(--font);
-  font-size: 13px;
-  letter-spacing: 3px;
-  padding: 10px 12px;
+  /* WOW polish 2026-05-15: bigger font + tracking so the password
+   * dots look chunky and confident, not whisper-tiny. */
+  font-size: 22px;
+  letter-spacing: 8px;
+  padding: 14px 16px;
   outline: none;
   text-align: center;
   transition: border-color 0.2s;
   box-sizing: border-box;
+  line-height: 1.2;
 }
 .admin-pwd-input:focus { border-color: var(--blue); box-shadow: 0 0 8px rgba(var(--blue-rgb),0.2); }
 .admin-pwd-error {
