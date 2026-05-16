@@ -924,13 +924,22 @@ class BTControllerDriver:
         # second 'press' on a held/bouncy button would STOP the choreo
         # that the first press just started. User symptom: 'press A,
         # YeahShow2 starts, sound briefly, then stops dead'.
-        # Track per-canonical-code state, fire actions on rising edge
-        # only. Don't update on EV_KEY value=2 (autorepeat synth) —
-        # the physical button is still held, prev state shouldn't flip.
-        edge_key = code_names[0] if code_names else None
-        prev_pressed = self._prev_btns.get(edge_key, False) if edge_key else False
+        # Track per-scancode state, fire actions on rising edge only.
+        # Key by event.code (integer scancode) — audit L1 2026-05-16:
+        # ecodes.KEY ordering isn't guaranteed stable across kernel /
+        # python-evdev versions, so code_names[0] could flip within a
+        # session if evdev re-enumerates. event.code is the canonical
+        # stable id.
+        # Don't update on EV_KEY value=2 (autorepeat synth) — the
+        # physical button is still held, prev state shouldn't flip.
+        # Known limitation (audit L2): if value=2 arrives without a
+        # preceding value=1 (mid-press evdev reconnect), the button
+        # won't fire until released+repressed. Safe failure mode (no
+        # spurious fire) — don't "fix" by treating value=2 as pressed.
+        edge_key = event.code
+        prev_pressed = self._prev_btns.get(edge_key, False)
         rising_edge  = pressed and not prev_pressed
-        if edge_key and event.value in (0, 1):
+        if event.value in (0, 1):
             self._prev_btns[edge_key] = pressed
 
         log.debug(
@@ -1032,7 +1041,9 @@ class BTControllerDriver:
             return
         try:
             # Lazy import to dodge circular import at module load time.
-            from master.api.shortcuts_bp import dispatch_action, _state_dict
+            from master.api.shortcuts_bp import (
+                dispatch_action, _state_dict, _persist_state,
+            )
             # 2026-05-16 fix: read PREVIOUS state from the shared
             # reg.shortcut_states dict (same store shortcut buttons use)
             # and pass it to dispatch_action. Without this, current
@@ -1042,7 +1053,8 @@ class BTControllerDriver:
             # every time and never closed it. User symptom: 'arm goes
             # out, re-press → arm stays out'. State key is the BT sid
             # ('btmap:<mapping_id>') so it doesn't collide with shortcut
-            # ids; multiple BT mappings to the same arm get independent
+            # ids (12-hex tokens) — audit confirmed no collision risk;
+            # multiple BT mappings to the same arm get independent
             # state (intentional — each button is a self-contained
             # toggle, last action wins on the hardware).
             state = _state_dict()
@@ -1057,6 +1069,18 @@ class BTControllerDriver:
                 # treated as 'currently on' (which would mean the
                 # toggle-stop branch fires before the start branch).
                 state[sid] = 'off' if new_state == 'fired' else new_state
+                # Audit M1 2026-05-16: persist to shortcuts.json so a
+                # Master reboot doesn't reset arm/panel toggle state to
+                # 'off' (which would compute open→OPEN again on the
+                # first post-reboot press, even though the hardware is
+                # already physically out). Mirror shortcuts_bp's
+                # _trigger_shortcut_impl persist call. Skip for 'fired'
+                # transients (no point persisting one-shot states).
+                if new_state != 'fired':
+                    try:
+                        _persist_state()
+                    except OSError as e:
+                        log.warning("BT custom mapping state persist failed: %s", e)
                 log.info("BT custom mapping fired: %s/%s → %s (was %s)",
                          a_type, a_target, new_state, current)
         except Exception:
