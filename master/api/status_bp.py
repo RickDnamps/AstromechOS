@@ -360,6 +360,7 @@ def get_status():
         'audio_playing':     reg.audio_playing,
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
+        'kids_speed_limit':  float(getattr(reg, 'kids_speed_limit', 0.5)),
         'estop_active':      reg.estop_active,
         # Audit finding Safety L-5 2026-05-15: surface stow_in_progress
         # so the frontend can swap the E-STOP button text to

@@ -49,7 +49,15 @@
 </head>
 <body>
 
-<div id="estop-overlay" role="alert" aria-live="assertive" aria-label="Emergency stop overlay"></div>
+<div id="estop-overlay" role="alert" aria-live="assertive" aria-label="Emergency stop overlay">
+  <!-- WOW polish D5 2026-05-15: prompt inside the red flashing border
+       so a novice operator knows what to do. Hidden unless E-STOP is
+       active (CSS .active class on overlay). -->
+  <div class="estop-prompt">
+    <div class="estop-prompt-title">EMERGENCY STOP ENGAGED</div>
+    <div class="estop-prompt-sub">Press <b>RESET E-STOP</b> below to re-arm drive</div>
+  </div>
+</div>
 
 <!-- ================================================================
      HEADER — Fixed holographic bar
@@ -353,6 +361,21 @@
     <div id="vesc-safety-banner" class="vesc-safety-banner" style="display:none">
       <span class="vesc-safety-icon">⚠</span>
       <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
+    </div>
+
+    <!-- WOW polish 2026-05-15: persistent mode badges strip. Visible
+         whenever bench, kids, or child-lock is active so the operator
+         can never forget the current state. Hidden when normal+safe. -->
+    <div id="drive-mode-strip" class="drive-mode-strip" style="display:none">
+      <span id="mode-bench" class="mode-pill mode-bench" style="display:none">
+        <span class="mode-pill-icon">🛡</span> BENCH — VESC bypass active
+      </span>
+      <span id="mode-kids" class="mode-pill mode-kids" style="display:none">
+        <span class="mode-pill-icon">👶</span> KIDS MODE — speed capped at <span id="mode-kids-pct">50</span>%
+      </span>
+      <span id="mode-lock" class="mode-pill mode-lock" style="display:none">
+        <span class="mode-pill-icon">🔒</span> CHILD LOCK — drive blocked, dome+sounds OK
+      </span>
     </div>
 
     <div class="drive-main">

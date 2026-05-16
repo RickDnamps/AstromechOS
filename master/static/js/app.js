@@ -1463,6 +1463,17 @@ class VirtualJoystick {
     this.y = Math.max(-1, Math.min(1, dy / maxR));
 
     this.knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
+    // WOW polish D3 2026-05-15: knob color gradient based on deflection
+    // magnitude. Visual intensity feedback — operator immediately sees
+    // "I'm at 80% throttle" vs "I'm at 10%". Green=low, amber=mid,
+    // red=max. Applies to both joysticks (propulsion + dome).
+    const magnitude = Math.min(1, Math.hypot(this.x, this.y));
+    let knobColor;
+    if (magnitude < 0.33)      knobColor = 'var(--green, #00cc66)';
+    else if (magnitude < 0.66) knobColor = 'var(--amber, #ffaa44)';
+    else                       knobColor = 'var(--red, #ff2244)';
+    this.knob.style.backgroundColor = knobColor;
+    this.knob.style.boxShadow = `0 0 ${8 + magnitude * 16}px ${knobColor}`;
     const now = performance.now();
     if (now - this._lastSend >= this._THROTTLE_MS) {
       this._lastSend = now;
@@ -1495,6 +1506,10 @@ class VirtualJoystick {
     this.y = 0;
     this.ring.classList.remove('active');
     this.knob.style.transform = 'translate(-50%, -50%)';
+    // WOW polish D3: reset the gradient color on release so the knob
+    // visually returns to "neutral" state instead of staying red.
+    this.knob.style.backgroundColor = '';
+    this.knob.style.boxShadow = '';
     this.onStop();
     if (this._valXId) { const v = el(this._valXId); if (v) v.textContent = '0.00'; }
     if (this._valYId) { const v = el(this._valYId); if (v) v.textContent = '0.00'; }
@@ -6440,6 +6455,29 @@ class StatusPoller {
     document.body.classList.toggle('drive-ramping', !!data.drive_ramp_active);
     document.body.classList.toggle('dome-ramping',  !!data.dome_ramp_active);
 
+    // WOW polish 2026-05-15 (D1 + D2): persistent mode badges so the
+    // operator can never forget which mode is active. Show ONLY when
+    // a non-normal mode is active — invisible during normal+safe.
+    const strip = el('drive-mode-strip');
+    const benchPill = el('mode-bench');
+    const kidsPill  = el('mode-kids');
+    const lockPill  = el('mode-lock');
+    if (strip) {
+      const bench = !!data.vesc_bench_mode;
+      const kids  = data.lock_mode === 1;
+      const lock  = data.lock_mode === 2;
+      const anyMode = bench || kids || lock;
+      strip.style.display = anyMode ? 'flex' : 'none';
+      if (benchPill) benchPill.style.display = bench ? 'inline-flex' : 'none';
+      if (kidsPill)  kidsPill.style.display  = kids  ? 'inline-flex' : 'none';
+      if (lockPill)  lockPill.style.display  = lock  ? 'inline-flex' : 'none';
+      if (kids && data.kids_speed_limit !== undefined) {
+        const pct = Math.round((data.kids_speed_limit ?? 0.5) * 100);
+        const pctEl = el('mode-kids-pct');
+        if (pctEl) pctEl.textContent = pct;
+      }
+    }
+
     // Audit finding Safety L-5 2026-05-15: surface stow_in_progress
     // on the E-STOP button text. While the safe-home is mid-stow,
     // the button shows STOWING… so the operator doesn't think reset
@@ -6513,8 +6551,14 @@ class StatusPoller {
       : '--V';
     if (st) {
       if (data.vesc_temp != null) {
-        st.textContent = data.vesc_temp.toFixed(0) + '°C';
-        st.style.color = data.vesc_temp < 50 ? 'var(--text-dim)' : data.vesc_temp < 70 ? 'var(--orange)' : 'var(--red)';
+        // WOW polish D4 2026-05-15: thermometer icon for proactive
+        // thermal awareness. Glyph swaps based on threshold so
+        // operator sees "🌡 65°C" not just "65°C" — easier to spot
+        // a warning in peripheral vision.
+        const t = data.vesc_temp;
+        const icon = t < 50 ? '' : (t < 70 ? '🌡 ' : '🔥 ');
+        st.textContent = icon + t.toFixed(0) + '°C';
+        st.style.color = t < 50 ? 'var(--text-dim)' : t < 70 ? 'var(--orange)' : 'var(--red)';
       } else {
         st.textContent = '--°C';
         st.style.color = 'var(--text-dim)';

@@ -1252,7 +1252,9 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   transform: translate(-50%, -50%);
   pointer-events: none;
   box-shadow: 0 0 16px rgba(var(--blue-rgb), 0.5), inset 0 2px 4px rgba(255,255,255,0.2);
-  transition: box-shadow 0.1s;
+  /* WOW polish D3 2026-05-15: smooth color transition during deflection
+   * so the green→amber→red gradient feels alive, not snappy. */
+  transition: box-shadow 0.12s, background-color 0.15s;
 }
 
 .joystick-ring.active .joystick-knob {
@@ -3961,6 +3963,91 @@ select.input-text option { background: var(--input-option); }
   background: rgba(0, 204, 102, 0.12);
   color: var(--green, #00cc66);
   border: 1px solid rgba(0, 204, 102, 0.4);
+}
+
+/* WOW polish D1+D2 2026-05-15: persistent mode badges strip on Drive.
+ * Visible only when bench / kids / child-lock is active. Operator can
+ * never forget the current mode = no surprises during demos. */
+.drive-mode-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.mode-pill-icon { font-size: 13px; }
+.mode-bench {
+  color: var(--amber, #ffaa44);
+  border-color: var(--amber, #ffaa44);
+  background: rgba(255, 170, 68, 0.08);
+  animation: mode-bench-pulse 2.4s ease-in-out infinite;
+}
+.mode-kids {
+  color: var(--green, #00cc66);
+  border-color: var(--green, #00cc66);
+  background: rgba(0, 204, 102, 0.08);
+}
+.mode-lock {
+  color: var(--red, #ff2244);
+  border-color: var(--red, #ff2244);
+  background: rgba(255, 34, 68, 0.08);
+}
+@keyframes mode-bench-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 170, 68, 0.4); }
+  50%      { box-shadow: 0 0 0 5px rgba(255, 170, 68, 0); }
+}
+
+/* WOW polish D5 2026-05-15: E-STOP overlay prompt — centered text
+ * inside the red border so novice operator knows next step. */
+.estop-prompt {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid var(--red, #ff2244);
+  border-radius: 10px;
+  padding: 16px 28px;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+#estop-overlay.active .estop-prompt {
+  opacity: 1;
+}
+.estop-prompt-title {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--red, #ff2244);
+  margin-bottom: 6px;
+  text-shadow: 0 0 10px rgba(255, 34, 68, 0.6);
+}
+.estop-prompt-sub {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text, #fff);
+  opacity: 0.85;
+}
+.estop-prompt-sub b {
+  color: var(--amber, #ffaa44);
+  font-weight: 700;
 }
 
 /* WOW polish 2026-05-15: drag-active upload zone — green glow,
