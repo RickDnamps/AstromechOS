@@ -141,6 +141,19 @@ def _clamp_speed(val: int) -> int:
     return max(_SPEED_MIN, min(_SPEED_MAX, val))
 
 
+def _safe_int(v, default: int) -> int:
+    """B3 fix 2026-05-16: defensive int() — a hand-edited or corrupted
+    angles JSON with `"open": "x"` used to raise ValueError inside
+    _read_panels_cfg which crashed GET /servo/settings with 500 →
+    the entire Calibration sub-panel became unreachable until the
+    file was fixed by SSH. Now falls back to the default silently and
+    the bad value gets normalized on next save."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
 def _read_panels_cfg() -> dict:
     """Returns {'panels': {name: {'label': str, 'open': int, 'close': int, 'speed': int}}}"""
     dome_json: dict = {}
@@ -156,22 +169,26 @@ def _read_panels_cfg() -> dict:
     except Exception:
         pass
 
+    # Defensive in case the loaded JSON isn't a dict (e.g. file is just `null`)
+    if not isinstance(dome_json, dict): dome_json = {}
+    if not isinstance(body_json, dict): body_json = {}
+
     panels = {}
     for name in DOME_SERVOS:
-        j = dome_json.get(name, {})
+        j = dome_json.get(name, {}) if isinstance(dome_json.get(name), dict) else {}
         panels[name] = {
-            'label': j.get('label', name),
-            'open':  _clamp(int(j.get('open',  _DEFAULT_OPEN))),
-            'close': _clamp(int(j.get('close', _DEFAULT_CLOSE))),
-            'speed': _clamp_speed(int(j.get('speed', _DEFAULT_SPEED))),
+            'label': str(j.get('label', name))[:40],
+            'open':  _clamp(_safe_int(j.get('open',  _DEFAULT_OPEN),  _DEFAULT_OPEN)),
+            'close': _clamp(_safe_int(j.get('close', _DEFAULT_CLOSE), _DEFAULT_CLOSE)),
+            'speed': _clamp_speed(_safe_int(j.get('speed', _DEFAULT_SPEED), _DEFAULT_SPEED)),
         }
     for name in BODY_SERVOS:
-        j = body_json.get(name, {})
+        j = body_json.get(name, {}) if isinstance(body_json.get(name), dict) else {}
         panels[name] = {
-            'label': j.get('label', name),
-            'open':  _clamp(int(j.get('open',  _DEFAULT_OPEN))),
-            'close': _clamp(int(j.get('close', _DEFAULT_CLOSE))),
-            'speed': _clamp_speed(int(j.get('speed', _DEFAULT_SPEED))),
+            'label': str(j.get('label', name))[:40],
+            'open':  _clamp(_safe_int(j.get('open',  _DEFAULT_OPEN),  _DEFAULT_OPEN)),
+            'close': _clamp(_safe_int(j.get('close', _DEFAULT_CLOSE), _DEFAULT_CLOSE)),
+            'speed': _clamp_speed(_safe_int(j.get('speed', _DEFAULT_SPEED), _DEFAULT_SPEED)),
         }
     return {'panels': panels}
 
@@ -209,14 +226,34 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
         try:
             with open(filepath) as f:
                 existing = json.load(f)
+            if not isinstance(existing, dict):
+                raise json.JSONDecodeError("not a dict at top level", "", 0)
         except (OSError, json.JSONDecodeError) as e:
-            log.warning("angles file unreadable (%s) — starting fresh: %s", filepath, e)
+            # E12 fix 2026-05-16: was starting with existing={} which
+            # meant a per-HAT save (subset of 16 servos) would WIPE all
+            # the other HATs' calibration from disk → cascading data
+            # loss after one corruption event. Quarantine the bad file
+            # to `.broken-<ts>` and refuse the save so operator can
+            # recover manually. The lock is released by the caller.
+            import time as _time
+            broken_path = f"{filepath}.broken-{int(_time.time())}"
+            try:
+                os.replace(filepath, broken_path)
+                log.error("angles file %s corrupted (%s) — quarantined to %s",
+                          filepath, e, broken_path)
+            except OSError:
+                log.exception("failed to quarantine corrupted angles file %s", filepath)
+            raise RuntimeError(
+                f"angles file corrupted; quarantined to {broken_path}. "
+                f"Restore from backup or restart Master to regenerate defaults."
+            )
     for name, vals in subset.items():
+        prev = existing.get(name) if isinstance(existing.get(name), dict) else {}
         existing[name] = {
-            'label': str(vals.get('label', existing.get(name, {}).get('label', name)))[:40],
-            'open':  _clamp(int(vals.get('open',  existing.get(name, {}).get('open',  110)))),
-            'close': _clamp(int(vals.get('close', existing.get(name, {}).get('close',  20)))),
-            'speed': _clamp_speed(int(vals.get('speed', existing.get(name, {}).get('speed', 10)))),
+            'label': str(vals.get('label', prev.get('label', name)))[:40],
+            'open':  _clamp(_safe_int(vals.get('open',  prev.get('open',  110)), 110)),
+            'close': _clamp(_safe_int(vals.get('close', prev.get('close',  20)),  20)),
+            'speed': _clamp_speed(_safe_int(vals.get('speed', prev.get('speed', 10)), 10)),
         }
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     tmp = filepath + '.tmp'
@@ -237,6 +274,14 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
     os.replace(tmp, filepath)
 
 
+class AnglesCorruptedError(RuntimeError):
+    """E12 fix 2026-05-16: signaled when an angles JSON file is
+    corrupted and was quarantined. Caller (save endpoint) should
+    return 503 with the message so operator sees a clear error
+    instead of a silent partial save."""
+    pass
+
+
 def _sync_angles_json(panels: dict) -> None:
     """Writes dome_angles.json (Master) and servo_angles.json (Slave via scp).
     Notifies both drivers to reload angles immediately — no service restart needed.
@@ -244,6 +289,9 @@ def _sync_angles_json(panels: dict) -> None:
     B-205 (remaining tabs audit 2026-05-15): the whole read+write+SCP
     cycle runs under _angles_lock so concurrent /servo/settings +
     /servo/arms posts can't lose each other's label changes.
+
+    Raises AnglesCorruptedError if either file was quarantined —
+    save endpoint should respond 503.
     """
     with _angles_lock:
         try:
@@ -252,11 +300,15 @@ def _sync_angles_json(panels: dict) -> None:
                 reg.dome_servo.reload()
         except OSError as e:
             log.warning("Failed to write dome_angles.json: %s", e)
+        except RuntimeError as e:
+            raise AnglesCorruptedError(str(e)) from e
         try:
             _update_angles_file(_SLAVE_ANGLES_FILE, panels, BODY_SERVOS)
         except OSError as e:
             log.warning("Failed to write servo_angles.json: %s", e)
             return
+        except RuntimeError as e:
+            raise AnglesCorruptedError(str(e)) from e
     # B-225 (remaining tabs audit 2026-05-15): SCP runs in a daemon
     # thread now. Was blocking the Flask request thread for up to 5s;
     # rapid Calibration saves (operator iterating angles) stacked
@@ -329,8 +381,40 @@ def _safe_position(raw) -> float | None:
     return max(0.0, min(1.0, v))
 
 
+# B2/E2 fix 2026-05-16: centralized safety gate for servo motion
+# endpoints. Was missing on body_open/close/move + dome_open/close/move
+# → operator clicking OPEN during E-STOP saw toast "OK" while physical
+# servo refused (dome) OR moved anyway (body — no freeze flag in
+# slave body_servo driver). Defense-in-depth: backend refuses 403,
+# frontend doesn't need to know.
+#
+# Per-axis: dome endpoints also block if choreo_uses_dome (operator
+# would race the choreo's dome events). Body endpoints don't have
+# an equivalent per-axis choreo flag since 'body' tracks are panel
+# state, not joystick — but we still block on E-STOP + stow.
+def _check_servo_safety(side: str) -> tuple[bool, tuple]:
+    """Return (ok, (response, status)) — caller uses:
+       safe, resp = _check_servo_safety('dome')
+       if not safe: return resp
+    """
+    if getattr(reg, 'estop_active', False):
+        return False, (jsonify({'error': 'E-STOP engaged — release before moving servos'}), 403)
+    if getattr(reg, 'stow_in_progress', False):
+        return False, (jsonify({'error': 'stow in progress — wait until complete'}), 503)
+    if side == 'dome' and reg.choreo is not None:
+        try:
+            st = reg.choreo.get_status() or {}
+            if st.get('playing') and st.get('uses_dome'):
+                return False, (jsonify({'error': 'choreo using dome — stop choreo first'}), 503)
+        except Exception:
+            pass
+    return True, (None, 0)
+
+
 @servo_bp.post('/body/move')
 def body_move():
+    safe, resp = _check_servo_safety('body')
+    if not safe: return resp
     body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name     = body.get('name', '')
     if not name:
@@ -353,6 +437,8 @@ def body_move():
 
 @servo_bp.post('/body/open')
 def body_open():
+    safe, resp = _check_servo_safety('body')
+    if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
@@ -371,6 +457,8 @@ def body_open():
 
 @servo_bp.post('/body/close')
 def body_close():
+    safe, resp = _check_servo_safety('body')
+    if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
@@ -473,6 +561,8 @@ def _launch_arm_sequences(arms_cfg: dict, cfg: dict, action: str) -> None:
 
 @servo_bp.post('/body/open_all')
 def body_open_all():
+    safe, resp = _check_servo_safety('body')
+    if not safe: return resp
     cfg     = _read_panels_cfg()
     arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
@@ -485,6 +575,8 @@ def body_open_all():
 
 @servo_bp.post('/body/close_all')
 def body_close_all():
+    safe, resp = _check_servo_safety('body')
+    if not safe: return resp
     cfg     = _read_panels_cfg()
     arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
@@ -511,6 +603,8 @@ def dome_state():
 
 @servo_bp.post('/dome/move')
 def dome_move():
+    safe, resp = _check_servo_safety('dome')
+    if not safe: return resp
     body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name     = body.get('name', '')
     if not name:
@@ -531,6 +625,8 @@ def dome_move():
 
 @servo_bp.post('/dome/open')
 def dome_open():
+    safe, resp = _check_servo_safety('dome')
+    if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
@@ -548,6 +644,8 @@ def dome_open():
 
 @servo_bp.post('/dome/close')
 def dome_close():
+    safe, resp = _check_servo_safety('dome')
+    if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = body.get('name', '')
     if not name:
@@ -565,6 +663,8 @@ def dome_close():
 
 @servo_bp.post('/dome/open_all')
 def dome_open_all():
+    safe, resp = _check_servo_safety('dome')
+    if not safe: return resp
     if not reg.dome_servo:
         return jsonify({'status': 'ok'})
     cfg = _read_panels_cfg()
@@ -575,6 +675,8 @@ def dome_open_all():
 
 @servo_bp.post('/dome/close_all')
 def dome_close_all():
+    safe, resp = _check_servo_safety('dome')
+    if not safe: return resp
     if not reg.dome_servo:
         return jsonify({'status': 'ok'})
     cfg = _read_panels_cfg()
@@ -626,9 +728,28 @@ def arms_config_save():
         count = max(0, min(_ARM_COUNT_MAX, int(data.get('count', 0))))
     except (TypeError, ValueError):
         return jsonify({'error': 'count must be an integer'}), 400
+    # B1 fix 2026-05-16: validate list shape + per-delay float-ability
+    # BEFORE entering the cfg write loop. Previously, sending
+    # `{"delays":["bad"]}` or `{"servos":"oops"}` reached float()/[i-1]
+    # unguarded → 500 with stack trace to the client.
     servos = data.get('servos', [])
     panels = data.get('panels', [])
     delays = data.get('delays', [])
+    if not isinstance(servos, list):
+        return jsonify({'error': 'servos must be a list'}), 400
+    if not isinstance(panels, list):
+        return jsonify({'error': 'panels must be a list'}), 400
+    if not isinstance(delays, list):
+        return jsonify({'error': 'delays must be a list'}), 400
+    # Pre-validate every delay coercion so we fail fast before holding
+    # the cfg_write_lock (better UX: error returns immediately).
+    for i, raw_delay in enumerate(delays):
+        if isinstance(raw_delay, bool):   # True/False would silently coerce to 1.0/0.0
+            return jsonify({'error': f'delay #{i+1} must be a number, got bool'}), 400
+        try:
+            float(raw_delay)
+        except (TypeError, ValueError):
+            return jsonify({'error': f'delay #{i+1} must be a number, got {raw_delay!r}'}), 400
 
     # Snapshot previous config so we can revert labels for removed arms
     prev = _read_arms_cfg()
@@ -791,9 +912,14 @@ def servo_settings_save():
         if name in _ALL_PANELS and isinstance(vals, dict):
             panels[name] = {
                 'label': _sanitize_label(vals.get('label', name), name),
-                'open':  _clamp(int(vals.get('open',  _DEFAULT_OPEN))),
-                'close': _clamp(int(vals.get('close', _DEFAULT_CLOSE))),
-                'speed': _clamp_speed(int(vals.get('speed', _DEFAULT_SPEED))),
+                'open':  _clamp(_safe_int(vals.get('open',  _DEFAULT_OPEN),  _DEFAULT_OPEN)),
+                'close': _clamp(_safe_int(vals.get('close', _DEFAULT_CLOSE), _DEFAULT_CLOSE)),
+                'speed': _clamp_speed(_safe_int(vals.get('speed', _DEFAULT_SPEED), _DEFAULT_SPEED)),
             }
-    _write_panels_cfg(panels)
+    try:
+        _write_panels_cfg(panels)
+    except AnglesCorruptedError as e:
+        # E12: file was quarantined, refuse the save instead of writing
+        # a fresh dict that would have wiped non-edited servos.
+        return jsonify({'error': str(e), 'recoverable': False}), 503
     return jsonify(_read_panels_cfg())
