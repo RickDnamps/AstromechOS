@@ -2519,13 +2519,13 @@ const behaviorPanel = (() => {
 
       Promise.all([
         api('/choreo/list'),
-        api('/audio/categories')
+        api('/audio/index')   // P2: was /audio/categories — same data, drop dupe endpoint
       ]).then(([choreoData, audioData]) => {
         const chorFiles = (Array.isArray(choreoData) ? choreoData : []).map(f => f.name || f);
         _populateSel('beh-startup-choreo', chorFiles, d.startup_choreo);
         _populateSel('beh-choreo-add-sel', chorFiles, null);
 
-        const cats = (audioData.categories || []).map(c => c.name || c);
+        const cats = Object.keys(audioData?.categories || {});
         _populateSel('beh-audio-category', cats, d.idle_audio_category);
 
         _setSelVal('beh-idle-mode', d.idle_mode);
@@ -3899,28 +3899,23 @@ class AudioBoard {
   }
 
   async loadCategories() {
-    // F-3: sync the visual toggle state from the persisted modes on each
-    // category-load (covers page reload, tab switch back, BT
-    // reconnect). Cheap, idempotent — just toggles a class.
     el('now-playing-repeat')?.classList.toggle('active', this._repeat);
     el('now-playing-auto')?.classList.toggle('active', this._autoRandom);
 
-    const [data, indexData] = await Promise.all([
-      api('/audio/categories'),
-      api('/audio/index'),
-    ]);
-    if (indexData?.categories) {
-      this._fullIndex = indexData.categories;
-      this._sound2cat = null;   // F-11: invalidate reverse-index cache
-    }
-    if (!data || !data.categories) return;
+    // P2 fix 2026-05-16: drop the parallel /audio/categories fetch —
+    // /audio/index already returns the same category names + we can
+    // derive counts client-side from each value's length. Saves one
+    // Flask roundtrip per loadCategories() call (~4 call sites).
+    const indexData = await api('/audio/index');
+    if (!indexData?.categories) return;
+    this._fullIndex = indexData.categories;
+    this._sound2cat = null;   // F-11: invalidate reverse-index cache
+
     const wrap = el('audio-categories');
     if (!wrap) return;
-
-    // Accepte les deux formats : [{name, count}] ou {name: count}
-    const cats = Array.isArray(data.categories)
-      ? data.categories
-      : Object.entries(data.categories).map(([name, count]) => ({ name, count }));
+    const cats = Object.entries(this._fullIndex).map(
+      ([name, sounds]) => ({ name, count: Array.isArray(sounds) ? sounds.length : 0 })
+    );
 
     // F-1 + F-2 fix: build DOM with createElement instead of innerHTML +
     // inline onclick. The category name comes from the server-side index
@@ -4298,6 +4293,16 @@ class AudioBoard {
       const cat = this._getCatForSound(name);
       if (cat) displayName = `${this._ICONS[cat] || '🔊'} ${name}`;
     }
+    // WOW M6-W fix 2026-05-16: when idle, show the active category's
+    // emoji + READY hint instead of bare 'IDLE'. Gives the
+    // now-playing bar a useful visual anchor when nothing's playing
+    // (would otherwise be 10% screen of dead space).
+    if (!active) {
+      const cat = this._currentCat;
+      const icon = (cat && this._ICONS[cat]) || '♪';
+      const catLabel = (cat && this._CAT_LABELS[cat]) || '';
+      displayName = catLabel ? `${icon} READY · ${catLabel}` : '♪ READY';
+    }
     if (text) {
       text.textContent = displayName;
       // F-15: long filenames get ellipsized by `now-playing-text` CSS
@@ -4469,29 +4474,53 @@ class AudioBoard {
 
     this._uploadStatus(`Uploading ${queued.length} file(s)…`, 'info');
     let ok = 0;
-    const renamed = [];   // {original, final}  — server auto-resolved a collision
-    const failed = [];    // F-7: keep per-file reason
-    for (const file of queued) {
+    const renamed = [];
+    const failed = [];
+    // L4-W fix 2026-05-15: XMLHttpRequest for upload progress events.
+    // fetch() doesn't expose progress for the request body (only the
+    // response). On a local LAN MP3 upload is 500ms-2s, well above the
+    // 300ms threshold from feedback_loading_states.md where progress
+    // feedback is justified.
+    const uploadOne = (file, idx) => new Promise(resolve => {
       const form = new FormData();
       form.append('file', file);
       form.append('category', cat);
-      try {
-        const res = await fetch((window.R2D2_API_BASE || '') + '/audio/upload', { method: 'POST', body: form });
-        let d = null;
-        try { d = await res.json(); } catch {}
-        if (res.ok && d && d.ok) {
-          ok++;
-          // Server auto-renamed because the requested name was taken.
-          // Surface this so the operator notices ("happy.mp3 → HAPPY_2").
-          if (d.renamed) renamed.push({ original: d.original, final: d.filename });
-        } else {
-          failed.push({
-            name:   file.name,
-            reason: (d && d.error) || `HTTP ${res.status}`,
-          });
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', (window.R2D2_API_BASE || '') + '/audio/upload');
+      if (typeof adminGuard !== 'undefined') {
+        const tok = adminGuard.getToken && adminGuard.getToken();
+        if (tok) xhr.setRequestHeader('X-Admin-Pw', tok);
+      }
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          this._uploadStatus(
+            `Uploading ${idx + 1}/${queued.length}: ${file.name} — ${pct}%`,
+            'info');
         }
-      } catch (e) {
-        failed.push({ name: file.name, reason: `network: ${e.message || e}` });
+      };
+      xhr.onload = () => {
+        let d = null;
+        try { d = JSON.parse(xhr.responseText); } catch {}
+        if (xhr.status >= 200 && xhr.status < 300 && d && d.ok) {
+          resolve({ ok: true, d });
+        } else {
+          resolve({ ok: false, reason: (d && d.error) || `HTTP ${xhr.status}` });
+        }
+      };
+      xhr.onerror = () => resolve({ ok: false, reason: 'network error' });
+      xhr.send(form);
+    });
+    for (let i = 0; i < queued.length; i++) {
+      const file = queued[i];
+      const result = await uploadOne(file, i);
+      if (result.ok) {
+        ok++;
+        if (result.d.renamed) {
+          renamed.push({ original: result.d.original, final: result.d.filename });
+        }
+      } else {
+        failed.push({ name: file.name, reason: result.reason });
       }
     }
     if (ok) {
@@ -7593,6 +7622,7 @@ async function saveAudioChannels() {
 // ─── Sound Profiles ───────────────────────────────────────────────────────────
 const soundProfiles = {
   _NAMES: ['convention', 'maison', 'exterieur'],
+  _saved: {},   // L2-W: last-saved values per profile, for dirty-check
 
   async load() {
     try {
@@ -7605,11 +7635,32 @@ const soundProfiles = {
     const defaults = { convention: 70, maison: 85, exterieur: 95 };
     for (const name of this._NAMES) {
       const vol = profiles?.[name] ?? defaults[name];
+      this._saved[name] = vol;
       const slider = el(`profile-${name}-vol`);
       const label  = el(`profile-${name}-val`);
-      if (slider) { slider.value = vol; syncHoloSlider(slider); }
+      if (slider) {
+        slider.value = vol;
+        syncHoloSlider(slider);
+        // L2-W fix 2026-05-15: wire dirty-check on input. Operator
+        // dragging a profile slider sees the row glow amber until
+        // SAVE persists. Prevents 'I changed it but forgot to save'.
+        if (!slider.dataset.dirtyWired) {
+          slider.dataset.dirtyWired = '1';
+          slider.addEventListener('input', () => this.checkDirty(name));
+        }
+      }
       if (label)  { label.textContent = vol + '%'; }
+      this.checkDirty(name);
     }
+  },
+
+  checkDirty(name) {
+    const slider = el(`profile-${name}-vol`);
+    const row    = slider?.closest('.profile-row');
+    if (!row) return;
+    const cur = parseInt(slider.value, 10);
+    const dirty = (cur !== this._saved[name]);
+    row.classList.toggle('profile-dirty', dirty);
   },
 
   async save(name) {
@@ -7622,6 +7673,8 @@ const soundProfiles = {
     if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
     const d = await api('/settings/config', 'POST', { [`audio.profile_${name}`]: vol });
     if (d?.status === 'ok') {
+      this._saved[name] = vol;       // L2-W: persist baseline
+      this.checkDirty(name);          // clears the dirty class
       toast(`Profile ${name}: ${vol}% saved`, 'ok');
       if (status) { status.textContent = `${name}: ${vol}% saved`; status.className = 'settings-status ok'; }
     } else {
@@ -7675,6 +7728,19 @@ const btSpeaker = {
 
   _render(d) {
     const connected = (d.paired || []).find(p => p.connected);
+    // E18 fix 2026-05-16: edge-trigger toast on connect/disconnect.
+    // Operator at a show needs to know mid-set if the BT speaker
+    // drops (audio silently falls back to the Pi's jack output).
+    const wasConnected = !!this._lastConnected;
+    const isConnected  = !!connected;
+    if (wasConnected && !isConnected) {
+      toast('🔇 BT speaker disconnected — audio on Pi jack', 'warn');
+    } else if (!wasConnected && isConnected && this._lastConnected !== undefined) {
+      // Skip the very first refresh (undefined → set) so the operator
+      // doesn't get a 'connected' toast on every page load.
+      toast(`🔊 BT speaker connected: ${connected.name}`, 'ok');
+    }
+    this._lastConnected = isConnected;
     const icon = el('btspk-icon');
     const text = el('btspk-status-text');
     if (icon) icon.textContent = connected ? '🔊' : '🔇';

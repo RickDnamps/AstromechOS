@@ -4600,6 +4600,18 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .status-pill:hover { opacity: 0.85; }
 
+/* WOW L2-W 2026-05-16: profile row dirty indicator. Operator drags
+ * a profile slider and forgets SAVE — small amber accent on the row
+ * + amber border on the slider so unsaved change is unmissable. */
+.profile-row.profile-dirty {
+  background: rgba(255, 170, 68, 0.06);
+  border-left: 2px solid var(--amber, #ffaa44);
+  padding-left: 6px;
+}
+.profile-row.profile-dirty .profile-vol-slider {
+  filter: drop-shadow(0 0 4px rgba(255, 170, 68, 0.5));
+}
+
 /* WOW H1 2026-05-15: currently-playing sound card highlight.
  * Cyan border + pulse so operator sees WHICH card is live in the
  * grid (the now-playing bar at bottom is too small for a glance). */

@@ -42,6 +42,7 @@ import configparser
 import hmac
 import logging
 import os
+import re
 import subprocess
 import threading
 import time
@@ -322,14 +323,22 @@ def _sync_audio_channels(channels: int) -> None:
         log.warning("Failed to write slave.cfg: %s", e)
 
     # SCP to Slave
-    try:
-        subprocess.run(
-            ['scp', slave_cfg_path, f'{slave_host}:{slave_cfg_path}'],
-            timeout=8, check=False, capture_output=True,
-        )
-        log.info("slave.cfg synced to Slave")
-    except Exception as e:
-        log.warning("Failed to SCP slave.cfg: %s", e)
+    # M1 fix 2026-05-16: defensive guard against slave_host containing
+    # whitespace, options, or shell metacharacters. The _resolve_slave_ssh_target
+    # is regex-gated upstream, but belt-and-suspenders: refuse anything that's
+    # not pure user@host.domain form before passing to scp.
+    if not re.match(r'^[A-Za-z0-9_]+(?:@[A-Za-z0-9.\-]+)?$', slave_host):
+        log.warning("Refusing to scp — slave_host has unexpected format: %r", slave_host)
+    else:
+        try:
+            subprocess.run(
+                ['scp', '-o', 'StrictHostKeyChecking=accept-new', '-B',
+                 slave_cfg_path, f'{slave_host}:{slave_cfg_path}'],
+                timeout=8, check=False, capture_output=True,
+            )
+            log.info("slave.cfg synced to Slave")
+        except Exception as e:
+            log.warning("Failed to SCP slave.cfg: %s", e)
 
     # M2 fix 2026-05-15: gate so concurrent saves don't spawn 2 restart
     # threads. First save wins; second updates cfg only (the still-pending
