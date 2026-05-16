@@ -4021,6 +4021,297 @@ select.input-text option { background: var(--input-option); }
   50%      { box-shadow: 0 0 0 5px rgba(255, 170, 68, 0); }
 }
 
+/* WOW polish U1 2026-05-15: universal save-button feedback states.
+ * Applied via withSaveFeedback() — operator gets clear visual of
+ * Saving / Saved ✓ / Failed without parsing toast text. */
+.btn.btn-saving {
+  position: relative;
+  background: rgba(var(--blue-rgb), 0.12);
+  border-color: var(--blue);
+  color: var(--blue);
+  cursor: progress;
+}
+.btn.btn-saving::after {
+  content: '';
+  position: absolute;
+  top: 50%; right: 8px;
+  width: 12px; height: 12px;
+  border: 2px solid var(--blue);
+  border-top-color: transparent;
+  border-radius: 50%;
+  margin-top: -6px;
+  animation: spin 0.7s linear infinite;
+}
+.btn.btn-saved {
+  background: rgba(0, 204, 102, 0.15);
+  border-color: var(--green, #00cc66);
+  color: var(--green, #00cc66);
+  box-shadow: 0 0 14px rgba(0, 204, 102, 0.4);
+}
+.btn.btn-failed {
+  background: rgba(255, 34, 68, 0.15);
+  border-color: var(--red, #ff2244);
+  color: var(--red, #ff2244);
+  animation: btn-failed-shake 0.4s ease-in-out;
+}
+@keyframes btn-failed-shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-4px); }
+  75%      { transform: translateX(4px); }
+}
+
+/* WOW polish H1 2026-05-15: VESC bench mode screaming border on the
+ * settings panel itself when enabled. The Drive tab pill (D1) was
+ * the always-visible reminder; this is the in-settings reinforcement. */
+#spanel-vesc.bench-active {
+  outline: 2px solid var(--red, #ff2244);
+  outline-offset: -2px;
+  border-radius: 6px;
+  background: linear-gradient(135deg,
+    transparent 0%, transparent 49%,
+    rgba(255, 34, 68, 0.04) 50%,
+    transparent 51%, transparent 100%) repeat;
+  background-size: 24px 24px;
+  animation: bench-stripes 4s linear infinite;
+}
+@keyframes bench-stripes {
+  to { background-position: 24px 24px; }
+}
+
+/* WOW polish M1 2026-05-15: Battery preview voltage rows */
+.battery-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0 14px 0;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-data, monospace);
+}
+.battery-preview-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* WOW polish M3 2026-05-15: Camera bitrate hint below sliders */
+.cam-bitrate-hint {
+  margin: 6px 0 12px 0;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-family: var(--font-data, monospace);
+  color: var(--blue, #00aaff);
+  background: rgba(var(--blue-rgb, 0 170 255), 0.06);
+  border-left: 2px solid var(--blue, #00aaff);
+  letter-spacing: 0.8px;
+}
+
+/* WOW polish I1 2026-05-15: Deploy commit info card */
+.deploy-commit-card {
+  margin: 10px 0 14px 0;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: var(--font-data, monospace);
+}
+.deploy-commit-row {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+}
+.deploy-commit-row + .deploy-commit-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  margin-top: 3px;
+}
+.deploy-commit-label {
+  min-width: 80px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.deploy-behind {
+  color: var(--amber, #ffaa44);
+  font-weight: 700;
+}
+
+/* WOW polish X1 2026-05-15: Settings nav section grouping. Visual
+ * hierarchy so the 16 sub-panels feel organized vs alphabet-soup. */
+.settings-nav-section-label {
+  display: block;
+  padding: 14px 14px 4px 14px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--text-dim, #666);
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+}
+.settings-nav-section-label:first-child { padding-top: 6px; }
+
+/* WOW polish X5 2026-05-15: Settings panel loading skeleton —
+ * brief shimmer while lazy-loaded data arrives. */
+.settings-panel-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.settings-panel-loading::before {
+  content: '';
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid var(--blue);
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 8px;
+  animation: spin 0.7s linear infinite;
+}
+
+/* WOW polish I3 2026-05-15: System reboot countdown overlay */
+.reboot-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 9998;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(6px);
+}
+.reboot-overlay.active { display: flex; }
+.reboot-overlay-title {
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--amber, #ffaa44);
+  margin-bottom: 14px;
+  text-shadow: 0 0 12px rgba(255, 170, 68, 0.6);
+}
+.reboot-overlay-sub {
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--text);
+  margin-bottom: 22px;
+  opacity: 0.85;
+}
+.reboot-overlay-countdown {
+  font-size: 56px;
+  font-weight: 700;
+  color: var(--blue, #00aaff);
+  font-family: var(--font-data, monospace);
+  text-shadow: 0 0 18px rgba(0, 170, 255, 0.6);
+  letter-spacing: 4px;
+}
+.reboot-overlay-status {
+  margin-top: 18px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+.reboot-overlay-status.ok    { color: var(--green, #00cc66); }
+.reboot-overlay-status.error { color: var(--red, #ff2244); }
+
+/* WOW polish X3 2026-05-15: Lock mode switcher buttons in the Lock
+ * panel — operator's expectation is to find the mode switch HERE. */
+.lock-mode-switcher {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0 18px 0;
+}
+.lock-mode-btn {
+  padding: 14px 12px;
+  border: 2px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.18s;
+  text-align: center;
+}
+.lock-mode-btn:hover { transform: translateY(-1px); }
+.lock-mode-btn .lock-mode-icon {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+.lock-mode-btn .lock-mode-sub {
+  display: block;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  text-transform: none;
+}
+.lock-mode-btn.active.lock-mode-normal {
+  border-color: var(--green, #00cc66);
+  background: rgba(0, 204, 102, 0.12);
+  color: var(--green, #00cc66);
+  box-shadow: 0 0 12px rgba(0, 204, 102, 0.3);
+}
+.lock-mode-btn.active.lock-mode-kids {
+  border-color: var(--amber, #ffaa44);
+  background: rgba(255, 170, 68, 0.12);
+  color: var(--amber, #ffaa44);
+  box-shadow: 0 0 12px rgba(255, 170, 68, 0.3);
+}
+.lock-mode-btn.active.lock-mode-lock {
+  border-color: var(--red, #ff2244);
+  background: rgba(255, 34, 68, 0.12);
+  color: var(--red, #ff2244);
+  box-shadow: 0 0 12px rgba(255, 34, 68, 0.3);
+}
+
+/* WOW polish X2 2026-05-15: BT scan visual pulse during scan */
+.btn.bt-scanning {
+  background: rgba(0, 170, 255, 0.15);
+  border-color: var(--blue);
+  color: var(--blue);
+  animation: bt-scan-pulse 1.2s ease-in-out infinite;
+}
+@keyframes bt-scan-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(0, 170, 255, 0.5); }
+  50%      { box-shadow: 0 0 0 10px rgba(0, 170, 255, 0); }
+}
+
+/* WOW polish I5+X2 2026-05-15: signal strength SVG bars */
+.signal-bars {
+  display: inline-flex;
+  gap: 1.5px;
+  align-items: flex-end;
+  vertical-align: middle;
+  height: 12px;
+  margin-right: 6px;
+}
+.signal-bar {
+  width: 3px;
+  background: var(--text-dim, #666);
+  border-radius: 1px;
+  opacity: 0.3;
+}
+.signal-bar.lit { opacity: 1; background: var(--green, #00cc66); }
+.signal-bar.weak.lit { background: var(--amber, #ffaa44); }
+.signal-bar.bad.lit  { background: var(--red, #ff2244); }
+.signal-bar-1 { height: 25%; }
+.signal-bar-2 { height: 45%; }
+.signal-bar-3 { height: 70%; }
+.signal-bar-4 { height: 100%; }
+
 /* WOW polish D5 2026-05-15: E-STOP overlay prompt — centered text
  * inside the red border so novice operator knows next step. */
 .estop-prompt {

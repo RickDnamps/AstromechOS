@@ -418,6 +418,80 @@ def get_version():
     return jsonify({'master': _read_version()})
 
 
+@status_bp.get('/system/version')
+def system_version():
+    """WOW polish I1 2026-05-15: rich version info for the Deploy panel.
+    Returns current commit SHA + subject + author date so operator
+    knows what's actually deployed BEFORE clicking UPDATE."""
+    import subprocess
+    repo = SCRIPTS_DIR.parent if SCRIPTS_DIR else None
+    out = {'version': _read_version()}
+    if repo and repo.exists():
+        try:
+            sha = subprocess.run(
+                ['git', '-C', str(repo), 'rev-parse', 'HEAD'],
+                capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            msg = subprocess.run(
+                ['git', '-C', str(repo), 'log', '-1', '--pretty=%s', 'HEAD'],
+                capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            date = subprocess.run(
+                ['git', '-C', str(repo), 'log', '-1', '--pretty=%cd', '--date=relative', 'HEAD'],
+                capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            out.update({'commit': sha, 'message': msg, 'date': date})
+        except Exception:
+            pass
+    return jsonify(out)
+
+
+@status_bp.get('/system/deploy_status')
+@require_admin
+def system_deploy_status():
+    """WOW polish I1 2026-05-15: git fetch + remote SHA comparison so
+    operator sees behind_count BEFORE clicking UPDATE. Cached 60s to
+    avoid hammering GitHub. Returns gracefully if offline."""
+    import subprocess, time as _t
+    repo = SCRIPTS_DIR.parent if SCRIPTS_DIR else None
+    if not repo or not repo.exists():
+        return jsonify({'error': 'repo not found'}), 503
+    cache_key = '_deploy_status_cache'
+    cache = getattr(system_deploy_status, cache_key, None)
+    now = _t.time()
+    if cache and cache.get('expires', 0) > now:
+        return jsonify(cache['value'])
+    out = {}
+    try:
+        subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet'],
+                       capture_output=True, timeout=8)
+        local = subprocess.run(
+            ['git', '-C', str(repo), 'rev-parse', 'HEAD'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        remote = subprocess.run(
+            ['git', '-C', str(repo), 'rev-parse', '@{u}'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        remote_msg = subprocess.run(
+            ['git', '-C', str(repo), 'log', '-1', '--pretty=%s', '@{u}'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        behind = subprocess.run(
+            ['git', '-C', str(repo), 'rev-list', '--count', 'HEAD..@{u}'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        out = {
+            'local_sha': local, 'remote_sha': remote,
+            'remote_msg': remote_msg,
+            'behind_count': int(behind) if behind.isdigit() else 0,
+        }
+    except Exception as e:
+        out = {'error': str(e)}
+    setattr(system_deploy_status, cache_key, {'value': out, 'expires': now + 60})
+    return jsonify(out)
+
+
 @status_bp.post('/system/update')
 @require_admin
 def system_update():

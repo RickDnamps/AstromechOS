@@ -505,6 +505,52 @@ function escapeHtml(s) {
 // API Helper
 // ================================================================
 
+// WOW polish 2026-05-15: universal save-button feedback helper.
+// Wrap any async save: disables the button, shows Saving…, then
+// Saved ✓ pulse, then restores. Failure path shows Failed in red,
+// restores after slightly longer. Operator gets immediate proof of
+// what happened — no more silent "did it work?" anxiety.
+//
+// Usage:
+//   await withSaveFeedback(el('btn-id'), async () => {
+//     const r = await api('/foo', 'POST', body);
+//     if (!r) throw new Error('failed');
+//     return r;
+//   });
+async function withSaveFeedback(btn, asyncFn, opts = {}) {
+  if (!btn) return asyncFn();
+  const origText  = btn.textContent;
+  const wasDisabled = btn.disabled;
+  const savingTxt = opts.saving || 'Saving…';
+  const savedTxt  = opts.saved  || 'Saved ✓';
+  const failedTxt = opts.failed || 'Failed';
+  btn.disabled = true;
+  btn.classList.add('btn-saving');
+  btn.textContent = savingTxt;
+  try {
+    const result = await asyncFn();
+    btn.classList.remove('btn-saving');
+    btn.classList.add('btn-saved');
+    btn.textContent = savedTxt;
+    setTimeout(() => {
+      btn.classList.remove('btn-saved');
+      btn.textContent = origText;
+      btn.disabled = wasDisabled;
+    }, 1400);
+    return result;
+  } catch (e) {
+    btn.classList.remove('btn-saving');
+    btn.classList.add('btn-failed');
+    btn.textContent = failedTxt;
+    setTimeout(() => {
+      btn.classList.remove('btn-failed');
+      btn.textContent = origText;
+      btn.disabled = wasDisabled;
+    }, 1800);
+    throw e;
+  }
+}
+
 async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -911,6 +957,11 @@ class LockManager {
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
       const dlabel = el('drive-lock-label');
       if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][lockMode];
+      // WOW polish X3 2026-05-15: sync the lock-mode-switcher buttons
+      // in Settings → Lock panel so they reflect the actual mode.
+      document.querySelectorAll('.lock-mode-btn').forEach(b => {
+        b.classList.toggle('active', parseInt(b.dataset.mode) === lockMode);
+      });
       // F-5: mirror _applyMode's cleanup for the Kids timer + prev speed.
       // Without this, an external lock-mode change (another tab, BT controller
       // toggle) would leave a dangling _kidsTimer and never restore the user's
@@ -1229,6 +1280,52 @@ function switchSettingsPanel(panelId) {
   if (panelId === 'audio')       { soundProfiles.load(); btSpeaker.refresh(); }
   if (panelId === 'diagnostics') diagPanel.load();
   if (panelId === 'shortcuts')   shortcutsEditor.load();
+  if (panelId === 'battery')     { try { updateBatteryPreview(); } catch {} }
+  if (panelId === 'camera')      { try { updateCameraBitrateHint(); } catch {} }
+  if (panelId === 'deploy')      { try { loadDeployCommitInfo(); } catch {} }
+  if (panelId === 'lock')        {
+    // WOW polish X3: sync mode buttons with current state on panel open.
+    document.querySelectorAll('.lock-mode-btn').forEach(b => {
+      b.classList.toggle('active', parseInt(b.dataset.mode) === (lockMgr._mode ?? 0));
+    });
+  }
+}
+
+// WOW polish I1 2026-05-15: load + render the current commit info
+// in the Deploy panel. Operator sees the deployed SHA + remote SHA
+// + behind count BEFORE deciding to update.
+async function loadDeployCommitInfo() {
+  const cur    = el('deploy-commit-current');
+  const remote = el('deploy-commit-remote');
+  const row    = el('deploy-behind-row');
+  const behind = el('deploy-behind-count');
+  if (cur)    cur.textContent    = 'loading…';
+  if (remote) remote.textContent = 'loading…';
+  try {
+    // /system/version exposes current SHA. /system/deploy_status if it
+    // exists exposes remote — try it; fall back gracefully.
+    const ver = await api('/system/version');
+    if (cur && ver) {
+      const sha = (ver.commit || ver.sha || '').substring(0, 7);
+      const msg = ver.message || ver.subject || '';
+      cur.textContent = sha ? `${sha} — ${msg}` : (ver.version || 'unknown');
+    }
+    const dep = await api('/system/deploy_status').catch(() => null);
+    if (remote && dep && dep.remote_sha) {
+      remote.textContent = `${dep.remote_sha.substring(0, 7)} — ${dep.remote_msg || ''}`;
+      if (dep.behind_count > 0 && row && behind) {
+        row.style.display = 'flex';
+        behind.textContent = `${dep.behind_count} commit${dep.behind_count > 1 ? 's' : ''} — UPDATE available`;
+      } else if (row) {
+        row.style.display = 'none';
+      }
+    } else if (remote) {
+      remote.textContent = 'unavailable (no remote check endpoint)';
+    }
+  } catch {
+    if (cur)    cur.textContent    = 'unavailable';
+    if (remote) remote.textContent = 'unavailable';
+  }
 }
 
 document.querySelectorAll('.tab').forEach(btn => {
@@ -4389,6 +4486,12 @@ function _applyBenchModeUI(enabled) {
   if (!btn) return;
   btn.textContent = enabled ? 'ON' : 'OFF';
   btn.classList.toggle('active', enabled);
+  // WOW polish H1 2026-05-15: when bench is ON, mark the whole VESC
+  // settings panel with a screaming red border + diagonal stripes so
+  // operator can't forget. The Drive tab already has the BENCH MODE
+  // pill (D1) — this one is the in-settings warning.
+  const panel = el('spanel-vesc');
+  if (panel) panel.classList.toggle('bench-active', enabled);
 }
 
 function vescToggleBenchMode() {
@@ -6837,14 +6940,30 @@ async function saveLightsBackend() {
   const backend = el('lights-backend')?.value;
   if (!backend) return;
   const status = el('lights-status');
-  if (status) { status.textContent = 'Applying...'; status.className = 'settings-status'; }
-  const data = await api('/settings/lights', 'POST', { backend });
-  if (data && data.status === 'ok') {
-    toast(data.message || `Lights driver: ${backend}`, 'ok');
-    if (status) { status.textContent = `Driver: ${backend}`; status.className = 'settings-status ok'; }
-  } else {
-    toast(data?.error || 'Hot-reload failed', 'error');
-    if (status) { status.textContent = data?.error || 'Error'; status.className = 'settings-status error'; }
+  // WOW polish 2026-05-15: H-5 race protection — disable the dropdown
+  // and button during the swap so a double-click can't race the
+  // driver re-init. Released in finally on both paths.
+  const dropdown = el('lights-backend');
+  const btn = document.querySelector('#spanel-lights button[onclick*="saveLightsBackend"]');
+  if (dropdown) dropdown.disabled = true;
+  try {
+    await withSaveFeedback(btn, async () => {
+      const data = await api('/settings/lights', 'POST', { backend });
+      if (!data || data.status !== 'ok') {
+        throw new Error(data?.error || 'failed');
+      }
+      toast(data.message || `Lights driver: ${backend}`, 'ok');
+      if (status) {
+        status.textContent = `Driver: ${backend} (reloaded just now)`;
+        status.className = 'settings-status ok';
+      }
+      return data;
+    });
+  } catch (e) {
+    toast(e.message || 'Hot-reload failed', 'error');
+    if (status) { status.textContent = e.message || 'Error'; status.className = 'settings-status error'; }
+  } finally {
+    if (dropdown) dropdown.disabled = false;
   }
 }
 
@@ -7093,19 +7212,74 @@ async function saveBatteryCells() {
   const chemistry = (el('battery-chemistry')?.value || 'liion').toLowerCase();
   const perCell   = chemistry === 'lifepo4' ? 3.0 : 3.5;
   const status = el('battery-cells-status');
-  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-  const data = await api('/settings/config', 'POST', {
-    'battery.cells':     cells,
-    'battery.chemistry': chemistry,
-  });
-  if (data?.status === 'ok') {
-    batteryGauge.setCells(cells);
-    toast(`Battery: ${cells}S ${chemistry.toUpperCase()} — undervoltage abort @ ${(cells * perCell).toFixed(1)} V`, 'ok');
-    if (status) { status.textContent = `${cells}S ${chemistry} — abort @ ${(cells * perCell).toFixed(1)} V`; status.className = 'settings-status ok'; }
-  } else {
+  const btn = document.querySelector('#spanel-battery button[onclick*="saveBatteryCells"]');
+  try {
+    await withSaveFeedback(btn, async () => {
+      const data = await api('/settings/config', 'POST', {
+        'battery.cells':     cells,
+        'battery.chemistry': chemistry,
+      });
+      if (!data || data.status !== 'ok') throw new Error('failed');
+      batteryGauge.setCells(cells);
+      toast(`Battery: ${cells}S ${chemistry.toUpperCase()} — abort @ ${(cells * perCell).toFixed(1)} V`, 'ok');
+      if (status) { status.textContent = `${cells}S ${chemistry} — abort @ ${(cells * perCell).toFixed(1)} V`; status.className = 'settings-status ok'; }
+      return data;
+    });
+  } catch {
     toast('Failed to save battery config', 'error');
     if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
   }
+}
+
+// WOW polish M3 2026-05-15: Camera bitrate / size impact preview.
+// Operator slides quality 100→50 — wants to know what that means
+// for bandwidth before applying. Computes a rough estimate from
+// resolution × fps × quality factor.
+function updateCameraBitrateHint() {
+  const res = el('cam-resolution')?.value || '640x480';
+  const fps = parseInt(el('cam-fps')?.value) || 30;
+  const q   = parseInt(el('cam-quality')?.value) || 80;
+  const hint = el('cam-bitrate-hint');
+  if (!hint) return;
+  const [w, h] = res.split('x').map(n => parseInt(n) || 0);
+  if (!w || !h) { hint.textContent = ''; return; }
+  // MJPEG approx: bytes/frame ≈ (w × h × 3) × (q/100) × 0.08 (JPEG ratio).
+  const bytesPerFrame = Math.round(w * h * 3 * (q / 100) * 0.08);
+  const kbps = Math.round(bytesPerFrame * fps * 8 / 1000);
+  const kbf  = Math.round(bytesPerFrame / 1024);
+  hint.textContent = `~${kbf} KB/frame · ~${kbps} kbps stream`;
+}
+
+// WOW polish M1 2026-05-15: Battery live voltage threshold preview.
+// Operator changes cell count or chemistry → sees IMMEDIATELY the
+// new idle/low/abort voltages BEFORE clicking APPLY. No more
+// "wait did I pick the right one?". Updates a small preview span
+// without committing — only APPLY writes to local.cfg.
+function updateBatteryPreview() {
+  const cells     = parseInt(el('battery-cells')?.value) || 4;
+  const chemistry = (el('battery-chemistry')?.value || 'liion').toLowerCase();
+  const abortV    = chemistry === 'lifepo4' ? 3.0 : 3.5;
+  const idleV     = chemistry === 'lifepo4' ? 3.3 : 3.85;
+  const fullV     = chemistry === 'lifepo4' ? 3.6 : 4.20;
+  const preview = el('battery-preview');
+  if (!preview) return;
+  preview.innerHTML = '';
+  const mk = (label, val, color) => {
+    const span = document.createElement('span');
+    span.className = 'battery-preview-row';
+    span.style.color = color;
+    span.innerHTML = '';
+    const lbl = document.createElement('strong');
+    lbl.textContent = label + ': ';
+    lbl.style.color = 'var(--text-dim)';
+    lbl.style.fontWeight = '600';
+    const v = document.createTextNode(`${val.toFixed(1)} V (${(val/cells).toFixed(2)} V/cell)`);
+    span.append(lbl, v);
+    preview.appendChild(span);
+  };
+  mk('Full',  cells * fullV,  'var(--green, #00cc66)');
+  mk('Idle',  cells * idleV,  'var(--text)');
+  mk('ABORT', cells * abortV, 'var(--red, #ff2244)');
 }
 
 // ─── Shortcuts (Settings → Shortcuts + Drive tab overlay) ────────────────────
@@ -7851,13 +8025,9 @@ async function saveConfig() {
   const current = {
     'github.repo_url':          (el('repo-url')?.value || '').trim(),
     'github.branch':            (el('git-branch')?.value || '').trim(),
-    // B-110 (audit 2026-05-15): send the native string the backend
-    // _normalise() coerces from common truthy/falsy values. Keeps the
-    // wire format stable across legacy ConfigParser readers.
     'github.auto_pull_on_boot': el('auto-pull')?.checked ? 'true' : 'false',
     'slave.host':               (el('slave-host')?.value || '').trim(),
   };
-  // Diff against the baseline captured at last load. Send only changes.
   const payload = {};
   for (const [k, v] of Object.entries(current)) {
     if (_deployCfgBaseline[k] !== v) payload[k] = v;
@@ -7866,21 +8036,99 @@ async function saveConfig() {
     toast('No changes to save', 'info');
     return;
   }
-  const data = await api('/settings/config', 'POST', payload);
-  if (data && data.status === 'ok') {
-    toast(`Config saved (${Object.keys(payload).length} field${Object.keys(payload).length>1?'s':''})`, 'ok');
-    _deployCfgBaseline = { ..._deployCfgBaseline, ...payload };   // accept the persisted values as new baseline
-  } else {
-    toast('Error saving config', 'error');
-  }
+  // WOW polish 2026-05-15: button feedback while the API roundtrip
+  // is in flight. Find the SAVE button by event target — fall back
+  // to selector if called programmatically.
+  const btn = document.querySelector('#spanel-deploy button[onclick*="saveConfig"]');
+  try {
+    await withSaveFeedback(btn, async () => {
+      const data = await api('/settings/config', 'POST', payload);
+      if (!data || data.status !== 'ok') throw new Error('save failed');
+      _deployCfgBaseline = { ..._deployCfgBaseline, ...payload };
+      toast(`Config saved (${Object.keys(payload).length} field${Object.keys(payload).length>1?'s':''})`, 'ok');
+      return data;
+    });
+  } catch { toast('Error saving config', 'error'); }
 }
 
 function confirmAction(msg, endpoint) {
-  if (confirm(msg)) {
-    api(endpoint, 'POST').then(d => {
-      if (d) toast('Command sent', 'ok');
-    });
+  if (!confirm(msg)) return;
+  // WOW polish I3 2026-05-15: any /system/reboot* or /system/shutdown*
+  // endpoint should show the countdown overlay so operator knows the
+  // page is intentionally offline. /system/resync_slave doesn't need it.
+  const isReboot   = /\/system\/reboot/.test(endpoint);
+  const isShutdown = /\/system\/shutdown/.test(endpoint);
+  if (isReboot || isShutdown) {
+    const title = isShutdown ? 'POWERING OFF' : 'REBOOTING';
+    const sub   = isShutdown
+      ? 'Master is shutting down — manual power cycle required to resume'
+      : 'The Master Pi is restarting — page will auto-reconnect';
+    showRebootOverlay(title, sub, isShutdown ? 0 : 30, !isShutdown);
   }
+  api(endpoint, 'POST').then(d => {
+    if (d) toast('Command sent', 'ok');
+  }).catch(() => {});
+}
+
+// WOW polish I3 2026-05-15: reboot/shutdown overlay manager.
+// `autoReconnect` polls /status until it comes back, then hides.
+function showRebootOverlay(title, sub, countdownSec, autoReconnect) {
+  const overlay   = el('reboot-overlay');
+  const titleEl   = el('reboot-overlay-title');
+  const subEl     = overlay?.querySelector('.reboot-overlay-sub');
+  const countEl   = el('reboot-overlay-countdown');
+  const statusEl  = el('reboot-overlay-status');
+  if (!overlay) return;
+  if (titleEl)  titleEl.textContent  = title;
+  if (subEl)    subEl.textContent    = sub;
+  if (statusEl) {
+    statusEl.textContent = 'waiting…';
+    statusEl.className = 'reboot-overlay-status';
+  }
+  overlay.classList.add('active');
+
+  if (!autoReconnect) {
+    if (countEl) countEl.textContent = '⚡';
+    return;
+  }
+  let remaining = Math.max(5, countdownSec | 0);
+  if (countEl) countEl.textContent = String(remaining);
+  const tick = setInterval(() => {
+    remaining -= 1;
+    if (countEl) countEl.textContent = String(Math.max(0, remaining));
+    if (remaining <= 0) {
+      if (statusEl) statusEl.textContent = 'reconnecting…';
+    }
+  }, 1000);
+  // Polling for /status to come back online — usually 25-45s for a Pi reboot
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const r = await fetch((window.R2D2_API_BASE || '') + '/status',
+        { cache: 'no-store', signal: AbortSignal.timeout(2000) });
+      if (r.ok) {
+        clearInterval(tick);
+        clearInterval(poll);
+        if (statusEl) {
+          statusEl.textContent = 'Reconnected ✓';
+          statusEl.className = 'reboot-overlay-status ok';
+        }
+        setTimeout(() => {
+          overlay.classList.remove('active');
+          location.reload();   // fresh page state post-reboot
+        }, 1200);
+      }
+    } catch {/* still offline */}
+    if (attempts > 90) {   // 3 minutes timeout
+      clearInterval(tick);
+      clearInterval(poll);
+      if (statusEl) {
+        statusEl.textContent = 'Still offline — check Master power';
+        statusEl.className = 'reboot-overlay-status error';
+      }
+    }
+  }, 2000);
 }
 
 async function systemUpdate() {

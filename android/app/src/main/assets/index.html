@@ -49,6 +49,15 @@
 </head>
 <body>
 
+<!-- WOW polish I3 2026-05-15: reboot countdown overlay — shown while
+     Master reboots, auto-clears when /status comes back online. -->
+<div id="reboot-overlay" class="reboot-overlay">
+  <div class="reboot-overlay-title" id="reboot-overlay-title">MASTER REBOOTING</div>
+  <div class="reboot-overlay-sub">The Master Pi is restarting — page will auto-reconnect</div>
+  <div class="reboot-overlay-countdown" id="reboot-overlay-countdown">30</div>
+  <div class="reboot-overlay-status" id="reboot-overlay-status">waiting…</div>
+</div>
+
 <div id="estop-overlay" role="alert" aria-live="assertive" aria-label="Emergency stop overlay">
   <!-- WOW polish D5 2026-05-15: prompt inside the red flashing border
        so a novice operator knows what to do. Hidden unless E-STOP is
@@ -962,22 +971,34 @@
   <div class="settings-layout">
 
     <!-- Sidebar -->
+    <!-- WOW polish X1 2026-05-15: grouped into semantic sections so 16
+         items don't read as alphabet-soup. Operator finds what they
+         want by category instead of scanning all 16. -->
     <nav class="settings-sidebar">
+      <span class="settings-nav-section-label">OPERATOR</span>
       <button class="settings-nav-item" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">🎛️ Shortcuts</button>
-      <button class="settings-nav-item active" data-panel="behavior"  onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
-      <button class="settings-nav-item" data-panel="interface"  onclick="switchSettingsPanel('interface')">🎨 Interface</button>
-      <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
+      <button class="settings-nav-item active" data-panel="behavior" onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
+      <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
+
+      <span class="settings-nav-section-label">HARDWARE</span>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
-      <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 BT Gamepad</button>
-      <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
-      <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
       <button class="settings-nav-item" data-panel="arms"      onclick="switchSettingsPanel('arms')">🦾 Arms</button>
       <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
       <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
       <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
-      <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
-      <button class="settings-nav-item" data-panel="deploy"    onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
-      <button class="settings-nav-item" data-panel="system"       onclick="switchSettingsPanel('system')">🖥️ System</button>
+
+      <span class="settings-nav-section-label">CONNECTIVITY</span>
+      <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 BT Gamepad</button>
+      <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
+      <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
+      <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
+
+      <span class="settings-nav-section-label">APPEARANCE</span>
+      <button class="settings-nav-item" data-panel="interface" onclick="switchSettingsPanel('interface')">🎨 Interface</button>
+
+      <span class="settings-nav-section-label">SYSTEM</span>
+      <button class="settings-nav-item" data-panel="deploy"      onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
+      <button class="settings-nav-item" data-panel="system"      onclick="switchSettingsPanel('system')">🖥️ System</button>
       <button class="settings-nav-item" data-panel="diagnostics" onclick="switchSettingsPanel('diagnostics')">🔍 Diagnostics</button>
     </nav>
 
@@ -1135,13 +1156,37 @@
       <div class="settings-panel" id="spanel-lock">
         <section class="card settings-card">
           <h2 class="card-title">LOCK MODE</h2>
-          <p class="settings-note">Maximum speed applied in Kids mode (🔒 orange icon).<br>Child Lock (🔒 red) blocks all propulsion.</p>
+          <!-- WOW polish X3 2026-05-15: explicit mode buttons IN the
+               panel. Operator was forced to use the topbar cycle icon
+               and could only step forward. Now: direct switch + visual
+               current-state. Lock→Normal still requires admin password
+               (handled by lockMgr._applyMode). -->
+          <div class="lock-mode-switcher" id="lock-mode-switcher">
+            <button class="lock-mode-btn lock-mode-normal" data-mode="0"
+                    onclick="lockMgr._applyMode(0)" title="Full drive at user speed slider">
+              <span class="lock-mode-icon">🟢</span>
+              NORMAL
+              <span class="lock-mode-sub">full drive</span>
+            </button>
+            <button class="lock-mode-btn lock-mode-kids" data-mode="1"
+                    onclick="lockMgr._applyMode(1)" title="Drive enabled but capped at Kids speed limit. Dome+sounds free.">
+              <span class="lock-mode-icon">👶</span>
+              KIDS MODE
+              <span class="lock-mode-sub">capped speed</span>
+            </button>
+            <button class="lock-mode-btn lock-mode-lock" data-mode="2"
+                    onclick="lockMgr._applyMode(2)" title="Drive fully blocked. Dome+sounds+lights remain free.">
+              <span class="lock-mode-icon">🔒</span>
+              CHILD LOCK
+              <span class="lock-mode-sub">drive blocked</span>
+            </button>
+          </div>
           <div class="speed-wrap" style="margin-top:12px">
             <label class="ctrl-label">KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
             <input type="range" id="kids-speed-slider" min="5" max="60" value="20" class="holo-slider"
                    oninput="lockMgr.setKidsSpeed(+this.value)">
           </div>
-          <p class="settings-note" style="margin-top:10px">Cycle: Normal → <span style="color:var(--orange)">KIDS</span> → <span style="color:var(--red)">CHILD LOCK</span> → (password) → Normal</p>
+          <p class="settings-note" style="margin-top:10px">Returning from Child Lock requires the admin password.</p>
         </section>
       </div>
 
@@ -1417,11 +1462,11 @@
       <!-- 🔋 Battery -->
       <div class="settings-panel" id="spanel-battery">
         <section class="card settings-card">
-          <h2 class="card-title">BATTERY</h2>
+          <h2 class="card-title">BATTERY <span class="live-badge">LIVE</span></h2>
           <p class="settings-note">Cells set the voltage gauges; chemistry sets the undervoltage abort threshold for choreographies.</p>
           <div class="form-group">
             <label>Cell count</label>
-            <select id="battery-cells" class="input-text" style="width:120px">
+            <select id="battery-cells" class="input-text" style="width:120px" onchange="updateBatteryPreview()">
               <option value="4">4S — 14.0 – 16.8 V</option>
               <option value="6">6S — 21.0 – 25.2 V</option>
               <option value="7">7S — 24.5 – 29.4 V</option>
@@ -1430,11 +1475,15 @@
           </div>
           <div class="form-group">
             <label>Chemistry</label>
-            <select id="battery-chemistry" class="input-text" style="width:160px">
+            <select id="battery-chemistry" class="input-text" style="width:160px" onchange="updateBatteryPreview()">
               <option value="liion">Li-ion / LiPo (3.5 V/cell abort)</option>
               <option value="lifepo4">LiFePO4 (3.0 V/cell abort)</option>
             </select>
           </div>
+          <!-- WOW polish M1 2026-05-15: live voltage threshold preview.
+               Operator sees Full/Idle/ABORT voltages update on every
+               dropdown change BEFORE clicking APPLY. -->
+          <div id="battery-preview" class="battery-preview"></div>
           <button class="btn" onclick="saveBatteryCells()">APPLY</button>
           <div class="settings-status" id="battery-cells-status"></div>
         </section>
@@ -1559,28 +1608,31 @@
       <!-- 📷 Camera -->
       <div class="settings-panel" id="spanel-camera">
         <section class="card settings-card">
-          <h2 class="card-title">CAMERA</h2>
+          <h2 class="card-title">CAMERA <span class="reboot-badge small">CAMERA RESTART</span></h2>
           <p class="settings-note">USB camera stream quality. Requires camera service restart (~2s).</p>
           <div class="form-group">
             <label class="ctrl-label">RESOLUTION</label>
-            <select id="cam-resolution" class="input-text" style="width:200px">
-              <option value="640x480">640×480 — VGA (default)</option>
+            <select id="cam-resolution" class="input-text" style="width:200px" onchange="updateCameraBitrateHint()">
+              <option value="640x480">640×480 — VGA</option>
               <option value="1280x720">1280×720 — HD 720p</option>
               <option value="1920x1080">1920×1080 — Full HD 1080p</option>
             </select>
           </div>
           <div class="form-group">
             <label class="ctrl-label">FRAMERATE</label>
-            <select id="cam-fps" class="input-text" style="width:120px">
+            <select id="cam-fps" class="input-text" style="width:120px" onchange="updateCameraBitrateHint()">
               <option value="15">15 fps</option>
-              <option value="30">30 fps (default)</option>
+              <option value="30">30 fps</option>
             </select>
           </div>
           <div class="form-group">
             <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span></label>
             <input type="range" id="cam-quality" min="10" max="100" step="5" value="80"
-                   oninput="el('cam-quality-val').textContent=this.value" class="holo-slider">
+                   oninput="el('cam-quality-val').textContent=this.value; updateCameraBitrateHint()" class="holo-slider">
           </div>
+          <!-- WOW polish M3 2026-05-15: live bitrate/size hint so operator
+               knows what their quality choice means in bandwidth. -->
+          <div id="cam-bitrate-hint" class="cam-bitrate-hint"></div>
           <button class="btn btn-warn" onclick="cameraConfig.save()">APPLY + RESTART CAMERA</button>
           <div class="settings-status" id="cam-config-status"></div>
         </section>
@@ -1656,6 +1708,22 @@
         <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">DEPLOY</h2>
           <p class="settings-note">Git pull on Master + rsync Slave + restart services.</p>
+          <!-- WOW polish I1 2026-05-15: current commit card so operator
+               knows what's deployed BEFORE clicking update. -->
+          <div id="deploy-commit-card" class="deploy-commit-card">
+            <div class="deploy-commit-row">
+              <span class="deploy-commit-label">DEPLOYED</span>
+              <span id="deploy-commit-current">loading…</span>
+            </div>
+            <div class="deploy-commit-row">
+              <span class="deploy-commit-label">REMOTE</span>
+              <span id="deploy-commit-remote">loading…</span>
+            </div>
+            <div class="deploy-commit-row" id="deploy-behind-row" style="display:none">
+              <span class="deploy-commit-label">BEHIND</span>
+              <span id="deploy-behind-count" class="deploy-behind">0 commits</span>
+            </div>
+          </div>
           <button class="btn btn-primary" onclick="systemUpdate()">⬆ UPDATE — git pull + sync Slave</button>
           <button class="btn btn-warn admin-only" onclick="systemRollback()" style="margin-top:8px">↩ ROLLBACK — revert to previous commit</button>
         </section>
