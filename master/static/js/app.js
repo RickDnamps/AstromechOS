@@ -7206,9 +7206,11 @@ class StatusPoller {
     const p = el('ck-pill-hb');
     if (!p) return;
     p.className = 'status-pill ' + (heartbeatOk ? 'ok' : 'error');
-    p.title     = heartbeatOk ? 'Heartbeat OK' : 'Heartbeat lost — app watchdog will fire';
+    p.title     = heartbeatOk
+      ? 'App heartbeat OK — browser ↔ Master'
+      : 'App heartbeat lost — browser stopped pinging Master (app watchdog will fire). UART HB Master ↔ Slave is shown separately.';
     for (const node of p.childNodes)
-      if (node.nodeType === Node.TEXT_NODE) node.textContent = 'HB';
+      if (node.nodeType === Node.TEXT_NODE) node.textContent = 'APP HB';
   }
 
   _setCockpitUartPill(uartReady, health, masterCrcErrors) {
