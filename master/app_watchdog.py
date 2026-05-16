@@ -137,12 +137,19 @@ class AppWatchdog:
         stop_drive()   # proportional ramp — no abrupt braking
         stop_dome()
         # Audit reclass R3 2026-05-15: also freeze servos on link loss.
-        # Previously only motors stopped; servos stayed at last command
-        # → could droop under load or hold a dangerous mid-air pose.
         # E-STOP semantics is "hold position with full torque" — link
         # loss should do the same.
+        #
+        # Post-audit fix 2026-05-15 (H-1): also set reg.estop_active=True
+        # so the existing /system/estop_reset flow handles re-arm. Without
+        # this, the robot stays frozen silently after HB returns — operator
+        # sees no Reset E-STOP button (gated on estop_active), every servo
+        # command silently no-ops, robot looks "broken". Auto-recovery on
+        # HB return is intentionally NOT done — operator must explicitly
+        # Reset (same safety stance as physical E-STOP).
         try:
             import master.registry as reg
+            reg.estop_active = True
             if reg.dome_servo:
                 try: reg.dome_servo.freeze()
                 except Exception: pass

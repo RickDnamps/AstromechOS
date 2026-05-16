@@ -8218,6 +8218,19 @@ const armsConfig = {
     const panelServo = el(`arm-panel-${idx}`)?.value || '';
     const delay      = parseFloat(el(`arm-delay-${idx}`)?.value) || 0.5;
     if (!armServo) { toast('Pick an arm servo first', 'warn'); return; }
+    // Post-audit fix 2026-05-15 (M-1): gate on E-STOP / stow state.
+    // Without this, the HTTP calls succeed (slave silently no-ops
+    // because FREEZE=1) and the button shows 'OK ✓' even though the
+    // servos never moved → operator misreads test result.
+    const st = await api('/status').catch(() => null);
+    if (st && st.estop_active) {
+      toast('Cannot test — E-STOP active. Reset first.', 'error');
+      return;
+    }
+    if (st && st.stow_in_progress) {
+      toast('Cannot test — robot is stowing. Wait a moment.', 'warn');
+      return;
+    }
     const btn = document.querySelector(`.arms-test-btn[data-arm-idx="${idx}"]`);
     try {
       await withSaveFeedback(btn, async () => {

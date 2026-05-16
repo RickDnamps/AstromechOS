@@ -418,13 +418,24 @@ def get_version():
     return jsonify({'master': _read_version()})
 
 
+_SYSTEM_VERSION_CACHE: dict = {'value': None, 'expires': 0.0}
+
 @status_bp.get('/system/version')
 def system_version():
     """WOW polish I1 2026-05-15: rich version info for the Deploy panel.
     Returns current commit SHA + subject + author date so operator
-    knows what's actually deployed BEFORE clicking UPDATE."""
-    import subprocess
+    knows what's actually deployed BEFORE clicking UPDATE.
+
+    Post-audit fix 2026-05-15 (M-2): TTL cache 30s. LAN-open endpoint
+    — without cache, spam from a LAN attacker would pin a Pi 4B core
+    with 3× git subprocess per hit. Cache key is HEAD SHA → invalidated
+    naturally by next deploy.
+    """
+    import subprocess, time as _t
     from pathlib import Path
+    now = _t.time()
+    if _SYSTEM_VERSION_CACHE['value'] is not None and _SYSTEM_VERSION_CACHE['expires'] > now:
+        return jsonify(_SYSTEM_VERSION_CACHE['value'])
     repo = Path(SCRIPTS_DIR).parent if SCRIPTS_DIR else None
     out = {'version': _read_version()}
     if repo and repo.exists():
@@ -444,6 +455,8 @@ def system_version():
             out.update({'commit': sha, 'message': msg, 'date': date})
         except Exception:
             pass
+    _SYSTEM_VERSION_CACHE['value']   = out
+    _SYSTEM_VERSION_CACHE['expires'] = now + 30.0
     return jsonify(out)
 
 
