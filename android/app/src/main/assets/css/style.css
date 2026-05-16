@@ -4600,6 +4600,69 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .status-pill:hover { opacity: 0.85; }
 
+/* WOW S2 fix 2026-05-16: prop/dome lock indicators on cards.
+ * Top-left corner so they don't clash with last-played (top-right)
+ * or loop badge (middle). Operator sees BEFORE click whether the
+ * sequence will lock their joysticks. */
+.seq-card-locks {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  gap: 2px;
+  z-index: 3;
+  pointer-events: none;
+  font-size: 11px;
+  opacity: 0.85;
+  background: rgba(0,0,0,0.45);
+  padding: 1px 4px;
+  border-radius: 8px;
+}
+.seq-card-lock {
+  display: inline-block;
+  line-height: 1;
+}
+.seq-card-lock-prop { color: var(--amber, #ffaa44); }
+.seq-card-lock-dome { color: var(--cyan, #00ffaa); }
+
+/* WOW S8 fix 2026-05-16: always-visible metadata footer (touchscreen
+ * parity — hover tooltip is desktop-only). Hidden during play (wave
+ * + progress take over). */
+.seq-card-meta {
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  opacity: 0.6;
+  margin-top: 2px;
+  text-align: center;
+  font-family: var(--font-data, monospace);
+}
+.seq-card.running .seq-card-meta { display: none; }
+
+/* WOW S7 fix 2026-05-16: operator-mode hint (visible when admin
+ * locked) — matches .seq-admin-hint visual but emphasizes 'unlock'. */
+.seq-operator-hint {
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  text-align: center;
+  border-top: 1px dashed rgba(var(--blue-rgb), 0.15);
+  margin-top: 4px;
+}
+
+/* WOW S3 fix 2026-05-16: faint loop ghost on idle cards so the
+ * gesture is discoverable. Promoted to opacity 1 on hover (desktop)
+ * and visible at low opacity always (tablet parity). */
+.seq-card:not(.looping):not(.running) .seq-card-loop {
+  display: block !important;
+  opacity: 0.18;
+  transition: opacity 0.15s;
+}
+.seq-card:not(.looping):not(.running):hover .seq-card-loop {
+  opacity: 0.9;
+}
+
 /* WOW S4 fix 2026-05-16: pill drag ghost + chosen feedback so admin
  * reordering categories sees where the dragged pill will land. */
 .seq-pill.seq-pill-ghost {

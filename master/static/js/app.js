@@ -5277,6 +5277,15 @@ class ScriptEngine {
         this._renderPills();
         this._renderGrid();
         this._syncAdminMode();
+        // S3 fix 2026-05-16: first-visit hint about loop gesture.
+        // Long-press to loop is a power feature operators don't
+        // discover. Toast once per session (localStorage flag).
+        try {
+          if (!localStorage.getItem('astromech-seq-hint-shown')) {
+            localStorage.setItem('astromech-seq-hint-shown', '1');
+            setTimeout(() => toast('Tap to play · Hold to loop · Double-click pill label to rename', 'info'), 800);
+          }
+        } catch {}
       } finally {
         this._loadInFlight = null;
       }
@@ -5351,10 +5360,24 @@ class ScriptEngine {
         emojiSpan.addEventListener('click', (e) => this.onPillEmojiClick(e, c.id));
       }
       pill.appendChild(emojiSpan);
-      pill.appendChild(document.createTextNode(' ' + (c.label || '')));
+      // S5 fix 2026-05-16: label as its own span so we can replace it
+      // with an inline input on dblclick (admin) without disturbing the
+      // emoji/count siblings.
+      const labelSpan = txt('span', ' ' + (c.label || ''), 'seq-pill-label');
+      pill.appendChild(labelSpan);
       pill.appendChild(txt('span', count, 'seq-pill-count'));
 
       if (isAdmin && c.id !== 'newchoreo') {
+        // S5 fix 2026-05-16: dblclick on label → inline rename
+        // (operator double-tap on tablet works too). Reuses /choreo/
+        // categories action=update which already supports `label`.
+        labelSpan.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this._startCategoryRename(labelSpan, c.id, c.label || '');
+        });
+        labelSpan.title = 'Double-click to rename';
+        labelSpan.style.cursor = 'text';
+
         const close = txt('span', '✕', 'seq-pill-close');
         close.addEventListener('click', (e) => this.deleteCategory(e, c.id));
         pill.appendChild(close);
@@ -5390,8 +5413,11 @@ class ScriptEngine {
       });
     }
 
+    // S7 fix 2026-05-16: also show the operator-mode hint when locked.
     const hint = el('seq-admin-hint');
-    if (hint) hint.style.display = isAdmin ? 'block' : 'none';
+    const opHint = el('seq-operator-hint');
+    if (hint)   hint.style.display   = isAdmin  ? 'block' : 'none';
+    if (opHint) opHint.style.display = !isAdmin ? 'block' : 'none';
   }
 
   async _savePillOrder() {
@@ -5450,6 +5476,56 @@ class ScriptEngine {
       });
     }
     this._renderGrid();
+  }
+
+  // S5 fix 2026-05-16: inline category rename without nuking the pill.
+  // Replaces the .seq-pill-label span with an input on dblclick;
+  // Enter or blur saves, Esc cancels. Server-side /choreo/categories
+  // action=update already supports `label`.
+  _startCategoryRename(labelSpan, catId, currentLabel) {
+    const input = document.createElement('input');
+    input.className = 'input-text seq-pill-rename-input';
+    input.style.cssText = 'width:110px;font-size:11px;padding:2px 6px;';
+    input.value = currentLabel;
+    input.maxLength = 32;
+    labelSpan.replaceWith(input);
+    input.focus(); input.select();
+    let saving = false;
+    const save = async () => {
+      if (saving) return;
+      saving = true;
+      const newLabel = input.value.trim();
+      if (!newLabel || newLabel === currentLabel) {
+        // No change → restore the label span
+        const restored = document.createElement('span');
+        restored.className = 'seq-pill-label';
+        restored.textContent = ' ' + currentLabel;
+        input.replaceWith(restored);
+        return;
+      }
+      try {
+        const d = await api('/choreo/categories', 'POST',
+          { action: 'update', id: catId, label: newLabel });
+        if (d && d.status === 'ok') {
+          toast(`Category renamed → ${newLabel}`, 'ok');
+        } else {
+          toast('Rename failed', 'error');
+        }
+      } catch { toast('Network error renaming category', 'error'); }
+      await this.load();   // re-render with new label
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') save();
+      if (e.key === 'Escape') {
+        saving = true;
+        const restored = document.createElement('span');
+        restored.className = 'seq-pill-label';
+        restored.textContent = ' ' + currentLabel;
+        input.replaceWith(restored);
+      }
+    });
+    input.addEventListener('blur', save);
+    input.addEventListener('click', (e) => e.stopPropagation());   // don't select the category
   }
 
   onPillEmojiClick(event, catId) {
@@ -5571,20 +5647,15 @@ class ScriptEngine {
       grid.appendChild(empty);
       return;
     }
+    // PERF-M2 fix 2026-05-16: hoist localStorage read OUT of the
+    // forEach. 48 cards × sync IPC read = waste. Read once.
+    let _lastPlayed = null;
+    try { _lastPlayed = localStorage.getItem('astromech-last-choreo'); } catch {}
     scripts.forEach(s => {
       const isRunning = this._running.has(s.name);
       const isLooping = this._looping.has(s.name);
-      // F-29 (audit 2026-05-15): preserve the operator's original
-      // casing when no custom label is set. Old code uppercased
-      // EVERYTHING (Theme001 → THEME001) which lost information that
-      // sometimes encoded meaning (digits at the end of an otherwise
-      // mixed-case name). Now only the underscore→space transform is
-      // applied; mixed-case input stays mixed-case.
+      // F-29: preserve casing
       const label = s.label || s.name.replace(/_/g, ' ');
-
-      // WOW polish 2026-05-15: also restore last-played marker on render.
-      let _lastPlayed = null;
-      try { _lastPlayed = localStorage.getItem('astromech-last-choreo'); } catch {}
       const card = document.createElement('div');
       card.className = 'seq-card'
         + (isRunning ? ' running' : '')
@@ -5639,6 +5710,41 @@ class ScriptEngine {
       lbl.className = 'seq-card-label';
       lbl.textContent = label;
       card.appendChild(lbl);
+
+      // WOW S2 fix 2026-05-16: visible pre-play indicator for sequences
+      // that lock joysticks. Operator sees the icon BEFORE tapping play,
+      // knows the bot will move. Wheel = propulsion, dome arc = dome
+      // motor rotation. Both = scary, gets both icons.
+      if (s.uses_propulsion || s.uses_dome) {
+        const flags = document.createElement('span');
+        flags.className = 'seq-card-locks';
+        if (s.uses_propulsion) {
+          const w = document.createElement('span');
+          w.className = 'seq-card-lock seq-card-lock-prop';
+          w.textContent = '🚗';
+          w.title = 'Uses propulsion — joystick will lock';
+          flags.appendChild(w);
+        }
+        if (s.uses_dome) {
+          const d = document.createElement('span');
+          d.className = 'seq-card-lock seq-card-lock-dome';
+          d.textContent = '↻';
+          d.title = 'Uses dome motor — dome joystick will lock';
+          flags.appendChild(d);
+        }
+        card.appendChild(flags);
+      }
+
+      // WOW S8 fix 2026-05-16: always-visible metadata footer for touch.
+      // Native title tooltip is hover-only — useless on tablet. Compact
+      // footer line under the label shows duration + event count when
+      // not running. Hidden during play (the wave + progress take over).
+      const meta = document.createElement('div');
+      meta.className = 'seq-card-meta';
+      const trackCount2 = (s.audio_count ?? 0) + (s.dome_count ?? 0)
+                       + (s.body_count ?? 0) + (s.lights_count ?? 0);
+      meta.textContent = `⏱${(s.duration ?? 0).toFixed(1)}s · ${trackCount2}evt`;
+      card.appendChild(meta);
 
       const progWrap = document.createElement('div');
       progWrap.className = 'seq-card-progress';
@@ -6132,8 +6238,25 @@ class ScriptEngine {
     // F-33 (audit 2026-05-15): the single-instance ChoreoPlayer means
     // `running` always has 0 or 1 entry. Drop the `.join(', ')` since
     // it implied a multi-running case that never happens.
+    // S6 fix 2026-05-16: show the user-friendly label, not the raw
+    // filename. The card already displays the label; the ACTIVE strip
+    // showing 'idle_dome_loop' while the card says 'Idle Dome' was
+    // an inconsistency.
     const list = el('running-scripts');
-    if (list) list.textContent = running.length ? running[0].name : '—';
+    if (list) {
+      if (running.length) {
+        const nm = running[0].name;
+        const meta = this._scripts.find(s => s.name === nm);
+        list.textContent = (meta && meta.label) || nm.replace(/_/g, ' ');
+      } else {
+        list.textContent = '—';
+      }
+    }
+    // S1 fix 2026-05-16: show/hide the STOP button. Visible when
+    // anything is playing — single tap to halt instead of long-press
+    // a buried card.
+    const stopBtn = el('seq-stop-btn');
+    if (stopBtn) stopBtn.style.display = running.length ? 'inline-block' : 'none';
   }
 
   _syncAdminMode() {

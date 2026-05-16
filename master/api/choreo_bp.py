@@ -928,18 +928,23 @@ def choreo_delete(name: str):
     if err:
         return err
     # B-12 (audit 2026-05-15): refuse to delete a sequence that's
-    # currently playing. Old code would happily unlink the file out
-    # from under the in-memory ChoreoPlayer — playback continued (the
-    # chor dict is already in RAM) but /choreo/status reported a name
-    # that no longer had a card on the grid, leaving the running
-    # highlight orphaned forever. Stopping first then deleting is the
-    # operator's intent anyway.
-    if reg.choreo and reg.choreo.is_playing():
-        cur = reg.choreo.get_status().get('name')
-        if cur == name:
-            return jsonify({
-                'error': 'sequence is currently playing — stop it first',
-            }), 409
+    # currently playing.
+    # EDGE-M2 fix 2026-05-16: take _play_lock during the check so the
+    # ~50ms gap between is_playing() and the delete can't race with a
+    # second operator's /choreo/play landing in between. acquire with
+    # short timeout — if the lock is busy, the player is mid-transition
+    # and we punt with 503 (operator can retry).
+    if not _play_lock.acquire(timeout=0.5):
+        return jsonify({'error': 'choreo busy — retry'}), 503
+    try:
+        if reg.choreo and reg.choreo.is_playing():
+            cur = reg.choreo.get_status().get('name')
+            if cur == name:
+                return jsonify({
+                    'error': 'sequence is currently playing — stop it first',
+                }), 409
+    finally:
+        _play_lock.release()
     with _chor_file_lock:
         if not os.path.exists(path):
             return jsonify({'error': 'not found'}), 404
