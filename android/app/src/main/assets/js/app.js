@@ -6981,22 +6981,35 @@ class StatusPoller {
 
     // Bug B3 fix 2026-05-15: surface choreo abort globally so an
     // undervoltage/overheat/uart_loss abort fires a toast no matter
-    // which tab the operator is on. Previously the abort modal only
-    // fired if operator was actively on the Choreo tab — silent
-    // safety event otherwise. Edge-trigger on transition empty → set.
-    const _newAbort = data.choreo_abort_reason || null;
-    if (_newAbort && _newAbort !== this._lastAbortReason) {
+    // which tab the operator is on.
+    //
+    // BUG fix 2026-05-15 (post B3): only toast on REAL mid-flight
+    // abort transitions — playing=true → playing=false WITH a reason.
+    // Previously firing on any non-null abort_reason caused a false
+    // toast at page load when a STALE reason was still in /status
+    // from a previous rejected play (user-reported 'bizarre un banner
+    // a apparue dans choreo disant que emergency était activer').
+    //
+    // The first poll initializes the baseline silently; subsequent
+    // polls compare against it. Reasons like estop_active /
+    // stow_in_progress that come from pre-flight rejection (operator
+    // already saw the toast from the API failure) are explicitly
+    // ignored — only TRUE in-flight aborts surface here.
+    const _newAbort   = data.choreo_abort_reason || null;
+    const _newPlaying = !!data.choreo_playing;
+    const _IGNORE = new Set(['estop_active', 'stow_in_progress']);
+    if (this._lastPlaying === true && _newPlaying === false
+        && _newAbort && !_IGNORE.has(_newAbort)) {
       const labels = {
-        uart_loss: 'UART LOSS',
+        uart_loss:    'UART LOSS',
         undervoltage: 'BATTERY UNDERVOLTAGE',
-        overheat: 'VESC OVERHEAT',
-        overcurrent: 'VESC OVERCURRENT',
-        estop_active: 'E-STOP',
-        stow_in_progress: 'STOW IN PROGRESS',
+        overheat:     'VESC OVERHEAT',
+        overcurrent:  'VESC OVERCURRENT',
       };
       toast(`⚠ Choreo aborted — ${labels[_newAbort] || _newAbort.toUpperCase()}`, 'error');
     }
     this._lastAbortReason = _newAbort;
+    this._lastPlaying     = _newPlaying;
 
     // Lock mode — sync si reconnexion ou autre client
     if (data.lock_mode !== undefined) {
