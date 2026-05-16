@@ -1185,28 +1185,58 @@ def admin_verify():
     return jsonify({'ok': False}), 401
 
 
+# M7 fix 2026-05-16: serialize concurrent password change attempts so
+# two admins racing don't both pass the 'current' check and clobber.
+_pwd_change_lock = threading.Lock()
+
+
 @settings_bp.post('/settings/admin/password')
 @require_admin
 def admin_change_password():
-    """Changes the admin password. Body: {\"current\": \"...\", \"new\": \"...\"}"""
+    """Changes the admin password. Body: {\"current\": \"...\", \"new\": \"...\"}
+    B4/H2 fix 2026-05-16: rate-limit per-IP (same bucket as /admin/verify)
+    + hmac.compare_digest on 'current' (was != which is a timing oracle).
+    M1 fix: reject empty-after-control-char-strip passwords (anyone-admin
+    exploit). M3 fix: reject new==current (silent no-op confused operators).
+    M4 fix: also cap 'current' field length (DoS via 100MB body)."""
     data    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     current = data.get('current', '')
     new_pwd = data.get('new', '').strip()
 
-    if current != _get_admin_password():
+    # M4: length cap on 'current' BEFORE expensive comparisons
+    if not isinstance(current, str) or len(current) > 128:
         return jsonify({'error': 'Incorrect current password'}), 401
-    if len(new_pwd) < 4:
-        return jsonify({'error': 'New password must be at least 4 characters'}), 400
-    # Audit finding M-4 2026-05-15: cap at 128 chars. Without this a
-    # 1 MB password bloats local.cfg and every admin call compares
-    # against a multi-megabyte string. 128 chars is plenty for any
-    # human-typeable secret + leaves room for paste-from-manager.
-    if len(new_pwd) > 128:
-        return jsonify({'error': 'New password too long (max 128 chars)'}), 400
 
-    _write_key('admin', 'password', new_pwd)
-    log.info("Admin password changed")
-    return jsonify({'ok': True})
+    # B4: rate-limit (shares bucket with /admin/verify)
+    ok_rate, retry_after = _verify_rate_check(request.remote_addr or 'unknown')
+    if not ok_rate:
+        return jsonify({'error': 'too many attempts', 'retry_after_s': int(retry_after)}), 429
+
+    # M7: serialize so concurrent admins don't both pass check
+    with _pwd_change_lock:
+        # H2: hmac.compare_digest defends against timing oracle
+        import hmac as _hmac
+        if not _hmac.compare_digest(current.encode(), _get_admin_password().encode()):
+            return jsonify({'error': 'Incorrect current password'}), 401
+        if len(new_pwd) < 4:
+            return jsonify({'error': 'New password must be at least 4 characters'}), 400
+        if len(new_pwd) > 128:
+            return jsonify({'error': 'New password too long (max 128 chars)'}), 400
+        # M1 fix: reject empty/whitespace-only or pure-control-char passwords
+        # (would survive len check then _write_key strips \n\r\x00 → ''
+        # → next admin call: ''==''=True → ANYONE-ADMIN exploit).
+        if not new_pwd or new_pwd.isspace():
+            return jsonify({'error': 'New password cannot be whitespace-only'}), 400
+        _stripped_ctl = ''.join(c for c in new_pwd if c not in '\n\r\x00')
+        if not _stripped_ctl.strip():
+            return jsonify({'error': 'New password cannot be only control chars'}), 400
+        # M3 fix: reject same-as-current (silent no-op)
+        if _hmac.compare_digest(new_pwd.encode(), _get_admin_password().encode()):
+            return jsonify({'error': 'New password must differ from current'}), 400
+
+        _write_key('admin', 'password', new_pwd)
+        log.info("Admin password changed")
+        return jsonify({'ok': True})
 
 
 @settings_bp.get('/settings/icons')

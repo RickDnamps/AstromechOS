@@ -855,14 +855,42 @@ def system_resync_slave():
     return jsonify({'status': 'resync_triggered'})
 
 
+# B1/H1/H5 fix 2026-05-16: idempotency lock — was no guard, mass-click
+# REBOOT spawned N sudo reboot threads racing on PAM.
+# H4 fix: shared event for all reboot/shutdown endpoints.
+_system_action_lock = threading.Lock()
+
+
+def _system_action_guard():
+    """Shared gate for all reboot/shutdown endpoints. Refuses if motion
+    in flight (per Deploy audit B6/E2 pattern — reboot kills Slave PWM
+    → arms fall under gravity). Also serializes concurrent actions."""
+    ok, reason = _deploy_safety_check()
+    if not ok:
+        return None, reason
+    if not _system_action_lock.acquire(blocking=False):
+        return None, 'system reboot/shutdown already in progress'
+    return _system_action_lock, None
+
+
+def _spawn_reboot(cmd: list[str]) -> None:
+    """M8 fix 2026-05-16: subprocess.run with explicit 15s timeout."""
+    def _run():
+        try:
+            subprocess.run(cmd, check=False, timeout=15)
+        except subprocess.TimeoutExpired:
+            log.error(f"system command timed out: {cmd}")
+    threading.Thread(target=_run, daemon=True).start()
+
+
 @status_bp.post('/system/reboot')
 @require_admin
 def system_reboot():
     """Reboots the Master (dome Pi)."""
-    threading.Thread(
-        target=lambda: subprocess.run(['sudo', 'reboot'], check=False),
-        daemon=True
-    ).start()
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    _spawn_reboot(['sudo', 'reboot'])
     return jsonify({'status': 'rebooting'})
 
 
@@ -870,22 +898,36 @@ def system_reboot():
 @require_admin
 def system_reboot_slave():
     """Sends a reboot command to the Slave via UART."""
-    if reg.uart:
-        reg.uart.send('REBOOT', '1')
-        return jsonify({'status': 'ok'})
-    return jsonify({'error': 'UART not available'}), 503
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    try:
+        if reg.uart:
+            reg.uart.send('REBOOT', '1')
+            return jsonify({'status': 'ok'})
+        return jsonify({'error': 'UART not available'}), 503
+    finally:
+        lock.release()
 
 
 @status_bp.post('/system/reboot_both')
 @require_admin
 def system_reboot_both():
-    """Reboots Slave first (via UART), then Master after a short delay."""
+    """Reboots Slave first (via UART), then Master after a short delay.
+    H3 fix 2026-05-16: send REBOOT 3× spaced 100ms + bumped Master sleep
+    to 2.5s so the UART TX buffer flushes before systemd kills us."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
     if reg.uart:
-        reg.uart.send('REBOOT', '1')
+        # 3x retransmit to defend against TX buffer congestion
+        for _ in range(3):
+            try: reg.uart.send('REBOOT', '1')
+            except Exception: pass
+            _time.sleep(0.1)
     def _reboot_master():
-        import time as _t
-        _t.sleep(1)
-        subprocess.run(['sudo', 'reboot'], check=False)
+        _time.sleep(2.5)
+        subprocess.run(['sudo', 'reboot'], check=False, timeout=15)
     threading.Thread(target=_reboot_master, daemon=True).start()
     return jsonify({'status': 'rebooting'})
 
@@ -894,22 +936,37 @@ def system_reboot_both():
 @require_admin
 def system_shutdown_slave():
     """Sends a shutdown command to the Slave via UART."""
-    if reg.uart:
-        reg.uart.send('SHUTDOWN', '1')
-        return jsonify({'status': 'ok'})
-    return jsonify({'error': 'UART not available'}), 503
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    try:
+        if reg.uart:
+            reg.uart.send('SHUTDOWN', '1')
+            return jsonify({'status': 'ok'})
+        return jsonify({'error': 'UART not available'}), 503
+    finally:
+        lock.release()
 
 
 @status_bp.post('/system/shutdown_both')
 @require_admin
 def system_shutdown_both():
     """Shuts down Slave first (via UART), then Master after a short delay."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    # M6 fix 2026-05-16: stop audio + lights before shutdown so operator
+    # doesn't return to orphaned audio loop after Master is dead.
     if reg.uart:
-        reg.uart.send('SHUTDOWN', '1')
+        try: reg.uart.send('S', 'STOP')
+        except Exception: pass
+        for _ in range(3):
+            try: reg.uart.send('SHUTDOWN', '1')
+            except Exception: pass
+            _time.sleep(0.1)
     def _shutdown_master():
-        import time as _t
-        _t.sleep(1)
-        subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False)
+        _time.sleep(2.5)
+        subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False, timeout=15)
     threading.Thread(target=_shutdown_master, daemon=True).start()
     return jsonify({'status': 'shutting down'})
 
@@ -918,10 +975,10 @@ def system_shutdown_both():
 @require_admin
 def system_shutdown():
     """Shuts down the Master."""
-    threading.Thread(
-        target=lambda: subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False),
-        daemon=True
-    ).start()
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    _spawn_reboot(['sudo', 'shutdown', '-h', 'now'])
     return jsonify({'status': 'shutting_down'})
 
 

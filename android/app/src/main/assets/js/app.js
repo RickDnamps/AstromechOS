@@ -11372,6 +11372,9 @@ async function saveRobotName() {
 }
 
 async function adminChangePassword() {
+  // B3 fix 2026-05-16: was leaving adminGuard._token = OLD password →
+  // every subsequent admin call sent stale X-Admin-Pw → server compared
+  // vs NEW pwd → 401 cascade. Cryptic 're-auth may be needed' errors.
   const current  = el('admin-pwd-current')?.value  || '';
   const newPwd   = el('admin-pwd-new')?.value      || '';
   const confirm_ = el('admin-pwd-confirm')?.value  || '';
@@ -11383,19 +11386,24 @@ async function adminChangePassword() {
     status.style.color = ok ? 'var(--ok)' : 'var(--warn)';
   };
 
-  if (!current)           return setStatus('Enter your current password.', false);
-  if (newPwd.length < 4)  return setStatus('New password must be at least 4 characters.', false);
+  if (!current)            return setStatus('Enter your current password.', false);
+  if (newPwd.length < 4)   return setStatus('New password must be at least 4 characters.', false);
   if (newPwd !== confirm_) return setStatus('Passwords do not match.', false);
+  if (newPwd === current)  return setStatus('New password must differ from current.', false);
 
-  const d = await api('/settings/admin/password', 'POST', { current, new: newPwd });
-  if (d && d.ok) {
+  const res = await apiDetail('/settings/admin/password', 'POST', { current, new: newPwd });
+  if (res.ok && res.data?.ok) {
     setStatus('Password changed ✓', true);
-    el('admin-pwd-current').value  = '';
-    el('admin-pwd-new').value      = '';
-    el('admin-pwd-confirm').value  = '';
-    toast('Admin password updated', 'ok');
+    el('admin-pwd-current').value = '';
+    el('admin-pwd-new').value     = '';
+    el('admin-pwd-confirm').value = '';
+    // B3 fix: re-key adminGuard so subsequent admin calls use the NEW pwd
+    if (typeof adminGuard !== 'undefined') {
+      adminGuard._token = newPwd;
+    }
+    toast('Admin password updated — session re-keyed', 'ok');
   } else {
-    setStatus(d?.error || 'Error — check your current password.', false);
+    setStatus(res.error || 'Error — check your current password.', false);
   }
 }
 
