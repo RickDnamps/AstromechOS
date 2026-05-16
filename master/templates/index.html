@@ -1518,18 +1518,23 @@
 
           <h3 style="font-size:12px;letter-spacing:.1em;color:var(--text-dim);margin:0 0 8px 0">PREVIEW · Drive tab layout</h3>
           <p class="settings-note" style="margin-top:0">
-            Aperçu de l'emplacement des boutons sur l'onglet Drive. Drag-drop pour repositionner libre — bientôt (v2).
+            Aperçu de l'emplacement des boutons sur l'onglet Drive.
           </p>
+          <!-- WOW polish M2 v2 2026-05-15: layout mirrors the actual
+               Drive tab — left pad + propulsion joystick, center camera,
+               right pad + dome joystick. WYSIWYG. -->
           <div id="shortcuts-preview" class="shortcuts-preview">
-            <div class="shortcuts-preview-pad left" id="sc-preview-left"></div>
-            <div class="shortcuts-preview-center">
-              <div class="shortcuts-preview-camera">📷  CAMERA</div>
-              <div class="shortcuts-preview-joys">
-                <div class="shortcuts-preview-joy">◯ L</div>
-                <div class="shortcuts-preview-joy">◯ R</div>
-              </div>
+            <div class="shortcuts-preview-side">
+              <div class="shortcuts-preview-pad left" id="sc-preview-left"></div>
+              <div class="shortcuts-preview-joy"></div>
+              <div class="shortcuts-preview-joy-label">PROPULSION</div>
             </div>
-            <div class="shortcuts-preview-pad right" id="sc-preview-right"></div>
+            <div class="shortcuts-preview-center">📷 CAMERA</div>
+            <div class="shortcuts-preview-side">
+              <div class="shortcuts-preview-pad right" id="sc-preview-right"></div>
+              <div class="shortcuts-preview-joy"></div>
+              <div class="shortcuts-preview-joy-label">DOME</div>
+            </div>
           </div>
         </section>
       </div>

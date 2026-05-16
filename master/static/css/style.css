@@ -1056,48 +1056,96 @@ body[data-lock-mode="2"] #js-left-ring::after {
 }
 .shortcut-row .shortcut-row-del:hover { color: var(--red); }
 
+/* WOW polish M2 v2 2026-05-15: preview now mimics the actual Drive
+ * layout — pad-left + joystick stack on the left, camera in the
+ * middle, pad-right + joystick stack on the right. Uses the SAME
+ * .shortcut-btn (56px) sizing as the live Drive UI so the preview
+ * is genuinely WYSIWYG (operator sees exactly what they'll get). */
 .shortcuts-preview {
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  gap: 12px;
-  padding: 14px;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  padding: 16px;
   background: var(--bg2);
   border: 1px dashed var(--border);
   border-radius: 6px;
-  min-height: 180px;
+  min-height: 240px;
+  align-items: start;
 }
-.shortcuts-preview-pad {
-  display: grid;
-  grid-template-columns: repeat(2, 40px);
-  gap: 4px;
-  align-content: start;
-}
-.shortcuts-preview-pad.left  { justify-self: start; }
-.shortcuts-preview-pad.right { justify-self: end; }
-.shortcuts-preview-center {
+.shortcuts-preview-side {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 10px;
+}
+.shortcuts-preview-pad {
+  display: grid;
+  grid-template-columns: repeat(2, 56px);
+  grid-auto-rows: min-content;
+  gap: 6px;
+  align-content: start;
+}
+.shortcuts-preview-pad:empty {
+  min-height: 56px;
+  border: 1px dashed rgba(var(--blue-rgb), 0.2);
+  border-radius: 6px;
+  width: 118px;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  gap: 8px;
+  font-size: 9px;
   color: var(--text-dim);
-  font-size: 10px;
+  letter-spacing: 1px;
 }
-.shortcuts-preview-camera {
-  padding: 24px 16px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+.shortcuts-preview-pad:empty::before {
+  content: '— EMPTY —';
 }
-.shortcuts-preview-joys { display: flex; gap: 18px; }
 .shortcuts-preview-joy {
-  width: 38px; height: 38px;
-  border: 1px solid var(--text-dim);
+  width: 64px;
+  height: 64px;
+  border: 2px solid var(--text-dim);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  position: relative;
+  background: rgba(0, 0, 0, 0.2);
 }
+.shortcuts-preview-joy::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--blue);
+  opacity: 0.4;
+}
+.shortcuts-preview-joy-label {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  font-weight: 700;
+  margin-top: -2px;
+}
+.shortcuts-preview-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 1px;
+  min-height: 200px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.15);
+}
+/* Legacy fallback kept for any straggler reference — won't appear
+ * anymore since _renderPreview uses .shortcut-btn now. */
 .shortcut-preview-btn {
   width: 40px; height: 40px;
   border: 1px solid rgba(var(--blue-rgb), 0.4);
