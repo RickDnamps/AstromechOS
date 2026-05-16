@@ -4156,27 +4156,11 @@ select.input-text option { background: var(--input-option); }
 }
 .settings-nav-section-label:first-child { padding-top: 6px; }
 
-/* WOW polish X5 2026-05-15: Settings panel loading skeleton —
- * brief shimmer + reduced opacity while lazy-loaded data arrives.
- * Removed automatically on next paint after async load resolves. */
-.settings-panel.panel-loading {
-  opacity: 0.5;
-  pointer-events: none;
-  position: relative;
-  transition: opacity 0.2s;
-}
-.settings-panel.panel-loading::before {
-  content: '';
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  width: 16px; height: 16px;
-  border: 2px solid var(--blue);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-  z-index: 10;
-}
+/* WOW polish X5 2026-05-15 — REVERTED 2026-05-15: the 350ms
+ * unconditional fade made every panel switch feel sluggish even
+ * when load was instant. User: 'on dirait juste que le système
+ * est pas assez réactif'. Snappy switching > loading indicator
+ * for sub-second loads. */
 
 /* WOW polish I3 2026-05-15: System reboot countdown overlay */
 .reboot-overlay {

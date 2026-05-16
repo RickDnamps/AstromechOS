@@ -1260,16 +1260,7 @@ function switchSettingsPanel(panelId) {
   const btn   = document.querySelector(`.settings-nav-item[data-panel="${panelId}"]`);
   const panel = el(`spanel-${panelId}`);
   if (btn)   btn.classList.add('active');
-  if (panel) {
-    panel.classList.add('active');
-    // WOW polish X5 2026-05-15: brief loading skeleton on panels that
-    // lazy-fetch data on open. Removed automatically on next paint
-    // after the load() call below (load is async; UI re-renders).
-    if (['network','servos','arms','behavior','audio','diagnostics','shortcuts','deploy'].includes(panelId)) {
-      panel.classList.add('panel-loading');
-      setTimeout(() => panel.classList.remove('panel-loading'), 350);
-    }
-  }
+  if (panel) panel.classList.add('active');
 
   // VESC fast poll only while VESC panel is visible
   if (panelId === 'vesc') _startVescTabPoll();
