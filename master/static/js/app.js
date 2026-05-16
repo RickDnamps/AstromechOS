@@ -9337,7 +9337,15 @@ function startAppHeartbeat() {
       `;
       const blob = new Blob([workerSrc], { type: 'application/javascript' });
       _hbWorker = new Worker(URL.createObjectURL(blob));
-      _hbWorker.postMessage({ type: 'start', url: base() + '/heartbeat' });
+      // 2026-05-15 bug: relative URL inside a blob Worker resolves
+      // against blob:... origin, not the document. Pass absolute URL
+      // so the Worker hits the right host. User-reported: APP HB pill
+      // stuck red after deploy even with hard reload — root cause was
+      // worker fetch failing silently due to relative URL resolution.
+      const hbUrl = base()
+        ? base() + '/heartbeat'
+        : `${location.protocol}//${location.host}/heartbeat`;
+      _hbWorker.postMessage({ type: 'start', url: hbUrl });
     } catch (e) {
       // Fallback to main-thread interval if Worker creation fails (very
       // old browsers / CSP blocking blob: workers). Less robust but
