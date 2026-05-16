@@ -1103,80 +1103,81 @@
               <span id="bt-rssi-val" style="font-size:10px;color:#7eb8d4;font-family:inherit">--</span>
             </div>
           </div>
-          <div class="bt-config-grid">
-            <div>
-              <div class="form-group">
-                <label class="ctrl-label">CONTROLLER TYPE</label>
-                <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
-                  <option value="ps">PlayStation (PS4 / PS5)</option>
-                  <option value="xbox">Xbox (One / Series)</option>
-                  <option value="nintendo">Nintendo Switch Pro</option>
-                  <option value="generic">Generic / Other</option>
+          <!-- 2026-05-16 redesign: dense 2-col grid for all configurable
+               fields. Labels + controls on same baseline. No more weird
+               margin-top hacks. SPEED MODE buttons removed (they belong
+               to the Drive tab, not BT config). -->
+          <div class="bt-config-compact">
+            <!-- Row 1: CONTROLLER TYPE | EMERGENCY STOP -->
+            <div class="bt-field">
+              <label class="ctrl-label">CONTROLLER TYPE</label>
+              <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
+                <option value="ps">PlayStation (PS4 / PS5)</option>
+                <option value="xbox">Xbox (One / Series)</option>
+                <option value="nintendo">Nintendo Switch Pro</option>
+                <option value="generic">Generic / Other</option>
+              </select>
+            </div>
+            <div class="bt-field">
+              <label class="ctrl-label">🛡 EMERGENCY STOP BUTTON</label>
+              <select id="bt-map-estop" class="input-text">
+                <option value="BTN_MODE">PS / Xbox / Home</option>
+                <option value="BTN_SELECT">Share / View / −</option>
+                <option value="BTN_START">Options / Menu / +</option>
+              </select>
+            </div>
+
+            <!-- Row 2: AXES (3 sub-fields in a single row) -->
+            <div class="bt-field bt-field-full">
+              <label class="ctrl-label">AXES</label>
+              <div class="bt-axes-row">
+                <select id="bt-map-throttle" class="input-text input-sm" title="Throttle axis">
+                  <option value="ABS_Y">Throttle: L Stick Y</option>
+                  <option value="ABS_RY">Throttle: R Stick Y</option>
+                </select>
+                <select id="bt-map-steer" class="input-text input-sm" title="Steering axis">
+                  <option value="ABS_X">Steering: L Stick X</option>
+                  <option value="ABS_RX">Steering: R Stick X</option>
+                </select>
+                <select id="bt-map-dome" class="input-text input-sm" title="Dome rotation axis">
+                  <option value="ABS_RX">Dome: R Stick X</option>
+                  <option value="ABS_X">Dome: L Stick X</option>
                 </select>
               </div>
-              <div class="section-label" style="font-size:10px;margin-bottom:6px">AXES</div>
-              <table class="bt-mapping-table">
-                <thead><tr><th>ACTION</th><th>AXE</th></tr></thead>
-                <tbody>
-                  <tr><td>Throttle</td><td><select id="bt-map-throttle" class="input-text input-sm">
-                    <option value="ABS_Y">L Stick Y</option>
-                    <option value="ABS_RY">R Stick Y</option>
-                  </select></td></tr>
-                  <tr><td>Steering</td><td><select id="bt-map-steer" class="input-text input-sm">
-                    <option value="ABS_X">L Stick X</option>
-                    <option value="ABS_RX">R Stick X</option>
-                  </select></td></tr>
-                  <tr><td>Dome rotation</td><td><select id="bt-map-dome" class="input-text input-sm">
-                    <option value="ABS_RX">R Stick X</option>
-                    <option value="ABS_X">L Stick X</option>
-                  </select></td></tr>
-                </tbody>
-              </table>
             </div>
-            <div>
-              <div class="section-label" style="font-size:10px;margin-bottom:6px;margin-top:32px">SAFETY BUTTON</div>
-              <table class="bt-mapping-table">
-                <thead><tr><th>ACTION</th><th>BOUTON</th></tr></thead>
-                <tbody>
-                  <tr><td>Emergency Stop</td><td><select id="bt-map-estop" class="input-text input-sm">
-                    <option value="BTN_MODE">PS / Xbox / Home</option>
-                    <option value="BTN_SELECT">Share / View / −</option>
-                    <option value="BTN_START">Options / Menu / +</option>
-                  </select></td></tr>
-                </tbody>
-              </table>
-              <p class="settings-note" style="font-size:10px;margin-top:6px;opacity:.7">
-                All other actions are configured per-controller in the
-                <strong>CUSTOM BUTTON ACTIONS</strong> card below — use
-                🎯 CAPTURE NEW BUTTON to bind any button to any action.
-              </p>
-            </div>
-          </div>
-          <div class="row mt" style="gap:16px;align-items:flex-end;flex-wrap:wrap">
-            <div class="speed-wrap" style="flex:1;min-width:140px">
+
+            <!-- Row 3: DEADZONE | INACTIVITY (aligned sliders) -->
+            <div class="bt-field">
               <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">10%</span></label>
               <input type="range" id="bt-deadzone" min="0" max="30" value="10"
                      oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
             </div>
-            <div class="speed-wrap" style="flex:1;min-width:140px">
+            <div class="bt-field">
               <label class="ctrl-label">INACTIVITY TIMEOUT <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
-              <div style="display:flex;align-items:center;gap:8px">
+              <div class="bt-timeout-row">
                 <input type="range" id="bt-inactivity-timeout" min="0" max="600" step="5" value="30"
-                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':this.value+'s';updateBtTimeoutPreview(this.value)" class="holo-slider" style="flex:1">
+                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':this.value+'s';updateBtTimeoutPreview(this.value)" class="holo-slider">
                 <input type="number" id="bt-timeout-num" min="0" max="3600" value="30" step="5"
                        oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':v+'s';updateBtTimeoutPreview(v)"
-                       style="width:58px;background:#0a0f1a;border:1px solid #1a3a5c;color:#7eb8d4;padding:3px 5px;font-family:inherit;font-size:11px;text-align:center">
+                       class="bt-timeout-num-input">
               </div>
-              <!-- W10 fix 2026-05-16: contextual preview text -->
-              <div id="bt-timeout-preview" class="bt-timeout-preview"></div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <button id="bt-save-cfg-btn" class="btn btn-active" onclick="withSaveFeedback(this, () => btController.saveFullConfig())">SAVE CONFIG</button>
-              <div class="speed-mode-btns">
-                <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
-                <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>
-                <button class="btn speed-mode-btn" data-mode="fast" onclick="setSpeedMode('fast')">FAST</button>
-              </div>
+
+            <!-- Row 4: notes (full width) -->
+            <div class="bt-field bt-field-full">
+              <div id="bt-timeout-preview" class="bt-timeout-preview"></div>
+              <p class="settings-note" style="font-size:10px;margin-top:6px;opacity:.7">
+                💡 Per-button actions (sounds, panels, choreos…) are configured in the
+                <strong>CUSTOM BUTTON ACTIONS</strong> card below — they auto-save on change.
+              </p>
+            </div>
+
+            <!-- Row 5: SAVE button (full width, right-aligned) -->
+            <div class="bt-field bt-field-full" style="text-align:right">
+              <button id="bt-save-cfg-btn" class="btn btn-active"
+                      onclick="withSaveFeedback(this, () => btController.saveFullConfig())">
+                SAVE CONFIG
+              </button>
             </div>
           </div>
         </section>
