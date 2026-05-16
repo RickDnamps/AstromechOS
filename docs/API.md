@@ -21,6 +21,7 @@ All POST endpoints accept and return `application/json`.
 - `stow_in_progress` — true during the ~3s safe-home stow after Reset E-STOP. Frontend swaps E-STOP button text to STOWING…
 - `drive_ramp_active` / `dome_ramp_active` — true during anti-tip 400ms ramp. Frontend pulses joystick ring amber
 - `kids_speed_limit` — float 0..1, current Kids mode speed cap. Frontend mode-kids pill shows "KIDS MODE X%"
+- `choreo_abort_reason` — when a playing choreo aborts (uart_loss/undervoltage/overheat/overcurrent), this carries the reason. Global StatusPoller surfaces a toast on the `playing:true→false WITH reason` transition. `estop_active`/`stow_in_progress` are pre-flight rejects, filtered out of the toast (operator already saw the 503).
 
 ---
 
@@ -118,7 +119,7 @@ All POST endpoints accept and return `application/json`.
 
 | Method | Path | Body / Notes |
 |--------|------|------|
-| GET | `/choreo/list` | `[{name, label, category, emoji, duration}, …]` — objects, NOT strings |
+| GET | `/choreo/list` | `[{name, label, category, emoji, duration, audio_count, dome_count, body_count, lights_count, uses_propulsion, uses_dome}, …]` — objects, NOT strings. `uses_propulsion`/`uses_dome` drive the frontend's optimistic joystick lock on Play click. |
 | POST | `/choreo/play` | `{"name":"foo","loop":true}` |
 | POST | `/choreo/stop` | — |
 | GET | `/choreo/status` | `{running, name, progress, loop, abort_reason}` |
