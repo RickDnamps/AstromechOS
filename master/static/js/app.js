@@ -2886,14 +2886,23 @@ function _setChoreoLockUI(propLocked, domeLocked, choreoName) {
   document.body.classList.toggle('choreo-prop-locked', propLocked);
   document.body.classList.toggle('choreo-dome-locked', domeLocked);
   // Bug B1 fix 2026-05-15: drive the badge text via CSS var so the
-  // choreo NAME shows on the locked joystick instead of static
-  // '🎬 CHOREO'. Wrap in quotes — CSS content: var() needs the
-  // quoted string form. Fall back to a generic label when name empty.
-  const name = (choreoName || '').toUpperCase();
-  const cssVal = name ? `"🎬 ${name.replace(/"/g, '\\"')}"` : '"🎬 CHOREO"';
+  // operator-set LABEL (not the filename) shows on the locked joystick.
+  // 2026-05-15: look up the friendly label from the scriptEngine cache,
+  // fall back to the filename if no label / no cache yet.
+  let displayName = choreoName || '';
+  try {
+    if (choreoName && typeof scriptEngine !== 'undefined' && scriptEngine._scripts) {
+      const meta = scriptEngine._scripts.find(s => s.name === choreoName);
+      if (meta && meta.label) displayName = meta.label;
+    }
+  } catch {}
+  const upperName = displayName.toUpperCase();
+  const cssVal = upperName
+    ? `"🎬 ${upperName.replace(/"/g, '\\"')}"`
+    : '"🎬 CHOREO"';
   document.documentElement.style.setProperty('--choreo-name', cssVal);
   const lbl = el('choreo-lock-label');
-  if (lbl) lbl.textContent = choreoName || '';
+  if (lbl) lbl.textContent = displayName;
   // Force-release only the joystick whose axis newly locked. A
   // dome-track choreo doesn't touch propulsion, so the user can keep
   // driving without their left joystick snapping back unexpectedly.
@@ -5622,9 +5631,10 @@ class ScriptEngine {
         document.body.classList.add('choreo-dome-locked', 'choreo-locked');
       }
       if (meta.uses_propulsion || meta.uses_dome) {
-        const nm = (name || '').toUpperCase();
+        // Use the user-friendly label, fall back to filename if empty.
+        const display = (meta.label || name || '').toUpperCase();
         document.documentElement.style.setProperty('--choreo-name',
-          `"🎬 ${nm.replace(/"/g, '\\"')}"`);
+          `"🎬 ${display.replace(/"/g, '\\"')}"`);
       }
     }
     api('/choreo/play', 'POST', { name, loop }).then(d => {
@@ -11609,9 +11619,11 @@ const choreoEditor = (() => {
         if (usesProp) document.body.classList.add('choreo-prop-locked', 'choreo-locked');
         if (usesDome) document.body.classList.add('choreo-dome-locked', 'choreo-locked');
         if (usesProp || usesDome) {
-          const nm = (_chor.meta.name || '').toUpperCase();
+          // Use the user-friendly label from the loaded chor's meta,
+          // fall back to filename if empty.
+          const display = (_chor.meta.label || _chor.meta.name || '').toUpperCase();
           document.documentElement.style.setProperty('--choreo-name',
-            `"🎬 ${nm.replace(/"/g, '\\"')}"`);
+            `"🎬 ${display.replace(/"/g, '\\"')}"`);
         }
         const result = await api('/choreo/play', 'POST', { name: playName });
         if (!result) {
