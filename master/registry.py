@@ -97,6 +97,13 @@ estop_active: bool = False
 # resume motion while servos are still slewing to safe positions.
 stow_in_progress: bool = False
 
+# B12 fix 2026-05-16: Event signaled by _do_estop() to interrupt an
+# in-progress _safe_home stow sequence. Replaces uninterruptible
+# time.sleep() calls in the stow runner. Initialized in main.py /
+# created lazily by _safe_home on first call.
+import threading as _threading_reg
+_safe_home_stop_event = _threading_reg.Event()
+
 # Timestamp of last drive/dome command from web/Android (priority over BT gamepad)
 web_last_drive_t: float = 0.0
 web_last_dome_t:  float = 0.0

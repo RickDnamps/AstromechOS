@@ -1041,6 +1041,59 @@ import threading as _threading
 _estop_transition_lock = _threading.Lock()
 
 
+def _do_estop() -> str:
+    """B7 fix 2026-05-16: factor E-STOP logic into a context-free
+    helper so callers without Flask app context (BT gamepad thread,
+    AppWatchdog, etc.) can run the full E-STOP chain.
+
+    Returns the status string ('estop_sent' or 'estop_already_active').
+    Does NOT call jsonify or anything Flask-specific.
+    Idempotent under concurrent callers via _estop_transition_lock.
+    """
+    with _estop_transition_lock:
+        if reg.estop_active:
+            return 'estop_already_active'
+        reg.estop_active = True
+    # B12 fix 2026-05-16: signal any in-progress _safe_home stow to
+    # exit fast. Without this, E-STOP during stow waits up to 12s for
+    # the next wait() to time out before honoring the freeze.
+    stop_evt = getattr(reg, '_safe_home_stop_event', None)
+    if stop_evt is not None:
+        try: stop_evt.set()
+        except Exception: pass
+    # Freeze servos FIRST so in-flight ramps stop writing PWM updates.
+    if reg.dome_servo:
+        try: reg.dome_servo.freeze()
+        except Exception: pass
+    if reg.uart:
+        try: reg.uart.send('FREEZE', '1')
+        except Exception: pass
+    if reg.vesc:
+        try: reg.vesc.stop()
+        except Exception: pass
+    if reg.dome:
+        try: reg.dome.stop()
+        except Exception: pass
+    if reg.choreo:
+        try: reg.choreo.stop()
+        except Exception: pass
+    if reg.uart:
+        try:
+            reg.uart.send('M', '0.0,0.0')
+            reg.uart.send('D', '0.0')
+            reg.uart.send('S', 'STOP')
+        except Exception: pass
+    try:
+        if reg.audio_playing:
+            reg.audio_playing = False
+            reg.audio_current  = ''
+    except Exception: pass
+    if reg.teeces:
+        try: reg.teeces.off()
+        except Exception: pass
+    return 'estop_sent'
+
+
 @status_bp.post('/system/estop')
 def system_estop():
     """Emergency stop — freeze the robot.
@@ -1051,86 +1104,20 @@ def system_estop():
     servos stay exactly where they are with full torque (no SLEEP, no
     drooping). Cleanup is a separate operation triggered by /system/estop_reset.
     """
-    # Bug C2 fix 2026-05-15: idempotent under concurrent operators.
-    # The check-and-set must be atomic — otherwise two tablets could
-    # both see estop_active=False, both run the freeze chain, and both
-    # set the flag at the end (harmless individually but creates a
-    # transient state mid-chain). Set inside the lock so only ONE
-    # request wins; the loser returns immediately.
-    with _estop_transition_lock:
-        if reg.estop_active:
-            return jsonify({'status': 'estop_already_active'})
-        reg.estop_active = True   # claim the transition under lock
-    # Freeze servos FIRST so in-flight ramps stop writing PWM updates.
-    # If we let choreo.stop() run before this, the dispatch thread may be
-    # blocked inside dome_servo.open_all() waiting for ramp threads to
-    # join — those ramp threads check _frozen on every step and exit early.
-    if reg.dome_servo:
-        try:
-            reg.dome_servo.freeze()
-        except Exception:
-            pass
-    if reg.uart:
-        try:
-            reg.uart.send('FREEZE', '1')   # body servos on Slave
-        except Exception:
-            pass
-
-    # Stop propulsion
-    if reg.vesc:
-        try:
-            reg.vesc.stop()
-        except Exception:
-            pass
-    # Stop dome rotation
-    if reg.dome:
-        try:
-            reg.dome.stop()
-        except Exception:
-            pass
-    # Abort any running choreography (the freeze above already unblocks
-    # any servo ramp the choreo dispatch was waiting on).
-    if reg.choreo:
-        try:
-            reg.choreo.stop()
-        except Exception:
-            pass
-    # Send explicit drive-stop over UART in case VESC driver is unavailable
-    if reg.uart:
-        try:
-            reg.uart.send('M', '0.0,0.0')
-            reg.uart.send('D', '0.0')
-        except Exception:
-            pass
-    # Audit finding Drive Safety H-1 2026-05-15: server-side E-STOP
-    # was leaving audio (mpg123 on Slave) and lights (Teeces) running
-    # — frontend emergencyStop() compensated with a separate /audio/stop
-    # call, but BT-gamepad E-STOP, automation, or a crashed WebView
-    # left them ON indefinitely. The contract is "freeze the robot"
-    # — audio + lights are part of the robot.
-    if reg.uart:
-        try:
-            reg.uart.send('S', 'STOP')
-        except Exception:
-            pass
-    try:
-        if reg.audio_playing:
-            reg.audio_playing = False
-            reg.audio_current  = ''
-    except Exception:
-        pass
-    if reg.teeces:
-        try:
-            reg.teeces.off()
-        except Exception:
-            pass
-    # estop_active already set to True under the C2 lock above.
-    return jsonify({'status': 'estop_sent'})
+    status = _do_estop()
+    return jsonify({'status': status})
 
 
 @status_bp.post('/system/estop_reset')
+@require_admin
 def system_estop_reset():
     """Clear E-STOP and stow the robot at a safe slew rate.
+
+    B2 fix 2026-05-16: admin-gated. /system/estop stays LAN-open
+    (safety endpoint, anyone must be able to freeze the robot).
+    But /system/estop_reset initiates ~3-5s of physical servo
+    motion — without auth, any LAN device can trigger the stow
+    sequence at will. Now requires admin token.
 
     Sequence (mirrors the Choreo arm dependency logic but at a slow speed):
       1. Retract each utility arm (parallel) — speed=_SAFE_SLEW_SPEED
@@ -1145,10 +1132,15 @@ def system_estop_reset():
     # Bug C2 fix 2026-05-15: idempotent reset — if estop not active,
     # nothing to reset. Lock prevents two simultaneous resets from
     # spawning two _safe_home_runner threads.
+    # B5 fix 2026-05-16: set stow_in_progress=True BEFORE clearing
+    # estop_active, so motion endpoints never see a window where BOTH
+    # flags are False (which would let a stale /motion/drive POST
+    # slip through and resume motion before stow starts).
     with _estop_transition_lock:
         if not reg.estop_active:
             return jsonify({'status': 'estop_already_clear'})
-        reg.estop_active = False
+        reg.stow_in_progress = True   # claim the gate FIRST
+        reg.estop_active = False      # then drop estop
 
     # Unfreeze BEFORE the stow sequence runs — otherwise the close commands
     # would be rejected at the driver's _move_ramp entry check.
@@ -1163,14 +1155,6 @@ def system_estop_reset():
         except Exception:
             pass
 
-    # stow_in_progress gates /motion/drive, /motion/arcade and
-    # /motion/dome/turn so a stale joystick request arriving immediately
-    # after estop_reset (or a user mashing the joystick during the
-    # stow sequence) cannot resume motion while servos are still slewing
-    # to safe positions. Cleared in the finally below so the gate
-    # always re-opens even if a step raises.
-    reg.stow_in_progress = True
-
     def _safe_home():
         # Lazy import to avoid a circular dependency between the two blueprints.
         from master.api.servo_bp import (
@@ -1182,8 +1166,16 @@ def system_estop_reset():
         arms_cfg   = _read_arms_cfg()
         arm_set    = _arm_servo_set()
 
+        # B12 fix 2026-05-16: shared stop event so a re-pressed E-STOP
+        # can interrupt the stow mid-flight. Set on estop, checked at
+        # every step. _time.sleep replaced with stop_event.wait so the
+        # stow exits within ~50ms of E-STOP instead of waiting up to
+        # 12s for the next sleep to expire.
+        stop_event = reg._safe_home_stop_event = threading.Event()
+
         # ── Step 1+2: arm-then-panel sequences in parallel ──
         def _close_arm_then_panel(arm: str, panel: str, delay: float) -> None:
+            if stop_event.is_set(): return
             if arm and reg.servo:
                 try:
                     reg.servo.close(arm,
@@ -1192,10 +1184,9 @@ def system_estop_reset():
                 except Exception:
                     log.exception("Safe-home: arm close failed: %s", arm)
             if panel:
-                # Hold off until the arm has had time to fully retract before
-                # the panel starts moving — same dependency the Choreo player
-                # honours during arm sequences.
-                _time.sleep(max(0.1, min(5.0, float(delay))))
+                # B12: interruptible delay
+                if stop_event.wait(max(0.1, min(5.0, float(delay)))):
+                    return  # stop_event was set
                 if reg.servo:
                     try:
                         reg.servo.close(panel,
@@ -1249,7 +1240,10 @@ def system_estop_reset():
         if arm_threads and max_arm_travel > 0:
             per_ramp_s = (max_arm_travel / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
             wait_s = min(5.0, 2.0 * per_ramp_s + 0.20)
-            _time.sleep(wait_s)
+            # B12 fix: interruptible — exit fast on re-pressed E-STOP
+            if stop_event.wait(wait_s):
+                log.info("Safe-home: aborted during arm/panel wait")
+                return
             log.info(f"Safe-home: waited {wait_s:.2f}s for arm/panel Slave ramps")
 
         # ── Step 3: remaining body servos (skip arm-managed ones) in parallel ──
@@ -1292,7 +1286,10 @@ def system_estop_reset():
                 per_ramp_s = (max_body_travel_deg / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
                 total_s = n_body * per_ramp_s + 0.20   # margin
                 actual_wait = min(12.0, total_s)   # cap 12s as safety
-                _time.sleep(actual_wait)
+                # B12 fix: interruptible
+                if stop_event.wait(actual_wait):
+                    log.info("Safe-home: aborted during body-servo wait")
+                    return
                 log.info(f"Safe-home: waited {actual_wait:.2f}s "
                          f"for {n_body} body servos to finish slave-side ramp "
                          f"(estimated {total_s:.2f}s)")

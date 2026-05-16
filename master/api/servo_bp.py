@@ -529,25 +529,36 @@ def _servo_close(name: str, cfg: dict) -> None:
         reg.uart.send('SRV', f'{name},{angle},{speed}')
 
 
+def _arm_blocked() -> str | None:
+    """B3/B4 fix 2026-05-16: shared gate for arm sequences. Checks BOTH
+    estop_active AND stow_in_progress. Was: only checked stow → mid-
+    sequence E-STOP didn't abort the next _servo_open after the delay
+    → arm continued to extend after FREEZE was sent on UART. Now
+    estop_active also blocks."""
+    if getattr(reg, 'estop_active', False):
+        return 'estop_active'
+    if getattr(reg, 'stow_in_progress', False):
+        return 'stow_in_progress'
+    return None
+
+
 def _arm_open_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
     """Open panel → wait delay → open arm (runs in its own thread).
 
-    Audit findings M-3 + M-4 2026-05-15: previously silently ignored
-    stow_in_progress (could write conflicting body-servo angles while
-    safe-home was running) and swallowed driver errors (operator saw
-    half-open arm with no error in UI). Now bails on stow and logs
-    failures with full stack trace."""
+    Audit findings M-3 + M-4 2026-05-15: bails on stow + logs failures.
+    B3/B4 fix 2026-05-16: also bails on estop_active (was: would still
+    extend arm after E-STOP fired mid-sequence)."""
     try:
-        if getattr(reg, 'stow_in_progress', False):
-            log.info("arm_open(%s) skipped — stow_in_progress", arm)
+        reason = _arm_blocked()
+        if reason:
+            log.info("arm_open(%s) skipped — %s", arm, reason)
             return
         if panel:
             _servo_open(panel, cfg)
             time.sleep(delay)
-        # Re-check stow after the delay — the safe-home stow may
-        # have started between the two writes.
-        if getattr(reg, 'stow_in_progress', False):
-            log.info("arm_open(%s) aborted mid-sequence — stow_in_progress", arm)
+        reason = _arm_blocked()
+        if reason:
+            log.info("arm_open(%s) aborted mid-sequence — %s", arm, reason)
             return
         _servo_open(arm, cfg)
     except Exception:
@@ -557,14 +568,16 @@ def _arm_open_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
 def _arm_close_sequence(arm: str, panel: str, delay: float, cfg: dict) -> None:
     """Close arm → wait delay → close panel (runs in its own thread)."""
     try:
-        if getattr(reg, 'stow_in_progress', False):
-            log.info("arm_close(%s) skipped — stow_in_progress", arm)
+        reason = _arm_blocked()
+        if reason:
+            log.info("arm_close(%s) skipped — %s", arm, reason)
             return
         _servo_close(arm, cfg)
         if panel:
             time.sleep(delay)
-            if getattr(reg, 'stow_in_progress', False):
-                log.info("arm_close(%s) aborted mid-sequence — stow_in_progress", arm)
+            reason = _arm_blocked()
+            if reason:
+                log.info("arm_close(%s) aborted mid-sequence — %s", arm, reason)
                 return
             _servo_close(panel, cfg)
     except Exception:

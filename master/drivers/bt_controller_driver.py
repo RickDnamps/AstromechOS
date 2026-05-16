@@ -771,8 +771,14 @@ class BTControllerDriver:
         delegates to status_bp.system_estop_reset."""
         log.warning("E-STOP triggered from BT gamepad")
         try:
-            from master.api.status_bp import system_estop
-            system_estop()
+            # B7 fix 2026-05-16: use _do_estop() helper instead of
+            # system_estop() — the latter calls jsonify() which raises
+            # RuntimeError outside Flask app context. The old fallback
+            # only froze dome + sent FREEZE; it did NOT stop choreo,
+            # audio, or lights — making BT-triggered E-STOP functionally
+            # weaker than the HTTP path.
+            from master.api.status_bp import _do_estop
+            _do_estop()
         except Exception as e:
             log.warning("BT E-STOP fallback (system_estop failed: %s)", e)
             # Defense-in-depth: if the canonical path fails, do the

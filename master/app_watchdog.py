@@ -79,6 +79,11 @@ class AppWatchdog:
         self._connected     = False   # True once the first HB is received
         self._triggered     = False   # True after a timeout — reset on next HB
         self._running       = False
+        # B1 fix 2026-05-16: track WHO set estop_active so _auto_recover
+        # doesn't silently cancel an operator-initiated E-STOP that
+        # happened to coincide with a heartbeat blip. Set ONLY in
+        # _emergency_stop, cleared ONLY in _auto_recover.
+        self._estop_set_by_watchdog = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -150,17 +155,35 @@ class AppWatchdog:
         """Bug H4 fix 2026-05-15: called when HB returns after a freeze.
         Unfreezes servos + clears estop_active so the operator can resume
         without manually pressing Reset E-STOP for every WiFi blip.
-        Real link drop never gets here (HB never returns)."""
-        log.warning("AppWatchdog: HB returned — auto-unfreezing + clearing estop")
+
+        B1 fix 2026-05-16: ONLY auto-clear estop_active if it was the
+        watchdog that set it. If the operator pressed /system/estop
+        manually (even at the same time as the watchdog), DON'T cancel
+        their intentional E-STOP — that's a safety violation. Still
+        unfreeze servos (those were ours) but leave estop_active for
+        the operator to clear via /system/estop_reset."""
+        log.warning("AppWatchdog: HB returned — auto-recover sequence")
         try:
-            import master.registry as reg
-            reg.estop_active = False
-            if reg.dome_servo:
-                try: reg.dome_servo.unfreeze()
-                except Exception: pass
-            if reg.uart:
-                try: reg.uart.send('FREEZE', '0')
-                except Exception: pass
+            from master.api.status_bp import _estop_transition_lock
+            with self._lock:
+                set_by_us = self._estop_set_by_watchdog
+                self._estop_set_by_watchdog = False
+            if set_by_us:
+                # We were the only one who set estop — safe to clear.
+                with _estop_transition_lock:
+                    reg.estop_active = False
+                log.info("AppWatchdog: cleared estop (set by us)")
+                if reg.dome_servo:
+                    try: reg.dome_servo.unfreeze()
+                    except Exception: pass
+                if reg.uart:
+                    try: reg.uart.send('FREEZE', '0')
+                    except Exception: pass
+            else:
+                # Operator pressed /system/estop manually — DO NOT cancel
+                # their intent. Just log the WiFi recovery; let operator
+                # press Reset E-STOP themselves.
+                log.warning("AppWatchdog: HB returned but estop_active was set by operator — leaving it engaged")
         except Exception:
             log.exception("AppWatchdog auto-recover failed")
 
@@ -184,7 +207,18 @@ class AppWatchdog:
         # Reset (same safety stance as physical E-STOP).
         try:
             import master.registry as reg
-            reg.estop_active = True
+            from master.api.status_bp import _estop_transition_lock
+            with _estop_transition_lock:
+                if not reg.estop_active:
+                    reg.estop_active = True
+                    # B1 fix 2026-05-16: mark that WE set it, so
+                    # _auto_recover knows it can safely clear later.
+                    with self._lock:
+                        self._estop_set_by_watchdog = True
+                else:
+                    # Already set by someone else (operator) — don't claim it
+                    with self._lock:
+                        self._estop_set_by_watchdog = False
             if reg.dome_servo:
                 try: reg.dome_servo.freeze()
                 except Exception: pass
