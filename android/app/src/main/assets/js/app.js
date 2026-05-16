@@ -3712,11 +3712,20 @@ const LIGHT_ANIMATIONS = [
 let _lightsAnimDataCache = null;
 
 async function loadLightSequences() {
-  const [seqData, animData, state] = await Promise.all([
+  let [seqData, animData, state] = await Promise.all([
     api('/light/list'),
     _lightsAnimDataCache ? Promise.resolve(_lightsAnimDataCache) : api('/teeces/animations'),
     api('/teeces/state'),
   ]);
+  // 2026-05-16: defense-in-depth — if the cached animData's backend
+  // doesn't match the active state.backend (e.g. someone edited
+  // local.cfg by hand), force a refetch so the grid matches the
+  // current driver's supported T-codes.
+  if (_lightsAnimDataCache && state?.backend && animData?.backend
+      && animData.backend !== state.backend) {
+    _lightsAnimDataCache = null;
+    animData = await api('/teeces/animations');
+  }
   if (!_lightsAnimDataCache && animData) _lightsAnimDataCache = animData;
 
   // Initialize dome simulation (idempotent)

@@ -268,13 +268,27 @@ def teeces_psi_seq():
 
 @teeces_bp.get('/animations')
 def teeces_animations():
-    """List all known T-code animations. LAN-open: read-only metadata."""
+    """List T-code animations supported by the ACTIVE backend.
+
+    User-reported 2026-05-16: clicking certain animation chips did
+    nothing because the frontend showed all 22 JawaLite T-codes even
+    when AstroPixels+ was active. AstroPixels firmware only implements
+    8 of them (T7-10/T12-19/T21/T92 are JawaLite-only — silently
+    ignored by AstroPixels). Now returns the per-driver subset via
+    `type(reg.teeces).ANIMATIONS` (each driver overrides this class
+    attribute with its own supported set). Falls back to the base
+    catalogue if no driver is loaded.
+    """
     from master.lights.base_controller import BaseLightsController
+    if reg.teeces is not None:
+        anim_dict = getattr(type(reg.teeces), 'ANIMATIONS', BaseLightsController.ANIMATIONS)
+        backend   = type(reg.teeces).__name__.replace('Driver', '').lower()
+    else:
+        anim_dict = BaseLightsController.ANIMATIONS
+        backend   = 'none'
     return jsonify({
-        'animations': [
-            {'mode': k, 'name': v}
-            for k, v in BaseLightsController.ANIMATIONS.items()
-        ]
+        'backend':    backend,
+        'animations': [{'mode': k, 'name': v} for k, v in anim_dict.items()],
     })
 
 
