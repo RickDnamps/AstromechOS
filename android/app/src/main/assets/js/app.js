@@ -3532,13 +3532,16 @@ class TeecesController {
   sendText(text, display = 'fld_top') {
     if (!text) return;
     // W3 fix 2026-05-16: SEND button feedback (was silent ~150-300ms wait)
+    // 2026-05-16 update: endpoint is now LAN-open (admin gate dropped),
+    // so the previous 'check admin lock' toast is gone. A null response
+    // now actually means the request truly failed (network/server).
     const btn = document.querySelector('#tab-lights .row.mt button.btn');
     const send = () => api('/teeces/text', 'POST', { text, display }).then(d => {
       if (d) {
         // B10 fix 2026-05-16: use server-sanitized text in the toast.
         toast(`${display.toUpperCase().replace('_',' ')}: "${d.text || text}"`, 'ok');
       } else {
-        toast('SEND failed — check admin lock', 'error');
+        toast('SEND failed — network or server error', 'error');
       }
       return d;
     });

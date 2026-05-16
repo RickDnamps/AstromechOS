@@ -165,10 +165,18 @@ def _dispatch_text(text: str, display: str) -> None:
     reg.teeces.text(text, target)
 
 
+# 2026-05-16: User feedback — Lights operator-level actions (random/
+# leia/off/text/psi/animation) demoted from @require_admin to LAN-open.
+# Rationale: aligns with /motion/* and /audio/play|volume|stop which
+# are already LAN-open. Lights are not safety-critical (flashing LEDs
+# don't harm the robot, motion/audio CAN). Inconsistency was confusing
+# operators ('why does SEND text need admin but drive doesn't?').
+# /raw stays admin-only — it writes arbitrary serial bytes, real risk.
+
+
 @teeces_bp.post('/random')
-@require_admin
 def teeces_random():
-    """Activates Teeces random animation mode."""
+    """Activates Teeces random animation mode. LAN-open (operator-level)."""
     global _mode
     _mode = 'random'
     if reg.teeces:
@@ -178,9 +186,8 @@ def teeces_random():
 
 
 @teeces_bp.post('/leia')
-@require_admin
 def teeces_leia():
-    """Activates Leia mode (holographic message)."""
+    """Activates Leia mode (holographic message). LAN-open."""
     global _mode
     _mode = 'leia'
     if reg.teeces:
@@ -190,9 +197,8 @@ def teeces_leia():
 
 
 @teeces_bp.post('/off')
-@require_admin
 def teeces_off():
-    """Turns off all Teeces LEDs."""
+    """Turns off all Teeces LEDs. LAN-open."""
     global _mode
     _mode = 'off'
     if reg.teeces:
@@ -202,7 +208,6 @@ def teeces_off():
 
 
 @teeces_bp.post('/text')
-@require_admin
 def teeces_text():
     """Displays text on FLD, RLD, or both. Body: {"text": "HELLO", "display": "fld"}
     Control characters (\\r, \\n, \\x00) are stripped before the
@@ -223,7 +228,6 @@ def teeces_text():
 
 
 @teeces_bp.post('/psi')
-@require_admin
 def teeces_psi():
     """Controls the PSIs. Body: {"mode": 1}"""
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -239,7 +243,6 @@ def teeces_psi():
 
 
 @teeces_bp.post('/psi_seq')
-@require_admin
 def teeces_psi_seq():
     """PSI sequence control. Body: {"target": "both", "sequence": "normal"}
     target: both | fpsi | rpsi
@@ -276,7 +279,6 @@ def teeces_animations():
 
 
 @teeces_bp.post('/animation')
-@require_admin
 def teeces_animation():
     """Trigger a T-code animation. Body: {"mode": 11}"""
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
