@@ -2576,22 +2576,94 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   gap: 6px;
 }
 
-.bt-timeout-row {
+/* Unified slider row — both DEADZONE + INACTIVITY use the same wrapper
+   so the slider track sits at the same baseline regardless of the
+   right-side widget (value pill vs number input + unit). 2026-05-16. */
+.bt-slider-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  /* lock the row height so the slider track is at the same Y in both
+     fields of the same grid row */
+  min-height: 28px;
 }
-.bt-timeout-row .holo-slider { flex: 1; }
-.bt-timeout-num-input {
-  width: 58px;
-  background: rgba(10,15,26,0.7);
-  border: 1px solid rgba(0,180,255,0.3);
-  color: var(--text);
-  padding: 4px 6px;
-  border-radius: 3px;
+.bt-slider-row > .holo-slider {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Value pill — read-only display for DEADZONE. Mimics .ctrl-val style
+   but as a standalone capsule, fixed width so layout doesn't jitter
+   as the value changes. */
+.bt-value-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 24px;
+  padding: 0 8px;
+  background: rgba(var(--blue-rgb, 0, 180, 255), 0.10);
+  border: 1px solid rgba(var(--blue-rgb, 0, 180, 255), 0.25);
+  border-radius: 12px;
   font-family: var(--font-data, monospace);
   font-size: 11px;
+  font-weight: 600;
+  color: var(--blue, #7eb8d4);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+/* Editable value input — used for INACTIVITY TIMEOUT.
+   Same visual weight as .bt-value-pill but actually clickable. */
+.bt-value-input {
+  width: 52px;
+  height: 24px;
+  padding: 0 6px;
+  background: rgba(10, 15, 26, 0.7);
+  border: 1px solid rgba(var(--blue-rgb, 0, 180, 255), 0.3);
+  border-radius: 4px;
+  color: var(--blue, #7eb8d4);
+  font-family: var(--font-data, monospace);
+  font-size: 11px;
+  font-weight: 600;
   text-align: center;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  /* hide spinner buttons for a cleaner look — operator types or scrolls */
+  -moz-appearance: textfield;
+}
+.bt-value-input::-webkit-outer-spin-button,
+.bt-value-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.bt-value-input:focus {
+  border-color: var(--blue, #7eb8d4);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb, 0, 180, 255), 0.15);
+}
+
+/* Unit suffix after the editable number input (e.g. 's' or 'OFF'). */
+.bt-value-unit {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  font-family: var(--font-data, monospace);
+  text-transform: lowercase;
+  min-width: 18px;
+  text-align: left;
+}
+
+/* Inline hint after a ctrl-label (gray subtext explaining the field) */
+.ctrl-label .ctrl-hint {
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  opacity: 0.5;
+  text-transform: none;
+  font-size: 9px;
+  margin-left: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Collapse to single column on phone */

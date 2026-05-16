@@ -1156,20 +1156,31 @@
               </p>
             </div>
 
-            <!-- Row 3: DEADZONE | INACTIVITY (aligned sliders) -->
+            <!-- Row 3: DEADZONE | INACTIVITY — slider + value-on-right.
+                 Both rows use .bt-slider-row so the slider track sits on
+                 the exact same baseline regardless of the right-side
+                 widget (read-only pill vs editable number input). -->
             <div class="bt-field">
-              <label class="ctrl-label">DEADZONE <span id="bt-deadzone-val" class="ctrl-val">10%</span></label>
-              <input type="range" id="bt-deadzone" min="0" max="30" value="10"
-                     oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
+              <label class="ctrl-label">DEADZONE
+                <span class="ctrl-hint">— ignores tiny stick wobble</span>
+              </label>
+              <div class="bt-slider-row">
+                <input type="range" id="bt-deadzone" min="0" max="30" value="10"
+                       oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
+                <span id="bt-deadzone-val" class="bt-value-pill">10%</span>
+              </div>
             </div>
             <div class="bt-field">
-              <label class="ctrl-label">INACTIVITY TIMEOUT <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
-              <div class="bt-timeout-row">
+              <label class="ctrl-label">INACTIVITY TIMEOUT
+                <span class="ctrl-hint">— auto-disable after idle</span>
+              </label>
+              <div class="bt-slider-row">
                 <input type="range" id="bt-inactivity-timeout" min="0" max="600" step="5" value="30"
-                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':this.value+'s';updateBtTimeoutPreview(this.value)" class="holo-slider">
+                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':'s';updateBtTimeoutPreview(this.value)" class="holo-slider">
                 <input type="number" id="bt-timeout-num" min="0" max="3600" value="30" step="5"
-                       oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':v+'s';updateBtTimeoutPreview(v)"
-                       class="bt-timeout-num-input">
+                       oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':'s';updateBtTimeoutPreview(v)"
+                       class="bt-value-input" title="Type a value up to 3600s">
+                <span id="bt-timeout-val" class="bt-value-unit">s</span>
               </div>
             </div>
 
