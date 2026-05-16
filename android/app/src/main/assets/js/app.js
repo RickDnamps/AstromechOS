@@ -913,34 +913,48 @@ class LockManager {
     }
   }
 
-  // Modal choix depuis Kids mode expiré (3 options)
-  _showKidsChoiceModal() {
+  // W22 fix 2026-05-16: shared modal-open helper. Centralizes
+  // cleanup (shake class, disabled inputs, stale lockout timer) so
+  // every reopen path starts fresh. Was: each show* path duplicated
+  // partial cleanup and could leave stale .shake or disabled inputs.
+  _openModal({ severity, title, sub, showChildLockBtn }) {
     const m = el('lock-modal');
     m.classList.remove('hidden');
-    el('lock-modal-icon').style.color   = 'var(--orange)';
-    el('lock-modal-title').style.color  = 'var(--orange)';
-    el('lock-modal-title').textContent  = 'KIDS MODE ACTIVE';
-    el('lock-modal-sub').textContent    = 'Enter password to return to normal mode';
-    el('lock-childlock-btn').style.display = '';   // montrer bouton Child Lock
-    el('lock-pwd-input').value = '';
-    el('lock-pwd-error').classList.add('hidden');
-    el('lock-pwd-caps')?.classList.add('hidden');   // reset stale hint on reopen
-    setTimeout(() => el('lock-pwd-input').focus(), 80);
+    // W15 fix 2026-05-16: data-severity attribute → CSS targets
+    m.dataset.severity = severity;
+    el('lock-modal-icon').style.color   = severity === 'warn' ? 'var(--orange)' : 'var(--red)';
+    el('lock-modal-title').style.color  = severity === 'warn' ? 'var(--orange)' : 'var(--red)';
+    el('lock-modal-title').textContent  = title;
+    el('lock-modal-sub').textContent    = sub;
+    el('lock-childlock-btn').style.display = showChildLockBtn ? '' : 'none';
+    // W22: full reset on every open
+    const inp = el('lock-pwd-input');
+    if (inp) { inp.value = ''; inp.classList.remove('shake'); inp.disabled = false; }
+    const err = el('lock-pwd-error');
+    if (err) { err.classList.add('hidden'); err.textContent = 'Incorrect password'; }
+    el('lock-pwd-caps')?.classList.add('hidden');
+    const submitBtn = document.querySelector('#lock-modal .btn.btn-active');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'UNLOCK'; }
+    if (this._lockoutTimer) { clearInterval(this._lockoutTimer); this._lockoutTimer = null; }
+    setTimeout(() => inp?.focus(), 80);
   }
 
-  // Modal déverrouillage simple (Child Lock → Normal)
+  _showKidsChoiceModal() {
+    this._openModal({
+      severity: 'warn',
+      title: 'KIDS MODE ACTIVE',
+      sub: 'Enter password to return to normal mode',
+      showChildLockBtn: true,
+    });
+  }
+
   _showUnlockModal() {
-    const m = el('lock-modal');
-    m.classList.remove('hidden');
-    el('lock-modal-icon').style.color   = 'var(--red)';
-    el('lock-modal-title').style.color  = 'var(--red)';
-    el('lock-modal-title').textContent  = 'CHILD LOCK ACTIVE';
-    el('lock-modal-sub').textContent    = 'Enter password to return to normal mode';
-    el('lock-childlock-btn').style.display = 'none';   // cacher bouton Child Lock
-    el('lock-pwd-input').value = '';
-    el('lock-pwd-error').classList.add('hidden');
-    el('lock-pwd-caps')?.classList.add('hidden');   // reset stale hint on reopen
-    setTimeout(() => el('lock-pwd-input').focus(), 80);
+    this._openModal({
+      severity: 'danger',
+      title: 'UNLOCK',
+      sub: 'Enter admin password to return to normal mode',
+      showChildLockBtn: false,
+    });
   }
 
   cancelModal() { el('lock-modal').classList.add('hidden'); }
@@ -1148,6 +1162,9 @@ class LockManager {
     const STATUS = ['NORMAL',   'KIDS',     'CHILD LOCK'][this._mode];
     const ACTION = ['→ KIDS',   '→ CHILD',  '→ UNLOCK'  ][this._mode];
     dlabel.innerHTML = `<span class="drive-lock-status">${STATUS}</span><span class="drive-lock-hint">${ACTION}</span>`;
+    // W16 fix 2026-05-16: timed-out dot on drive button after 5min Kids
+    const btn = el('drive-lock-btn');
+    if (btn) btn.classList.toggle('kids-timed-out', this._mode === 1 && this._kidsTimedOut);
   }
 
   isDriveLocked() { return this._mode === 2; }
@@ -1161,7 +1178,12 @@ class LockManager {
       const label = el('lock-mode-label');
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
       this._updateDriveLockLabel();
-      // W12 fix 2026-05-16: pulse the drive button on external change
+      // E18 fix 2026-05-16: when /status fails (Master unreachable), the
+  // lock state shown is stale. Disable lock mode buttons so operator
+  // can't queue actions while offline.
+  // (Hook called from StatusPoller offline path via lockMgr.setOnline)
+
+  // W12 fix 2026-05-16: pulse the drive button on external change
       // (another tab, BT, admin) so operator notices the state shift.
       const btn = el('drive-lock-btn');
       if (btn) {
@@ -3734,6 +3756,16 @@ document.addEventListener('keydown', e => {
   // mutates _keys. The choreo editor's own keydown handler (Space /
   // arrows for nudge) runs separately on its own tab.
   if (document.querySelector('.tab.active')?.dataset.tab !== 'drive') return;
+  // W25 fix 2026-05-16: 'L' key on Drive tab = emergency Child Lock
+  // (instant lock when handing tablet to a kid). No modifier needed
+  // since Drive tab doesn't use 'L' for anything else. Power-user
+  // shortcut — discoverable via tooltip on #drive-lock-btn.
+  if (e.code === 'KeyL' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (typeof lockMgr !== 'undefined' && lockMgr._mode === 0) {
+      lockMgr._applyMode(2);   // direct jump to Child Lock
+      return;
+    }
+  }
   if (_keys[e.code]) return;
   _keys[e.code] = true;
   _updateKbdUI();
@@ -8151,6 +8183,11 @@ class StatusPoller {
       // W6 fix 2026-05-16: quick-exit CTA visible only when locked.
       const unlockCta = el('mode-unlock-cta');
       if (unlockCta) unlockCta.style.display = (kids || lock) ? 'inline-flex' : 'none';
+      // W16 fix 2026-05-16: refresh the kids-timed-out dot every poll
+      // (it's wall-clock-derived; needs periodic re-eval to flip on).
+      if (kids && typeof lockMgr !== 'undefined' && lockMgr._updateDriveLockLabel) {
+        lockMgr._updateDriveLockLabel();
+      }
     }
 
     // Audit finding Safety L-5 2026-05-15: surface stow_in_progress

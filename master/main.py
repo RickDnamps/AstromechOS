@@ -418,6 +418,14 @@ def main() -> None:
     # 0.0 → since_activity = HUGE → ALIVE fired within 30s of boot.
     import time as _time
     reg.last_activity = _time.monotonic()
+    # E8 fix 2026-05-16: defensive NaN/Inf check on hand-edited
+    # kids_speed_limit (existing isfinite check moved to _kids_cap
+    # in motion_bp, but registry's value could still be NaN if cfg
+    # parse produced it). Final clamp here to guarantee /status
+    # never returns NaN (which is invalid JSON for strict parsers).
+    import math as _math_boot
+    if not _math_boot.isfinite(getattr(reg, 'kids_speed_limit', 0.5)):
+        reg.kids_speed_limit = 0.5
     behavior_engine.start()
     log.info("BehaviorEngine started")
 

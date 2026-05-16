@@ -4753,6 +4753,44 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Lock Mode — batch 4 polish (2026-05-16) */
+
+/* W15 — data-severity attribute targets for modal */
+#lock-modal[data-severity="danger"] .admin-modal-icon,
+#lock-modal[data-severity="danger"] .admin-modal-title { /* CSS-driven later replaces inline style.color */ }
+#lock-modal[data-severity="warn"]   .admin-modal-icon,
+#lock-modal[data-severity="warn"]   .admin-modal-title { /* — */ }
+
+/* W19 — modal card shake (subtler than input shake) */
+@keyframes modal-card-shake {
+  0%,100% { transform: translateX(0); }
+  20%,60% { transform: translateX(-3px); }
+  40%,80% { transform: translateX(3px); }
+}
+.admin-modal-card.shake-card { animation: modal-card-shake 0.35s ease-in-out; }
+
+/* W16 — kids 5-min timer indicator on drive button */
+.drive-lock-btn.kids-timed-out::after {
+  content: '';
+  position: absolute;
+  top: -2px; right: -2px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--amber, #ffaa44);
+  box-shadow: 0 0 6px var(--amber, #ffaa44);
+}
+.drive-lock-btn { position: relative; }
+
+/* W17 — kids speed slider markers */
+.kids-speed-marks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
 /* Lock Mode — batch 3 polish (2026-05-16) */
 
 /* W1 — Drive lock button two-line label */

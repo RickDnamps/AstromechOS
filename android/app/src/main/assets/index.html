@@ -1243,7 +1243,17 @@
           <div class="speed-wrap" style="margin-top:12px">
             <label class="ctrl-label">KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
             <input type="range" id="kids-speed-slider" min="5" max="60" value="20" class="holo-slider"
-                   oninput="lockMgr.setKidsSpeed(+this.value)">
+                   oninput="lockMgr.setKidsSpeed(+this.value)" list="kids-speed-marks-list">
+            <!-- W17 fix 2026-05-16: tick marks at common values -->
+            <datalist id="kids-speed-marks-list">
+              <option value="10"></option>
+              <option value="25"></option>
+              <option value="40"></option>
+              <option value="55"></option>
+            </datalist>
+            <div class="kids-speed-marks">
+              <span>SLOW</span><span>MEDIUM</span><span>FAST</span>
+            </div>
             <!-- W5 fix 2026-05-16: contextual mental-model hint -->
             <div id="kids-speed-preview" class="kids-speed-preview"></div>
           </div>
