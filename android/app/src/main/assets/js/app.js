@@ -3517,6 +3517,15 @@ function _setEstopUI(tripped) {
       for (const k of Object.keys(_keys)) delete _keys[k];
       if (typeof _updateKbdUI === 'function') _updateKbdUI();
     }
+    // VESC E1 fix 2026-05-16: auto-disable Test Mode on E-STOP fire.
+    // Test Mode has its own keyboard pipeline (vescTest.onKey captures
+    // BEFORE the global drive gate); leaving it active when E-STOP
+    // trips meant the operator could keep slamming WASD against the
+    // safety chain (server rejects but UI looks live). Force the
+    // toggle off so the danger surface is hidden.
+    if (typeof vescTest !== 'undefined' && vescTest._active) {
+      try { vescTest.toggle(); } catch(e) {}
+    }
   }
   if (!btn) return;
   if (tripped) {
@@ -5687,17 +5696,51 @@ class VescPanel {
     const info   = el('vesc-scale-pct');
     if (!slider) return;
     _updateSliderBg(slider);
+    const updateTier = (pct) => {
+      // W1 fix 2026-05-16: live tier hint reacts to power slider
+      const tier = el('vesc-scale-tier');
+      if (!tier) return;
+      let txt, cls;
+      if (pct <= 25)      { txt = 'CRAWL — robot will feel sluggish'; cls = 'tier-low'; }
+      else if (pct <= 50) { txt = 'MODERATE — safe for tight spaces'; cls = 'tier-mid'; }
+      else if (pct <= 80) { txt = 'NORMAL — typical demo speed';      cls = 'tier-norm'; }
+      else                { txt = 'FULL THROTTLE — ensure clear space'; cls = 'tier-high'; }
+      tier.textContent = txt;
+      tier.className = 'vesc-scale-tier ' + cls;
+    };
+    updateTier(parseInt(slider.value, 10));
     slider.addEventListener('input', () => {
       const pct = parseInt(slider.value, 10);
       if (label) label.textContent = pct + '%';
       if (info)  info.textContent  = pct;
       _updateSliderBg(slider);
+      updateTier(pct);
       clearTimeout(this._scaleDebounce);
       this._scaleDebounce = setTimeout(() => {
         api('/vesc/config', 'POST', { scale: pct / 100 });
       }, 200);
     });
   }
+}
+
+// W2 fix 2026-05-16: reset VESC config to safe defaults.
+// power_scale=1.0, invert L/R off, bench OFF, RPM mode.
+async function vescResetDefaults() {
+  if (!confirm('Reset VESC config to defaults?\n\nPower 100% · Both motors NORMAL · Bench OFF · RPM mode\n\n(Operator can re-adjust after.)')) return;
+  const results = await Promise.all([
+    apiDetail('/vesc/config',     'POST', { scale: 1.0 }),
+    apiDetail('/vesc/invert',     'POST', { side: 'L', state: false }),
+    apiDetail('/vesc/invert',     'POST', { side: 'R', state: false }),
+    apiDetail('/vesc/bench_mode', 'POST', { enabled: false }),
+    apiDetail('/vesc/mode',       'POST', { duty: false }),
+  ]);
+  const failed = results.filter(r => !r.ok);
+  if (failed.length) {
+    toast(`Reset partially failed (${failed.length}/${results.length})`, 'error');
+  } else {
+    toast('VESC config reset to defaults ✓', 'ok');
+  }
+  await vescPanel.loadConfig();
 }
 
 const vescPanel = new VescPanel();
