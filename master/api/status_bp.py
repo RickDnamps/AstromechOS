@@ -1360,5 +1360,14 @@ def system_estop_reset():
             elapsed = _t.monotonic() - t0
             log.info(f"Safe-home complete in {elapsed:.2f}s — motion gate re-opened")
 
-    threading.Thread(target=_safe_home_runner, name='safehome', daemon=True).start()
+    # C3 fix 2026-05-16: try/except around .start() so a RuntimeError
+    # (OOM, thread cap hit on long Pi sessions) clears stow_in_progress
+    # — was: thread spawn failure left the gate set forever, blocking
+    # all subsequent motion.
+    try:
+        threading.Thread(target=_safe_home_runner, name='safehome', daemon=True).start()
+    except RuntimeError as e:
+        log.exception("Failed to spawn safe-home thread")
+        reg.stow_in_progress = False
+        return jsonify({'error': f'thread spawn failed: {e}'}), 503
     return jsonify({'status': 'reset'})

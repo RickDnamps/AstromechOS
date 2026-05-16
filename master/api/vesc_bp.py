@@ -260,6 +260,12 @@ def invert_motor():
     return jsonify({'status': 'ok', 'side': side, 'state': state})
 
 
+# H4 fix 2026-05-16: single-flight lock — concurrent /can/scan requests
+# from 2 admins raced on reg.vesc_can_scan_event (clear+wait) → wake
+# could be missed → 8s timeout for both even though Slave replied.
+_can_scan_lock = threading.Lock()
+
+
 @vesc_bp.get('/can/scan')
 @require_admin
 def can_scan():
@@ -267,24 +273,23 @@ def can_scan():
     Starts a CAN bus scan via UART → Slave → VESC 1 USB.
     Slave replies with CANFOUND:id1,id2 or CANFOUND:ERR.
     Timeout 8s — returns {'ids': [...], 'count': N}.
+    H4 fix 2026-05-16: single-flight via _can_scan_lock.
     """
     if not reg.uart:
         return jsonify({'error': 'UART not available'}), 503
 
-    # Reset the previous scan state
-    reg.vesc_can_scan_result = None
-    reg.vesc_can_scan_event.clear()
-
-    # Send the scan command to the Slave
-    reg.uart.send('CANSCAN', 'start')
-
-    # Wait for the response (max 8s — scan 11 IDs × ~0.12s + margin)
-    got = reg.vesc_can_scan_event.wait(timeout=8.0)
-    if not got:
-        return jsonify({'error': 'Timeout — Slave not available or VESCs not connected via USB'}), 504
-
-    result = reg.vesc_can_scan_result
-    if result is None:
-        return jsonify({'error': 'Scan failed — VescDriver not ready (Phase 2 not activated?)'}), 500
-
-    return jsonify({'ids': result, 'count': len(result)})
+    if not _can_scan_lock.acquire(blocking=False):
+        return jsonify({'error': 'CAN scan already in progress'}), 409
+    try:
+        reg.vesc_can_scan_result = None
+        reg.vesc_can_scan_event.clear()
+        reg.uart.send('CANSCAN', 'start')
+        got = reg.vesc_can_scan_event.wait(timeout=8.0)
+        if not got:
+            return jsonify({'error': 'Timeout — Slave not available or VESCs not connected via USB'}), 504
+        result = reg.vesc_can_scan_result
+        if result is None:
+            return jsonify({'error': 'Scan failed — VescDriver not ready (Phase 2 not activated?)'}), 500
+        return jsonify({'ids': result, 'count': len(result)})
+    finally:
+        _can_scan_lock.release()

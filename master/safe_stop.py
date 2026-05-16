@@ -78,6 +78,13 @@ _cancel_dome  = threading.Event()
 _drive_ramp_active = threading.Event()
 _dome_ramp_active  = threading.Event()
 
+# Batch 4 fix 2026-05-16 (M1): lock around cancel_ramp's check+set
+# sequence + ramp activation. Without this, the operator's cancel can
+# fire BETWEEN the check (ramp not active) and another thread starting
+# a ramp → cancel applies to the new ramp → ramp exits early → robot
+# keeps rolling.
+_ramp_guard_lock = threading.Lock()
+
 
 def cancel_ramp():
     """Cancel any ongoing ramp.
@@ -88,11 +95,12 @@ def cancel_ramp():
     the ramp thread would exit early without sending the final M:0,0,
     and the robot would keep rolling at the last commanded speed.
     """
-    if _drive_ramp_active.is_set() or _dome_ramp_active.is_set():
-        log.debug("cancel_ramp(): no-op — safety ramp in progress")
-        return
-    _cancel_drive.set()
-    _cancel_dome.set()
+    with _ramp_guard_lock:
+        if _drive_ramp_active.is_set() or _dome_ramp_active.is_set():
+            log.debug("cancel_ramp(): no-op — safety ramp in progress")
+            return
+        _cancel_drive.set()
+        _cancel_dome.set()
 
 
 def is_drive_ramp_active() -> bool:
@@ -147,7 +155,12 @@ def stop_drive(vesc=None, uart=None) -> None:
     # Set the safety-ramp gate BEFORE the thread starts so any concurrent
     # /motion/drive arriving in the gap between this line and the thread
     # entering its loop is still refused. Cleared in the thread's finally.
-    _drive_ramp_active.set()
+    # M1 fix 2026-05-16: hold _ramp_guard_lock around clear+set so a
+    # concurrent cancel_ramp() can't race-set _cancel_drive between our
+    # clear (in the ramp thread body) and set (here).
+    with _ramp_guard_lock:
+        _cancel_drive.clear()
+        _drive_ramp_active.set()
     duration_ms = int(max_speed * RAMP_MAX_MS)
     steps       = max(3, duration_ms // RAMP_STEP_MS)
     interval    = duration_ms / 1000.0 / steps
@@ -194,8 +207,10 @@ def stop_dome(dome=None, uart=None) -> None:
         _send_dome(d, u, 0.0)
         return
 
-    _cancel_dome.clear()
-    _dome_ramp_active.set()
+    # M1 fix 2026-05-16: atomic clear+set under _ramp_guard_lock
+    with _ramp_guard_lock:
+        _cancel_dome.clear()
+        _dome_ramp_active.set()
     duration_ms = int(abs(speed) * RAMP_MAX_MS)
     steps       = max(3, duration_ms // RAMP_STEP_MS)
     interval    = duration_ms / 1000.0 / steps

@@ -311,9 +311,14 @@ class BTControllerDriver:
             caps = dev.capabilities()
             abs_info = {info[0]: info[1] for info in caps.get(ecodes.EV_ABS, [])}
 
-            # Start background thread to poll RSSI + battery every 30s
-            threading.Thread(target=self._hw_poll_loop, daemon=True,
-                             name='bt-hw-poll').start()
+            # H6 fix 2026-05-16: generation tracking — flaky controller
+            # reconnects spawned cumulative _hw_poll_loop threads (each
+            # sleeping 30s between subprocess calls). Old threads now
+            # exit when self._hw_poll_gen != their captured gen.
+            self._hw_poll_gen = getattr(self, '_hw_poll_gen', 0) + 1
+            my_gen = self._hw_poll_gen
+            threading.Thread(target=self._hw_poll_loop, args=(my_gen,),
+                             daemon=True, name=f'bt-hw-poll-{my_gen}').start()
 
             for event in dev.read_loop():
                 if self._stop_evt.is_set():
@@ -359,16 +364,15 @@ class BTControllerDriver:
                 except Exception: pass
             self._stop_motion()
 
-    def _hw_poll_loop(self) -> None:
+    def _hw_poll_loop(self, my_gen: int = 0) -> None:
         """Polls RSSI and battery level every 30s via upower/sysfs.
 
-        Battery reporting works for PS4 / PS5 / Xbox controllers which expose
-        a standard Linux HID battery interface. The NVIDIA Shield controller
-        uses a proprietary protocol and does not expose battery via upower or
-        sysfs — battery will remain 0% for that device.
-        """
+        H6 fix 2026-05-16: my_gen param — old generations exit when
+        a newer reconnect spawns a fresh poll loop. Prevents thread
+        accumulation across flaky controller reconnect cycles."""
         import subprocess, re, glob as _glob
-        while self._connected and not self._stop_evt.is_set():
+        while (self._connected and not self._stop_evt.is_set()
+               and (my_gen == 0 or my_gen == getattr(self, '_hw_poll_gen', 0))):
             dev = self._device
             mac_colon = (dev.uniq or '').upper() if dev else ''
             rssi    = None
