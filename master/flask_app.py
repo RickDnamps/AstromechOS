@@ -162,6 +162,17 @@ def create_app() -> Flask:
         from flask import send_from_directory
         return send_from_directory(icons_dir, filename)
 
+    # Browsers auto-request /favicon.ico on every page load. Without
+    # a handler this 404s in the console on every reload.
+    @app.get('/favicon.ico')
+    def favicon():
+        from flask import send_from_directory
+        return send_from_directory(
+            os.path.join(static_dir, 'icons'),
+            'icon-192.png',
+            mimetype='image/png',
+        )
+
     # Service worker: served dynamically so the CACHE name embeds the current
     # deploy commit. The static file ships with the placeholder '__VERSION__'
     # which we substitute at request time. This forces a cache flush on every
