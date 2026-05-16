@@ -4769,7 +4769,12 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .admin-modal-card.shake-card { animation: modal-card-shake 0.35s ease-in-out; }
 
-/* W16 — kids 5-min timer indicator on drive button */
+/* W16 — kids 5-min timer indicator on drive button.
+ * NOTE: .drive-lock-btn is already position:absolute (L493) which
+ * serves as its own positioning context for the ::after dot.
+ * 2026-05-16 user-reported: original W16 added `position: relative`
+ * here, overriding the absolute → button fell back into flow →
+ * pushed camera down. The button's existing absolute IS enough. */
 .drive-lock-btn.kids-timed-out::after {
   content: '';
   position: absolute;
@@ -4779,7 +4784,6 @@ body[data-lock-mode="2"] .drive-wrapper {
   background: var(--amber, #ffaa44);
   box-shadow: 0 0 6px var(--amber, #ffaa44);
 }
-.drive-lock-btn { position: relative; }
 
 /* W17 — kids speed slider markers */
 .kids-speed-marks {
