@@ -1917,6 +1917,13 @@ const _domeSim = (() => {
     if (pr && !_psiCustom.rear.active)  { pr.style.background = rear;  pr.style.boxShadow = `0 0 14px ${rear}`; }
   }
 
+  // P3 fix 2026-05-16: cache last applied PSI color per side. Without
+  // this, every frame writes style.background even when color hasn't
+  // changed (most frames stay in phase<0.5 OR phase>=0.5 for many
+  // ticks). 60Hz × 2 sides × 2 style writes/dot = needless layout
+  // pressure. Cache lets the CSS .psi-circle transition:.3s finish
+  // cleanly instead of being fought by JS every frame.
+  const _psiLastColor = { front: null, rear: null };
   function _renderCustomPSI() {
     const now = Date.now() / 1000;
     for (const [side, elemId] of [['front','psi-front'],['rear','psi-rear']]) {
@@ -1924,6 +1931,8 @@ const _domeSim = (() => {
       if (!s.active) continue;
       const phase = (now % s.speed) / s.speed;
       const color = phase < 0.5 ? s.c1 : s.c2;
+      if (color === _psiLastColor[side]) continue;   // skip — unchanged
+      _psiLastColor[side] = color;
       const e = document.getElementById(elemId);
       if (e) { e.style.background = color; e.style.boxShadow = color === '#000000' ? 'none' : `0 0 14px ${color}`; }
     }
@@ -2072,12 +2081,20 @@ const _domeSim = (() => {
     // hidden DOM nodes for nothing.
     if (!_active) return;
     _tick++;
-    if (_mode === 'short') {
-      if (_tick - _lastShort >= 3) { _modes.short(_tick); _lastShort = _tick; }
-    } else {
-      (_modes[_mode] || _modes.random)(_tick);
+    // P2 fix 2026-05-16: throttle to ~20Hz (every 3rd rAF frame).
+    // disco/random/scream redraw 198 dots × 2 style writes = 396
+    // writes/frame; 60Hz vs 20Hz is the difference between 24k and
+    // 8k writes/sec for the same visual quality (LED dots are too
+    // small for the eye to perceive >30Hz transitions). Major Pi 4B
+    // tablet WebView CPU saving.
+    if ((_tick & 3) === 0) {
+      if (_mode === 'short') {
+        if (_tick - _lastShort >= 3) { _modes.short(_tick); _lastShort = _tick; }
+      } else {
+        (_modes[_mode] || _modes.random)(_tick);
+      }
+      _renderCustomPSI();
     }
-    _renderCustomPSI();
     requestAnimationFrame(_loop);
   }
 
@@ -2227,6 +2244,9 @@ const _PSI_SEQ_COLORS = {
 function applyPSI() {
   const target   = el('psi-target')?.value   || 'both';
   const sequence = el('psi-sequence')?.value || 'normal';
+  // E4 fix 2026-05-16: debounce — operator spam-clicking SET PSI
+  // produced burst POSTs that interleaved badly on UART.
+  if (_lightsThrottled('psi:' + target + ':' + sequence)) return;
   // B8 fix 2026-05-16: only mute the dome sim AFTER server accepts.
   // Was: setPSICustom ran synchronously regardless of HTTP result —
   // local sim showed RED ALERT even when server returned 403/500.
@@ -3609,7 +3629,23 @@ class TeecesController {
 
 const teecesController = new TeecesController();
 
-function teecesMode(mode)  { teecesController.setMode(mode); }
+// E4 fix 2026-05-16: client-side debounce on lights mutation paths.
+// pyserial has no atomic write guarantee for >1 byte payloads (server
+// added threading.Lock in E2 batch 1, but two POSTs arriving 5ms
+// apart still produce two distinct UART writes). Spam-clicks just
+// thrash the firmware buffer — drop dup calls within 250ms.
+const _lightsDebounce = { last: {}, MIN_MS: 250 };
+function _lightsThrottled(key) {
+  const now = Date.now();
+  if (now - (_lightsDebounce.last[key] || 0) < _lightsDebounce.MIN_MS) return true;
+  _lightsDebounce.last[key] = now;
+  return false;
+}
+
+function teecesMode(mode)  {
+  if (_lightsThrottled('mode:' + mode)) return;
+  teecesController.setMode(mode);
+}
 function sendTeecesText() {
   const text    = el('teeces-text')?.value.trim() || '';
   const display = el('teeces-display')?.value || 'fld_top';
@@ -3688,12 +3724,19 @@ const LIGHT_ANIMATIONS = [
   { mode: 92, label: 'VU Meter',         icon: '📊', dur: '∞' },
 ];
 
+// E1 fix 2026-05-16: cache animData + grid build state. Animations
+// list is server-static (BaseLightsController.ANIMATIONS dict), so
+// re-fetching on every tab switch was waste. Cache survives the
+// session; switching backend in Settings invalidates via reload.
+let _lightsAnimDataCache = null;
+
 async function loadLightSequences() {
   const [seqData, animData, state] = await Promise.all([
     api('/light/list'),
-    api('/teeces/animations'),
+    _lightsAnimDataCache ? Promise.resolve(_lightsAnimDataCache) : api('/teeces/animations'),
     api('/teeces/state'),
   ]);
+  if (!_lightsAnimDataCache && animData) _lightsAnimDataCache = animData;
 
   // Initialize dome simulation (idempotent)
   _domeSim.init();
@@ -3706,7 +3749,13 @@ async function loadLightSequences() {
     20:'c-dim',21:'c-green',92:'c-green',
   };
   const animGrid = el('anim-grid');
-  if (animGrid && animData?.animations) {
+  // E1 fix 2026-05-16: skip rebuild if grid already populated. Was
+  // destroying + recreating all chips on every tab visit → flicker +
+  // lost hover/long-press state. Only rebuild on first visit OR if
+  // chip count differs (backend switch invalidates).
+  const needRebuild = animGrid && animData?.animations
+    && animGrid.children.length !== animData.animations.length;
+  if (animGrid && animData?.animations && needRebuild) {
     // W5 fix 2026-05-16: native title tooltip with duration + mode#
     // — was: bare chip, operator pressed "Leia" not knowing it's 34s.
     // Tooltip is desktop hover + touch long-press (mobile parity).
@@ -3733,11 +3782,24 @@ async function loadLightSequences() {
     teecesController.updateCardTitle(state.backend);
     teecesController.updateBackendPill(state.backend);
   }
+  // W9 fix 2026-05-16: restore last-played anim marker (per-robot).
+  const lastAnim = _lsGet('astromech-last-anim');
+  if (lastAnim) {
+    document.querySelectorAll('.anim-chip.last-played').forEach(b => b.classList.remove('last-played'));
+    const lastBtn = el(`anim-btn-${lastAnim}`);
+    if (lastBtn) lastBtn.classList.add('last-played');
+  }
   // Reset counter to current input length (covers re-visit case)
   updateTextCounter();
 }
 
 function playAnimation(mode) {
+  // E4 fix 2026-05-16: debounce against double-click race on same mode
+  if (_lightsThrottled('anim:' + mode)) return;
+  // W9 fix 2026-05-16: persist last-played marker (per-robot via
+  // _lsKey helpers). Parité Audio/Sequences. Restored on grid render
+  // (see loadLightSequences last-played decoration block).
+  _lsSet('astromech-last-anim', String(mode));
   api('/teeces/animation', 'POST', { mode }).then(d => {
     if (d) {
       _domeSim.setModeNum(mode);
@@ -8082,6 +8144,13 @@ async function saveLightsBackend() {
         status.textContent = `Driver: ${backend} (reloaded just now)`;
         status.className = 'settings-status ok';
       }
+      // E1 fix 2026-05-16: backend switch changes the ANIMATIONS dict
+      // (AstroPixels exposes 8 codes vs Teeces 22). Invalidate the
+      // session cache + clear the grid so next Lights-tab visit
+      // rebuilds with the right chips.
+      _lightsAnimDataCache = null;
+      const grid = el('anim-grid');
+      if (grid) grid.innerHTML = '';
       return data;
     });
   } catch (e) {

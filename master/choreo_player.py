@@ -1278,13 +1278,35 @@ class ChoreoPlayer:
         # shutdown (don't crash on the way out) but lost the stack
         # trace. log.exception keeps the trace for post-mortem AND
         # still keeps the loop going (next fn() runs).
+        # E11 fix 2026-05-16: only touch lights if the choreo actually
+        # used them. A panel/sound-only choreo used to call all_off()
+        # at end → operator's RANDOM blasted before play was nuked to
+        # OFF for no reason. Per-axis matching the prop/dome lockout.
+        # If lights WERE used, restore the operator's persisted default
+        # mode (random/off/leia from local.cfg) instead of leaving the
+        # bot in whatever weird state the choreo ended on.
+        _used_lights = bool(self._status.get('uses_lights'))
+        def _restore_lights():
+            if not (self._teeces and _used_lights):
+                return
+            try:
+                import configparser
+                from shared.paths import LOCAL_CFG, MAIN_CFG
+                from master.api.teeces_bp import restore_mode_from_cfg
+                cfg = configparser.ConfigParser()
+                cfg.read([MAIN_CFG, LOCAL_CFG])
+                restore_mode_from_cfg(cfg)
+            except Exception:
+                # If anything goes wrong, fall back to off (current behavior)
+                try: self._teeces.all_off()
+                except Exception: log.exception("E11 fallback all_off failed")
         for fn in [
             *[
                 (lambda cmd=('S' if i == 0 else f'S{i+1}'): self._audio.send(cmd, 'STOP') if self._audio else None)
                 for i in range(self._audio_channels)
             ],
             lambda: [self._release_slot(i) for i in range(self._audio_channels)],
-            lambda: self._teeces.all_off() if self._teeces else None,
+            _restore_lights,
             lambda: self._dome_motor.set_speed(0.0) if self._dome_motor else None,
             lambda: self._vesc.drive(0.0, 0.0) if self._vesc else None,
         ]:

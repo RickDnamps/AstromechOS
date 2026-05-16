@@ -4713,6 +4713,20 @@ body[data-lock-mode="2"] .drive-wrapper {
   font-family: var(--font-data, monospace);
 }
 
+/* W9 — Last-played animation marker (parité Audio/Sequences green dot) */
+.anim-chip.last-played::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ok, #00cc66);
+  box-shadow: 0 0 6px var(--ok, #00cc66);
+}
+.anim-chip { position: relative; }
+
 /* W14 — Animation chip active pulse (matches .seq-card.running cyan pulse pattern) */
 @keyframes anim-chip-pulse {
   0%, 100% { box-shadow: 0 0 6px currentColor, inset 0 0 4px rgba(255,255,255,0.2); }

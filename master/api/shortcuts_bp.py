@@ -92,6 +92,7 @@ _ACTION_TYPES = {
     'play_choreo',
     'play_sound',
     'play_random_audio',
+    'play_animation',   # W16 fix 2026-05-16 — bind Imperial March etc. to Drive shortcut
 }
 
 # Limits picked to match other UX caps already in the project (servo
@@ -214,6 +215,18 @@ def _validate_action(action_type: str, target) -> tuple[bool, str]:
             return False, f'unknown audio category: {t}'
         if not cats[t]:
             return False, f'category "{t}" has no sounds'
+        return True, ''
+
+    if action_type == 'play_animation':
+        # W16 fix 2026-05-16: T-code must exist in the canonical
+        # ANIMATIONS dict. Target is the integer mode as string.
+        try:
+            mode_int = int(t)
+        except (TypeError, ValueError):
+            return False, f'play_animation target must be a numeric T-code, got: {t!r}'
+        from master.lights.base_controller import BaseLightsController
+        if mode_int not in BaseLightsController.ANIMATIONS:
+            return False, f'unknown animation T-code: {mode_int}'
         return True, ''
 
     return False, f'unhandled action type: {action_type}'
@@ -490,6 +503,25 @@ def _act_none(target: str, current: str) -> str:
     return 'off'
 
 
+def _act_play_animation(target: str, current: str) -> str:
+    """W16 fix 2026-05-16: trigger a T-code animation as a shortcut.
+    Re-validates the T-code at trigger time (defense-in-depth: the
+    .chor catalogue could have changed between save and fire)."""
+    try:
+        mode_int = int(target)
+    except (TypeError, ValueError):
+        log.warning("play_animation shortcut: invalid target %r", target)
+        return 'off'
+    from master.lights.base_controller import BaseLightsController
+    if mode_int not in BaseLightsController.ANIMATIONS:
+        log.warning("play_animation shortcut: unknown T-code %d", mode_int)
+        return 'off'
+    if not reg.teeces:
+        return 'off'
+    reg.teeces.animation(mode_int)
+    return 'fired'
+
+
 _ACTIONS = {
     'none':                _act_none,
     'arms_toggle':         _act_arms_toggle,
@@ -498,6 +530,7 @@ _ACTIONS = {
     'play_choreo':         _act_play_choreo,
     'play_sound':          _act_play_sound,
     'play_random_audio':   _act_play_random_audio,
+    'play_animation':      _act_play_animation,
 }
 
 

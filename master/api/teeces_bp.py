@@ -67,6 +67,54 @@ def current_teeces_mode() -> str:
     """Module-public accessor — used by status_bp to expose mode in /status."""
     return _mode
 
+
+# E5 fix 2026-05-16: persist the operator's chosen default mode so a
+# Master reboot restores RANDOM/OFF/LEIA instead of always defaulting
+# to RANDOM. Animation:N/text/raw/psi are transient and NOT persisted
+# (operator's intent there is "play this NOW", not "make this default").
+_PERSISTABLE_MODES = ('random', 'off', 'leia')
+
+
+def _persist_mode(mode: str) -> None:
+    """Write the default mode to local.cfg if it's a stable choice.
+    Uses the cross-blueprint cfg_write_lock so it doesn't race with
+    other settings writers (CLAUDE.md mandate)."""
+    if mode not in _PERSISTABLE_MODES:
+        return
+    try:
+        from master.api.settings_bp import _cfg_write_lock
+        from master.config.config_loader import write_cfg_atomic, MAIN_CFG, LOCAL_CFG
+        import configparser
+        with _cfg_write_lock:
+            cfg = configparser.ConfigParser()
+            cfg.read([MAIN_CFG, LOCAL_CFG])
+            if not cfg.has_section('lights'):
+                cfg.add_section('lights')
+            cfg.set('lights', 'last_mode', mode)
+            write_cfg_atomic(cfg, LOCAL_CFG)
+    except Exception:
+        # Best-effort — if persistence fails the in-RAM _mode is still
+        # correct; only reboot recovery suffers.
+        import logging
+        logging.getLogger(__name__).exception("Lights mode persistence failed")
+
+
+def restore_mode_from_cfg(cfg) -> str:
+    """Called once from main.py after teeces.setup() succeeds. Reads
+    [lights] last_mode (default 'random') and dispatches the matching
+    driver call so hardware + UI agree on boot. Returns the restored
+    mode string for log line."""
+    global _mode
+    last = (cfg.get('lights', 'last_mode', fallback='random') or 'random').strip().lower()
+    if last not in _PERSISTABLE_MODES:
+        last = 'random'
+    _mode = last
+    if reg.teeces:
+        if   last == 'off':    reg.teeces.off()
+        elif last == 'leia':   reg.teeces.leia()
+        else:                  reg.teeces.random_mode()
+    return last
+
 # /teeces/raw command allowlist. Real JawaLite commands look like
 # `<addr>T<mode>` or `<addr>M<text>` etc. The firmware Teeces also
 # uses # for setup. Bound to the universe the lights/teeces module
@@ -125,6 +173,7 @@ def teeces_random():
     _mode = 'random'
     if reg.teeces:
         reg.teeces.random_mode()
+    _persist_mode(_mode)   # E5: survives reboot
     return jsonify({'status': 'ok', 'mode': 'random'})
 
 
@@ -136,6 +185,7 @@ def teeces_leia():
     _mode = 'leia'
     if reg.teeces:
         reg.teeces.leia()
+    _persist_mode(_mode)   # E5: survives reboot
     return jsonify({'status': 'ok', 'mode': 'leia'})
 
 
@@ -147,6 +197,7 @@ def teeces_off():
     _mode = 'off'
     if reg.teeces:
         reg.teeces.off()
+    _persist_mode(_mode)   # E5: survives reboot
     return jsonify({'status': 'ok', 'mode': 'off'})
 
 

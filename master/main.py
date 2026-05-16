@@ -386,7 +386,18 @@ def main() -> None:
         log.warning("Teeces32 init failed — degraded mode (LEDs unavailable)")
 
     uart.start()
-    teeces.random_mode()
+    # E5 fix 2026-05-16: restore persisted lights mode instead of always
+    # defaulting to random. Master reboot mid-OFF/mid-LEIA used to leave
+    # the operator with RANDOM blasting in a quiet venue (and the Slave
+    # firmware still doing whatever it was last told). Now boot reads
+    # [lights] last_mode from local.cfg and re-dispatches.
+    try:
+        from master.api.teeces_bp import restore_mode_from_cfg
+        restored = restore_mode_from_cfg(cfg)
+        log.info(f"Lights mode restored from cfg: {restored}")
+    except Exception:
+        log.exception("Lights mode restore failed — falling back to random")
+        teeces.random_mode()
     deploy.start()
 
     # ------------------------------------------------------------------
