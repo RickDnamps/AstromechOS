@@ -2227,9 +2227,35 @@ const _PSI_SEQ_COLORS = {
 function applyPSI() {
   const target   = el('psi-target')?.value   || 'both';
   const sequence = el('psi-sequence')?.value || 'normal';
-  api('/teeces/psi_seq', 'POST', { target, sequence }).then(d => {
-    if (d) toast(`PSI ${target.toUpperCase()} — ${sequence.toUpperCase()}`, 'ok');
+  // B8 fix 2026-05-16: only mute the dome sim AFTER server accepts.
+  // Was: setPSICustom ran synchronously regardless of HTTP result —
+  // local sim showed RED ALERT even when server returned 403/500.
+  const btn = el('psi-apply-btn');
+  const run = () => api('/teeces/psi_seq', 'POST', { target, sequence }).then(d => {
+    if (!d) {
+      toast(`PSI ${sequence.toUpperCase()} failed — admin needed`, 'error');
+      return null;
+    }
+    toast(`PSI ${target.toUpperCase()} — ${sequence.toUpperCase()}`, 'ok');
+    const anim = _PSI_SEQ_ANIM[sequence] || _PSI_SEQ_ANIM.normal;
+    if (target === 'both' || target === 'fpsi') _domeSim.setPSICustom('front', anim.c1, anim.c2, anim.speed);
+    if (target === 'both' || target === 'rpsi') _domeSim.setPSICustom('rear',  anim.c1, anim.c2, anim.speed);
+    return d;
   });
+  if (btn && typeof withSaveFeedback === 'function') {
+    withSaveFeedback(btn, run);
+  } else {
+    run();
+  }
+}
+
+// W13 fix 2026-05-16: live preview of PSI sequence in dome sim BEFORE
+// the operator clicks SET PSI. onchange handler reads current target +
+// sequence, updates the visual sim only (no UART write). Operator
+// auditions colors safely; clicking SET PSI commits to hardware.
+function previewPSI() {
+  const target   = el('psi-target')?.value   || 'both';
+  const sequence = el('psi-sequence')?.value || 'normal';
   const anim = _PSI_SEQ_ANIM[sequence] || _PSI_SEQ_ANIM.normal;
   if (target === 'both' || target === 'fpsi') _domeSim.setPSICustom('front', anim.c1, anim.c2, anim.speed);
   if (target === 'both' || target === 'rpsi') _domeSim.setPSICustom('rear',  anim.c1, anim.c2, anim.speed);
@@ -3553,8 +3579,22 @@ class TeecesController {
   updateCardTitle(backend) {
     const title = el('lights-card-title');
     if (!title) return;
-    const names = { teeces: 'TEECES LOGIC DISPLAY', astropixels: 'ASTROPIXELS+ CONTROL' };
-    title.textContent = names[backend] || 'LIGHTS CONTROL';
+    // W12 fix 2026-05-16: title is preserved (just "LIGHTS CONTROL") +
+    // a pill child carries the backend label/color. Was: title text
+    // hot-swapped which clobbered the pill at every poll.
+    const labelNode = title.childNodes[0];
+    if (labelNode) labelNode.nodeValue = 'LIGHTS CONTROL ';
+  }
+
+  /** W12 fix 2026-05-16: backend pill visible next to title with
+   *  per-backend color (teeces blue / astropixels cyan / unknown grey).
+   *  Was: backend only encoded in card title text. */
+  updateBackendPill(backend) {
+    const pill = el('lights-backend-pill');
+    if (!pill) return;
+    const LABELS = { teeces: 'TEECES', astropixels: 'ASTROPIXELS+', none: '— OFFLINE' };
+    pill.textContent = LABELS[backend] || backend.toUpperCase();
+    pill.className = 'backend-pill backend-' + backend;
   }
 
   setPSI(modeNum) {
@@ -3573,8 +3613,54 @@ function teecesMode(mode)  { teecesController.setMode(mode); }
 function sendTeecesText() {
   const text    = el('teeces-text')?.value.trim() || '';
   const display = el('teeces-display')?.value || 'fld_top';
+  // W6 fix 2026-05-16: empty SEND = explicit toast warn (was silent
+  // no-op — operator unsure if click registered).
+  if (!text) {
+    toast('Type a message first', 'warn');
+    el('teeces-text')?.focus();
+    return;
+  }
   teecesController.sendText(text, display);
   _domeSim.setText(display, text);
+}
+
+// W6 fix 2026-05-16: live char counter — amber at ≥18, red at 20.
+function updateTextCounter() {
+  const input = el('teeces-text');
+  const counter = el('teeces-text-counter');
+  if (!input || !counter) return;
+  const len = input.value.length;
+  counter.textContent = `${len}/20`;
+  counter.classList.toggle('text-counter-warn', len >= 18 && len < 20);
+  counter.classList.toggle('text-counter-max',  len >= 20);
+}
+
+// W4 fix 2026-05-16: one-tap "demo moments" — chains FLD anim + PSI
+// sequence so operator at convention doesn't have to click 3 times.
+// Each preset POSTs both endpoints; PSI as fire-and-forget after anim
+// (acceptable: order matters visually but doesn't break correctness).
+function lightsPreset(name) {
+  const PRESETS = {
+    emergency: { anim: 3,  psi: { target: 'both', sequence: 'redalert' }, toast: '🚨 EMERGENCY' },
+    leia:      { anim: 6,  psi: { target: 'both', sequence: 'leia'     }, toast: '🌀 LEIA'      },
+    party:     { anim: 13, psi: { target: 'both', sequence: 'march'    }, toast: '🪩 PARTY'     },
+    patrol:    { anim: 1,  psi: { target: 'both', sequence: 'normal'   }, toast: '🛡 PATROL'   },
+  };
+  const p = PRESETS[name];
+  if (!p) return;
+  const btn = document.querySelector(`.preset-chip[onclick*="${name}"]`);
+  const run = async () => {
+    const a = await api('/teeces/animation', 'POST', { mode: p.anim });
+    if (!a) { toast(`${p.toast} failed — admin needed`, 'error'); return null; }
+    await api('/teeces/psi_seq', 'POST', p.psi);
+    toast(`${p.toast} engaged`, 'ok');
+    return a;
+  };
+  if (btn && typeof withSaveFeedback === 'function') {
+    withSaveFeedback(btn, run);
+  } else {
+    run();
+  }
 }
 
 const LIGHT_ANIMATIONS = [
@@ -3621,13 +3707,18 @@ async function loadLightSequences() {
   };
   const animGrid = el('anim-grid');
   if (animGrid && animData?.animations) {
+    // W5 fix 2026-05-16: native title tooltip with duration + mode#
+    // — was: bare chip, operator pressed "Leia" not knowing it's 34s.
+    // Tooltip is desktop hover + touch long-press (mobile parity).
     animGrid.innerHTML = animData.animations.map(a => {
       const meta = LIGHT_ANIMATIONS.find(x => x.mode === a.mode);
       const icon = meta ? meta.icon : '';
       const label = (meta ? meta.label : a.name).toUpperCase();
+      const dur   = meta ? meta.dur : '';
       const cc = CHIP_COLORS[a.mode] || 'c-blue';
+      const title = `${meta ? meta.label : a.name} • T${a.mode}${dur ? ' • ' + dur : ''}`;
       return `<button class="anim-chip ${cc}" id="anim-btn-${a.mode}"
-              onclick="playAnimation(${a.mode})">${icon ? icon + ' ' : ''}${label}</button>`;
+              onclick="playAnimation(${a.mode})" title="${title}">${icon ? icon + ' ' : ''}${label}<span class="anim-chip-dur">${dur}</span></button>`;
     }).join('');
   }
 
@@ -3637,8 +3728,13 @@ async function loadLightSequences() {
     _updateRawPaletteItem();
   }
 
-  // Backend title
-  if (state?.backend) teecesController.updateCardTitle(state.backend);
+  // Backend title + W12 fix: sync backend pill
+  if (state?.backend) {
+    teecesController.updateCardTitle(state.backend);
+    teecesController.updateBackendPill(state.backend);
+  }
+  // Reset counter to current input length (covers re-visit case)
+  updateTextCounter();
 }
 
 function playAnimation(mode) {

@@ -674,11 +674,20 @@
      TAB 4: LIGHTS — Logic Display + Light Sequences
 ================================================================ -->
 <div class="tab-content" id="tab-lights">
-  <div class="systems-grid" style="grid-template-columns: 1fr 1fr">
+  <!-- W7 fix 2026-05-16: removed inline 'grid-template-columns: 1fr 1fr'
+       which was overriding the @media (max-width:768px) rule that
+       collapses to 1 column on phone. Now uses .systems-grid responsive
+       defaults (repeat(auto-fit,minmax(320px,1fr)) below 768px → 1fr). -->
+  <div class="systems-grid" id="lights-grid">
 
     <!-- Lights Control (Teeces / AstroPixels+) -->
     <section class="card systems-card">
-      <h2 class="card-title" id="lights-card-title">LIGHTS CONTROL</h2>
+      <!-- W12 fix 2026-05-16: backend pill next to title (was: backend
+           only shown in card title text — easy to miss at a glance). -->
+      <h2 class="card-title" id="lights-card-title">
+        LIGHTS CONTROL
+        <span class="backend-pill" id="lights-backend-pill" title="Active lights driver">—</span>
+      </h2>
 
       <!-- Dome simulation -->
       <div class="dome-views" id="dome-sim">
@@ -731,10 +740,26 @@
         <button class="btn btn-dark" id="teeces-btn-off" onclick="teecesMode('off')">OFF</button>
       </div>
 
+      <!-- W4 fix 2026-05-16: PRESETS combos for one-tap "demo moments"
+           at convention. Each preset chains FLD anim + PSI sequence (+
+           optional text). Without this operator had to chain 3 clicks. -->
+      <div class="psi-swatches-label mt">PRESETS</div>
+      <div class="presets-row">
+        <button class="btn btn-dark preset-chip" onclick="lightsPreset('emergency')"
+                title="Alarm anim + Red Alert PSI">🚨 EMERGENCY</button>
+        <button class="btn btn-dark preset-chip" onclick="lightsPreset('leia')"
+                title="Leia anim + Leia PSI sequence">🌀 LEIA</button>
+        <button class="btn btn-dark preset-chip" onclick="lightsPreset('party')"
+                title="Disco anim + March PSI">🪩 PARTY</button>
+        <button class="btn btn-dark preset-chip" onclick="lightsPreset('patrol')"
+                title="Random anim + Normal PSI (default safe state)">🛡 PATROL</button>
+      </div>
+
       <!-- Text input with display target -->
       <div class="row mt">
         <input type="text" id="teeces-text" placeholder="Scrolling text (max 20)…"
-               maxlength="20" class="input-text">
+               maxlength="20" class="input-text"
+               oninput="updateTextCounter()" onkeydown="if(event.key==='Enter')sendTeecesText()">
         <select id="teeces-display" class="input-select-sm" title="Display target">
           <option value="fld_top">FLD TOP</option>
           <option value="fld_bottom">FLD BOT</option>
@@ -742,15 +767,23 @@
           <option value="rld">RLD</option>
           <option value="all">ALL</option>
         </select>
-        <button class="btn" onclick="sendTeecesText()">SEND</button>
+        <button class="btn" id="teeces-send-btn" onclick="sendTeecesText()">SEND</button>
+      </div>
+      <!-- W6 fix 2026-05-16: live char counter — was: silent truncation
+           at maxlength=20, no warning if operator pasted longer text. -->
+      <div class="text-counter-row">
+        <span class="text-counter" id="teeces-text-counter">0/20</span>
       </div>
 
       <!-- PSI controls -->
+      <!-- W13 fix 2026-05-16: dropdowns trigger live preview in dome
+           sim (no UART write) so operator can audition colors before
+           committing via SET PSI. -->
       <div class="psi-swatches-label mt">PSI SETTINGS</div>
       <div class="psi-ctrl">
         <div class="psi-ctrl-row">
           <span class="psi-ctrl-label">TARGET</span>
-          <select id="psi-target" class="input-select-sm" style="flex:1">
+          <select id="psi-target" class="input-select-sm" style="flex:1" onchange="previewPSI()">
             <option value="both">BOTH</option>
             <option value="fpsi">FPSI (FRONT)</option>
             <option value="rpsi">RPSI (REAR)</option>
@@ -758,7 +791,7 @@
         </div>
         <div class="psi-ctrl-row" style="margin-top:6px">
           <span class="psi-ctrl-label">SEQUENCE</span>
-          <select id="psi-sequence" class="input-select-sm" style="flex:1">
+          <select id="psi-sequence" class="input-select-sm" style="flex:1" onchange="previewPSI()">
             <option value="normal">NORMAL</option>
             <option value="flash">FLASH</option>
             <option value="alarm">ALARM</option>
@@ -768,23 +801,29 @@
             <option value="march">MARCH</option>
           </select>
         </div>
-        <button class="btn" style="margin-top:8px;width:100%" onclick="applyPSI()">SET PSI</button>
+        <button class="btn" id="psi-apply-btn" style="margin-top:8px;width:100%" onclick="applyPSI()">SET PSI</button>
         <button class="btn btn-dark" style="margin-top:4px;font-size:9px;width:100%"
-                onclick="resetPSI()">↺ RESET TO ANIMATION</button>
+                onclick="resetPSI()"
+                title="Sync PSI back to the active animation's color (PSI normally stays blue regardless of T-code mode)">↺ RESET TO ANIMATION</button>
       </div>
     </section>
 
     <!-- T-code Animations -->
-    <section class="card systems-card" style="display:flex;flex-direction:column">
-      <h2 class="card-title">ANIMATIONS</h2>
-      <div class="anim-grid" id="anim-grid" style="flex:1;align-content:flex-start">
-        <!-- generated by JS -->
+    <section class="card systems-card lights-anims-card">
+      <!-- W15/W8/B15 fix 2026-05-16: STOP ALL moved to a sticky bar
+           in the card header so it's always 1 tap away (was: at bottom
+           of card, off-screen on mobile after 22 chips). Wired to
+           teecesMode('off') so _currentMode + buttons stay sync'd
+           (was: inline onclick that bypassed the controller). -->
+      <div class="lights-anims-header">
+        <h2 class="card-title" style="margin:0">ANIMATIONS</h2>
+        <button class="btn btn-danger btn-sm anim-stop-btn"
+                id="anim-stop-btn"
+                onclick="teecesMode('off')"
+                title="Stop all lights">■ STOP ALL</button>
       </div>
-      <div style="margin-top:12px">
-        <button class="btn btn-danger btn-sm" style="width:100%"
-                onclick="api('/teeces/off','POST').then(()=>{toast('Lights off','ok');document.querySelectorAll('.anim-chip').forEach(b=>b.classList.remove('active'));_domeSim.setModeNum(20);})">
-          STOP ALL
-        </button>
+      <div class="anim-grid" id="anim-grid">
+        <!-- generated by JS -->
       </div>
     </section>
 
