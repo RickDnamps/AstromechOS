@@ -4025,12 +4025,38 @@ class AudioBoard {
       // played (persisted in localStorage). Helps re-trigger quickly.
       let lastSound = null;
       try { lastSound = localStorage.getItem('astromech-last-sound'); } catch {}
+      const isAdmin = adminGuard.unlocked;
       data.sounds.forEach(s => {
         const btn = document.createElement('button');
         btn.className = 'sound-btn sound-card' + (s === lastSound ? ' last-played' : '');
         btn.dataset.sound = s;
-        btn.title = s === lastSound ? `${s} (last played)` : s;
+        // L3-W feature 2026-05-16: long-press hint for admin (delete)
+        btn.title = (s === lastSound ? `${s} (last played)` : s)
+                  + (isAdmin ? ' · long-press to delete' : '');
         btn.textContent = this._formatSound(s);
+        // L3-W: long-press 700ms → confirm + delete (admin only).
+        // Normal tap still fires play. Suppress click if long-press
+        // triggered via capture-phase stopImmediatePropagation.
+        if (isAdmin) {
+          let _lpTimer = null;
+          let _lpFired = false;
+          const startLp = () => {
+            _lpFired = false;
+            _lpTimer = setTimeout(() => {
+              _lpFired = true;
+              this._confirmDeleteSound(s);
+            }, 700);
+          };
+          const cancelLp = () => {
+            if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+          };
+          btn.addEventListener('pointerdown', startLp);
+          btn.addEventListener('pointerup', cancelLp);
+          btn.addEventListener('pointerleave', cancelLp);
+          btn.addEventListener('click', (e) => {
+            if (_lpFired) { e.stopImmediatePropagation(); _lpFired = false; }
+          }, true);
+        }
         grid.appendChild(btn);
       });
     } else {
@@ -4093,6 +4119,47 @@ class AudioBoard {
         }
       }
     });
+  }
+
+  async _confirmDeleteSound(sound) {
+    // L3-W feature 2026-05-16: admin long-press → confirm + delete.
+    // Browser confirm is acceptable for destructive admin actions —
+    // it's modal and unmissable. The toast pattern is for non-blocking
+    // info; here we WANT to block.
+    if (!confirm(`Delete sound "${sound}"?\n\nThis removes it from:\n  - the audio library\n  - any shortcut targeting it (becomes "none")\n\nChoreo blocks that reference it are preserved — re-upload the same name to restore.`)) {
+      return;
+    }
+    try {
+      const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+      const headers = {};
+      const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+      if (tok) headers['X-Admin-Pw'] = tok;
+      const res = await fetch(base + '/audio/sound/' + encodeURIComponent(sound), {
+        method: 'DELETE',
+        headers,
+      });
+      const d = await res.json().catch(() => null);
+      if (res.ok && d && d.ok) {
+        let msg = `✓ Deleted ${sound}`;
+        if (d.shortcuts_neutralized > 0) {
+          msg += ` (${d.shortcuts_neutralized} shortcut${d.shortcuts_neutralized > 1 ? 's' : ''} neutralized)`;
+        }
+        toast(msg, 'ok');
+        await this.loadCategories();
+        await this.selectCategory(this._currentCat);
+        // Refresh global _audioIndex used by choreo editor too
+        try {
+          const r = await api('/audio/index');
+          if (r && r.categories && typeof _audioIndex !== 'undefined') {
+            _audioIndex = r.categories;
+          }
+        } catch {}
+      } else {
+        toast(`Delete failed: ${(d && d.error) || 'HTTP ' + res.status}`, 'error');
+      }
+    } catch (e) {
+      toast(`Delete network error: ${e.message || e}`, 'error');
+    }
   }
 
   playRandom(cat) {

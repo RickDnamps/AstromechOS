@@ -851,6 +851,118 @@ def upload_sound():
     })
 
 
+@audio_bp.route('/sound/<sound>', methods=['DELETE'])
+@require_admin
+def delete_sound(sound):
+    """L3-W feature 2026-05-16: per-sound delete with cascade.
+
+    Removes the sound from:
+      - sounds_index.json (master, atomic write under _upload_lock)
+      - local slave/sounds/<stem>.mp3 file
+      - remote slave filesystem (via SFTP, serialized via _sftp_lock)
+      - any shortcut targeting it (cascade_delete from shortcuts_bp
+        switches the shortcut's action to 'none' so the operator sees
+        the dead button and can reconfigure)
+
+    NOT cascaded (intentional): choreo audio tracks. A choreo block
+    referencing a deleted sound is preserved so the operator can
+    re-upload a replacement under the same name without re-editing
+    the choreo. The choreo dispatch will silently no-op if the
+    sound is missing at play time.
+    """
+    if not isinstance(sound, str) or not _SOUND_NAME_RE.match(sound):
+        return jsonify({'ok': False, 'error': 'Invalid sound name'}), 400
+    local_mp3 = _safe_sound_path(sound)
+    if not local_mp3:
+        return jsonify({'ok': False, 'error': 'Sound path resolution failed'}), 400
+
+    with _upload_lock:
+        index = _get_index()
+        cats = index.get('categories', {})
+        # Remove from EVERY category that contains it (defensive — a
+        # sound could be listed in multiple cats if the index was
+        # hand-edited).
+        found_in = []
+        for cat_name, sounds in cats.items():
+            if isinstance(sounds, list) and sound in sounds:
+                cats[cat_name] = [s for s in sounds if s != sound]
+                found_in.append(cat_name)
+        if not found_in:
+            return jsonify({'ok': False, 'error': 'Sound not in index'}), 404
+        _atomic_write_index(index)
+
+    # Local MP3 delete (best-effort — index removal is authoritative)
+    try:
+        if os.path.exists(local_mp3):
+            os.remove(local_mp3)
+            log.info("Deleted local MP3: %s", local_mp3)
+    except OSError as e:
+        log.warning("Failed to delete local MP3 %s: %s", local_mp3, e)
+
+    # SFTP delete + index sync to Slave (serialized via _sftp_lock).
+    # Same threading pattern as upload — don't block the HTTP response.
+    threading.Thread(
+        target=_sftp_delete_sound, args=(sound,),
+        daemon=True, name=f'sftp-delete-{sound}',
+    ).start()
+
+    # Cascade: any shortcut pointing at this sound becomes 'none'
+    cascaded = 0
+    try:
+        from master.api.shortcuts_bp import cascade_delete
+        cascaded = cascade_delete('play_sound', sound)
+    except Exception as e:
+        log.warning("cascade_delete for sound %s failed: %s", sound, e)
+
+    return jsonify({
+        'ok': True, 'sound': sound,
+        'removed_from_cats': found_in,
+        'shortcuts_neutralized': cascaded,
+    })
+
+
+def _sftp_delete_sound(sound: str) -> None:
+    """L3-W support 2026-05-16: SFTP-delete a sound from the Slave +
+    re-sync the freshly-updated index. Serialized via _sftp_lock so
+    it can't race with concurrent uploads."""
+    with _sftp_lock:
+        try:
+            with open(_SOUNDS_INDEX, 'rb') as f:
+                fresh_index = json.loads(f.read().decode('utf-8'))
+        except (OSError, json.JSONDecodeError):
+            log.warning("SFTP delete: index read failed for %s", sound)
+            return
+        try:
+            import paramiko
+            c = paramiko.SSHClient()
+            c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            c.connect(**_slave_sftp_creds())
+            sftp = c.open_sftp()
+            try:
+                # Remove remote MP3 (ignore if already missing)
+                try:
+                    sftp.remove(f'{_SLAVE_SOUNDS}/{sound}.mp3')
+                except IOError:
+                    pass
+                # Sync the index
+                data = json.dumps(fresh_index, indent=2, ensure_ascii=False).encode('utf-8')
+                _sftp_atomic_put(sftp, f'{_SLAVE_SOUNDS}/sounds_index.json', data)
+                # Reload Slave in-memory index
+                try:
+                    if reg.uart:
+                        reg.uart.send('SIDX', 'RELOAD')
+                except Exception:
+                    pass
+            finally:
+                sftp.close()
+                c.close()
+            log.info("SFTP deleted %s.mp3 + synced index", sound)
+        except (OSError, IOError) as e:
+            log.warning("SFTP delete failed for %s: %s", sound, e)
+        except ImportError:
+            log.warning("SFTP delete skipped (paramiko not installed): %s", sound)
+
+
 @audio_bp.post('/category/create')
 @require_admin
 def create_category():
