@@ -265,6 +265,17 @@ def _cpu_temp() -> float | None:
     return v
 
 
+def _is_default_admin_password() -> bool:
+    """W2 fix 2026-05-16: True if [admin] password equals 'deetoo'
+    (the documented default). Used by /status to drive the SYSTEM
+    panel banner."""
+    try:
+        from master.api.settings_bp import _get_admin_password
+        return _get_admin_password() == 'deetoo'
+    except Exception:
+        return False
+
+
 def _shortcut_states_snapshot() -> dict:
     """E7 fix 2026-05-16: snapshot the shortcuts dispatcher's in-memory
     state dict for /status sync. Returns {} if shortcuts blueprint not
@@ -447,6 +458,10 @@ def get_status():
         # tab A presses arms_toggle → tab B indicator stays stale
         # until full reload. Tiny payload (~50 bytes for 12 entries).
         'shortcut_states':   _shortcut_states_snapshot(),
+        # W2 fix 2026-05-16: surface default-password state so the
+        # SYSTEM panel can show a red banner. Boolean only — never
+        # leak the actual password.
+        'admin_pwd_is_default': _is_default_admin_password(),
         'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_drive_safe':   is_drive_safe(),
@@ -980,6 +995,19 @@ def system_shutdown():
         return jsonify({'error': reason}), 503
     _spawn_reboot(['sudo', 'shutdown', '-h', 'now'])
     return jsonify({'status': 'shutting_down'})
+
+
+@status_bp.post('/system/restart_master')
+@require_admin
+def system_restart_master():
+    """W6 fix 2026-05-16: restart astromech-master.service only (~5s).
+    Faster than full Pi reboot for dev iteration. Slave UART reconnects
+    automatically via heartbeat + BOOT:READY resync."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    _spawn_reboot(['sudo', 'systemctl', 'restart', 'astromech-master.service'])
+    return jsonify({'status': 'restarting'})
 
 
 @status_bp.post('/heartbeat')

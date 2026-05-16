@@ -2206,6 +2206,10 @@
       <div class="settings-panel" id="spanel-system">
         <section class="card settings-card">
           <h2 class="card-title">SYSTEM</h2>
+          <!-- W2 fix 2026-05-16: default password warning banner -->
+          <div id="admin-pwd-default-warn" class="default-pwd-warn hidden">
+            ⚠ <strong>Default admin password 'deetoo' is in use</strong> — change it below to lock out unauthorized access.
+          </div>
           <div class="settings-status" id="system-version">Loading...</div>
           <div class="settings-divider"></div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
@@ -2216,19 +2220,32 @@
             <button class="btn btn-warn"   onclick="confirmAction('Reboot both Master + Slave?',   '/system/reboot_both')">REBOOT BOTH</button>
             <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN both Master + Slave?', '/system/shutdown_both')">SHUTDOWN BOTH</button>
           </div>
+          <!-- W6 fix 2026-05-16: restart services only (faster than full reboot) -->
+          <button class="btn btn-sm" style="margin-top:6px;width:100%"
+                  onclick="confirmAction('Restart Master services? (~5s, faster than full reboot)', '/system/restart_master', true)">
+            ↻ RESTART MASTER SERVICES <span style="opacity:.6;font-size:9px">(~5s)</span>
+          </button>
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
           <div class="settings-row">
             <label class="settings-label">Current password</label>
-            <input type="password" id="admin-pwd-current" class="settings-input" placeholder="Current password">
+            <!-- W1 fix 2026-05-16: show/hide eye toggle (reuse Network pattern) -->
+            <div class="pwd-input-wrap">
+              <input type="password" id="admin-pwd-current" class="settings-input" placeholder="Current password" maxlength="128"
+                     autocomplete="current-password">
+              <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-current', this)" aria-label="Show password">👁</button>
+            </div>
           </div>
           <div class="settings-row">
             <label class="settings-label">New password</label>
-            <input type="password" id="admin-pwd-new" class="settings-input"
-                   placeholder="New password (min 4 chars)"
-                   oninput="updatePwdStrength()"
-                   onkeydown="checkCapsLock(event, 'admin-pwd-caps-new')">
-            <!-- WOW polish I7 2026-05-15: live strength meter -->
+            <div class="pwd-input-wrap">
+              <input type="password" id="admin-pwd-new" class="settings-input"
+                     placeholder="New password (min 4 chars)" maxlength="128"
+                     autocomplete="new-password"
+                     oninput="updatePwdStrength()"
+                     onkeydown="checkCapsLock(event, 'admin-pwd-caps-new')">
+              <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-new', this)" aria-label="Show password">👁</button>
+            </div>
             <div class="pwd-strength-meter" id="admin-pwd-strength">
               <div class="pwd-strength-bar" id="admin-pwd-strength-bar"></div>
               <span class="pwd-strength-label" id="admin-pwd-strength-label">enter a password</span>
@@ -2237,15 +2254,29 @@
           </div>
           <div class="settings-row">
             <label class="settings-label">Confirm</label>
-            <input type="password" id="admin-pwd-confirm" class="settings-input"
-                   placeholder="Confirm new password"
-                   oninput="updatePwdMatch()"
-                   onkeydown="checkCapsLock(event, 'admin-pwd-caps-confirm')">
+            <div class="pwd-input-wrap">
+              <input type="password" id="admin-pwd-confirm" class="settings-input"
+                     placeholder="Confirm new password" maxlength="128"
+                     autocomplete="new-password"
+                     oninput="updatePwdMatch()"
+                     onkeydown="checkCapsLock(event, 'admin-pwd-caps-confirm')">
+              <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-confirm', this)" aria-label="Show password">👁</button>
+            </div>
             <div id="admin-pwd-match" class="pwd-match-indicator"></div>
             <div id="admin-pwd-caps-confirm" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
           </div>
-          <button class="btn btn-primary" onclick="adminChangePassword()">CHANGE PASSWORD</button>
+          <!-- W4 fix 2026-05-16: withSaveFeedback on CHANGE PASSWORD -->
+          <button id="admin-pwd-change-btn" class="btn btn-primary" onclick="withSaveFeedback(this, () => adminChangePassword())">CHANGE PASSWORD</button>
           <div class="settings-status" id="admin-pwd-status"></div>
+          <details class="forgot-password-help" style="margin-top:12px;font-size:11px;opacity:.7">
+            <summary style="cursor:pointer">🔑 Forgot password?</summary>
+            <div style="padding:6px 0">
+              SSH into Master (<code>ssh artoo@&lt;master-ip&gt;</code>), edit
+              <code>/home/artoo/astromechos/master/config/local.cfg</code>,
+              find the <code>[admin]</code> section, set <code>password = newpwd</code>,
+              save + restart: <code>sudo systemctl restart astromech-master.service</code>.
+            </div>
+          </details>
         </section>
       </div>
 

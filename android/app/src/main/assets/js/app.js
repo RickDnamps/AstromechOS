@@ -8385,6 +8385,12 @@ class StatusPoller {
     if (camPanel && camPanel.classList.contains('active')) {
       try { updateCameraStatusPill(data); } catch {}
     }
+    // W2 fix 2026-05-16: default-admin-password warning banner
+    const pwdWarn = el('admin-pwd-default-warn');
+    if (pwdWarn) {
+      if (data.admin_pwd_is_default) pwdWarn.classList.remove('hidden');
+      else pwdWarn.classList.add('hidden');
+    }
 
     // Conditional topbar pills — visible only when something is wrong
     const pillSlave = el('pill-slave');
@@ -10584,23 +10590,39 @@ async function saveConfig() {
   } catch { toast('Error saving config', 'error'); }
 }
 
-function confirmAction(msg, endpoint) {
+// B11 fix 2026-05-16: await api response BEFORE showing overlay so the
+// safety gate / lock rejection (503) can surface as a toast instead of
+// trapping the operator behind a 30s overlay for a reboot that never
+// happened.
+async function confirmAction(msg, endpoint, isServiceRestart) {
   if (!confirm(msg)) return;
-  // WOW polish I3 2026-05-15: any /system/reboot* or /system/shutdown*
-  // endpoint should show the countdown overlay so operator knows the
-  // page is intentionally offline. /system/resync_slave doesn't need it.
+  // W6 fix 2026-05-16: shorter overlay for service-only restart (~5s).
   const isReboot   = /\/system\/reboot/.test(endpoint);
   const isShutdown = /\/system\/shutdown/.test(endpoint);
-  if (isReboot || isShutdown) {
-    const title = isShutdown ? 'POWERING OFF' : 'REBOOTING';
-    const sub   = isShutdown
-      ? 'Master is shutting down — manual power cycle required to resume'
-      : 'The Master Pi is restarting — page will auto-reconnect';
-    showRebootOverlay(title, sub, isShutdown ? 0 : 30, !isShutdown);
+  const isRestart  = isServiceRestart || /\/system\/restart_master/.test(endpoint);
+  const res = await apiDetail(endpoint, 'POST');
+  if (!res.ok) {
+    toast(res.error || 'Command refused', 'error');
+    return;
   }
-  api(endpoint, 'POST').then(d => {
-    if (d) toast('Command sent', 'ok');
-  }).catch(() => {});
+  if (isReboot || isShutdown || isRestart) {
+    let title, sub, countdown;
+    if (isShutdown) {
+      title = 'POWERING OFF';
+      sub   = 'Master is shutting down — manual power cycle required to resume';
+      countdown = 0;
+    } else if (isRestart) {
+      title = 'RESTARTING SERVICES';
+      sub   = 'Master services restarting (~5s) — page will auto-reconnect';
+      countdown = 10;
+    } else {
+      title = 'REBOOTING';
+      sub   = 'The Master Pi is restarting — page will auto-reconnect';
+      countdown = 30;
+    }
+    showRebootOverlay(title, sub, countdown, !isShutdown);
+  }
+  toast('Command sent', 'ok');
 }
 
 // WOW polish I3 2026-05-15: reboot/shutdown overlay manager.
@@ -11386,10 +11408,10 @@ async function adminChangePassword() {
     status.style.color = ok ? 'var(--ok)' : 'var(--warn)';
   };
 
-  if (!current)            return setStatus('Enter your current password.', false);
-  if (newPwd.length < 4)   return setStatus('New password must be at least 4 characters.', false);
-  if (newPwd !== confirm_) return setStatus('Passwords do not match.', false);
-  if (newPwd === current)  return setStatus('New password must differ from current.', false);
+  if (!current)            { setStatus('Enter your current password.', false); return false; }
+  if (newPwd.length < 4)   { setStatus('New password must be at least 4 characters.', false); return false; }
+  if (newPwd !== confirm_) { setStatus('Passwords do not match.', false); return false; }
+  if (newPwd === current)  { setStatus('New password must differ from current.', false); return false; }
 
   const res = await apiDetail('/settings/admin/password', 'POST', { current, new: newPwd });
   if (res.ok && res.data?.ok) {
@@ -11397,14 +11419,14 @@ async function adminChangePassword() {
     el('admin-pwd-current').value = '';
     el('admin-pwd-new').value     = '';
     el('admin-pwd-confirm').value = '';
-    // B3 fix: re-key adminGuard so subsequent admin calls use the NEW pwd
     if (typeof adminGuard !== 'undefined') {
       adminGuard._token = newPwd;
     }
     toast('Admin password updated — session re-keyed', 'ok');
-  } else {
-    setStatus(res.error || 'Error — check your current password.', false);
+    return true;
   }
+  setStatus(res.error || 'Error — check your current password.', false);
+  return false;
 }
 
 // ================================================================
