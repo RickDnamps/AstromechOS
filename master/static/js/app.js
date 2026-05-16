@@ -3264,13 +3264,31 @@ function estopReset() {
       toast('Stowing servos…', 'info');
       _setEstopUI(false);
       if (txt) txt.textContent = 'STOWING…';   // poller flips back when done
-      // Safety belt — if poller misses the transition, force-clear after 30s.
-      setTimeout(() => {
-        if (txt && txt.textContent === 'STOWING…' && !_estopTripped) {
-          console.warn('estopReset: 30s timeout fired, force-clearing STOWING text');
-          txt.textContent = 'EMERGENCY STOP';
+      // 2026-05-16 user-reported "ça fait un bail": instead of waiting
+      // 2s for the StatusPoller to detect stow_in_progress flip, poll
+      // /status directly every 500ms for up to 10s. Backend safe_home
+      // takes ~1-2s measured, so this clears the text within ~500ms
+      // of physical motion ending — perceived as "instant".
+      let elapsed = 0;
+      const fastPoll = setInterval(async () => {
+        elapsed += 500;
+        if (elapsed > 10000) {
+          clearInterval(fastPoll);
+          if (txt && txt.textContent === 'STOWING…') {
+            console.warn('estopReset: 10s fast-poll timeout, force-clearing');
+            txt.textContent = 'EMERGENCY STOP';
+          }
+          return;
         }
-      }, 30000);
+        const d = await api('/status').catch(() => null);
+        if (!d) return;
+        if (!d.stow_in_progress && !d.estop_active) {
+          clearInterval(fastPoll);
+          if (txt && txt.textContent === 'STOWING…') {
+            txt.textContent = 'EMERGENCY STOP';
+          }
+        }
+      }, 500);
     } else {
       if (txt) txt.textContent = 'RESET E-STOP';
       toast('Reset failed', 'error');
