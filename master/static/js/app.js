@@ -8085,11 +8085,6 @@ const cockpitPanel = {
 
     btn.classList.toggle('danger', hasDanger);
     btn.classList.toggle('alert',  hasWarn);
-    // Debug: expose state to DevTools so user can verify
-    btn.dataset.danger = String(hasDanger);
-    btn.dataset.warn   = String(hasWarn);
-    btn.dataset.bench  = String(!!data.vesc_bench_mode);
-    btn.dataset.lock   = String(data.lock_mode || 0);
   },
 
   _updateAlerts(data) {
