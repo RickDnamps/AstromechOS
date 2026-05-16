@@ -8142,6 +8142,18 @@ class StatusPoller {
       return;
     }
     this._setOffline(false);
+    // W1+W2 fix 2026-05-16: cache /status snapshot for HAT panel
+    // meta rendering (HAT health dots + servo count preview).
+    _lastStatusForHats = data;
+    // Re-render HAT meta if HATs panel is visible.
+    const hatsPanel = el('spanel-hats');
+    if (hatsPanel && hatsPanel.classList.contains('active')) {
+      try {
+        validateHatField('master-hats-input');
+        validateHatField('slave-hats-input');
+        validateHatField('slave-motor-hat-input', true);
+      } catch {}
+    }
 
     // Conditional topbar pills — visible only when something is wrong
     const pillSlave = el('pill-slave');
@@ -8648,6 +8660,14 @@ async function loadSettings() {
       slave_motor_hat: data.hardware.slave_motor_hat || '0x40',
       body_uart_lat_ms: data.hardware.body_uart_lat_ms ?? 25,
     };
+    // W1+W2 fix 2026-05-16: render meta immediately after populating
+    // inputs so operator sees the live HAT health + servo count on
+    // first panel visit (not just after typing).
+    try {
+      validateHatField('master-hats-input');
+      validateHatField('slave-hats-input');
+      validateHatField('slave-motor-hat-input', true);
+    } catch {}
   }
 
   if (data.lights) {
@@ -10209,11 +10229,12 @@ async function saveBodyUartLat() {
   const data = await api('/settings/config', 'POST', {'choreo.body_servo_uart_lat': sec});
   if (data?.status === 'ok') {
     if (_hardwareLoaded) _hardwareLoaded.body_uart_lat_ms = ms;
-    // Brief 'saved' indicator next to the input
+    // W10 fix 2026-05-16: unified saved-pulse visual matching the
+    // rest of the app (withSaveFeedback style).
     const ind = el('body-uart-lat-saved');
     if (ind) {
-      ind.style.opacity = '1';
-      setTimeout(() => { ind.style.opacity = '0'; }, 1500);
+      ind.classList.add('is-visible');
+      setTimeout(() => { ind.classList.remove('is-visible'); }, 1500);
     }
     return true;
   }
@@ -10335,6 +10356,85 @@ async function applyUartRttRecommendation() {
   const btn = el('uart-rtt-apply-btn');
   if (btn) btn.disabled = true;
 }
+
+// W1+W2 fix 2026-05-16: render live HAT health + servo count preview
+// next to each input as operator types. Sources hat_health from /status
+// (cockpit panel already uses this — re-render here on every poll).
+function _renderHatMeta(inputId, metaId, opts = {}) {
+  const inp = el(inputId);
+  const meta = el(metaId);
+  if (!inp || !meta) return;
+  const single = !!opts.single;
+  const raw = inp.value.trim();
+  if (!raw) { meta.textContent = ''; return; }
+  const v = _validateHatList(raw, { single });
+  if (!v.ok) {
+    meta.innerHTML = '';
+    const span = document.createElement('span');
+    span.className = 'hat-meta-err';
+    span.textContent = '✗ ' + v.error;
+    meta.appendChild(span);
+    return;
+  }
+  meta.innerHTML = '';
+  // Servo count preview (16 channels per HAT)
+  const nHats = v.addrs.length;
+  const totalServos = nHats * 16;
+  const summary = document.createElement('span');
+  summary.className = 'hat-meta-summary';
+  summary.textContent = single
+    ? `→ Motor HAT @ 0x${v.addrs[0].toString(16)}`
+    : `→ ${nHats} HAT${nHats>1?'s':''} · ${totalServos} channels`;
+  meta.appendChild(summary);
+  // Per-addr health dot from latest /status snapshot
+  const prefix = opts.servoPrefix || '';
+  const healthArr = opts.healthArr || [];
+  v.addrs.forEach((n, i) => {
+    const addrHex = '0x' + n.toString(16);
+    const chip = document.createElement('span');
+    chip.className = 'hat-meta-chip';
+    const health = healthArr.find(h => parseInt(h.addr, 16) === n);
+    if (health) {
+      if (health.ok) {
+        chip.classList.add('hat-ok');
+        chip.title = `${addrHex}: I2C OK`;
+      } else {
+        chip.classList.add('hat-bad');
+        chip.title = `${addrHex}: I2C ${health.errors || 'no response'}`;
+      }
+    } else {
+      chip.classList.add('hat-unknown');
+      chip.title = `${addrHex}: status unknown (save + reboot to detect)`;
+    }
+    if (single) {
+      chip.textContent = '● Motor';
+    } else {
+      const startId = prefix + (i * 16);
+      const endId   = prefix + (i * 16 + 15);
+      chip.textContent = `● ${addrHex} (${startId}–${endId})`;
+    }
+    meta.appendChild(chip);
+  });
+}
+
+function validateHatField(inputId, single = false) {
+  // Decide metaId + servo prefix from input id
+  const metaMap = {
+    'master-hats-input':       { metaId: 'master-hats-meta',     prefix: 'Servo_M' },
+    'slave-hats-input':        { metaId: 'slave-hats-meta',      prefix: 'Servo_S' },
+    'slave-motor-hat-input':   { metaId: 'slave-motor-hat-meta', prefix: 'Motor' },
+  };
+  const cfg = metaMap[inputId];
+  if (!cfg) return;
+  const latest = _lastStatusForHats || {};
+  const healthArr = inputId === 'master-hats-input' ? (latest.dome_hat_health || [])
+                  : inputId === 'slave-hats-input'  ? (latest.body_hat_health || [])
+                  : (latest.motor_hat_health ? [latest.motor_hat_health] : []);
+  _renderHatMeta(inputId, cfg.metaId, { single, servoPrefix: cfg.prefix, healthArr });
+}
+
+// Cache latest /status snapshot for HAT health lookups
+let _lastStatusForHats = null;
 
 // W5 fix 2026-05-16: client-side hex validation (matches backend
 // _HAT_ADDR_RE + PCA9685 0x40-0x77 range + dedup).
