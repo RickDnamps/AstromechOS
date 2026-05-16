@@ -66,6 +66,7 @@ Calibration:
 import configparser
 import json
 import logging
+import math
 import os
 import subprocess
 import threading
@@ -718,18 +719,35 @@ _ARM_COUNT_MAX = 6
 _ARM_DEFAULT_DELAY = 0.5  # seconds between panel open and arm extension
 
 def _read_arms_cfg() -> dict:
-    """Returns {count, servos[4], panels[4], delays[4]} from local.cfg [arms].
-    Always returns exactly 4 slots (empty string = not assigned).
+    """Returns {count, servos[6], panels[6], delays[6]} from local.cfg [arms].
+    Always returns exactly _ARM_COUNT_MAX slots (empty string = not assigned).
     Values are servo IDs (e.g. 'Servo_S12'), never labels.
     delays are floats in seconds (default 0.5).
+
+    B2 fix 2026-05-16: defensive against corrupted local.cfg values
+    (was: cfg.getint/getfloat raised ValueError on garbage → 500 on
+    GET /servo/arms + /servo/body/open_all + ChoreoPlayer arm reads).
+    M6 fix: docstring updated (was '4 slots', real cap is _ARM_COUNT_MAX=6).
     """
     cfg = configparser.ConfigParser()
     cfg.read(_LOCAL_CFG)
-    count  = max(0, min(_ARM_COUNT_MAX, cfg.getint('arms', 'count', fallback=0)))
+    try:
+        count = max(0, min(_ARM_COUNT_MAX, cfg.getint('arms', 'count', fallback=0)))
+    except (ValueError, configparser.Error):
+        log.warning("arms.count is non-numeric in local.cfg — defaulting to 0")
+        count = 0
     servos = [cfg.get('arms', f'arm_{i}',   fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
     panels = [cfg.get('arms', f'panel_{i}', fallback='').strip() for i in range(1, _ARM_COUNT_MAX + 1)]
-    delays = [round(max(0.1, min(5.0, cfg.getfloat('arms', f'delay_{i}', fallback=_ARM_DEFAULT_DELAY))), 2)
-              for i in range(1, _ARM_COUNT_MAX + 1)]
+    delays = []
+    for i in range(1, _ARM_COUNT_MAX + 1):
+        try:
+            d = cfg.getfloat('arms', f'delay_{i}', fallback=_ARM_DEFAULT_DELAY)
+            if not math.isfinite(d):
+                d = _ARM_DEFAULT_DELAY
+            delays.append(round(max(0.1, min(5.0, d)), 2))
+        except (ValueError, configparser.Error):
+            log.warning("arms.delay_%d non-numeric — defaulting", i)
+            delays.append(_ARM_DEFAULT_DELAY)
     return {'count': count, 'servos': servos, 'panels': panels, 'delays': delays}
 
 
@@ -766,21 +784,50 @@ def arms_config_save():
         return jsonify({'error': 'delays must be a list'}), 400
     # Pre-validate every delay coercion so we fail fast before holding
     # the cfg_write_lock (better UX: error returns immediately).
+    # B8 fix 2026-05-16: NaN/Inf would have survived float() then become
+    # 'nan' in local.cfg → ChoreoPlayer arm sequence time.sleep(nan)
+    # raises ValueError and kills the thread silently.
     for i, raw_delay in enumerate(delays):
-        if isinstance(raw_delay, bool):   # True/False would silently coerce to 1.0/0.0
+        if isinstance(raw_delay, bool):
             return jsonify({'error': f'delay #{i+1} must be a number, got bool'}), 400
         try:
-            float(raw_delay)
+            v = float(raw_delay)
         except (TypeError, ValueError):
             return jsonify({'error': f'delay #{i+1} must be a number, got {raw_delay!r}'}), 400
+        if not math.isfinite(v):
+            return jsonify({'error': f'delay #{i+1} must be a finite number'}), 400
+
+    # B3 fix 2026-05-16: bound the active range to `count` BEFORE any
+    # validation that depends on uniqueness. Was: validation loop ran
+    # over all 6 slots → curl POST with extra slots beyond count could
+    # set arm_3/4/5/6 in local.cfg even though count=2 → silent leak.
+    active_servos = [
+        (servos[i - 1] if i - 1 < len(servos) else '')
+        for i in range(1, count + 1)
+    ]
+    active_panels = [
+        (panels[i - 1] if i - 1 < len(panels) else '')
+        for i in range(1, count + 1)
+    ]
+    # B4/L3 fix 2026-05-16: reject duplicate servo assignments.
+    # Was: arm_1=arm_2=Servo_S5 silently accepted → 2 threads racing
+    # same physical servo at runtime (UART duplication + PCA9685 race).
+    # Also rejects arm_N == panel_N (servo as its own panel).
+    seen = []
+    for sv in active_servos + active_panels:
+        if sv and sv in seen:
+            return jsonify({
+                'error': f'servo {sv} assigned to multiple arm/panel slots',
+            }), 400
+        if sv:
+            seen.append(sv)
 
     # Snapshot previous config so we can revert labels for removed arms
     prev = _read_arms_cfg()
 
-    # B-49 (audit 2026-05-15): RMW under settings_bp._cfg_write_lock
-    # so a concurrent /settings/config (different blueprint, same
-    # local.cfg) can't load + mutate + write in between and lose one
-    # side's keys.
+    # B-49 + M5 fix 2026-05-16: hold _cfg_write_lock across BOTH the
+    # local.cfg write AND the auto-label update so a concurrent
+    # /servo/settings calibration label save can't race-overwrite.
     with _cfg_write_lock:
         cfg = configparser.ConfigParser()
         cfg.read(_LOCAL_CFG)
@@ -789,12 +836,16 @@ def arms_config_save():
         cfg.set('arms', 'count', str(count))
         new_servos, new_panels = [], []
         for i in range(1, _ARM_COUNT_MAX + 1):
-            raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
-            raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
-            raw_delay = delays[i - 1] if i - 1 < len(delays) else _ARM_DEFAULT_DELAY
-            sv = raw_servo if raw_servo in BODY_SERVOS else ''
-            pn = raw_panel if raw_panel in BODY_SERVOS else ''
-            dl = round(max(0.1, min(5.0, float(raw_delay))), 2)
+            # B3: only write within count range; bound slots clear themselves.
+            if i > count:
+                sv, pn, dl = '', '', _ARM_DEFAULT_DELAY
+            else:
+                raw_servo = servos[i - 1] if i - 1 < len(servos) else ''
+                raw_panel = panels[i - 1] if i - 1 < len(panels) else ''
+                raw_delay = delays[i - 1] if i - 1 < len(delays) else _ARM_DEFAULT_DELAY
+                sv = raw_servo if raw_servo in BODY_SERVOS else ''
+                pn = raw_panel if raw_panel in BODY_SERVOS else ''
+                dl = round(max(0.1, min(5.0, float(raw_delay))), 2)
             cfg.set('arms', f'arm_{i}',   sv)
             cfg.set('arms', f'panel_{i}', pn)
             cfg.set('arms', f'delay_{i}', str(dl))
@@ -803,42 +854,59 @@ def arms_config_save():
         os.makedirs(os.path.dirname(_LOCAL_CFG), exist_ok=True)
         write_cfg_atomic(cfg, _LOCAL_CFG)
 
-    # Auto-label servos in servo_angles.json to match their arm role.
-    # Only overwrites if the current label doesn't already start with the expected prefix —
-    # so custom suffixes like "Arm1_Pince" or "Arm1_panel_Pince" are preserved.
-    panels_cfg    = _read_panels_cfg()['panels']
-    label_updates = {}
-    still_assigned = set()  # all servos that remain assigned in the NEW config
-    for i in range(_ARM_COUNT_MAX):
-        sv   = new_servos[i]
-        pn   = new_panels[i]
-        slot = i + 1
-        arm_prefix   = f'Arm{slot}'
-        panel_prefix = f'Arm{slot}_panel'
-        if sv:
-            still_assigned.add(sv)
-            current = panels_cfg.get(sv, {}).get('label', sv)
-            if not current.startswith(arm_prefix):
-                label_updates[sv] = arm_prefix
-        if pn:
-            still_assigned.add(pn)
-            current = panels_cfg.get(pn, {}).get('label', pn)
-            if not current.startswith(panel_prefix):
-                label_updates[pn] = panel_prefix
+        # M5 fix: auto-label inside the same _cfg_write_lock so a
+        # concurrent /servo/settings label save can't snapshot stale
+        # panels_cfg then overwrite our arm label patch.
+        panels_cfg    = _read_panels_cfg()['panels']
+        label_updates = {}
+        still_assigned = set()
+        for i in range(_ARM_COUNT_MAX):
+            sv   = new_servos[i]
+            pn   = new_panels[i]
+            slot = i + 1
+            arm_prefix   = f'Arm{slot}'
+            panel_prefix = f'Arm{slot}_panel'
+            if sv:
+                still_assigned.add(sv)
+                current = panels_cfg.get(sv, {}).get('label', sv)
+                if not current.startswith(arm_prefix):
+                    label_updates[sv] = arm_prefix
+            if pn:
+                still_assigned.add(pn)
+                current = panels_cfg.get(pn, {}).get('label', pn)
+                if not current.startswith(panel_prefix):
+                    label_updates[pn] = panel_prefix
 
-    # Revert labels ONLY for servos that were arms/panels before but are no longer assigned
-    for i in range(_ARM_COUNT_MAX):
-        prev_sv = prev['servos'][i]
-        prev_pn = prev['panels'][i]
-        if prev_sv and prev_sv not in still_assigned:
-            label_updates[prev_sv] = prev_sv  # revert to servo ID
-        if prev_pn and prev_pn not in still_assigned:
-            label_updates[prev_pn] = prev_pn  # revert to servo ID
+        # B1 fix 2026-05-16: ONLY revert labels we previously SET ourselves.
+        # Was: unconditionally reset to servo ID → destroyed any custom
+        # label the operator had given the servo (e.g. 'Arm3_Pince',
+        # 'MyGripper', or even a totally unrelated calibration name).
+        # USER-REPORTED INCIDENT: 'plus de arms label et servo label'.
+        # Now: only revert if current label looks like one WE assigned
+        # (matches the Arm{prev_slot} or Arm{prev_slot}_panel pattern).
+        for i in range(_ARM_COUNT_MAX):
+            prev_sv = prev['servos'][i]
+            prev_pn = prev['panels'][i]
+            prev_slot = i + 1
+            prev_arm_prefix   = f'Arm{prev_slot}'
+            prev_panel_prefix = f'Arm{prev_slot}_panel'
+            if prev_sv and prev_sv not in still_assigned:
+                cur = panels_cfg.get(prev_sv, {}).get('label', prev_sv)
+                # Only revert if we recognize our own prefix (with optional
+                # custom suffix like _Pince). Avoids destroying operator's
+                # totally-custom labels for servos that happened to be
+                # arm-slotted before.
+                if cur == prev_arm_prefix or cur.startswith(prev_arm_prefix + '_'):
+                    label_updates[prev_sv] = prev_sv
+            if prev_pn and prev_pn not in still_assigned:
+                cur = panels_cfg.get(prev_pn, {}).get('label', prev_pn)
+                if cur == prev_panel_prefix or cur.startswith(prev_panel_prefix + '_'):
+                    label_updates[prev_pn] = prev_pn
 
-    if label_updates:
-        patch = {sid: {**panels_cfg.get(sid, {}), 'label': lbl} for sid, lbl in label_updates.items()}
-        _sync_angles_json({**panels_cfg, **patch})
-        log.info("Arms auto-label: %s", label_updates)
+        if label_updates:
+            patch = {sid: {**panels_cfg.get(sid, {}), 'label': lbl} for sid, lbl in label_updates.items()}
+            _sync_angles_json({**panels_cfg, **patch})
+            log.info("Arms auto-label: %s", label_updates)
 
     log.info("Arms config saved: count=%d servos=%s panels=%s", count, new_servos, new_panels)
     return jsonify({'status': 'ok', **_read_arms_cfg()})

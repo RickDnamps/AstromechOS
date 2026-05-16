@@ -4757,6 +4757,21 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Arms — batch 1 polish (2026-05-16) */
+
+/* W2 — live duplicate servo conflict warning */
+.arms-conflict-warn {
+  background: rgba(255,170,0,0.12);
+  border: 1px solid var(--warn, #ffaa00);
+  color: var(--warn, #ffaa00);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.arms-conflict-warn strong { color: var(--warn, #ffaa00); display: block; margin-bottom: 4px; }
+
 /* System — batch 2 polish (2026-05-16) */
 
 /* W2 — default password warning banner */

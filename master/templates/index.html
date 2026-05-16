@@ -1279,7 +1279,7 @@
       <!-- 🦾 Arms -->
       <div class="settings-panel" id="spanel-arms">
         <section class="card settings-card">
-          <h2 class="card-title">ARMS</h2>
+          <h2 class="card-title">ARMS — <span class="robot-name">R2-D2</span></h2>
           <p class="settings-note">Arm servos run a panel→delay→arm sequence — excluded from OPEN ALL / CLOSE ALL.</p>
           <div class="form-group">
             <label>Arms</label>
@@ -1294,7 +1294,10 @@
             </select>
           </div>
           <div id="arms-selectors"></div>
-          <button class="btn" onclick="armsConfig.save()">SAVE ARMS</button>
+          <!-- W2 fix 2026-05-16: live conflict warning (duplicate servo) -->
+          <div id="arms-conflict-warn" class="arms-conflict-warn" style="display:none"></div>
+          <!-- W1 fix 2026-05-16: withSaveFeedback wrap -->
+          <button id="arms-save-btn" class="btn" onclick="withSaveFeedback(this, () => armsConfig.save())">SAVE ARMS</button>
           <div class="settings-status" id="arms-status"></div>
         </section>
       </div>

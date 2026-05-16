@@ -10301,12 +10301,43 @@ const armsConfig = {
     }
     html += '</div>';
     container.innerHTML = html;
-    // WOW polish H3 2026-05-15: wire the TEST buttons. Operator can
-    // validate a row's panel+arm+delay BEFORE saving — proves the
-    // hardware mapping is right.
     container.querySelectorAll('.arms-test-btn').forEach(btn => {
       btn.addEventListener('click', () => this._testRow(parseInt(btn.dataset.armIdx, 10)));
     });
+    // W2 fix 2026-05-16: live conflict detection — wire onchange to
+    // every servo/panel select so operator sees duplicates immediately.
+    container.querySelectorAll('select[id^="arm-servo-"], select[id^="arm-panel-"]').forEach(sel => {
+      sel.addEventListener('change', () => this._checkConflicts());
+    });
+    this._checkConflicts();
+  },
+
+  _checkConflicts() {
+    const warn = el('arms-conflict-warn');
+    if (!warn) return;
+    const seen = {};   // servoId → [labels]
+    for (let i = 0; i < this._count; i++) {
+      const sv = el(`arm-servo-${i}`)?.value || '';
+      const pn = el(`arm-panel-${i}`)?.value || '';
+      if (sv) (seen[sv] = seen[sv] || []).push(`Arm${i+1} arm`);
+      if (pn) (seen[pn] = seen[pn] || []).push(`Arm${i+1} panel`);
+    }
+    const conflicts = Object.entries(seen).filter(([_, uses]) => uses.length > 1);
+    if (conflicts.length === 0) {
+      warn.style.display = 'none';
+      warn.textContent = '';
+    } else {
+      warn.style.display = '';
+      warn.innerHTML = '';
+      const head = document.createElement('strong');
+      head.textContent = '⚠ Duplicate servo assignments — SAVE will be rejected:';
+      warn.appendChild(head);
+      conflicts.forEach(([sv, uses]) => {
+        const li = document.createElement('div');
+        li.textContent = `· ${sv}: ${uses.join(' + ')}`;
+        warn.appendChild(li);
+      });
+    }
   },
 
   async _testRow(idx) {
@@ -10358,21 +10389,47 @@ const armsConfig = {
     const count  = parseInt(el('arms-count')?.value) || 0;
     const servos = Array.from({length: 6}, (_, i) => el(`arm-servo-${i}`)?.value || '');
     const panels = Array.from({length: 6}, (_, i) => el(`arm-panel-${i}`)?.value || '');
-    const delays = Array.from({length: 6}, (_, i) => parseFloat(el(`arm-delay-${i}`)?.value) || 0.5);
+    // M1 fix 2026-05-16: was 'parseFloat(...) || 0.5' but parseFloat('0')
+    // returns 0 (falsy) → operator entering 0 silently became 0.5.
+    // Also: NaN-safe via Number.isFinite.
+    const delays = Array.from({length: 6}, (_, i) => {
+      const v = parseFloat(el(`arm-delay-${i}`)?.value);
+      return Number.isFinite(v) ? Math.max(0.1, Math.min(5, v)) : 0.5;
+    });
+    // W3 fix 2026-05-16: confirm before destructive count reduction
+    // (user-reported pain: 'efface mes configs').
+    if (count < this._count) {
+      const lost = [];
+      for (let i = count; i < this._count; i++) {
+        if (this._servos[i] || this._panels[i]) lost.push(`Arm${i+1}`);
+      }
+      if (lost.length && !confirm(
+        `Reducing arms count from ${this._count} to ${count}.\n\n` +
+        `This will UNASSIGN and REVERT auto-labels for: ${lost.join(', ')}.\n\n` +
+        `Custom servo labels (e.g. 'Arm3_Pince') are now preserved (fix B1).\n\n` +
+        `Continue?`
+      )) {
+        return false;
+      }
+    }
     const status = el('arms-status');
     if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-    const data = await api('/servo/arms', 'POST', { count, servos, panels, delays });
-    if (data?.status === 'ok') {
-      this._count  = data.count;
-      this._servos = data.servos;
-      this._panels = data.panels;
-      this._delays = data.delays || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
+    // B5/L5 fix 2026-05-16: apiDetail surfaces backend validation
+    // errors (duplicate servo, bad delay) as actionable toasts.
+    const res = await apiDetail('/servo/arms', 'POST', { count, servos, panels, delays });
+    if (res.ok && res.data?.status === 'ok') {
+      this._count  = res.data.count;
+      this._servos = res.data.servos;
+      this._panels = res.data.panels;
+      this._delays = res.data.delays || [0.5, 0.5, 0.5, 0.5, 0.5, 0.5];
       toast(`Arms: ${count} arm(s) configured`, 'ok');
       if (status) { status.textContent = `${count} arm(s) saved`; status.className = 'settings-status ok'; }
-    } else {
-      toast('Failed to save arms config', 'error');
-      if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+      return true;
     }
+    const errMsg = res.error || 'Failed to save arms config';
+    toast(errMsg, 'error');
+    if (status) { status.textContent = errMsg; status.className = 'settings-status error'; }
+    return false;
   },
 };
 
