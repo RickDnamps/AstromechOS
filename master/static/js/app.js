@@ -8183,6 +8183,12 @@ class StatusPoller {
         validateHatField('slave-motor-hat-input', true);
       } catch {}
     }
+    // W1 fix 2026-05-16: refresh battery preview NOW voltage every
+    // poll if Battery panel visible (uses cached _lastStatusForHats).
+    const battPanel = el('spanel-battery');
+    if (battPanel && battPanel.classList.contains('active')) {
+      try { updateBatteryPreview(); } catch {}
+    }
 
     // Conditional topbar pills — visible only when something is wrong
     const pillSlave = el('pill-slave');
@@ -9169,6 +9175,15 @@ function updateCameraBitrateHint() {
   hint.textContent = `~${kbf} KB/frame · ~${kbps} kbps stream`;
 }
 
+// W9 fix 2026-05-16: reset battery dropdowns to single-pack defaults
+function resetBatteryDefaults() {
+  if (!confirm('Reset to 4S Li-ion defaults? (Click APPLY to persist.)')) return;
+  const c = el('battery-cells');     if (c) c.value = '4';
+  const m = el('battery-chemistry'); if (m) m.value = 'liion';
+  updateBatteryPreview();
+  if (typeof toast === 'function') toast('Defaults loaded — click APPLY to persist', 'info');
+}
+
 // WOW polish M1 2026-05-15: Battery live voltage threshold preview.
 // Operator changes cell count or chemistry → sees IMMEDIATELY the
 // new idle/low/abort voltages BEFORE clicking APPLY. No more
@@ -9177,17 +9192,20 @@ function updateCameraBitrateHint() {
 function updateBatteryPreview() {
   const cells     = parseInt(el('battery-cells')?.value) || 4;
   const chemistry = (el('battery-chemistry')?.value || 'liion').toLowerCase();
-  const abortV    = chemistry === 'lifepo4' ? 3.0 : 3.5;
-  const idleV     = chemistry === 'lifepo4' ? 3.3 : 3.85;
-  const fullV     = chemistry === 'lifepo4' ? 3.6 : 4.20;
+  // W8 fix 2026-05-16: shared chemistry map (was duplicated in 3 places)
+  const CHEM = {
+    liion:   { abort: 3.5, idle: 3.85, full: 4.20, label: 'Li-ion',  note: 'Nominal 3.7V/cell · steeper discharge near empty · common for hobby builds' },
+    lipo:    { abort: 3.5, idle: 3.85, full: 4.20, label: 'LiPo',    note: 'Same as Li-ion thresholds · higher discharge rate' },
+    lifepo4: { abort: 3.0, idle: 3.30, full: 3.60, label: 'LiFePO4', note: 'Nominal 3.2V/cell · flatter discharge · safer thermal · lower energy density' },
+  };
+  const c = CHEM[chemistry] || CHEM.liion;
   const preview = el('battery-preview');
   if (!preview) return;
-  preview.innerHTML = '';
+  preview.replaceChildren();
   const mk = (label, val, color) => {
     const span = document.createElement('span');
     span.className = 'battery-preview-row';
     span.style.color = color;
-    span.innerHTML = '';
     const lbl = document.createElement('strong');
     lbl.textContent = label + ': ';
     lbl.style.color = 'var(--text-dim)';
@@ -9196,9 +9214,40 @@ function updateBatteryPreview() {
     span.append(lbl, v);
     preview.appendChild(span);
   };
-  mk('Full',  cells * fullV,  'var(--green, #00cc66)');
-  mk('Idle',  cells * idleV,  'var(--text)');
-  mk('ABORT', cells * abortV, 'var(--red, #ff2244)');
+  mk('Full',  cells * c.full,  'var(--green, #00cc66)');
+  mk('Idle',  cells * c.idle,  'var(--text)');
+  mk('ABORT', cells * c.abort, 'var(--red, #ff2244)');
+  // W1 fix 2026-05-16: live NOW voltage with color matching gauge
+  // (data.battery_voltage from latest /status snapshot — cached for
+  // HATs already as _lastStatusForHats; reuse for parité).
+  const liveV = (typeof _lastStatusForHats === 'object' && _lastStatusForHats)
+                ? _lastStatusForHats.battery_voltage : null;
+  if (liveV != null) {
+    const nowSpan = document.createElement('span');
+    nowSpan.className = 'battery-preview-row battery-preview-now';
+    const nowLbl = document.createElement('strong');
+    nowLbl.textContent = 'NOW: ';
+    nowLbl.style.color = 'var(--text-dim)';
+    nowLbl.style.fontWeight = '600';
+    const pct = Math.max(0, Math.min(100, Math.round(((liveV - cells * c.abort) / (cells * c.full - cells * c.abort)) * 100)));
+    const nowVal = document.createElement('span');
+    nowVal.textContent = `${liveV.toFixed(1)} V · ${pct}%`;
+    const vpc = liveV / cells;
+    nowVal.style.color = vpc >= (c.full - 0.4) ? 'var(--ok, #00cc66)'
+                       : vpc >= (c.abort + 0.2) ? 'var(--amber, #ffaa44)'
+                       : 'var(--err, #ff4444)';
+    nowVal.style.fontWeight = 'bold';
+    nowSpan.append(nowLbl, nowVal);
+    preview.appendChild(nowSpan);
+  }
+  // W3 fix 2026-05-16: chemistry educational hint
+  const hintWrap = el('battery-chem-hint');
+  if (hintWrap) hintWrap.textContent = c.note;
+  // W2 fix 2026-05-16: per-cell footnote (honest about pack-only measure)
+  const footnote = el('battery-footnote');
+  if (footnote && !footnote.textContent) {
+    footnote.textContent = 'Per-cell values shown are pack ÷ cells average — not measured per-cell. Use a BMS for cell-level monitoring.';
+  }
 }
 
 // ─── Shortcuts (Settings → Shortcuts + Drive tab overlay) ────────────────────

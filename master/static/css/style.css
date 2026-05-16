@@ -4753,6 +4753,38 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Battery — batch 2 polish (2026-05-16) */
+
+.battery-chem-hint {
+  font-size: 11px;
+  color: var(--blue, #00aaff);
+  font-style: italic;
+  padding: 4px 8px;
+  margin: 6px 0;
+  border-left: 2px solid var(--blue, #00aaff);
+  background: rgba(var(--blue-rgb, 0 170 255), 0.05);
+  min-height: 16px;
+}
+.battery-preview-now {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+  margin-top: 4px;
+  font-size: 14px;
+}
+.battery-footnote {
+  font-size: 9px;
+  color: var(--text-dim);
+  opacity: 0.7;
+  font-style: italic;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+/* W10 fix 2026-05-16: stack preview rows on narrow viewport */
+@media (max-width: 480px) {
+  .battery-preview { grid-template-columns: 1fr; }
+}
+
 /* HATs — batch 3 polish (2026-05-16) */
 
 /* B15 — persistent 'Master reboot required' banner */

@@ -1608,11 +1608,18 @@
               <option value="lifepo4">LiFePO4 (3.0 V/cell abort)</option>
             </select>
           </div>
+          <!-- W3 fix 2026-05-16: chemistry educational hint -->
+          <div id="battery-chem-hint" class="battery-chem-hint"></div>
           <!-- WOW polish M1 2026-05-15: live voltage threshold preview.
-               Operator sees Full/Idle/ABORT voltages update on every
-               dropdown change BEFORE clicking APPLY. -->
+               2026-05-16 batch 2: adds live NOW voltage + pct. -->
           <div id="battery-preview" class="battery-preview"></div>
-          <button class="btn" onclick="saveBatteryCells()">APPLY</button>
+          <!-- W2 fix 2026-05-16: per-cell honesty footnote -->
+          <div id="battery-footnote" class="battery-footnote"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+            <button class="btn" onclick="saveBatteryCells()">APPLY (hot-applied)</button>
+            <!-- W9 fix 2026-05-16: reset to defaults (4S Li-ion) -->
+            <button class="btn btn-sm" onclick="resetBatteryDefaults()" title="Reset to 4S Li-ion defaults (no save)">↺ Reset</button>
+          </div>
           <div class="settings-status" id="battery-cells-status"></div>
         </section>
       </div>
