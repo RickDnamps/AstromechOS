@@ -3730,12 +3730,26 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   margin-top: 2px;
 }
 .bt-device-mac {
-  font-size: 9px;
-  color: var(--text-dim);
+  /* 2026-05-16 (user feedback): was font-size:9px + dim + opacity:0.7
+     → nearly invisible. Bumped to readable cyan mono, matching the
+     MAC styling in .bt-device-card-mac for visual coherence. */
+  display: inline-block;
+  font-size: 10px;
+  color: var(--blue, #7eb8d4);
   font-family: var(--font-data, monospace);
-  letter-spacing: 0.5px;
-  margin-top: 1px;
-  opacity: 0.7;
+  letter-spacing: 0.6px;
+  margin-top: 2px;
+  padding: 1px 6px;
+  background: rgba(var(--blue-rgb, 0, 180, 255), 0.08);
+  border-radius: 3px;
+}
+.bt-device-mac::before {
+  content: 'MAC ';
+  opacity: 0.55;
+  font-weight: 600;
+  font-size: 9px;
+  letter-spacing: 1px;
+  margin-right: 3px;
 }
 
 .bt-battery-wrap {
