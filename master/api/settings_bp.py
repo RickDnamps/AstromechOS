@@ -182,27 +182,68 @@ def _sync_slave_hat_cfg(**kwargs) -> None:
             return   # nothing to push if local write failed
 
     def _bg_sync_and_restart():
+        global _last_slave_hat_sync_status
+        import time as _t
+        _last_slave_hat_sync_status = {'attempted': True, 'ok': False, 'error': 'running', 'ts': _t.time()}
         target = _resolve_slave_ssh_target()
+        # B7 fix 2026-05-16: validate target shape before passing to
+        # scp (defense-in-depth; admin-validated on save but argv
+        # passing still parses -options).
+        import re as _re_tgt
+        if not _re_tgt.match(r'^[A-Za-z0-9_]+(?:@[A-Za-z0-9.\-]+)?$', target):
+            log.error("Slave target %r failed shape check — refusing SCP", target)
+            _last_slave_hat_sync_status = {'attempted': True, 'ok': False,
+                                           'error': f'invalid slave target: {target}',
+                                           'ts': _t.time()}
+            return
         try:
+            # B6 fix 2026-05-16: -o StrictHostKeyChecking=accept-new
+            # + -B (batch mode, no prompts) so first-deploy doesn't
+            # hang interactively on a missing host key. Matches
+            # _sync_audio_channels pattern.
             r = subprocess.run(
-                ['scp', _SLAVE_CFG, f'{target}:{_SLAVE_CFG}'],
+                ['scp', '-o', 'StrictHostKeyChecking=accept-new', '-B',
+                 _SLAVE_CFG, f'{target}:{_SLAVE_CFG}'],
                 timeout=8, check=False, capture_output=True,
             )
         except (subprocess.TimeoutExpired, OSError) as e:
             log.error("SCP slave.cfg failed (%s) — skipping Slave restart", e)
+            _last_slave_hat_sync_status = {'attempted': True, 'ok': False,
+                                           'error': str(e), 'ts': _t.time()}
             return
         if r.returncode != 0:
+            err = (r.stderr.decode(errors='replace') if isinstance(r.stderr, bytes) else (r.stderr or '')).strip()[:200] or f'rc={r.returncode}'
             log.error("SCP slave.cfg rc=%d stderr=%s — skipping restart",
-                      r.returncode, r.stderr[:200] if r.stderr else '')
+                      r.returncode, err)
+            _last_slave_hat_sync_status = {'attempted': True, 'ok': False,
+                                           'error': err, 'ts': _t.time()}
             return
         log.info("slave.cfg synced to Slave (hat config)")
         time.sleep(2)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
-        log.info("Slave service restart issued")
+        # B8 fix 2026-05-16: capture restart rc so silent failures
+        # (sudo not configured, unit name typo) are surfaced.
+        rr = subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'],
+                            check=False, capture_output=True, timeout=10)
+        if rr.returncode == 0:
+            log.info("Slave service restart issued")
+            _last_slave_hat_sync_status = {'attempted': True, 'ok': True,
+                                           'error': None, 'ts': _t.time()}
+        else:
+            err = (rr.stderr.decode(errors='replace') if isinstance(rr.stderr, bytes) else (rr.stderr or '')).strip()[:200] or f'rc={rr.returncode}'
+            log.error("Slave systemctl restart failed: %s", err)
+            _last_slave_hat_sync_status = {'attempted': True, 'ok': False,
+                                           'error': f'restart failed: {err}', 'ts': _t.time()}
 
     threading.Thread(target=_bg_sync_and_restart, daemon=True,
                      name='slave-hat-sync').start()
     log.info("Slave HAT sync scheduled (background)")
+
+
+# B8 fix 2026-05-16: surface Slave HAT sync status to the frontend
+# so a save that didn't actually reach the Slave shows a clear warning
+# instead of silent success. Frontend polls /settings/slave_hat_sync_status
+# ~3s after a save that includes Slave HAT keys.
+_last_slave_hat_sync_status: dict = {'attempted': False, 'ok': True, 'error': None, 'ts': 0.0}
 
 
 def _run(cmd: list[str], timeout: int = 15) -> tuple[int, str, str]:
@@ -646,13 +687,23 @@ def set_config():
         if dotkey == 'github.auto_pull_on_boot':
             return 'true' if s.lower() in ('true', '1', 'yes', 'on') else 'false'
         if dotkey == 'choreo.body_servo_uart_lat':
+            # B11 fix 2026-05-16: clamp 0-0.2s (200ms) to match UI input
+            # max and ChoreoPlayer's internal cap. Was: backend allowed
+            # up to 1.0s, written to cfg, then silently re-clamped at
+            # hot-swap time → cfg vs runtime divergence.
             try:
-                return str(max(0.0, min(1.0, float(s))))
+                v = float(s)
+                import math as _m
+                if not _m.isfinite(v): return None
+                return str(max(0.0, min(0.2, v)))
             except ValueError:
                 return None
         if dotkey == 'choreo.audio_startup_lat':
             try:
-                return str(max(0.0, min(1.0, float(s))))
+                v = float(s)
+                import math as _m
+                if not _m.isfinite(v): return None
+                return str(max(0.0, min(0.5, v)))
             except ValueError:
                 return None
         if dotkey == 'lights.backend':
@@ -661,34 +712,65 @@ def set_config():
         return s
 
     # Audit finding H-1 2026-05-15: Slave-HAT keys used to skip
-    # _normalise entirely and pass raw operator input straight into
-    # slave.cfg via ConfigParser. A POST like
-    # `{"i2c_servo_hats.slave_hats": "0x41\n[admin]\npassword=pwn"}`
-    # injected a fake [admin] section into slave.cfg at the next
-    # write. Now validate as comma-separated 0xNN hex addresses with
-    # control chars stripped, before letting them through.
+    # _normalise entirely. Validate as hex addresses with control
+    # chars stripped before write.
+    # 2026-05-16 audit batch (B1-B4): unified validator covers all
+    # THREE HAT keys (master_hats was missing → operator input "lol"
+    # silently fell back to 0x40). Also: enforce PCA9685 range
+    # 0x40-0x77 (datasheet), reject duplicate addrs (silent collision
+    # → 2 channel sets at same I2C address), reject motor/servo HAT
+    # collision (motor commands could hit servo HAT and vice versa).
     import re as _re_hat
-    _HAT_LIST_RE = _re_hat.compile(r'^0x[0-9a-fA-F]{2}(\s*,\s*0x[0-9a-fA-F]{2})*$')
-    _HAT_SINGLE_RE = _re_hat.compile(r'^0x[0-9a-fA-F]{2}$')
+    _HAT_ADDR_RE   = _re_hat.compile(r'^0x[0-9a-fA-F]{2}$')
+    _PCA9685_MIN   = 0x40
+    _PCA9685_MAX   = 0x77   # 6 solder jumpers → 64 addresses max but
+                            # PCA9685 reserves 0x70-0x77 for All-Call /
+                            # SubAddrs; some operators use them anyway
+
+    def _parse_hat_addr(s: str) -> int | None:
+        """Single hex addr → int in [0x40..0x77], else None."""
+        s = s.strip()
+        if not _HAT_ADDR_RE.match(s):
+            return None
+        n = int(s, 16)
+        return n if _PCA9685_MIN <= n <= _PCA9685_MAX else None
+
+    def _parse_hat_list(s: str) -> list[int] | None:
+        """Comma-separated hex addrs → unique list in range, else None."""
+        addrs = []
+        for part in s.split(','):
+            n = _parse_hat_addr(part)
+            if n is None:
+                return None
+            addrs.append(n)
+        if len(addrs) != len(set(addrs)):
+            return None   # dedup reject
+        return addrs
+
+    _HAT_KEYS_LIST   = {'i2c_servo_hats.master_hats', 'i2c_servo_hats.slave_hats'}
+    _HAT_KEYS_SINGLE = {'i2c_servo_hats.slave_motor_hat'}
+    _HAT_KEYS_ALL    = _HAT_KEYS_LIST | _HAT_KEYS_SINGLE
 
     updated = []
     rejected = []
+    # First pass: validate all HAT keys + canonicalise, then collision-check
+    hat_canonical: dict[str, str] = {}
     for dotkey, value in data.items():
         if dotkey not in allowed:
             continue
-        if dotkey in _SLAVE_HAT_KEYS:
-            # Strip newlines + leading/trailing whitespace before regex
-            # so the inject-via-newline trick can't bypass.
+        if dotkey in _HAT_KEYS_ALL:
             raw = str(value).replace('\r', '').replace('\n', '').replace('\x00', '').strip()
-            # slave_motor_hat is single address; slave_hats is list.
-            key_short = dotkey.split('.', 1)[1]
-            ok = (_HAT_SINGLE_RE.match(raw) if key_short == 'slave_motor_hat'
-                  else _HAT_LIST_RE.match(raw))
-            if not ok:
-                rejected.append(dotkey)
-                continue
-            data[dotkey] = raw   # canonicalise for the sync step below
-            updated.append(dotkey)
+            if dotkey in _HAT_KEYS_SINGLE:
+                n = _parse_hat_addr(raw)
+                if n is None:
+                    rejected.append(dotkey); continue
+                hat_canonical[dotkey] = f'0x{n:02x}'
+            else:
+                addrs = _parse_hat_list(raw)
+                if addrs is None:
+                    rejected.append(dotkey); continue
+                hat_canonical[dotkey] = ', '.join(f'0x{n:02x}' for n in addrs)
+            data[dotkey] = hat_canonical[dotkey]   # canonicalised form
             continue
         norm = _normalise(dotkey, value)
         if norm is None:
@@ -697,9 +779,44 @@ def set_config():
         section, key = dotkey.split('.', 1)
         _write_key(section, key, norm)
         updated.append(dotkey)
+
+    # B2 fix: cross-key collision check on Slave side. Motor HAT and
+    # servo HAT must NEVER share an address (servo commands would drive
+    # motor PWM and vice versa). Need the FULL picture: merge submitted
+    # values with current cfg for the keys not in this POST.
+    if any(k in hat_canonical for k in ('i2c_servo_hats.slave_hats',
+                                         'i2c_servo_hats.slave_motor_hat')):
+        scfg = _read_slave_cfg()
+        cur_shats = scfg.get('i2c_servo_hats', 'slave_hats',      fallback='0x41')
+        cur_motor = scfg.get('i2c_servo_hats', 'slave_motor_hat', fallback='0x40')
+        new_shats = hat_canonical.get('i2c_servo_hats.slave_hats',      cur_shats)
+        new_motor = hat_canonical.get('i2c_servo_hats.slave_motor_hat', cur_motor)
+        try:
+            servo_addrs = {int(p.strip(), 16) for p in new_shats.split(',')}
+            motor_addr  = int(new_motor.strip(), 16)
+            if motor_addr in servo_addrs:
+                return jsonify({
+                    'error': f'slave_motor_hat {new_motor} cannot also be in slave_hats — '
+                             f'motor + servo at same I2C address corrupts both.',
+                }), 400
+        except (ValueError, TypeError):
+            pass   # already caught by parse above
+
+    # Second pass: now safe to commit HAT keys
+    for dotkey in hat_canonical:
+        if dotkey == 'i2c_servo_hats.master_hats':
+            # B1 fix 2026-05-16: master_hats persisted to local.cfg
+            # (was: fell through to _normalise pass-through and got
+            # written without validation; now caught above).
+            _write_key('i2c_servo_hats', 'master_hats', hat_canonical[dotkey])
+        updated.append(dotkey)
+
     if rejected:
         log.warning("set_config rejected invalid values for: %s", rejected)
-        return jsonify({'error': f'invalid value(s): {", ".join(rejected)}'}), 400
+        return jsonify({
+            'error': f'invalid value(s): {", ".join(rejected)}',
+            'hint': 'HAT addresses must be hex 0x40-0x77, comma-separated, unique',
+        }), 400
 
     # Slave HAT keys go to slave.cfg (not local.cfg) and trigger a Slave
     # restart — but ONLY if the new values genuinely differ from what the
@@ -747,6 +864,18 @@ def set_config():
                 log.warning("Hot-swap audio_startup_lat failed: %s", e)
 
     return jsonify({'status': 'ok', 'updated': updated})
+
+
+@settings_bp.get('/settings/slave_hat_sync_status')
+def slave_hat_sync_status():
+    """B8 fix 2026-05-16: report the result of the most recent Slave
+    HAT SCP+restart push. Frontend polls this ~3s after a save that
+    includes Slave HAT keys → if attempted && !ok, toast a warning
+    so the operator knows the new HAT config didn't reach the Slave."""
+    import time as _t
+    sync = dict(_last_slave_hat_sync_status)
+    sync['age_s'] = round(_t.time() - sync.get('ts', 0), 2) if sync.get('ts') else None
+    return jsonify(sync)
 
 
 @settings_bp.post('/settings/audio/profile/apply')

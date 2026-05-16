@@ -10195,6 +10195,12 @@ async function saveBodyUartLat() {
   const ms = parseInt(inp.value);
   if (isNaN(ms) || ms < 0 || ms > 200) {
     toast('UART latency must be 0-200 ms', 'error');
+    // B10 fix 2026-05-16: revert field to last-saved value + red flash
+    // so operator sees the invalid input was rejected (was: field
+    // stayed showing the bad value, looked like nothing happened).
+    inp.value = _hardwareLoaded?.body_uart_lat_ms ?? 25;
+    inp.classList.add('input-error');
+    setTimeout(() => inp.classList.remove('input-error'), 800);
     return false;
   }
   // Skip the round-trip if the value is already what we have on file
@@ -10242,17 +10248,54 @@ async function measureUartRtt() {
     return;
   }
 
-  // Stats line
+  // B9 fix 2026-05-16: render via createElement+textContent instead
+  // of innerHTML interpolation (CLAUDE.md XSS-safe rendering rule).
+  // Values are numeric from a trusted endpoint today; this closes the
+  // sink for future string fields and matches the project pattern.
+  // W7 fix: also render a mini horizontal bar showing min→p50→p95
+  // distribution + current/recommended markers — visual at-a-glance
+  // diagnostic ('drifted right' / 'tightly clustered').
   if (stats) {
-    stats.innerHTML = (
-      `<b>${data.count}</b> samples · ` +
-      `min <b>${data.min_ms}</b> · ` +
-      `avg <b>${data.avg_ms}</b> · ` +
-      `p50 <b>${data.p50_ms}</b> · ` +
-      `p95 <b>${data.p95_ms}</b> ms<br>` +
-      `current: <b>${data.current_body_uart_lat_ms} ms</b>  ·  ` +
-      `recommended: <b style="color:var(--accent)">${data.recommended_body_uart_lat_ms} ms</b>`
-    );
+    stats.replaceChildren();
+    const mkBold = (s) => { const b = document.createElement('b'); b.textContent = String(s); return b; };
+    const line1 = document.createElement('div');
+    line1.append(mkBold(data.count), document.createTextNode(' samples · min '),
+                 mkBold(data.min_ms), document.createTextNode(' · avg '),
+                 mkBold(data.avg_ms), document.createTextNode(' · p50 '),
+                 mkBold(data.p50_ms), document.createTextNode(' · p95 '),
+                 mkBold(data.p95_ms), document.createTextNode(' ms'));
+    stats.appendChild(line1);
+    const line2 = document.createElement('div');
+    line2.append(document.createTextNode('current: '), mkBold(data.current_body_uart_lat_ms + ' ms'),
+                 document.createTextNode('  ·  recommended: '));
+    const rec = document.createElement('b');
+    rec.textContent = data.recommended_body_uart_lat_ms + ' ms';
+    rec.style.color = 'var(--accent)';
+    line2.appendChild(rec);
+    stats.appendChild(line2);
+    // W7 mini bar
+    const max = Math.max(data.p95_ms, data.current_body_uart_lat_ms, data.recommended_body_uart_lat_ms, 50);
+    const bar = document.createElement('div');
+    bar.className = 'uart-rtt-bar';
+    const segOk = document.createElement('div');
+    segOk.className = 'uart-rtt-seg seg-ok';
+    segOk.style.left  = `${(data.min_ms / max) * 100}%`;
+    segOk.style.width = `${((data.p50_ms - data.min_ms) / max) * 100}%`;
+    const segWarn = document.createElement('div');
+    segWarn.className = 'uart-rtt-seg seg-warn';
+    segWarn.style.left  = `${(data.p50_ms / max) * 100}%`;
+    segWarn.style.width = `${((data.p95_ms - data.p50_ms) / max) * 100}%`;
+    const mkMarker = (val, cls, label) => {
+      const m = document.createElement('div');
+      m.className = 'uart-rtt-marker ' + cls;
+      m.style.left = `${(val / max) * 100}%`;
+      m.title = label + ': ' + val + ' ms';
+      return m;
+    };
+    bar.append(segOk, segWarn,
+               mkMarker(data.current_body_uart_lat_ms, 'marker-current', 'current'),
+               mkMarker(data.recommended_body_uart_lat_ms, 'marker-rec', 'recommended'));
+    stats.appendChild(bar);
   }
 
   // Fit indicator: how close is the configured value to the recommendation?
@@ -10293,6 +10336,24 @@ async function applyUartRttRecommendation() {
   if (btn) btn.disabled = true;
 }
 
+// W5 fix 2026-05-16: client-side hex validation (matches backend
+// _HAT_ADDR_RE + PCA9685 0x40-0x77 range + dedup).
+function _validateHatList(s, opts = {}) {
+  const single = !!opts.single;
+  if (!s) return { ok: false, error: 'empty' };
+  const parts = s.split(',').map(p => p.trim()).filter(Boolean);
+  if (single && parts.length !== 1) return { ok: false, error: 'expected single address' };
+  const addrs = [];
+  for (const p of parts) {
+    if (!/^0x[0-9a-fA-F]{2}$/.test(p)) return { ok: false, error: `invalid hex: ${p}` };
+    const n = parseInt(p, 16);
+    if (n < 0x40 || n > 0x77) return { ok: false, error: `${p} out of PCA9685 range (0x40-0x77)` };
+    addrs.push(n);
+  }
+  if (addrs.length !== new Set(addrs).size) return { ok: false, error: 'duplicate address' };
+  return { ok: true, addrs };
+}
+
 async function saveHardwareConfig() {
   // HAT-only save. Body UART latency has its own live save (auto-save on
   // blur, or APPLY & SAVE button) and is intentionally NOT bundled here.
@@ -10302,14 +10363,31 @@ async function saveHardwareConfig() {
   const status = el('hardware-config-status');
   if (!masterHats || !slaveHats || !slaveMotor) { toast('HAT addresses are required', 'error'); return; }
 
+  // W5 fix: client-side validation BEFORE round-trip
+  const vM = _validateHatList(masterHats);
+  if (!vM.ok) { toast('Master HATs: ' + vM.error, 'error'); return; }
+  const vS = _validateHatList(slaveHats);
+  if (!vS.ok) { toast('Slave HATs: ' + vS.error, 'error'); return; }
+  const vMot = _validateHatList(slaveMotor, { single: true });
+  if (!vMot.ok) { toast('Slave Motor HAT: ' + vMot.error, 'error'); return; }
+  // W3 fix: motor/servo collision client-side
+  if (vS.addrs.includes(vMot.addrs[0])) {
+    toast(`Collision: ${slaveMotor} is in both Slave HATs and Motor HAT`, 'error');
+    return;
+  }
+
   // Diff against the snapshot taken at load time so we send only what
   // genuinely changed.
+  // B12 fix 2026-05-16: normalize whitespace for diff so '0x40,0x42'
+  // vs '0x40, 0x42' (same canonical value) doesn't fire a spurious
+  // 'changed' detection.
+  const norm = (s) => (s || '').replace(/\s+/g, '').toLowerCase();
   const loaded = _hardwareLoaded || {};
   const payload = {};
   let masterHatChanged = false, slaveHatChanged = false;
-  if (masterHats  !== (loaded.master_hats     ?? '')) { payload['i2c_servo_hats.master_hats']     = masterHats;  masterHatChanged = true; }
-  if (slaveHats   !== (loaded.slave_hats      ?? '')) { payload['i2c_servo_hats.slave_hats']      = slaveHats;   slaveHatChanged  = true; }
-  if (slaveMotor  !== (loaded.slave_motor_hat ?? '')) { payload['i2c_servo_hats.slave_motor_hat'] = slaveMotor;  slaveHatChanged  = true; }
+  if (norm(masterHats) !== norm(loaded.master_hats))     { payload['i2c_servo_hats.master_hats']     = masterHats;  masterHatChanged = true; }
+  if (norm(slaveHats)  !== norm(loaded.slave_hats))      { payload['i2c_servo_hats.slave_hats']      = slaveHats;   slaveHatChanged  = true; }
+  if (norm(slaveMotor) !== norm(loaded.slave_motor_hat)) { payload['i2c_servo_hats.slave_motor_hat'] = slaveMotor;  slaveHatChanged  = true; }
 
   if (!masterHatChanged && !slaveHatChanged) {
     toast('No changes to save', 'info');
@@ -10322,22 +10400,41 @@ async function saveHardwareConfig() {
   if (slaveHatChanged)  consequences.push('• Slave service will auto-restart');
   if (!confirm('Save hardware config?\n\n' + consequences.join('\n'))) return;
 
-  if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-  const data = await api('/settings/config', 'POST', payload);
-  if (data?.status === 'ok') {
-    if (masterHatChanged) loaded.master_hats = masterHats;
-    if (slaveHatChanged)  { loaded.slave_hats = slaveHats; loaded.slave_motor_hat = slaveMotor; }
-    _hardwareLoaded = loaded;
-    let msgOk;
-    if (masterHatChanged && slaveHatChanged) msgOk = 'Saved — Master reboot required · Slave restarting';
-    else if (masterHatChanged)               msgOk = 'Saved — Master reboot required';
-    else                                     msgOk = 'Saved — Slave auto-restarting';
-    toast(msgOk, 'ok');
-    if (status) { status.textContent = '✓ ' + msgOk; status.className = 'settings-status ok'; }
-  } else {
-    toast('Error saving hardware config', 'error');
-    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
-  }
+  // W4 fix 2026-05-16: withSaveFeedback for spinner/checkmark parity
+  const btn = document.querySelector('#spanel-hats button.btn-primary');
+  const run = async () => {
+    if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
+    const data = await apiDetail('/settings/config', 'POST', payload);
+    if (data.ok) {
+      if (masterHatChanged) loaded.master_hats = masterHats;
+      if (slaveHatChanged)  { loaded.slave_hats = slaveHats; loaded.slave_motor_hat = slaveMotor; }
+      _hardwareLoaded = loaded;
+      let msgOk;
+      if (masterHatChanged && slaveHatChanged) msgOk = 'Saved — Master reboot required · Slave restarting';
+      else if (masterHatChanged)               msgOk = 'Saved — Master reboot required';
+      else                                     msgOk = 'Saved — Slave auto-restarting';
+      toast(msgOk, 'ok');
+      if (status) { status.textContent = '✓ ' + msgOk; status.className = 'settings-status ok'; }
+      // B8 fix: poll Slave sync status ~4s after save (SCP + restart ~3s)
+      if (slaveHatChanged) {
+        setTimeout(async () => {
+          const sync = await api('/settings/slave_hat_sync_status').catch(() => null);
+          if (sync && sync.attempted && !sync.ok && sync.error !== 'running') {
+            toast(`Slave HAT sync failed: ${sync.error}`, 'error');
+            if (status) { status.textContent = '✗ Slave sync failed'; status.className = 'settings-status error'; }
+          }
+        }, 4000);
+      }
+      return true;
+    } else {
+      const err = data.error || 'unknown';
+      toast('Save failed: ' + err, 'error');
+      if (status) { status.textContent = '✗ ' + err; status.className = 'settings-status error'; }
+      return false;
+    }
+  };
+  if (btn && typeof withSaveFeedback === 'function') withSaveFeedback(btn, run);
+  else run();
 }
 
 const _R2_LOGO_SVG = `<svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/></svg>`;
