@@ -486,7 +486,14 @@
       <!-- Col 1: Speed + VESC stats -->
       <div class="drive-bottom-left">
         <div class="speed-wrap">
-          <label class="ctrl-label">SPEED <span id="speed-val" class="ctrl-val">60%</span></label>
+          <label class="ctrl-label">
+            SPEED <span id="speed-val" class="ctrl-val">60%</span>
+            <!-- WOW HW1 2026-05-15: shows the effective real-world output
+                 when power_scale < 1.0. Hidden when scale=1.0 to avoid
+                 noise. Operator sees "60% × 50% = 30%" so they know why
+                 the bot is sluggish. -->
+            <span id="speed-effective" class="ctrl-effective" style="display:none"></span>
+          </label>
           <input type="range" id="speed-slider" min="10" max="100" value="60"
                  oninput="setSpeed(this.value)" class="holo-slider">
         </div>
@@ -505,6 +512,13 @@
 
       <!-- Col 3: Dome auto + camera toggle -->
       <div class="drive-bottom-right">
+        <!-- WOW HW3 2026-05-15: BT controller status visible on Drive.
+             Hidden when BT disabled. Glyph + signal bars updated by
+             StatusPoller from data.bt_connected + data.bt_rssi. -->
+        <span id="drive-bt-pill" class="drive-bt-pill" style="display:none" title="Bluetooth controller">
+          <span class="drive-bt-icon">🎮</span>
+          <span id="drive-bt-bars" class="signal-bars"></span>
+        </span>
         <button id="alive-toggle-btn" class="alive-btn" onclick="behaviorPanel.toggleAlive()" title="ALIVE mode — idle reactions">
           ALIVE
         </button>

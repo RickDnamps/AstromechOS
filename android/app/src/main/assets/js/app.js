@@ -2358,6 +2358,24 @@ const _chorMon = (() => {
 // would force a single global value and break that use case.
 const _SPEED_LS_KEY = 'astromech-speed-limit';
 
+// WOW HW1 2026-05-15: cache last-known power_scale so setSpeed can
+// update the "effective" hint live (e.g. operator drags slider while
+// power_scale=0.5, sees the multiplied result update in real-time).
+let _powerScaleCached = 1.0;
+
+function _updateSpeedEffective() {
+  const v = Math.round((_speedLimit || 0) * 100);
+  const eff = el('speed-effective');
+  if (!eff) return;
+  if (_powerScaleCached >= 0.99) {
+    eff.style.display = 'none';
+  } else {
+    const realPct = Math.round(v * _powerScaleCached);
+    eff.style.display = 'inline';
+    eff.textContent = ` × ${Math.round(_powerScaleCached * 100)}% = ${realPct}%`;
+  }
+}
+
 function setSpeed(val) {
   const v = Math.max(10, Math.min(100, parseInt(val, 10) || 60));
   _speedLimit = v / 100;
@@ -2368,6 +2386,7 @@ function setSpeed(val) {
     slider.style.setProperty('--val', v + '%');
     if (slider.value !== String(v)) slider.value = v;
   }
+  _updateSpeedEffective();
   try { localStorage.setItem(_SPEED_LS_KEY, String(v)); } catch {}
 }
 
@@ -3063,44 +3082,24 @@ function emergencyStop() {
 }
 
 function estopReset() {
-  // F-9: same serialization for reset. Don't flip _estopTripped here —
-  // wait for server confirmation. _estopBusy prevents double-fire during
-  // the round-trip.
+  // F-9: serialization. Don't flip _estopTripped here — wait for server
+  // confirmation. _estopBusy prevents double-fire during the round-trip.
+  //
+  // Bug H3 fix 2026-05-15: removed the 500ms _stowWatch interval that
+  // raced the 2s StatusPoller. The poller is now the SINGLE source of
+  // truth for STOWING / EMERGENCY STOP text transitions (line ~6918).
+  // It also fires the 'Ready' toast on the stow_in_progress:true→false
+  // transition. Removes 30 extra /status hits per stow + eliminates
+  // the race where two writers fight over the same text element.
   _estopBusy = true;
-  // User-reported 2026-05-15: STOWING text used to appear ONLY at the
-  // next status poll (≤2s lag), so the servos were already moving
-  // before the operator saw the indicator. Now: optimistic — the
-  // button text + a fast 500ms watch loop fire IMMEDIATELY on click,
-  // so the visual lines up with the physical motion start.
   const txt = el('estop-toggle-text');
-  if (txt) txt.textContent = 'STOWING…';
+  if (txt) txt.textContent = 'STOWING…';   // optimistic — poller will sync
   api('/system/estop_reset', 'POST').then(r => {
-    if (r && r.status === 'reset') {
+    if (r && (r.status === 'reset' || r.status === 'estop_already_clear')) {
       toast('Stowing servos…', 'info');
       _setEstopUI(false);
-      // Don't immediately overwrite STOWING — _setEstopUI sets text to
-      // 'EMERGENCY STOP' but we want STOWING until the actual stow ends.
-      if (txt) txt.textContent = 'STOWING…';
-      // 500ms watch: catches the stow_in_progress=false transition
-      // way before the 2s status poller does, so the button reverts
-      // to EMERGENCY STOP exactly when the slew actually finishes.
-      const _stowWatch = setInterval(async () => {
-        const s = await api('/status');
-        if (!s || !s.stow_in_progress) {
-          clearInterval(_stowWatch);
-          if (txt) txt.textContent = 'EMERGENCY STOP';
-          // 2026-05-15: use operator-configured robot name, not hardcoded
-          // 'R2'. Falls back to 'Robot' if name unavailable.
-          if (s) {
-            const name = (s.robot_name && s.robot_name.trim()) || 'Robot';
-            toast(`${name} ready — drive armed`, 'ok');
-          }
-        }
-      }, 500);
-      // Safety: stop polling after 15s no matter what
-      setTimeout(() => clearInterval(_stowWatch), 15000);
+      if (txt) txt.textContent = 'STOWING…';   // poller flips back when done
     } else {
-      // Restore the button on failure
       if (txt) txt.textContent = 'RESET E-STOP';
       toast('Reset failed', 'error');
     }
@@ -6913,6 +6912,10 @@ class StatusPoller {
     // on the E-STOP button text. While the safe-home is mid-stow,
     // the button shows STOWING… so the operator doesn't think reset
     // succeeded fully and try to drive (which 503s during stow).
+    //
+    // Bug H3 fix 2026-05-15: also fire the 'Ready' toast on the
+    // stow_in_progress:true→false transition (was in the old 500ms
+    // _stowWatch loop which we removed to avoid the race).
     const estopTxt = el('estop-toggle-text');
     if (estopTxt) {
       if (data.stow_in_progress) {
@@ -6921,6 +6924,47 @@ class StatusPoller {
         estopTxt.textContent = 'EMERGENCY STOP';
       }
     }
+    // Edge-triggered ready toast (only on true→false transition).
+    if (this._lastStowing === true && data.stow_in_progress === false && !_estopTripped) {
+      const name = (data.robot_name && data.robot_name.trim()) || 'Robot';
+      toast(`${name} ready — drive armed`, 'ok');
+    }
+    this._lastStowing = !!data.stow_in_progress;
+
+    // WOW HW1 2026-05-15: sync the speed-effective hint with the
+    // current VESC power_scale from /status.
+    if (typeof data.power_scale === 'number' && data.power_scale !== _powerScaleCached) {
+      _powerScaleCached = data.power_scale;
+      if (typeof _updateSpeedEffective === 'function') _updateSpeedEffective();
+    }
+
+    // WOW HW3 2026-05-15: BT controller status pill on Drive bottom.
+    // Shown only when a controller is paired+connected. Edge-trigger
+    // toast on disconnect so operator knows mid-show.
+    const btPill = el('drive-bt-pill');
+    const btBars = el('drive-bt-bars');
+    const btConnected = !!data.bt_connected;
+    if (btPill) btPill.style.display = btConnected ? 'inline-flex' : 'none';
+    if (btConnected && btBars) {
+      const rssi = data.bt_rssi;
+      const lit = (typeof rssi === 'number')
+        ? (rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1)
+        : 0;
+      const cls = (typeof rssi === 'number')
+        ? (rssi >= -65 ? '' : rssi >= -75 ? 'weak' : 'bad')
+        : '';
+      btBars.replaceChildren();
+      for (let i = 1; i <= 4; i++) {
+        const b = document.createElement('span');
+        b.className = `signal-bar signal-bar-${i} ${i <= lit ? 'lit ' + cls : ''}`;
+        btBars.appendChild(b);
+      }
+      if (btPill) btPill.title = `Bluetooth controller · ${rssi ?? '?'} dBm`;
+    }
+    if (this._lastBtConnected === true && !btConnected) {
+      toast('🎮 BT controller disconnected', 'warn');
+    }
+    this._lastBtConnected = btConnected;
 
     // Drive-tab shortcut indicators — turn buttons green while the
     // matching choreo/sound is actually playing, revert when done.
@@ -9245,6 +9289,14 @@ function startAppHeartbeat() {
       // old browsers / CSP blocking blob: workers). Less robust but
       // better than no heartbeat at all.
       console.warn('Heartbeat worker unavailable, falling back to setInterval', e);
+      // Bug H6 fix 2026-05-15: surface to operator. Fallback re-enables
+      // the exact failure mode the worker fix prevented (false E-STOP
+      // on heavy renders) — operator needs to know they're degraded.
+      // Toast only once per session via window flag.
+      if (typeof toast === 'function' && !window._hbFallbackWarned) {
+        window._hbFallbackWarned = true;
+        toast('Heartbeat fallback active — heavy renders may trigger false E-STOP', 'warn');
+      }
       _hbWorker = { _fallback: setInterval(() => {
         fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
       }, 200) };

@@ -385,6 +385,11 @@ def get_status():
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_drive_safe':   is_drive_safe(),
         'vesc_bench_mode':   bool(reg.vesc_bench_mode),
+        # WOW HW1 2026-05-15: expose power_scale so the Drive speed
+        # slider can show '60% × 50% = 30%' effective output. Operator
+        # at a show wonders 'why is the bot sluggish' — the answer is
+        # the scale. Now visible directly on Drive.
+        'power_scale':       float(getattr(reg.vesc, '_speed_limit', 1.0)) if reg.vesc else 1.0,
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
         'camera_found':      len(glob.glob('/dev/video*')) > 0,
         'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],

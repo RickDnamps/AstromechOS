@@ -1606,17 +1606,23 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 .kbd-key {
   width: 26px;
   height: 26px;
-  background: rgba(var(--blue-rgb),0.06);
-  border: 1px solid var(--border);
+  /* WOW HW2 2026-05-15: bumped contrast so keyboard hints are
+   * discoverable instead of looking like decoration. Was bg
+   * rgba(.06) + color text-dim = invisible on dark themes. */
+  background: rgba(var(--blue-rgb), 0.12);
+  border: 1px solid rgba(var(--blue-rgb), 0.45);
   border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 10px;
-  color: var(--text-dim);
-  transition: all 0.1s;
+  color: var(--blue);
+  opacity: 0.7;
+  transition: all 0.15s;
   letter-spacing: 0;
+  font-weight: 700;
 }
+.kbd-key:hover { opacity: 1; }
 
 .kbd-key.active {
   background: rgba(var(--blue-rgb),0.2);
@@ -4525,6 +4531,32 @@ select.chor-dirty {
   0%, 100% { box-shadow: 0 0 12px rgba(0, 204, 102, 0.5); }
   50%      { box-shadow: 0 0 22px rgba(0, 204, 102, 0.8); }
 }
+
+/* WOW HW1 2026-05-15: speed effective hint (60% × 50% = 30%) */
+.ctrl-effective {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--amber, #ffaa44);
+  font-family: var(--font-data, monospace);
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+/* WOW HW3 2026-05-15: Drive bottom-bar BT pill */
+.drive-bt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(var(--blue-rgb), 0.08);
+  border: 1px solid rgba(var(--blue-rgb), 0.3);
+  font-size: 11px;
+  vertical-align: middle;
+}
+.drive-bt-icon { font-size: 13px; }
 
 /* WOW polish H4 2026-05-15: Behavior next-trigger countdown */
 .beh-next-trigger {
