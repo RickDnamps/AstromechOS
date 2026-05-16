@@ -303,6 +303,11 @@ class BTControllerDriver:
             # Audit finding BT M-1 2026-05-15: surface the inactivity
             # pause state so the UI can warn the operator.
             'bt_inactivity_pause':  bool(getattr(self, '_inactivity_pause', False)),
+            # 2026-05-16: surface the active MAC at the driver level so
+            # status_bp's `**bt_status` spread carries it into /status.
+            # /bt/status used to monkey-patch this on top of get_status()
+            # → the header pill (which reads /status) never saw the MAC.
+            'active_device_mac':    self._active_device_mac,
         }
 
     # ------------------------------------------------------------------
