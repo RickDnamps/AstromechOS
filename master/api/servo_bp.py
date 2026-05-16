@@ -256,6 +256,12 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
             'speed': _clamp_speed(_safe_int(vals.get('speed', prev.get('speed', 10)), 10)),
         }
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    # User-reported 2026-05-16: rotate 3 .bak generations BEFORE writing
+    # so an unintended mutation (audit script, cascade label revert,
+    # operator fat-finger) can be reverted via SSH:
+    #   cp dome_angles.json.bak1 dome_angles.json && restart astromechos
+    from master.config.config_loader import rotate_backup as _rotate
+    _rotate(filepath)
     tmp = filepath + '.tmp'
     with open(tmp, 'w') as f:
         json.dump(existing, f, indent=2)

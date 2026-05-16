@@ -130,8 +130,14 @@ def _read_shortcuts() -> dict:
 
 def _atomic_write_json(path: str, data: dict) -> None:
     """tmp + os.replace + fsync + chmod 0o600 — same pattern as
-    write_cfg_atomic in master/config/config_loader.py."""
+    write_cfg_atomic in master/config/config_loader.py.
+
+    User-reported 2026-05-16: rotate 3 .bak generations BEFORE write
+    so an unintended mutation can be recovered via SSH (cp shortcuts
+    .json.bak1 shortcuts.json + restart)."""
+    from master.config.config_loader import rotate_backup as _rotate
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    _rotate(path)
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

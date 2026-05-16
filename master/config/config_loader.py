@@ -90,6 +90,44 @@ def is_auto_pull_enabled(cfg: configparser.ConfigParser) -> bool:
     return cfg.getboolean('github', 'auto_pull_on_boot', fallback=True)
 
 
+def rotate_backup(path: str, keep: int = 3) -> None:
+    """User-reported 2026-05-16: 'ça fait plusieurs fois que tu efface
+    mes configs j'en ai marre'.
+
+    Before each write, rotate <path>.bak1 → <path>.bak2 → <path>.bak3
+    so the operator has 3 generations of recovery on demand. The N-th
+    most recent state lives at <path>.bakN. Caller invokes BEFORE
+    write_cfg_atomic / atomic_json_write.
+
+    If path doesn't exist (first write), no-op.
+    .bak1 = most recent good state (last successful write)
+    .bak2 = previous one
+    .bak3 = oldest kept
+
+    Recovery from SSH:
+        cp local.cfg.bak1 local.cfg && systemctl restart astromechos
+    """
+    if not os.path.exists(path):
+        return
+    try:
+        # Rotate oldest to newest: bak{N-1} -> bakN, ..., bak1 -> bak2
+        for i in range(keep - 1, 0, -1):
+            src = f"{path}.bak{i}"
+            dst = f"{path}.bak{i+1}"
+            if os.path.exists(src):
+                os.replace(src, dst)
+        # Copy current path to .bak1 (NOT rename — current file still needed
+        # by readers until the new write lands; rename would create a gap)
+        import shutil
+        shutil.copy2(path, f"{path}.bak1")
+        try:
+            os.chmod(f"{path}.bak1", 0o600)
+        except OSError:
+            pass
+    except OSError as e:
+        log.warning("rotate_backup failed for %s: %s — proceeding with write", path, e)
+
+
 def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
     """Writes cfg to path atomically using a .tmp file + os.replace().
     If the process crashes between write and replace, the original file
@@ -103,7 +141,12 @@ def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
     them — the real defense is changing the admin + SSH passwords,
     which is operator responsibility. fsync flushes the rename
     durability so a power loss right after replace doesn't lose it.
+
+    User-reported 2026-05-16: rotate 3 .bak generations BEFORE writing
+    so an unintended mutation (bad audit script, fat-finger in dashboard,
+    cascade clear) can be reverted via SSH one-line.
     """
+    rotate_backup(path)
     tmp = path + '.tmp'
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(tmp, 'w', encoding='utf-8') as f:

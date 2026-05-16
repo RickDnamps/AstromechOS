@@ -129,6 +129,9 @@ def _write_cam_env(resolution: str, fps: int, quality: int) -> None:
     write_cfg_atomic + chmod 0600 (the env may eventually hold
     sensitive camera tokens)."""
     os.makedirs(os.path.dirname(_ENV_PATH), exist_ok=True)
+    # User-reported 2026-05-16: rotate .bak before write
+    from master.config.config_loader import rotate_backup as _rotate
+    _rotate(_ENV_PATH)
     tmp = _ENV_PATH + '.tmp'
     with open(tmp, 'w') as f:
         f.write(f'CAMERA_RESOLUTION={resolution}\n')

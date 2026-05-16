@@ -78,7 +78,12 @@ def _atomic_write_chor(path: str, chor: dict) -> None:
 
     Caller MUST hold _chor_file_lock so two concurrent writers can't both
     create the same .tmp path and one's replace overwrites the other's data.
+
+    User-reported 2026-05-16: rotate 3 .bak generations BEFORE write so a
+    bad .chor save (or audit-induced mutation) can be reverted via SSH.
     """
+    from master.config.config_loader import rotate_backup as _rotate
+    _rotate(path)
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(chor, f, indent=2, ensure_ascii=False)
@@ -161,8 +166,13 @@ def _save_categories(cats: list) -> None:
     between the write and the inode flush can't leave a 0-byte file
     that _load_categories has to regenerate from defaults (silently
     losing user-created categories). Cheap on a Pi 4B's SD card; the
-    file is a few hundred bytes."""
+    file is a few hundred bytes.
+
+    User-reported 2026-05-16: rotate .bak before write so a categories
+    accident can be recovered via SSH."""
+    from master.config.config_loader import rotate_backup as _rotate
     os.makedirs(os.path.dirname(_CATEGORIES_PATH), exist_ok=True)
+    _rotate(_CATEGORIES_PATH)
     tmp = _CATEGORIES_PATH + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(cats, f, indent=2, ensure_ascii=False)

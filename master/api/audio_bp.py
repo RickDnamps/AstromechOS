@@ -415,6 +415,9 @@ def _atomic_write_index(index: dict) -> None:
     scenario in CLAUDE.md). This helper is the same pattern as
     write_cfg_atomic / _atomic_write_chor."""
     tmp = _INDEX_FILE + '.tmp'
+    # User-reported 2026-05-16: rotate .bak before write
+    from master.config.config_loader import rotate_backup as _rotate
+    _rotate(_INDEX_FILE)
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(index, f, indent=2, ensure_ascii=False)
         f.flush()
