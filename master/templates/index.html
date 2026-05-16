@@ -1067,7 +1067,9 @@
       <!-- 🎮 Bluetooth -->
       <div class="settings-panel" id="spanel-bluetooth">
         <section class="card settings-card">
-          <h2 class="card-title">BT GAMEPAD</h2>
+          <h2 class="card-title">BT GAMEPAD — <span class="robot-name">R2-D2</span></h2>
+          <!-- W4/W11 fix 2026-05-16: lock/bench mode pills visible in BT panel -->
+          <div id="bt-mode-pills" class="bt-mode-pills" style="display:none"></div>
           <div class="bt-status-row">
             <svg class="gamepad-icon" width="48" height="32" viewBox="0 0 48 32">
               <rect x="4" y="8" width="40" height="18" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
@@ -1171,14 +1173,16 @@
               <label class="ctrl-label">INACTIVITY TIMEOUT <span id="bt-timeout-val" class="ctrl-val">30s</span></label>
               <div style="display:flex;align-items:center;gap:8px">
                 <input type="range" id="bt-inactivity-timeout" min="0" max="600" step="5" value="30"
-                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':this.value+'s'" class="holo-slider" style="flex:1">
+                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':this.value+'s';updateBtTimeoutPreview(this.value)" class="holo-slider" style="flex:1">
                 <input type="number" id="bt-timeout-num" min="0" max="3600" value="30" step="5"
-                       oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':v+'s'"
+                       oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':v+'s';updateBtTimeoutPreview(v)"
                        style="width:58px;background:#0a0f1a;border:1px solid #1a3a5c;color:#7eb8d4;padding:3px 5px;font-family:inherit;font-size:11px;text-align:center">
               </div>
+              <!-- W10 fix 2026-05-16: contextual preview text -->
+              <div id="bt-timeout-preview" class="bt-timeout-preview"></div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <button class="btn btn-active" onclick="btController.saveFullConfig()">SAVE CONFIG</button>
+              <button id="bt-save-cfg-btn" class="btn btn-active" onclick="withSaveFeedback(this, () => btController.saveFullConfig())">SAVE CONFIG</button>
               <div class="speed-mode-btns">
                 <button class="btn speed-mode-btn" data-mode="slow" onclick="setSpeedMode('slow')">SLOW</button>
                 <button class="btn speed-mode-btn btn-active" data-mode="normal" onclick="setSpeedMode('normal')">NORMAL</button>

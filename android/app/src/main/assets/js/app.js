@@ -7383,6 +7383,36 @@ class BTController {
       }
     }
 
+    // W5 fix 2026-05-16: surface inactivity pause in status text
+    const stEl = el('bt-status-text');
+    if (stEl && data.bt_inactivity_pause === true) {
+      stEl.textContent = '⏸ PAUSED (inactivity) — press any button';
+      stEl.classList.add('inactivity-paused');
+    } else if (stEl) {
+      stEl.classList.remove('inactivity-paused');
+    }
+    // W4/W11 fix 2026-05-16: bench/lock mode pills inside BT card
+    const pills = el('bt-mode-pills');
+    if (pills) {
+      const items = [];
+      if (data.vesc_bench_mode) {
+        items.push('<span class="mode-pill mode-bench">🛡 BENCH MODE</span>');
+      }
+      if (data.lock_mode === 2) {
+        items.push('<span class="mode-pill mode-lock">🔒 CHILD LOCK — drive blocked, dome free</span>');
+      } else if (data.lock_mode === 1) {
+        const cap = Math.round((data.kids_speed_limit || 0.5) * 100);
+        items.push(`<span class="mode-pill mode-kids">👶 KIDS MODE — drive capped at ${cap}%</span>`);
+      }
+      if (items.length) {
+        pills.innerHTML = items.join(' ');
+        pills.style.display = '';
+      } else {
+        pills.innerHTML = '';
+        pills.style.display = 'none';
+      }
+    }
+
     this._updatePill();
   }
 
@@ -7645,12 +7675,30 @@ const btPairing = {
   },
 
   unpair(address) {
+    // W14 fix 2026-05-16: confirm before forget. Mistap on REMOVE was
+    // dropping the operator's only paired controller, forcing a 1-3min
+    // re-scan + re-pair cycle. Mirrors the destructive-action pattern
+    // used for Audio sound delete (long-press) — explicit confirm here
+    // because the cost of an undo is high.
+    if (!confirm(`Forget device ${address}?\n\nYou will need to re-pair from scratch (scan + pair). The robot will not auto-connect to this controller anymore.`)) return;
     api('/bt/unpair', 'POST', { address }).then(r => {
       if (r && r.status === 'ok') { toast('Device removed', 'ok'); this.refresh(); }
       else toast('Remove error', 'error');
     });
   },
 };
+
+// W10 fix 2026-05-16: live preview text for inactivity timeout slider
+function updateBtTimeoutPreview(val) {
+  const p = el('bt-timeout-preview');
+  if (!p) return;
+  const v = parseInt(val, 10) || 0;
+  if (v === 0) {
+    p.innerHTML = '<span class="bt-preview-warn">⚠ Pause disabled — joystick stays active indefinitely.</span>';
+  } else {
+    p.innerHTML = `<span class="robot-name">R2-D2</span> will pause if no input for <strong>${v}s</strong>. Press any button to resume.`;
+  }
+}
 
 // Charger les appareils jumelés au démarrage
 window.addEventListener('DOMContentLoaded', () => setTimeout(() => btPairing.refresh(), 1500));
