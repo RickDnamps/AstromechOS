@@ -1025,12 +1025,20 @@ def system_estop_reset():
         """Wrapper around _safe_home that ALWAYS clears stow_in_progress on
         exit — even if _safe_home raises. Without the try/finally, an
         unexpected exception (e.g. servo driver disconnect during stow)
-        would leave the gate set forever, refusing all subsequent motion."""
+        would leave the gate set forever, refusing all subsequent motion.
+
+        2026-05-16: timing logs added per user report that the STOWING
+        button text persisted long after servos visually finished.
+        Helps distinguish backend slowness (real _safe_home delay) from
+        frontend polling delay (StatusPoller missed transitions)."""
+        import time as _t
+        t0 = _t.monotonic()
         try:
             _safe_home()
         finally:
             reg.stow_in_progress = False
-            log.info("Safe-home complete — motion gate re-opened")
+            elapsed = _t.monotonic() - t0
+            log.info(f"Safe-home complete in {elapsed:.2f}s — motion gate re-opened")
 
     threading.Thread(target=_safe_home_runner, name='safehome', daemon=True).start()
     return jsonify({'status': 'reset'})
