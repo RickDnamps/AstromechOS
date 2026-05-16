@@ -4753,6 +4753,65 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Network — batch 3 polish (2026-05-16) */
+
+/* W3 — currently-connected SSID highlight in scan list */
+.wifi-scan-card.is-connected {
+  border-color: var(--ok, #00cc66);
+  background: rgba(0,204,102,0.06);
+}
+.wifi-current-badge {
+  background: var(--ok, #00cc66);
+  color: #000;
+  font-size: 9px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  margin-left: auto;
+}
+
+/* W4 — password input wrap with show/hide eye toggle */
+.pwd-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.pwd-input-wrap .input-text { padding-right: 36px; flex: 1; }
+.pwd-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  opacity: 0.6;
+  color: var(--text);
+}
+.pwd-toggle:hover { opacity: 1; background: rgba(255,255,255,0.05); border-radius: 3px; }
+
+/* W5 — PSK strength meter under hotspot password */
+.pwd-strength-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 10px;
+}
+.pwd-strength-bars {
+  display: inline-flex;
+  gap: 2px;
+  height: 8px;
+}
+.pwd-strength-label {
+  font-family: var(--font-data, monospace);
+  letter-spacing: 0.5px;
+  font-weight: bold;
+}
+
 /* Battery — batch 2 polish (2026-05-16) */
 
 .battery-chem-hint {

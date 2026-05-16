@@ -588,6 +588,12 @@ def _set_wifi_impl():
     # SSID containing \n would inject a fake [section] on next read.
     if any(c in ssid for c in '\n\r\x00') or any(c in password for c in '\n\r\x00'):
         return jsonify({'error': 'SSID/password contains illegal control char'}), 400
+    # E6 fix 2026-05-16: reject bidi-override + zero-width chars that
+    # could disguise the SSID in UI/logs.
+    _BIDI = {'‪', '‫', '‬', '‭', '‮',
+             '⁦', '⁧', '⁨', '⁩', '​', '‎', '‏'}
+    if any(c in _BIDI for c in ssid):
+        return jsonify({'error': 'SSID contains disallowed bidi/zero-width char'}), 400
     # B9 fix 2026-05-16: IEEE 802.11 caps SSID at 32 bytes.
     if len(ssid.encode('utf-8')) > 32:
         return jsonify({'error': 'SSID too long (max 32 bytes per IEEE 802.11)'}), 400

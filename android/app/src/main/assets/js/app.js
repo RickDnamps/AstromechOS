@@ -10054,6 +10054,9 @@ async function scanWifi() {
       const row = document.createElement('button');
       row.type = 'button';
       row.className = 'wifi-scan-card';
+      // W3 fix 2026-05-16: highlight currently-connected SSID (backend
+      // now returns 'in_use' from nmcli IN-USE column).
+      if (n.in_use) row.classList.add('is-connected');
       row.dataset.ssid = n.ssid;
       row.addEventListener('click', () => {
         sel.value = n.ssid;
@@ -10061,7 +10064,6 @@ async function scanWifi() {
         list.querySelectorAll('.wifi-scan-card').forEach(c => c.classList.remove('selected'));
         row.classList.add('selected');
       });
-      // Signal bars (1-4 lit based on %)
       const bars = document.createElement('span');
       bars.className = 'signal-bars';
       const lit = n.signal >= 75 ? 4 : n.signal >= 50 ? 3 : n.signal >= 25 ? 2 : 1;
@@ -10076,8 +10078,20 @@ async function scanWifi() {
       ssidEl.textContent = n.ssid;
       const meta = document.createElement('span');
       meta.className = 'wifi-scan-meta';
-      meta.textContent = `${n.signal}%${n.security ? ' · 🔒' : ''}`;
-      row.append(bars, ssidEl, meta);
+      // W11 fix 2026-05-16: show band (2.4G/5G) when available
+      const parts = [`${n.signal}%`];
+      if (n.band) parts.push(n.band);
+      if (n.security) parts.push('🔒');
+      meta.textContent = parts.join(' · ');
+      // W3 current marker badge
+      if (n.in_use) {
+        const badge = document.createElement('span');
+        badge.className = 'wifi-current-badge';
+        badge.textContent = '✓ CURRENT';
+        row.append(bars, ssidEl, meta, badge);
+      } else {
+        row.append(bars, ssidEl, meta);
+      }
       list.appendChild(row);
     });
   }
@@ -10085,6 +10099,60 @@ async function scanWifi() {
 
 function onScanSelect(ssid) {
   if (ssid) { const f = el('wifi-ssid'); if (f) f.value = ssid; }
+}
+
+// W4 fix 2026-05-16: password show/hide eye toggle helper.
+// Applied to wlan1 password + hotspot password inputs.
+function togglePwdVisibility(inputId, btn) {
+  const inp = el(inputId);
+  if (!inp) return;
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    if (btn) { btn.textContent = '🙈'; btn.setAttribute('aria-label', 'Hide password'); }
+    // Auto-revert after 5s
+    setTimeout(() => {
+      if (inp.type === 'text') {
+        inp.type = 'password';
+        if (btn) { btn.textContent = '👁'; btn.setAttribute('aria-label', 'Show password'); }
+      }
+    }, 5000);
+  } else {
+    inp.type = 'password';
+    if (btn) { btn.textContent = '👁'; btn.setAttribute('aria-label', 'Show password'); }
+  }
+}
+
+// W5 fix 2026-05-16: WPA-PSK strength meter for hotspot password.
+// Reuses .signal-bars SVG component (lit count from char-class score).
+function updateHotspotPwdStrength(pwd) {
+  const wrap = el('hotspot-pwd-strength');
+  const label = el('hotspot-pwd-strength-label');
+  if (!wrap) return;
+  if (!pwd) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  // Score: 1pt for length≥8, 1pt for length≥12, 1pt each for class
+  // (lower/upper/digit/symbol). Max 5 → mapped to 4 lit bars.
+  let score = 0;
+  if (pwd.length >= 8) score++;
+  if (pwd.length >= 12) score++;
+  if (/[a-z]/.test(pwd)) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+  const lit = Math.min(4, Math.max(1, Math.ceil(score / 1.5)));
+  const tier = score <= 2 ? 'bad' : score <= 3 ? 'weak' : '';
+  const tierLabel = score <= 2 ? 'weak' : score <= 4 ? 'good' : 'strong';
+  wrap.querySelectorAll('.signal-bar').forEach((b, i) => {
+    b.classList.remove('lit', 'weak', 'bad');
+    if (i < lit) {
+      b.classList.add('lit');
+      if (tier) b.classList.add(tier);
+    }
+  });
+  if (label) {
+    label.textContent = tierLabel.toUpperCase();
+    label.style.color = score <= 2 ? 'var(--err)' : score <= 4 ? 'var(--amber)' : 'var(--ok)';
+  }
 }
 
 // W1/E16 fix 2026-05-16: withSaveFeedback wrapper for visual parity +

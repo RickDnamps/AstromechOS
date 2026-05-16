@@ -1809,7 +1809,12 @@
             </div>
             <div class="form-group">
               <label>Password</label>
-              <input type="password" id="wifi-password" class="input-text" placeholder="Leave blank to keep current">
+              <!-- W4 fix 2026-05-16: show/hide eye toggle on WPA-PSK input -->
+              <div class="pwd-input-wrap">
+                <input type="password" id="wifi-password" class="input-text" placeholder="Leave blank to keep current"
+                       autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('wifi-password', this)" aria-label="Show password">👁</button>
+              </div>
             </div>
             <button class="btn btn-active" onclick="applyWifi()">CONNECT wlan1</button>
           </section>
@@ -1822,7 +1827,22 @@
             </div>
             <div class="form-group">
               <label>Password (min 8 chars)</label>
-              <input type="password" id="hotspot-password" class="input-text" placeholder="Leave blank to keep current">
+              <div class="pwd-input-wrap">
+                <input type="password" id="hotspot-password" class="input-text" placeholder="Leave blank to keep current"
+                       autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false"
+                       oninput="updateHotspotPwdStrength(this.value)">
+                <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('hotspot-password', this)" aria-label="Show password">👁</button>
+              </div>
+              <!-- W5 fix 2026-05-16: WPA-PSK strength meter reusing signal-bars -->
+              <div class="pwd-strength-row" id="hotspot-pwd-strength" style="display:none">
+                <span class="signal-bars pwd-strength-bars">
+                  <span class="signal-bar signal-bar-1"></span>
+                  <span class="signal-bar signal-bar-2"></span>
+                  <span class="signal-bar signal-bar-3"></span>
+                  <span class="signal-bar signal-bar-4"></span>
+                </span>
+                <span class="pwd-strength-label" id="hotspot-pwd-strength-label">—</span>
+              </div>
             </div>
             <div class="settings-note">Fixed IP: 192.168.4.1 — clients must reconnect after applying</div>
             <button class="btn btn-warn" onclick="applyHotspot()">APPLY + RESTART HOTSPOT</button>
