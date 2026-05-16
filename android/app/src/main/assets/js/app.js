@@ -9453,14 +9453,20 @@ function updateBatteryPreview() {
 //   shortcutsRunner — Drive tab overlay: renders the configured
 //                     shortcuts split across the left+right joystick
 //                     pads, handles clicks, updates indicator dots.
+// W1/B1 fix 2026-05-16: play_animation was a backend-only feature →
+// invisible in the editor → operator could never bind Imperial March
+// without SSH-editing shortcuts.json. Added here + handled in
+// _buildTargetInput + _defaultIconFor/Label below.
+// W10 fix: action-type emojis inline for visual scan.
 const _SHORTCUT_ACTION_TYPES = [
   { value: 'none',                label: '— none —' },
-  { value: 'arms_toggle',         label: 'Arm toggle' },
-  { value: 'body_panel_toggle',   label: 'Body panel toggle' },
-  { value: 'dome_panel_toggle',   label: 'Dome panel toggle' },
-  { value: 'play_choreo',         label: 'Play choreo' },
-  { value: 'play_sound',          label: 'Play sound' },
-  { value: 'play_random_audio',   label: 'Play random (category)' },
+  { value: 'arms_toggle',         label: '🦾 Arm toggle' },
+  { value: 'body_panel_toggle',   label: '🚪 Body panel toggle' },
+  { value: 'dome_panel_toggle',   label: '🔘 Dome panel toggle' },
+  { value: 'play_choreo',         label: '🎭 Play choreo' },
+  { value: 'play_sound',          label: '🎵 Play sound' },
+  { value: 'play_random_audio',   label: '🎲 Play random (category)' },
+  { value: 'play_animation',      label: '💡 Play lights animation' },
 ];
 
 const shortcutsEditor = {
@@ -9541,6 +9547,7 @@ const shortcutsEditor = {
     if (type === 'arms_toggle')       return '🦾';
     if (type === 'body_panel_toggle') return '🚪';
     if (type === 'dome_panel_toggle') return '🔘';
+    if (type === 'play_animation')    return '💡';
     return '⚡';
   },
 
@@ -9571,6 +9578,11 @@ const shortcutsEditor = {
     if (type === 'arms_toggle')       return this._armLabel(parseInt(target, 10) || 1);
     if (type === 'body_panel_toggle' || type === 'dome_panel_toggle') {
       return this._panelLabel(target);
+    }
+    if (type === 'play_animation') {
+      const anims = (typeof animData !== 'undefined' && animData.animations) || [];
+      const a = anims.find(x => String(x.code ?? x.mode ?? x.id) === target);
+      return (a && a.name) ? a.name : (target ? `T${target}` : 'ANIM');
     }
     return `BTN ${this._shortcuts.indexOf(sc) + 1}`;
   },
@@ -9813,6 +9825,21 @@ const shortcutsEditor = {
       Object.keys(this._cats || {}).sort().forEach(c => options.push({value: c, text: c}));
       return mkSelect(options, sc.action.target);
     }
+    // W1/B1 fix 2026-05-16: play_animation T-code dropdown
+    if (type === 'play_animation') {
+      const options = [{value: '', text: '(pick an animation)'}];
+      // Lights animations are cached as global animData (loaded from /teeces/animations)
+      const anims = (typeof animData !== 'undefined' && animData.animations) || [];
+      anims.forEach(a => {
+        const code = String(a.code ?? a.mode ?? a.id ?? '');
+        const name = a.name || a.label || `T${code}`;
+        if (code) options.push({value: code, text: `T${code} — ${name}`});
+      });
+      if (anims.length === 0) {
+        options.push({value: '', text: '(visit Lights tab first)', disabled: true});
+      }
+      return mkSelect(options, sc.action.target);
+    }
     const span = document.createElement('span');
     span.textContent = '—';
     return span;
@@ -9988,6 +10015,17 @@ const shortcutsRunner = {
   updateFromStatus(data) {
     if (!this._shortcuts || !this._shortcuts.length) return;
     if (!data) return;
+    // E7 fix 2026-05-16: sync toggle states from /status.shortcut_states
+    // so two browser tabs (web + Android) stay in sync without full
+    // /shortcuts refetch. Without this, tab A pressing arms_toggle
+    // left tab B's indicator stale until full reload.
+    if (data.shortcut_states && typeof data.shortcut_states === 'object') {
+      for (const sid of Object.keys(data.shortcut_states)) {
+        this._states[sid] = data.shortcut_states[sid];
+        const b = this._btnById[sid];
+        if (b) b.classList.toggle('is-on', this._states[sid] === 'on');
+      }
+    }
     const choreoName = data.choreo_playing ? (data.choreo_name || '') : '';
     const audioCur   = data.audio_playing  ? (data.audio_current || '') : '';
     // audio_current looks like '🎲 happy' for random-category plays, plain
@@ -10019,14 +10057,18 @@ const shortcutsRunner = {
   async _trigger(id, btn) {
     btn.disabled = true;
     try {
-      const d = await api(`/shortcuts/${encodeURIComponent(id)}/trigger`, 'POST');
-      if (!d) {
-        toast('Shortcut failed', 'error');
+      // B19 fix 2026-05-16: use apiDetail to surface backend error
+      // messages (busy: 409, refused: 503, debounced: 429) instead of
+      // generic 'Shortcut failed'.
+      const res = await apiDetail(`/shortcuts/${encodeURIComponent(id)}/trigger`, 'POST');
+      if (!res.ok) {
+        // B2/B3/B4 toast — 'another sequence playing', 'UART unavail', etc.
+        const msg = res.error || 'Shortcut failed';
+        const kind = res.status === 429 ? 'info' : 'error';
+        toast(msg, kind);
         return;
       }
-      // Bug M5 fix 2026-05-15: server may return 200 with {error: ...}
-      // for an unhandled internal error. Previously d.state was
-      // undefined → button stuck without is-on but no toast either.
+      const d = res.data || {};
       if (d.error) {
         toast(`Shortcut: ${d.error}`, 'error');
         return;
@@ -10034,18 +10076,21 @@ const shortcutsRunner = {
       const state = d.state;
       this._states[id] = state === 'fired' ? 'off' : state;
       btn.classList.toggle('is-on', this._states[id] === 'on');
-      // Immediate visual ack for one-shot triggers — the green
-      // 'is-playing' indicator is then taken over by the status
-      // poller on the next 2s tick when choreo_name/audio_current
-      // reflect the actual playback.
       if (state === 'fired') {
         btn.classList.add('is-playing');
-        // If the poller hasn't seen it within 2.5s the action was
-        // ultra-short (or the server rejected silently): clear so
-        // the button isn't stuck green.
-        setTimeout(() => {
-          if (poller && poller._lastData) shortcutsRunner.updateFromStatus(poller._lastData);
-        }, 2500);
+        // B8 fix 2026-05-16: was relying on updateFromStatus to clear
+        // is-playing, but play_animation + future one-shot types aren't
+        // monitored → green forever. Look up the action type and use a
+        // hard 800ms clear for one-shot fire types.
+        const sc = this._shortcuts.find(s => s.id === id);
+        const oneShotTypes = new Set(['play_animation']);
+        if (sc && oneShotTypes.has(sc.action?.type)) {
+          setTimeout(() => btn.classList.remove('is-playing'), 800);
+        } else {
+          setTimeout(() => {
+            if (poller && poller._lastData) shortcutsRunner.updateFromStatus(poller._lastData);
+          }, 2500);
+        }
       }
     } finally {
       btn.disabled = false;

@@ -61,8 +61,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import threading
+import time
 from pathlib import Path
 
 from flask import Blueprint, request, jsonify
@@ -78,6 +80,33 @@ _SHORTCUTS_FILE = os.path.join(
     os.path.dirname(__file__), '..', 'config', 'shortcuts.json',
 )
 _SHORTCUTS_LOCK = threading.Lock()
+
+# B5/P2 fix 2026-05-16: per-shortcut trigger lock + debounce.
+# Was: double-tap on arms_toggle / panel_toggle spawned 2 daemon
+# threads racing same servo (UART duplication + PCA9685 race).
+# 150ms debounce per-sid blocks rapid re-trigger; the lock
+# serializes legitimate sequential presses.
+_TRIGGER_LOCKS: dict[str, threading.Lock] = {}
+_TRIGGER_LOCKS_GUARD = threading.Lock()
+_LAST_TRIGGER_TS: dict[str, float] = {}
+_TRIGGER_DEBOUNCE_S = 0.15
+
+
+def _per_sid_lock(sid: str) -> threading.Lock:
+    with _TRIGGER_LOCKS_GUARD:
+        lk = _TRIGGER_LOCKS.get(sid)
+        if lk is None:
+            lk = threading.Lock()
+            _TRIGGER_LOCKS[sid] = lk
+        return lk
+
+
+# B2/B3/B4 fix 2026-05-16: explicit exceptions for trigger failures.
+# Lets the endpoint surface a precise toast vs silent 'off'/'fired'.
+class _ShortcutBusy(Exception):
+    """Raised when the action conflicts with another in-flight one."""
+class _ShortcutRefused(Exception):
+    """Raised when a hardware/safety condition refuses the trigger."""
 
 # Cap to avoid pathological configs flooding the Drive tab.
 _MAX_SHORTCUTS = 12
@@ -426,29 +455,18 @@ def _act_dome_panel_toggle(target: str, current: str) -> str:
 
 
 def _act_play_choreo(target: str, current: str) -> str:
-    # Toggle: if THIS choreo is currently playing, a second press kills
-    # it (operator wants to abort without going through Sequences).
+    # B3 fix 2026-05-16: distinguish 'another choreo playing' (409
+    # conflict) from clean refusal. Was silently 'off' → UI showed
+    # no feedback. Now raises to surface a toast.
     if reg.choreo and reg.choreo.is_playing():
         status = reg.choreo.get_status() or {}
         if status.get('name') == target:
             reg.choreo.stop()
             return 'off'
-        # A *different* choreo is running — refuse this press rather
-        # than racing two playbacks. The runner already shows the
-        # currently-playing choreo's button green.
-        return 'off'
+        raise _ShortcutBusy(f"another sequence playing: {status.get('name', '?')}")
     if not reg.choreo:
         return 'off'
     from master.api.choreo_bp import safe_play, _safe_choreo_path
-    # Re-validate the path at trigger time (defense in depth) — the
-    # save-time check already runs through _validate_action, but a
-    # tampered shortcuts.json or symlink race between save and
-    # trigger could otherwise escape the choreographies dir. Same
-    # helper choreo_bp uses for its own /play endpoint.
-    # NOTE: _safe_choreo_path returns a (path, err) TUPLE — not a
-    # bare string. Earlier code missed the unpack and crashed with
-    # 'stat: path should be string, not tuple' on every shortcut
-    # trigger (user-reported 2026-05-15).
     path, err = _safe_choreo_path(target)
     if err is not None or not path or not os.path.isfile(path):
         return 'off'
@@ -457,51 +475,74 @@ def _act_play_choreo(target: str, current: str) -> str:
             chor = json.load(f)
     except (OSError, json.JSONDecodeError):
         return 'off'
-    safe_play(chor, loop=False, log_label=f'shortcut:{target}')
+    # B2 fix 2026-05-16: was ignoring safe_play() return → false 'fired'
+    # green pulse even when the canonical refused (estop, lock,
+    # stow). Now propagate the refusal so the runner can toast.
+    ok = safe_play(chor, loop=False, log_label=f'shortcut:{target}')
+    if not ok:
+        raise _ShortcutRefused('sequence refused (safety lock or another playing)')
     return 'fired'
 
 
+# B4 fix 2026-05-16: audio handlers must hold _audio_state_lock around
+# the registry mutation — P4 fix from audio_bp B-10 was re-introduced
+# by these handlers writing reg.audio_* directly.
 def _act_play_sound(target: str, current: str) -> str:
-    # Toggle: re-pressing while THIS sound is playing stops it.
-    # Delegates registry-state bookkeeping to audio_bp helpers so
-    # reg.audio_playing / reg.audio_current / _schedule_audio_reset
-    # stay in sync with the UART send — matches what /audio/play
-    # does. Without this, the 'is-playing' indicator never lit up
-    # for shortcut-triggered plays (audit finding H-1).
+    # B6 fix 2026-05-16: defense-in-depth path re-validation at trigger
+    # time. Was: _safe_sound_path called only at save → tampered
+    # shortcuts.json could pass through with newlines/control chars.
     from master.api.audio_bp import (
         _schedule_audio_reset, _get_sound_duration_ms,
+        _safe_sound_path, _audio_state_lock,
     )
+    safe_target, perr = _safe_sound_path(target)
+    if perr is not None or not safe_target:
+        log.warning("play_sound shortcut: invalid target %r (%s)", target, perr)
+        return 'off'
     if not reg.uart:
-        return 'off'
-    if reg.audio_playing and reg.audio_current == target:
-        reg.uart.send('S', 'STOP')
-        reg.audio_playing = False
-        reg.audio_current = ''
-        return 'off'
-    reg.uart.send('S', target)
-    reg.audio_playing = True
-    reg.audio_current = target
-    _schedule_audio_reset(_get_sound_duration_ms(target))
+        raise _ShortcutRefused('Slave UART unavailable — sound not sent')
+    try:
+        with _audio_state_lock:
+            if reg.audio_playing and reg.audio_current == target:
+                reg.uart.send('S', 'STOP')
+                reg.audio_playing = False
+                reg.audio_current = ''
+                return 'off'
+            reg.uart.send('S', target)
+            reg.audio_playing = True
+            reg.audio_current = target
+        _schedule_audio_reset(_get_sound_duration_ms(target))
+    except OSError as e:
+        log.warning("play_sound UART send failed: %s", e)
+        raise _ShortcutRefused('UART send failed')
     return 'fired'
 
 
 def _act_play_random_audio(target: str, current: str) -> str:
     from master.api.audio_bp import (
         _schedule_audio_reset, _category_avg_duration_ms,
-        RANDOM_PLAY_PREFIX,
+        RANDOM_PLAY_PREFIX, _audio_state_lock,
     )
+    # B6: re-validate category name (defense-in-depth)
+    if not re.match(r'^[a-z0-9_]{1,32}$', str(target)):
+        return 'off'
     if not reg.uart:
-        return 'off'
+        raise _ShortcutRefused('Slave UART unavailable')
     tagged = f'{RANDOM_PLAY_PREFIX}{target}'
-    if reg.audio_playing and reg.audio_current == tagged:
-        reg.uart.send('S', 'STOP')
-        reg.audio_playing = False
-        reg.audio_current = ''
-        return 'off'
-    reg.uart.send('S', f'RANDOM:{target}')
-    reg.audio_playing = True
-    reg.audio_current = tagged
-    _schedule_audio_reset(_category_avg_duration_ms(target) + 500)
+    try:
+        with _audio_state_lock:
+            if reg.audio_playing and reg.audio_current == tagged:
+                reg.uart.send('S', 'STOP')
+                reg.audio_playing = False
+                reg.audio_current = ''
+                return 'off'
+            reg.uart.send('S', f'RANDOM:{target}')
+            reg.audio_playing = True
+            reg.audio_current = tagged
+        _schedule_audio_reset(_category_avg_duration_ms(target) + 500)
+    except OSError as e:
+        log.warning("play_random_audio UART send failed: %s", e)
+        raise _ShortcutRefused('UART send failed')
     return 'fired'
 
 
@@ -594,8 +635,11 @@ def save_shortcuts():
     with _SHORTCUTS_LOCK:
         out = {'shortcuts': cleaned, 'states': new_state}
         _atomic_write_json(_SHORTCUTS_FILE, out)
-    state.clear()
-    state.update(new_state)
+        # P1 fix 2026-05-16: was clearing state OUTSIDE the lock →
+        # concurrent trigger read OLD state while disk had NEW → state
+        # drift on next persist. Now atomic.
+        state.clear()
+        state.update(new_state)
 
     log.info("Shortcuts saved: %d entries", len(cleaned))
     return jsonify({
@@ -609,6 +653,26 @@ def save_shortcuts():
 @shortcuts_bp.post('/shortcuts/<sid>/trigger')
 def trigger_shortcut(sid: str):
     """Execute the shortcut's action. Returns the new state."""
+    # B5/P2 fix 2026-05-16: per-sid debounce — reject rapid re-trigger
+    # within 150ms (double-tap, BT autorepeat, sticky touch button).
+    now = time.monotonic()
+    last = _LAST_TRIGGER_TS.get(sid, 0)
+    if (now - last) < _TRIGGER_DEBOUNCE_S:
+        return jsonify({'error': 'debounced', 'state': 'off'}), 429
+    _LAST_TRIGGER_TS[sid] = now
+
+    # Per-sid lock — serialize the dispatcher so concurrent triggers
+    # from web + Android can't race the state read+write.
+    lk = _per_sid_lock(sid)
+    if not lk.acquire(blocking=False):
+        return jsonify({'error': 'busy', 'state': 'off'}), 429
+    try:
+        return _trigger_shortcut_impl(sid)
+    finally:
+        lk.release()
+
+
+def _trigger_shortcut_impl(sid: str):
     data = _read_shortcuts()
     sc = next((s for s in data.get('shortcuts', []) if s.get('id') == sid), None)
     if sc is None:
@@ -641,6 +705,13 @@ def trigger_shortcut(sid: str):
 
     try:
         new_state = handler(a_target, current)
+    except _ShortcutBusy as e:
+        # B3 fix: surface 'another sequence playing' as 409 instead of
+        # silent 'off' → frontend toast.
+        return jsonify({'error': str(e), 'state': 'off'}), 409
+    except _ShortcutRefused as e:
+        # B2/B4 fix: refused by safety / UART → 503 → frontend toast.
+        return jsonify({'error': str(e), 'state': 'off'}), 503
     except Exception as e:
         log.exception("Shortcut trigger failed: %s (action=%s target=%s)",
                       sid, a_type, a_target)

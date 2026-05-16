@@ -1655,7 +1655,7 @@
           <div id="shortcuts-list" style="margin-top:10px"></div>
 
           <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
-            <button class="btn btn-active" onclick="shortcutsEditor.save()">SAVE SHORTCUTS</button>
+            <button id="sc-save-btn" class="btn btn-active" onclick="withSaveFeedback(this, () => shortcutsEditor.save())">SAVE SHORTCUTS</button>
             <div class="settings-status" id="shortcuts-status"></div>
           </div>
 

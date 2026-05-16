@@ -265,6 +265,17 @@ def _cpu_temp() -> float | None:
     return v
 
 
+def _shortcut_states_snapshot() -> dict:
+    """E7 fix 2026-05-16: snapshot the shortcuts dispatcher's in-memory
+    state dict for /status sync. Returns {} if shortcuts blueprint not
+    initialized (e.g. import-order edge case at boot)."""
+    try:
+        from master.api.shortcuts_bp import _state_dict
+        return dict(_state_dict())
+    except Exception:
+        return {}
+
+
 def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
     """True = drive allowed for this VESC side. UI-layer convenience wrapper
     around vesc_safety._side_ok — the previous standalone implementation
@@ -431,6 +442,11 @@ def get_status():
         'drive_ramp_active': bool(is_drive_ramp_active()),
         'dome_ramp_active':  bool(is_dome_ramp_active()),
         'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
+        # E7 fix 2026-05-16: surface shortcut toggle states so two
+        # browser tabs / Web + Android stay in sync. Without this,
+        # tab A presses arms_toggle → tab B indicator stays stale
+        # until full reload. Tiny payload (~50 bytes for 12 entries).
+        'shortcut_states':   _shortcut_states_snapshot(),
         'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
         'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
         'vesc_drive_safe':   is_drive_safe(),
