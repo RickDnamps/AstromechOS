@@ -55,7 +55,15 @@ from master.safe_stop import stop_drive, stop_dome
 
 log = logging.getLogger(__name__)
 
-TIMEOUT_S   = 0.6   # 600ms — 3 missed HBs at 200ms = disconnection
+TIMEOUT_S   = 1.5   # 1.5s — 7+ missed HBs at 200ms = real disconnection
+# 2026-05-15: bumped from 0.6s → 1.5s. The 600ms window was too
+# aggressive — any UI hiccup (heavy choreo render blocking main
+# thread, network jitter, Slave briefly busy) could trip it and
+# the R3 fix would set estop_active. 1.5s still catches a dropped
+# tablet within the 800ms drive watchdog window for actual loss
+# scenarios, while tolerating routine 200-500ms render blocks.
+# Combined with the Web Worker heartbeat sender, this is now
+# resilient to both main-thread blocking AND brief network jitter.
 CHECK_HZ    = 0.1   # check every 100ms
 
 
