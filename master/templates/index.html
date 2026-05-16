@@ -1238,17 +1238,16 @@
               <span class="lock-mode-sub">capped speed</span>
             </button>
             <button class="lock-mode-btn lock-mode-lock" data-mode="2"
-                    onclick="lockMgr._applyMode(2)" title="Drive fully blocked. Dome+sounds+lights remain free.">
+                    onclick="lockMgr._applyMode(2)" title="Drive fully blocked. Dome capped at Child speed (slider below). Sounds + lights remain free.">
               <span class="lock-mode-icon">🔒</span>
               CHILD LOCK
-              <span class="lock-mode-sub">drive blocked</span>
+              <span class="lock-mode-sub">drive blocked · dome slow</span>
             </button>
           </div>
           <div class="speed-wrap" style="margin-top:12px">
-            <label class="ctrl-label">KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
+            <label class="ctrl-label">👶 KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
             <input type="range" id="kids-speed-slider" min="5" max="60" value="20" class="holo-slider"
                    oninput="lockMgr.setKidsSpeed(+this.value)" list="kids-speed-marks-list">
-            <!-- W17 fix 2026-05-16: tick marks at common values -->
             <datalist id="kids-speed-marks-list">
               <option value="10"></option>
               <option value="25"></option>
@@ -1258,8 +1257,25 @@
             <div class="kids-speed-marks">
               <span>SLOW</span><span>MEDIUM</span><span>FAST</span>
             </div>
-            <!-- W5 fix 2026-05-16: contextual mental-model hint -->
             <div id="kids-speed-preview" class="kids-speed-preview"></div>
+            <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.7">
+              Applied to BOTH drive AND dome rotation in Kids mode.
+            </p>
+          </div>
+          <!-- Batch 3 fix 2026-05-16: Child dome speed slider (separate
+               from Kids — Child is stricter, dome at slower speed). -->
+          <div class="speed-wrap" style="margin-top:12px">
+            <label class="ctrl-label">🔒 CHILD LOCK DOME SPEED <span id="child-dome-val" class="ctrl-val">30%</span></label>
+            <input type="range" id="child-dome-slider" min="5" max="50" value="30" class="holo-slider"
+                   oninput="lockMgr.setChildDomeSpeed(+this.value)">
+            <div class="kids-speed-marks">
+              <span>VERY SLOW</span><span>SLOW</span><span>MODERATE</span>
+            </div>
+            <div id="child-dome-preview" class="kids-speed-preview"></div>
+            <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.7">
+              Dome rotation speed when Child Lock is active. Drive is fully blocked in Child mode.
+              Recommended: keep below the Kids slider above (Child is stricter).
+            </p>
           </div>
           <p class="settings-note" style="margin-top:10px">Returning from Child Lock requires the admin password.</p>
           <!-- W23 fix 2026-05-16: reassure persistence -->
@@ -1269,8 +1285,8 @@
             <summary>What does each mode do?</summary>
             <ul class="settings-help-list">
               <li><strong>NORMAL</strong> — full drive at your speed slider. Dome, sounds, lights all free.</li>
-              <li><strong>KIDS</strong> — drive enabled but capped at the Kids speed limit above. Dome+sounds+lights free. Designed for kid behind the wheel.</li>
-              <li><strong>CHILD LOCK</strong> — drive fully blocked. Dome+sounds+lights still free. Designed for handing the tablet to a kid who can play with sounds without risking propulsion.</li>
+              <li><strong>KIDS</strong> — drive AND dome capped at the Kids speed limit. Sounds+lights free. Designed for a kid behind the wheel.</li>
+              <li><strong>CHILD LOCK</strong> — drive fully blocked. Dome rotates at the (slower) Child Dome speed. Sounds+lights free. Designed for handing the tablet to a small child who can play with the dome + sounds without risking propulsion.</li>
             </ul>
           </details>
         </section>

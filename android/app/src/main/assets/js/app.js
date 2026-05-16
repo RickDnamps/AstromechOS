@@ -939,9 +939,6 @@ class LockManager {
     // longer sees a misleading 'unlocked' state.
     api('/status').then(d => {
       if (!d) return;
-      // Prefer server kids_speed_limit over localStorage (was: localStorage
-      // wins, leading to UI/server divergence on fresh tablets where
-      // localStorage defaulted to 20% but server was at 50%).
       if (typeof d.kids_speed_limit === 'number') {
         const serverPct = Math.round(d.kids_speed_limit * 100);
         this._kidsSpeed = serverPct;
@@ -949,7 +946,15 @@ class LockManager {
         if (s) { s.value = serverPct; syncHoloSlider(s); }
         if (v) v.textContent = serverPct + '%';
       }
-      // syncFromStatus handles the mode UI sync
+      // Batch 3 fix 2026-05-16: sync child_dome_speed_limit from /status
+      if (typeof d.child_dome_speed_limit === 'number') {
+        const childPct = Math.round(d.child_dome_speed_limit * 100);
+        this._childDomeSpeed = childPct;
+        const cs = el('child-dome-slider');
+        const cv = el('child-dome-val');
+        if (cs) { cs.value = childPct; syncHoloSlider(cs); }
+        if (cv) cv.textContent = childPct + '%';
+      }
       if (typeof d.lock_mode === 'number' && d.lock_mode !== 0) {
         this.syncFromStatus(d.lock_mode);
       }
@@ -962,20 +967,38 @@ class LockManager {
     if (v) v.textContent = val + '%';
     this._updateKidsPreview();
     if (this._mode === 1) this._applyKidsSpeed();
-    // Audit finding Drive UX M-2 2026-05-15: debounce the server
-    // POST. Slider oninput fires per pixel of drag → ~55 POSTs at
-    // 30Hz, all serialized on _cfg_write_lock. Coalesce into one
-    // POST 250ms after the operator stops dragging.
-    // LOW #7 fix 2026-05-15: also debounce localStorage write (was
-    // sync IPC per pixel on Android WebView — ~55 writes/drag).
     if (this._kidsSendTimer) clearTimeout(this._kidsSendTimer);
     this._kidsSendTimer = setTimeout(() => {
-      _lsSet('kidsSpeedLimit', String(val));   // W21: per-robot
+      _lsSet('kidsSpeedLimit', String(val));
       api('/lock/set', 'POST', {
         mode: this._mode,
         kids_speed_limit: val / 100,
       });
       this._kidsSendTimer = null;
+    }, 250);
+  }
+
+  // Batch 3 fix 2026-05-16: child_dome_speed_limit slider handler
+  // (separate from Kids — Child is stricter, slower dome).
+  setChildDomeSpeed(val) {
+    this._childDomeSpeed = val;
+    const v = el('child-dome-val');
+    if (v) v.textContent = val + '%';
+    // Live preview text
+    const p = el('child-dome-preview');
+    if (p) {
+      p.textContent = val <= 15 ? 'Very slow — tiny rotation per joystick push'
+                    : val <= 30 ? 'Slow — gentle rotation for small kids'
+                    : 'Moderate — bigger rotation, still capped';
+    }
+    // Same 250ms debounce as setKidsSpeed
+    if (this._childSendTimer) clearTimeout(this._childSendTimer);
+    this._childSendTimer = setTimeout(() => {
+      api('/lock/set', 'POST', {
+        mode: this._mode,
+        child_dome_speed_limit: val / 100,
+      });
+      this._childSendTimer = null;
     }, 250);
   }
 
