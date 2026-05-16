@@ -10,9 +10,17 @@ All POST endpoints accept and return `application/json`.
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/status` | Full system state — see fields below |
+| GET | `/status/version` | `{master: VERSION}` (legacy) |
+| GET | `/system/version` | `{version, commit, message, date}` — full git info (WOW polish I1, 2026-05-15) |
+| GET | `/system/deploy_status` | admin · `{local_sha, remote_sha, remote_msg, behind_count}` — git fetch + remote compare, cached 60s (WOW polish I1) |
 | POST | `/heartbeat` | App ↔ Master watchdog (every 200ms, 600ms timeout) |
 
-**Key `/status` fields:** `robot_name` · `master_location` · `slave_location` · `version` · `uptime` · `temperature` · `heartbeat_ok` · `uart_ready` · `uart_health` (Slave stats or null) · `battery_voltage` · `vesc_ready` · `vesc_l_ok` · `vesc_r_ok` · `vesc_bench_mode` · `dome_servo_ready` · `servo_ready` · `choreo_playing` · `audio_playing` · `estop_active` · `camera_found` · `camera_active` · `dome_hat_health [{addr,ok,errors}]` · `body_hat_health [{addr,ok,errors}]` · `motor_hat_health {addr,ok}` · `display_ready` · `display_port` · `bt_connected` · `bt_rssi` · `slave_temp` · `slave_cpu` · `master_wlan0` · `master_wlan1`
+**Key `/status` fields:** `robot_name` · `master_location` · `slave_location` · `version` · `uptime` · `temperature` · `heartbeat_ok` · `uart_ready` · `uart_health` (Slave stats or null) · `battery_voltage` · `vesc_ready` · `vesc_l_ok` · `vesc_r_ok` · `vesc_bench_mode` · `dome_servo_ready` · `servo_ready` · `choreo_playing` · `audio_playing` · `estop_active` · `stow_in_progress` · `drive_ramp_active` · `dome_ramp_active` · `lock_mode` · `kids_speed_limit` · `camera_found` · `camera_active` · `dome_hat_health [{addr,ok,errors}]` · `body_hat_health [{addr,ok,errors}]` · `motor_hat_health {addr,ok}` · `display_ready` · `display_port` · `bt_connected` · `bt_rssi` · `slave_temp` · `slave_cpu` · `master_wlan0` · `master_wlan1`
+
+**WOW polish field additions (2026-05-15):**
+- `stow_in_progress` — true during the ~3s safe-home stow after Reset E-STOP. Frontend swaps E-STOP button text to STOWING…
+- `drive_ramp_active` / `dome_ramp_active` — true during anti-tip 400ms ramp. Frontend pulses joystick ring amber
+- `kids_speed_limit` — float 0..1, current Kids mode speed cap. Frontend mode-kids pill shows "KIDS MODE X%"
 
 ---
 
@@ -144,6 +152,31 @@ All POST endpoints accept and return `application/json`.
 | POST | `/lock/unlock` | LAN-open · `{password, mode:0}` · server-side `hmac.compare_digest` vs admin password · operator-facing unlock from Kids/Child Lock |
 
 Mode 0 = Normal · Mode 1 = Kids (capped via `kids_speed_limit`) · Mode 2 = Child Lock (drive forbidden, dome/sounds/lights free).
+
+---
+
+## Behavior Engine
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET  | `/behavior/status` | `{alive_enabled, startup_enabled, idle_mode, idle_timeout_min, last_activity_ago_s, next_idle_in_s, ...}` |
+| POST | `/behavior/config` | admin · full behavior config save to `local.cfg [behavior]` |
+| POST | `/behavior/alive` | admin · `{enabled:true\|false}` — toggle alive mode |
+
+**WOW polish H4 (2026-05-15):** `next_idle_in_s` computed as `last_activity + idle_timeout_min - now`. `null` when `alive_enabled=false`. Frontend renders a live ticking countdown pill "Next idle reaction in 9:58".
+
+---
+
+## Diagnostics
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/diagnostics/logs?filter=ALL\|WARNING\|ERROR` | admin · master log tail |
+| GET | `/diagnostics/uart_stats` | UART CRC/health/heartbeat metrics |
+| GET | `/diagnostics/uart_rtt` | rolling 200-sample RTT stats (~40s window) |
+| GET | `/diagnostics/ping_slave` | admin · TCP ping → port 5001 |
+
+Frontend `diagPanel` auto-refreshes stats every 5s while panel visible. TAIL mode auto-refreshes logs every 2s + scroll-locks to bottom (WOW polish I8).
 
 ---
 
