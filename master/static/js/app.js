@@ -844,9 +844,14 @@ class LockManager {
     if (s) { s.value = this._kidsSpeed; syncHoloSlider(s); }
     const v = el('kids-speed-val');
     if (v) v.textContent = this._kidsSpeed + '%';
+    // W5 fix 2026-05-16: live preview hint for kids speed slider
+    this._updateKidsPreview();
     document.body.dataset.lockMode = '0';
-    const dlabel = el('drive-lock-label');
-    if (dlabel) dlabel.textContent = 'LOCK';
+    this._updateDriveLockLabel();
+    // W24 fix 2026-05-16: pre-set active class on mode 0 button so
+    // Settings panel doesn't briefly show no-active state
+    const btn0 = document.querySelector('.lock-mode-btn[data-mode="0"]');
+    if (btn0) btn0.classList.add('active');
     // B10/B14 fix 2026-05-16: synchronously fetch /status once at init
     // so the UI reflects the SERVER lock_mode + kids_speed_limit
     // immediately instead of showing Normal for ~2s until the first
@@ -875,6 +880,7 @@ class LockManager {
     this._kidsSpeed = val;
     const v = el('kids-speed-val');
     if (v) v.textContent = val + '%';
+    this._updateKidsPreview();
     if (this._mode === 1) this._applyKidsSpeed();
     // Audit finding Drive UX M-2 2026-05-15: debounce the server
     // POST. Slider oninput fires per pixel of drag → ~55 POSTs at
@@ -950,13 +956,34 @@ class LockManager {
   _updateCapsHint(e) {
     const hint = el('lock-pwd-caps');
     if (!hint) return;
-    const on = e && typeof e.getModifierState === 'function'
+    // B11 fix 2026-05-16: only check on real character keys.
+    // Was: fired on every key including F-keys/Tab where getModifierState
+    // returns inconsistent results across browsers → false hint toggles.
+    if (!e || !e.key || e.key.length !== 1) return;
+    const on = typeof e.getModifierState === 'function'
       ? e.getModifierState('CapsLock') : false;
     hint.classList.toggle('hidden', !on);
   }
   onKeyDown(e) {
     if (e.key === 'Enter')  { this.submitModal(); return; }
     if (e.key === 'Escape') { this.cancelModal(); return; }
+    // B12 fix 2026-05-16: focus trap. Tab cycle stays within modal
+    // (input → Cancel → Unlock → input). Was: Tab escaped to underlying
+    // drive UI — operator could accidentally tap drive joystick while
+    // modal "modal".
+    if (e.key === 'Tab') {
+      const modal = el('lock-modal');
+      if (!modal) return;
+      const focusable = Array.from(modal.querySelectorAll('input, button')).filter(x => !x.disabled);
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault(); last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault(); first.focus();
+      }
+      return;
+    }
     this._updateCapsHint(e);
   }
   onKeyUp(e) { this._updateCapsHint(e); }
@@ -1042,26 +1069,20 @@ class LockManager {
 
   _applyMode(mode) {
     // W9/B3 fix 2026-05-16: relaxation (going TOWARD less restrictive)
-    // requires the password modal. Was: Settings panel buttons could
-    // skip the password gate entirely by clicking "Normal" while in
-    // ChildLock. Now: detect relax direction and route through the
-    // unlock modal instead.
+    // requires the password modal.
     const prev = this._mode;
     if (mode < prev) {
-      // Operator wants to relax — must enter password
       this._showUnlockModal();
       return;
     }
-    // B8 fix 2026-05-16: no-op if already in this mode (saves a
-    // useless POST + persist cycle)
+    // B8 fix 2026-05-16: no-op if already in this mode
     if (mode === prev) return;
     this._mode = mode;
     document.body.dataset.lockMode = mode;
 
     const label = el('lock-mode-label');
-    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];  // kept for compatibility
-    const dlabel = el('drive-lock-label');
-    if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][mode];
+    if (label) label.textContent = ['', 'KIDS', 'LOCK'][mode];
+    this._updateDriveLockLabel();
 
     // B4/E4 fix 2026-05-16: use _kidsEnterTs (wall-clock) instead of
     // setTimeout. Hidden tabs throttle timers; wall-clock diff is robust.
@@ -1103,6 +1124,32 @@ class LockManager {
     if (s) { s.value = this._kidsSpeed; setSpeed(this._kidsSpeed); }
   }
 
+  // W5 fix 2026-05-16: contextual hint under the kids speed slider
+  // so operator has a mental model of what % means physically.
+  _updateKidsPreview() {
+    const hint = el('kids-speed-preview');
+    if (!hint) return;
+    const v = this._kidsSpeed;
+    let txt = '', cls = '';
+    if (v <= 15)      { txt = '≈ slow walk (very safe)';     cls = 'preview-ok'; }
+    else if (v <= 30) { txt = '≈ brisk walk (kid-friendly)'; cls = 'preview-ok'; }
+    else if (v <= 45) { txt = '≈ jog (supervise)';           cls = 'preview-warn'; }
+    else              { txt = '⚠ ≈ jog/run (close supervision)'; cls = 'preview-err'; }
+    hint.textContent = txt;
+    hint.className = 'kids-speed-preview ' + cls;
+  }
+
+  // W1 fix 2026-05-16: two-line drive button label so operator sees
+  // status (top) + action hint (bottom). Was: ambiguous LOCK/KIDS/
+  // CHILD with no clue what tap does next.
+  _updateDriveLockLabel() {
+    const dlabel = el('drive-lock-label');
+    if (!dlabel) return;
+    const STATUS = ['NORMAL',   'KIDS',     'CHILD LOCK'][this._mode];
+    const ACTION = ['→ KIDS',   '→ CHILD',  '→ UNLOCK'  ][this._mode];
+    dlabel.innerHTML = `<span class="drive-lock-status">${STATUS}</span><span class="drive-lock-hint">${ACTION}</span>`;
+  }
+
   isDriveLocked() { return this._mode === 2; }
   isKidsMode()    { return this._mode === 1; }
 
@@ -1113,8 +1160,19 @@ class LockManager {
       document.body.dataset.lockMode = lockMode;
       const label = el('lock-mode-label');
       if (label) label.textContent = ['', 'KIDS', 'LOCK'][lockMode];
-      const dlabel = el('drive-lock-label');
-      if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][lockMode];
+      this._updateDriveLockLabel();
+      // W12 fix 2026-05-16: pulse the drive button on external change
+      // (another tab, BT, admin) so operator notices the state shift.
+      const btn = el('drive-lock-btn');
+      if (btn) {
+        btn.classList.add('lock-external-pulse');
+        setTimeout(() => btn.classList.remove('lock-external-pulse'), 1200);
+      }
+      const TOASTS = ['Lock mode changed externally — NORMAL',
+                      'Lock mode changed externally — KIDS',
+                      'Lock mode changed externally — CHILD LOCK'];
+      const TYPES  = ['ok', 'warn', 'error'];
+      if (typeof toast === 'function') toast(TOASTS[lockMode], TYPES[lockMode]);
       // WOW polish X3 2026-05-15: sync the lock-mode-switcher buttons
       // in Settings → Lock panel so they reflect the actual mode.
       document.querySelectorAll('.lock-mode-btn').forEach(b => {
@@ -8090,6 +8148,9 @@ class StatusPoller {
         const pctEl = el('mode-kids-pct');
         if (pctEl) pctEl.textContent = pct;
       }
+      // W6 fix 2026-05-16: quick-exit CTA visible only when locked.
+      const unlockCta = el('mode-unlock-cta');
+      if (unlockCta) unlockCta.style.display = (kids || lock) ? 'inline-flex' : 'none';
     }
 
     // Audit finding Safety L-5 2026-05-15: surface stow_in_progress

@@ -259,6 +259,8 @@
 ================================================================ -->
 <div id="lock-modal" class="admin-modal hidden" onclick="lockMgr.onOverlayClick(event)">
   <div class="admin-modal-card">
+    <!-- W4 fix 2026-05-16: X close affordance — was: only ESC/Cancel/click-outside -->
+    <button class="admin-modal-close" onclick="lockMgr.cancelModal()" aria-label="Close">×</button>
     <div class="admin-modal-icon" id="lock-modal-icon">
       <svg width="28" height="32" viewBox="0 0 14 16">
         <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
@@ -421,6 +423,12 @@
                   title="Child Lock — propulsion fully blocked. Dome rotation, sounds, lights and panels remain free for the child to play with.">
               <span class="mode-pill-icon">🔒</span> CHILD LOCK
             </span>
+            <!-- W6 fix 2026-05-16: quick-exit CTA when locked.
+                 Tap → opens unlock modal directly. -->
+            <button id="mode-unlock-cta" class="mode-pill mode-pill-action" style="display:none"
+                    onclick="lockMgr._showUnlockModal()" title="Unlock now (admin password)">
+              🔑 Tap to unlock
+            </button>
           </div>
 
           <!-- HUD overlays -->
@@ -1236,8 +1244,21 @@
             <label class="ctrl-label">KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
             <input type="range" id="kids-speed-slider" min="5" max="60" value="20" class="holo-slider"
                    oninput="lockMgr.setKidsSpeed(+this.value)">
+            <!-- W5 fix 2026-05-16: contextual mental-model hint -->
+            <div id="kids-speed-preview" class="kids-speed-preview"></div>
           </div>
           <p class="settings-note" style="margin-top:10px">Returning from Child Lock requires the admin password.</p>
+          <!-- W23 fix 2026-05-16: reassure persistence -->
+          <p class="settings-note settings-note-ok" style="margin-top:4px">✓ Mode persists across Master reboots.</p>
+          <!-- W13 fix 2026-05-16: collapsible mode explainer -->
+          <details class="settings-help" style="margin-top:8px">
+            <summary>What does each mode do?</summary>
+            <ul class="settings-help-list">
+              <li><strong>NORMAL</strong> — full drive at your speed slider. Dome, sounds, lights all free.</li>
+              <li><strong>KIDS</strong> — drive enabled but capped at the Kids speed limit above. Dome+sounds+lights free. Designed for kid behind the wheel.</li>
+              <li><strong>CHILD LOCK</strong> — drive fully blocked. Dome+sounds+lights still free. Designed for handing the tablet to a kid who can play with sounds without risking propulsion.</li>
+            </ul>
+          </details>
         </section>
       </div>
 

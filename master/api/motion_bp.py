@@ -155,6 +155,11 @@ def _dome_gate():
 # Edge fix 2026-05-15: track cap-relaxation transitions for ramp-up.
 # {last_seen_cap: previous tick's cap, unlock_from: cap before the
 # transition, unlock_at: time the transition was detected}.
+# B7 fix 2026-05-16: lock around the read-modify-write of this dict.
+# Two concurrent /motion/drive POSTs (web + script + BT POST) used to
+# race on unlock_from/unlock_at — eff_cap could jump backwards mid-ramp.
+import threading as _threading_kids
+_kids_cap_lock  = _threading_kids.Lock()
 _kids_cap_state = {'last_seen_cap': 1.0, 'unlock_from': 1.0, 'unlock_at': 0.0}
 
 def _kids_cap(left: float, right: float) -> tuple:
@@ -162,10 +167,11 @@ def _kids_cap(left: float, right: float) -> tuple:
     kids_speed_limit when lock_mode==1.
 
     Edge fix 2026-05-15: when Kids→Normal happens WHILE driving full
-    throttle, the cap jumps 0.5→1.0 in one tick → motor jumps 50→100%
-    in ~17ms (anti-tip ramp doesn't fire because input INCREASED).
-    Now: detect the transition, capture the from/to caps, and ramp
-    the effective cap UP over 200ms so the unlock is proportional.
+    throttle, ramp the effective cap UP over 200ms so the unlock is
+    proportional (anti-tip-style smoothing).
+
+    B7 fix 2026-05-16: state mutation under _kids_cap_lock to prevent
+    interleaved torn reads from concurrent drive POSTs.
     """
     cap = 1.0
     if getattr(reg, 'lock_mode', 0) == 1:
@@ -174,16 +180,17 @@ def _kids_cap(left: float, right: float) -> tuple:
             cap = 0.5
         cap = max(0.0, min(1.0, cap))
     now = time.monotonic()
-    last_seen = _kids_cap_state['last_seen_cap']
-    # Detect relaxation transition — record from/to + timestamp.
-    if cap > last_seen + 0.05:
-        _kids_cap_state['unlock_from'] = last_seen
-        _kids_cap_state['unlock_at']   = now
-    _kids_cap_state['last_seen_cap'] = cap
-    # If we're within the 200ms ramp window post-transition, interpolate.
-    elapsed = now - _kids_cap_state['unlock_at']
+    with _kids_cap_lock:
+        last_seen = _kids_cap_state['last_seen_cap']
+        # Detect relaxation transition — record from/to + timestamp.
+        if cap > last_seen + 0.05:
+            _kids_cap_state['unlock_from'] = last_seen
+            _kids_cap_state['unlock_at']   = now
+        _kids_cap_state['last_seen_cap'] = cap
+        from_cap   = _kids_cap_state['unlock_from']
+        unlock_at  = _kids_cap_state['unlock_at']
+    elapsed = now - unlock_at
     if elapsed < 0.2:
-        from_cap = _kids_cap_state['unlock_from']
         frac = elapsed / 0.2
         eff_cap = from_cap + (cap - from_cap) * frac
     else:
