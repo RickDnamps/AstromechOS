@@ -6909,6 +6909,14 @@ class StatusPoller {
       if (headerName) headerName.textContent = data.robot_name;
       const nameInput = el('robot-name-input');
       if (nameInput && !nameInput.matches(':focus')) nameInput.value = data.robot_name;
+      // 2026-05-15: sync any <span class="robot-name"> in static body
+      // copy (settings notes, warnings) to the operator-configured
+      // name so 'R2-D2 cannot turn' becomes '<their name> cannot turn'.
+      document.querySelectorAll('.robot-name').forEach(s => {
+        if (s.id !== 'header-robot-name' && s.textContent !== data.robot_name) {
+          s.textContent = data.robot_name;
+        }
+      });
     }
 
     // Location names — Dome/Body can be renamed per robot
