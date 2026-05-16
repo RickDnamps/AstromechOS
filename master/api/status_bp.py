@@ -595,12 +595,32 @@ def system_deploy_status():
     return jsonify(out)
 
 
+def _deploy_safety_check() -> tuple[bool, str]:
+    """B6/E2 fix 2026-05-16: shared safety gate for /system/update +
+    /system/rollback. Deploy reboots Slave → instant servo PWM cut →
+    arms/panels fall under gravity, VESCs drop drive state. Refuse
+    if anything risky is in flight."""
+    if reg.estop_active:
+        return False, 'E-STOP active — reset before deploying'
+    if getattr(reg, 'stow_in_progress', False):
+        return False, 'stow in progress — wait for servos to settle'
+    if reg.choreo and reg.choreo.is_playing():
+        return False, 'choreo running — stop it before deploying'
+    if is_drive_ramp_active() or is_dome_ramp_active():
+        return False, 'motion ramping — wait for it to finish'
+    return True, ''
+
+
 @status_bp.post('/system/update')
 @require_admin
 def system_update():
-    """Forces git pull + rsync Slave + reboot Slave (same as the dome button)."""
+    """Forces git pull + rsync Slave + reboot Slave + restart Master.
+    B6/E2 fix 2026-05-16: refuse if motion is in flight."""
     if not reg.deploy:
         return jsonify({'error': 'DeployController not available'}), 503
+    ok, reason = _deploy_safety_check()
+    if not ok:
+        return jsonify({'error': reason}), 503
     import threading
     threading.Thread(target=reg.deploy.update_and_deploy, daemon=True).start()
     return jsonify({'status': 'ok', 'message': 'Update in progress...'})
@@ -807,9 +827,13 @@ def lock_unlock():
 @status_bp.post('/system/rollback')
 @require_admin
 def system_rollback():
-    """Rolls back to the previous git commit + rsync Slave + reboot Slave."""
+    """Rolls back to the previous git commit + rsync Slave + reboot Slave.
+    B6/E2 fix 2026-05-16: same safety gate as /system/update."""
     if not reg.deploy:
         return jsonify({'error': 'DeployController not available'}), 503
+    ok, reason = _deploy_safety_check()
+    if not ok:
+        return jsonify({'error': reason}), 503
     import threading
     threading.Thread(target=reg.deploy.rollback, daemon=True).start()
     return jsonify({'status': 'ok', 'message': 'Rollback in progress...'})

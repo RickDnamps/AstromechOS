@@ -36,7 +36,9 @@ Deploy Controller — Update and deployment.
 """
 
 import logging
+import re
 import subprocess
+import threading
 import configparser
 import os
 import time   # B-51: rsync_to_slave's retry loop calls time.sleep(backoff)
@@ -45,22 +47,44 @@ import time   # B-51: rsync_to_slave's retry loop calls time.sleep(backoff)
 
 log = logging.getLogger(__name__)
 
-from shared.paths import VERSION_FILE
+from shared.paths import VERSION_FILE, MAIN_CFG, LOCAL_CFG
 MAX_SYNC_RETRIES = 3
 SYNC_RETRY_BACKOFF_S = [5, 15, 30]
+
+# B4 fix 2026-05-16: branch name validator. Reject leading '-' (git would
+# parse as option flag → 'git pull origin --upload-pack=/tmp/pwn' → RCE).
+# Allowed: letters, digits, ./_- and / (for refs/heads/foo).
+_SAFE_BRANCH_RE = re.compile(r'^[A-Za-z0-9._/\-]+$')
+
+# E1/B7 fix 2026-05-16: module-level deploy lock — prevents two
+# concurrent UPDATE clicks from racing on .git/index.lock.
+_deploy_lock = threading.Lock()
 
 
 class DeployController:
     def __init__(self, cfg: configparser.ConfigParser, uart_controller, teeces_controller):
         self._repo_path      = cfg.get('master', 'repo_path')
         self._slave_user     = cfg.get('deploy', 'slave_user')
-        self._slave_host     = cfg.get('slave',  'host',         fallback=cfg.get('deploy', 'slave_host'))
+        # B2/E3 fix 2026-05-16: read from cfg at INIT only for default,
+        # but reload from disk on every operation that uses these fields
+        # (reload_cfg). Was: cached at init → operator's /settings/config
+        # change to slave_host / repo_url / branch silently ignored until
+        # Master reboot.
         self._slave_path     = cfg.get('deploy', 'slave_path')
         self._internet_iface = cfg.get('network', 'internet_interface')
-        self._github_url     = cfg.get('github', 'repo_url',     fallback='')
-        self._github_branch  = cfg.get('github', 'branch',       fallback='main')
         self._uart    = uart_controller
         self._teeces  = teeces_controller
+        self.reload_cfg()  # populate slave_host/github_url/branch from local.cfg
+
+    def reload_cfg(self) -> None:
+        """B2/E3 fix 2026-05-16: re-read mutable cfg fields from disk.
+        Called from __init__ + at the start of every deploy action so
+        operator's /settings/config changes take effect immediately."""
+        c = configparser.ConfigParser()
+        c.read([MAIN_CFG, LOCAL_CFG])
+        self._slave_host    = c.get('slave',  'host',     fallback='r2-slave.local')
+        self._github_url    = c.get('github', 'repo_url', fallback='')
+        self._github_branch = c.get('github', 'branch',   fallback='main')
 
     def start(self) -> None:
         log.info("DeployController started")
@@ -70,38 +94,83 @@ class DeployController:
     # ------------------------------------------------------------------
 
     def update_and_deploy(self) -> bool:
-        """Short press: git pull (if internet available) + rsync + reboot Slave."""
-        if self._is_internet_available():
-            self.git_pull()
-        else:
-            log.info("wlan1 unavailable — rsync local version")
-        success = self.rsync_to_slave()
-        if success:
-            self.reboot_slave()
-        return success
+        """Short press: git pull (if internet available) + rsync + reboot Slave.
+        B1 fix 2026-05-16: also restart astromech-master.service AFTER rsync
+        so the NEW Python code actually loads. Was: only the new HTML/JS was
+        served (via static files) but Python kept running OLD code until
+        manual REBOOT MASTER click.
+        B2/E3 fix: reload_cfg() at start so operator's recent /settings/config
+        changes (repo_url, branch, slave host) are picked up."""
+        # E1/B7 fix: serialize concurrent deploys
+        if not _deploy_lock.acquire(blocking=False):
+            log.warning("update_and_deploy refused: another deploy in progress")
+            return False
+        try:
+            self.reload_cfg()
+            if self._is_internet_available():
+                self.git_pull()
+            else:
+                log.info("wlan1 unavailable — rsync local version")
+            success = self.rsync_to_slave()
+            if success:
+                self.reboot_slave()
+                # B1 fix 2026-05-16: restart Master service so the new Python
+                # code on disk actually loads (rsync only updated Slave +
+                # /static files served fresh, but Flask still runs old code).
+                self._restart_master_async()
+            return success
+        finally:
+            _deploy_lock.release()
+
+    def _restart_master_async(self) -> None:
+        """Fire-and-forget Master service restart. systemd will respawn us
+        with the new code. The HTTP response from /system/update was
+        already sent before this fires, so the dying request connection
+        is acceptable."""
+        def _restart():
+            time.sleep(1.0)  # give the HTTP response time to flush
+            try:
+                subprocess.run(
+                    ['sudo', 'systemctl', 'restart', 'astromech-master.service'],
+                    check=False, timeout=10
+                )
+            except Exception as e:
+                log.error(f"Master restart failed: {e}")
+        threading.Thread(target=_restart, name='deploy-master-restart', daemon=True).start()
+        log.info("Master service restart scheduled in 1s")
 
     def rollback(self) -> bool:
-        """Long press: git checkout HEAD^ + rsync + reboot Slave."""
-        log.info("Rollback: git checkout HEAD^")
-        try:
-            result = subprocess.run(
-                ["git", "checkout", "HEAD^"],
-                cwd=self._repo_path,
-                capture_output=True, text=True, timeout=30
-            )
-            if result.returncode != 0:
-                log.error(f"git checkout HEAD^ failed: {result.stderr}")
-                return False
-            self._update_version_file()
-            log.info("Rollback git OK")
-        except Exception as e:
-            log.error(f"Rollback error: {e}")
+        """Long press: git checkout HEAD^ + rsync + reboot Slave.
+        E1 fix 2026-05-16: same deploy lock as update_and_deploy.
+        B1 fix: restart Master service after rsync."""
+        if not _deploy_lock.acquire(blocking=False):
+            log.warning("rollback refused: another deploy in progress")
             return False
+        try:
+            self.reload_cfg()
+            log.info("Rollback: git checkout HEAD^")
+            try:
+                result = subprocess.run(
+                    ["git", "checkout", "HEAD^"],
+                    cwd=self._repo_path,
+                    capture_output=True, text=True, timeout=30
+                )
+                if result.returncode != 0:
+                    log.error(f"git checkout HEAD^ failed: {result.stderr}")
+                    return False
+                self._update_version_file()
+                log.info("Rollback git OK")
+            except Exception as e:
+                log.error(f"Rollback error: {e}")
+                return False
 
-        success = self.rsync_to_slave()
-        if success:
-            self.reboot_slave()
-        return success
+            success = self.rsync_to_slave()
+            if success:
+                self.reboot_slave()
+                self._restart_master_async()
+            return success
+        finally:
+            _deploy_lock.release()
 
     def git_pull(self) -> bool:
         """
@@ -110,12 +179,29 @@ class DeployController:
         Updates remote 'origin' if the URL has changed.
         """
         try:
+            # B4 fix 2026-05-16: validate branch name BEFORE passing to git.
+            # Without this, branch='--upload-pack=/tmp/pwn' (no whitespace,
+            # passes the validator at /settings/config level) would let
+            # git parse it as an OPTION FLAG and run /tmp/pwn as the remote
+            # helper → RCE on Master under admin auth boundary.
+            if not _SAFE_BRANCH_RE.match(self._github_branch or ''):
+                log.error(f"git pull refused: unsafe branch name {self._github_branch!r}")
+                return False
+            if self._github_branch.startswith('-'):
+                log.error(f"git pull refused: branch starts with '-' {self._github_branch!r}")
+                return False
+
             # Sync remote origin with local.cfg if needed
             if self._github_url:
                 self._sync_remote_url()
 
+            # B12 fix 2026-05-16: --ff-only prevents merge commits on
+            # divergence (operator might have a dev commit on the Pi
+            # that we'd otherwise auto-merge, polluting history).
+            # Also use '--' separator as defense-in-depth against future
+            # branch-name parser quirks.
             result = subprocess.run(
-                ["git", "pull", "origin", self._github_branch],
+                ["git", "pull", "--ff-only", "origin", "--", self._github_branch],
                 cwd=self._repo_path,
                 timeout=30,
                 capture_output=True, text=True

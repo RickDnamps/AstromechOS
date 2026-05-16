@@ -447,7 +447,12 @@ def get_settings():
         'github': {
             'repo_url':          cfg.get('github', 'repo_url', fallback='') if is_admin else '',
             'branch':            cfg.get('github', 'branch',   fallback='main') if is_admin else '',
-            'auto_pull_on_boot': cfg.getboolean('github', 'auto_pull_on_boot', fallback=True),
+            # B10/E11 fix 2026-05-16: getboolean raises ValueError on
+            # garbage values ('yess'); hand-edited local.cfg or a
+            # restored corrupted bak would 500 the whole GET /settings.
+            # Wrap defensively.
+            'auto_pull_on_boot': (lambda: cfg.getboolean('github', 'auto_pull_on_boot', fallback=True)
+                                  if cfg.get('github', 'auto_pull_on_boot', fallback='true').lower() in ('true','false','yes','no','on','off','0','1') else True)(),
         },
         'slave': {
             'host': cfg.get('slave', 'host', fallback='r2-slave.local') if is_admin else '',
@@ -837,8 +842,15 @@ def set_config():
                 return None
             return s if len(s) <= 512 else None
         if dotkey == 'github.branch':
-            # No spaces, no slashes-of-doom; up to 64 chars.
-            if not s or len(s) > 64 or any(c in s for c in ' \t\n\r'):
+            # B4 fix 2026-05-16: tighten — reject leading '-' (git would
+            # parse 'git pull origin --upload-pack=X' as option flag →
+            # RCE on Master under admin auth) + restrict charset to git
+            # ref allowlist (alnum + ./_/-).
+            if not s or len(s) > 64:
+                return None
+            if s.startswith('-'):
+                return None
+            if not re.match(r'^[A-Za-z0-9._/\-]+$', s):
                 return None
             return s
         if dotkey == 'github.auto_pull_on_boot':
@@ -1037,6 +1049,18 @@ def set_config():
                 reg.choreo.set_battery(_c, _ch)
             except Exception as e:
                 log.warning("Hot-swap battery failed: %s", e)
+
+    # B2/E3 fix 2026-05-16: hot-reload DeployController cache so the
+    # operator's repo_url / branch / slave_host change takes effect
+    # on the NEXT /system/update without requiring a Master reboot.
+    if any(k in updated for k in ('github.repo_url', 'github.branch', 'slave.host')):
+        try:
+            import master.registry as reg
+            if reg.deploy and hasattr(reg.deploy, 'reload_cfg'):
+                reg.deploy.reload_cfg()
+                log.info("DeployController cache reloaded from cfg")
+        except Exception as e:
+            log.warning("DeployController reload_cfg failed: %s", e)
 
     return jsonify({'status': 'ok', 'updated': updated})
 
