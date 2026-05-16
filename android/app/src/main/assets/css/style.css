@@ -4673,21 +4673,6 @@ body[data-lock-mode="2"] .drive-wrapper {
 .backend-pill.backend-astropixels  { border-color: var(--cyan,  #00ffaa); color: var(--cyan, #00ffaa);   background: rgba(0,255,170,0.10); }
 .backend-pill.backend-none         { border-color: var(--err,   #ff4444); color: var(--err,  #ff4444);   background: rgba(255,68,68,0.10); }
 
-/* W4 — PRESETS row */
-.presets-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.preset-chip {
-  flex: 1 1 calc(50% - 4px);
-  font-size: 10px;
-  letter-spacing: 1px;
-  padding: 8px 4px;
-  min-width: 0;
-}
-
 /* W6 — Text counter */
 .text-counter-row {
   display: flex;
@@ -4766,8 +4751,6 @@ body[data-lock-mode="2"] .drive-wrapper {
 @media (max-width: 540px) {
   .anim-grid { gap: 4px; }
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
-  .presets-row { flex-direction: column; }
-  .preset-chip { flex: 1 1 auto; }
 }
 
 /* L2 fix 2026-05-16: global .hidden utility. Pre-existing scoped

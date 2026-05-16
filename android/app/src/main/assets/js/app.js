@@ -3671,33 +3671,11 @@ function updateTextCounter() {
   counter.classList.toggle('text-counter-max',  len >= 20);
 }
 
-// W4 fix 2026-05-16: one-tap "demo moments" — chains FLD anim + PSI
-// sequence so operator at convention doesn't have to click 3 times.
-// Each preset POSTs both endpoints; PSI as fire-and-forget after anim
-// (acceptable: order matters visually but doesn't break correctness).
-function lightsPreset(name) {
-  const PRESETS = {
-    emergency: { anim: 3,  psi: { target: 'both', sequence: 'redalert' }, toast: '🚨 EMERGENCY' },
-    leia:      { anim: 6,  psi: { target: 'both', sequence: 'leia'     }, toast: '🌀 LEIA'      },
-    party:     { anim: 13, psi: { target: 'both', sequence: 'march'    }, toast: '🪩 PARTY'     },
-    patrol:    { anim: 1,  psi: { target: 'both', sequence: 'normal'   }, toast: '🛡 PATROL'   },
-  };
-  const p = PRESETS[name];
-  if (!p) return;
-  const btn = document.querySelector(`.preset-chip[onclick*="${name}"]`);
-  const run = async () => {
-    const a = await api('/teeces/animation', 'POST', { mode: p.anim });
-    if (!a) { toast(`${p.toast} failed — admin needed`, 'error'); return null; }
-    await api('/teeces/psi_seq', 'POST', p.psi);
-    toast(`${p.toast} engaged`, 'ok');
-    return a;
-  };
-  if (btn && typeof withSaveFeedback === 'function') {
-    withSaveFeedback(btn, run);
-  } else {
-    run();
-  }
-}
+// PRESETS reverted 2026-05-16: redundant with ANIMATIONS grid + PSI
+// controls already present on the same tab. User feedback: 'I don't
+// understand what it does there — we already have animations next to
+// it'. The combo (anim + PSI) is 2 explicit clicks via the existing
+// controls — not worth a duplicate UI section.
 
 const LIGHT_ANIMATIONS = [
   { mode:  1, label: 'Random',           icon: '✨', dur: '∞' },
