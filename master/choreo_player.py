@@ -213,15 +213,33 @@ class ChoreoPlayer:
         #   liion / lipo (default) → 3.5V/cell  (~30% remaining, safe abort)
         #   lifepo4               → 3.0V/cell  (~10% remaining; chemistry sits at 3.2V nominal)
         # Override entirely with [choreo] vesc_min_voltage = <volts>.
-        _PER_CELL_FLOOR = {'liion': 3.5, 'lipo': 3.5, 'lifepo4': 3.0}
+        self._PER_CELL_FLOOR = {'liion': 3.5, 'lipo': 3.5, 'lifepo4': 3.0}
+        _PER_CELL_FLOOR = self._PER_CELL_FLOOR
         if cfg is not None:
             self._telem_check_interval = cfg.getfloat('choreo', 'telem_check_interval', fallback=0.5)
             self._uart_fail_threshold  = cfg.getint('choreo',   'uart_fail_threshold',  fallback=3)
-            _cells     = cfg.getint('battery', 'cells', fallback=4)
+            # E3/E5 fix 2026-05-16: hand-edited local.cfg with cells=
+            # (empty) or cells=foo raises ValueError uncaught at boot.
+            # Wrap with safe fallback + log warning. Same for chemistry.
+            try:
+                _cells = int(cfg.get('battery', 'cells', fallback='4').strip() or '4')
+                if _cells <= 0:
+                    raise ValueError('cells must be > 0')
+            except (ValueError, TypeError):
+                log.warning("Battery: invalid cells in cfg — defaulting to 4")
+                _cells = 4
             _chemistry = cfg.get('battery', 'chemistry', fallback='liion').strip().lower()
-            _per_cell  = _PER_CELL_FLOOR.get(_chemistry, _PER_CELL_FLOOR['liion'])
+            if _chemistry not in _PER_CELL_FLOOR:
+                log.warning("Battery: unknown chemistry %r — defaulting to liion thresholds", _chemistry)
+                _chemistry = 'liion'
+            _per_cell  = _PER_CELL_FLOOR[_chemistry]
             _default_min_v = _cells * _per_cell
-            self._vesc_min_voltage     = cfg.getfloat('choreo', 'vesc_min_voltage',     fallback=_default_min_v)
+            # Track if vesc_min_voltage was explicitly overridden so hot-
+            # swap respects the operator's manual choice (B1 fix below).
+            self._vesc_min_v_explicit = cfg.has_option('choreo', 'vesc_min_voltage')
+            self._battery_cells       = _cells
+            self._battery_chemistry   = _chemistry
+            self._vesc_min_voltage    = cfg.getfloat('choreo', 'vesc_min_voltage', fallback=_default_min_v)
             self._vesc_max_temp        = cfg.getfloat('choreo', 'vesc_max_temp',        fallback=80.0)
             self._vesc_max_current     = cfg.getfloat('choreo', 'vesc_max_current',     fallback=30.0)
             log.info("Battery: %d cells %s → undervoltage abort at %.1fV",
@@ -232,6 +250,9 @@ class ChoreoPlayer:
             self._vesc_min_voltage     = 14.0   # 4S Li-ion default (3.5V × 4)
             self._vesc_max_temp        = 80.0
             self._vesc_max_current     = 30.0
+            self._battery_cells        = 4
+            self._battery_chemistry    = 'liion'
+            self._vesc_min_v_explicit  = False
 
         # Runtime state — reset on each play()
         self._drive_fail_count: int       = 0
@@ -331,6 +352,42 @@ class ChoreoPlayer:
             log.info("ChoreoPlayer: audio_startup_lat hot-updated to %.3fs", self._audio_startup_lat)
         except (TypeError, ValueError):
             log.warning("set_audio_startup_lat: invalid value %r", seconds)
+
+    def set_battery(self, cells: int, chemistry: str) -> bool:
+        """B1/E1 fix 2026-05-16: hot-update battery cells+chemistry so
+        the undervoltage abort threshold takes effect WITHOUT a Master
+        reboot. Was: cells+chemistry read once at __init__ → operator
+        saved new battery → toast said new abort but reality stayed old
+        until reboot → safety regression on the next choreo.
+
+        Respects explicit [choreo] vesc_min_voltage override (operator
+        set the threshold manually; chemistry change should NOT clobber).
+        Returns True if threshold actually updated.
+        """
+        try:
+            cells = int(cells)
+            chemistry = str(chemistry).strip().lower()
+            if cells <= 0:
+                return False
+            if chemistry not in self._PER_CELL_FLOOR:
+                log.warning("set_battery: unknown chemistry %r — keeping current", chemistry)
+                return False
+            self._battery_cells     = cells
+            self._battery_chemistry = chemistry
+            if self._vesc_min_v_explicit:
+                log.info("set_battery: cells=%d chem=%s noted but vesc_min_voltage explicit "
+                         "in [choreo] — threshold unchanged at %.1fV",
+                         cells, chemistry, self._vesc_min_voltage)
+                return False
+            new_min = cells * self._PER_CELL_FLOOR[chemistry]
+            old_min = self._vesc_min_voltage
+            self._vesc_min_voltage = new_min
+            log.info("Battery hot-update: %d cells %s → abort threshold %.1fV (was %.1fV)",
+                     cells, chemistry, new_min, old_min)
+            return True
+        except (TypeError, ValueError) as e:
+            log.warning("set_battery: invalid value cells=%r chem=%r (%s)", cells, chemistry, e)
+            return False
 
     def get_status(self) -> dict:
         with self._status_lock:

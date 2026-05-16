@@ -1651,15 +1651,36 @@ class BatteryGauge {
     this._pct      = el('battery-pct');
     this._TOTAL    = 170;   // full arc length (main)
     this._MINI     = 63;    // full arc length (mini header)
-    this._MIN_V    = 14.0;  // 4S default (testing battery)
+    this._cells    = 4;
+    this._chem     = 'liion';
+    this._MIN_V    = 14.0;
     this._MAX_V    = 16.8;
+    this._perCellMin = 3.5;   // for color thresholds
+    this._perCellMax = 4.2;
     this._lastV    = null;
   }
 
-  // LiPo: 3.5 V/cell (min) — 4.2 V/cell (max)
-  setCells(cells) {
-    this._MIN_V = cells * 3.5;
-    this._MAX_V = cells * 4.2;
+  // W4 fix 2026-05-16: chemistry-aware thresholds. Was: hardcoded LiPo
+  // math (3.5/4.2) → LiFePO4 packs (nominal 3.2/cell, max 3.6/cell)
+  // showed RED at full charge → operator panic-swapped healthy packs.
+  // Now picks per-cell window per chemistry; setCells accepts a 2nd
+  // arg for the chemistry (defaults to current).
+  setCells(cells, chemistry) {
+    cells = Math.max(1, parseInt(cells, 10) || 4);
+    this._cells = cells;
+    if (chemistry) this._chem = String(chemistry).toLowerCase();
+    const CHEM = {
+      liion:   { min: 3.5, max: 4.2, warn: 3.6, ok: 3.8 },
+      lipo:    { min: 3.5, max: 4.2, warn: 3.6, ok: 3.8 },
+      lifepo4: { min: 3.0, max: 3.6, warn: 3.2, ok: 3.3 },
+    };
+    const c = CHEM[this._chem] || CHEM.liion;
+    this._perCellMin = c.min;
+    this._perCellMax = c.max;
+    this._perCellWarn = c.warn;
+    this._perCellOk   = c.ok;
+    this._MIN_V = cells * c.min;
+    this._MAX_V = cells * c.max;
     if (this._lastV) this.update(this._lastV);
   }
 
@@ -1668,10 +1689,11 @@ class BatteryGauge {
     return Math.max(0, Math.min(100, ((v - this._MIN_V) / (this._MAX_V - this._MIN_V)) * 100));
   }
 
-  // Per-cell thresholds (LiPo): green > 3.8V, orange 3.6–3.8V, red < 3.6V
   voltToColor(v) {
-    const vpc = v / (this._MAX_V / 4.2);
-    return vpc >= 3.8 ? '#00cc66' : vpc >= 3.6 ? '#ff8800' : '#ff2244';
+    const vpc = v / Math.max(1, this._cells);
+    return vpc >= (this._perCellOk   ?? 3.8) ? '#00cc66'
+         : vpc >= (this._perCellWarn ?? 3.6) ? '#ff8800'
+         : '#ff2244';
   }
 
   update(voltage) {
@@ -7648,11 +7670,18 @@ const cockpitPanel = {
   },
 
   _updateVitals(data) {
+    // W4 fix 2026-05-16: keep gauge thresholds in sync with backend
+    // cells+chemistry on every poll (handles cross-tab changes).
+    const _cells = data.battery_cells || 4;
+    const _chem  = (data.battery_chemistry || 'liion').toLowerCase();
+    if (batteryGauge._cells !== _cells || batteryGauge._chem !== _chem) {
+      batteryGauge.setCells(_cells, _chem);
+    }
     const v = data.battery_voltage;
     if (v != null) {
       const col   = batteryGauge.voltToColor(v);
       const pct   = Math.round(batteryGauge.voltToPct(v));
-      const cells = data.battery_cells || 4;
+      const cells = _cells;
       const bv    = el('ck-battery-v');
       const bp    = el('ck-battery-pct');
       if (bv) { bv.textContent = v.toFixed(1) + 'V'; bv.style.color = col; }
@@ -8684,11 +8713,25 @@ async function loadSettings() {
 
   if (data.battery) {
     const cells = data.battery.cells ?? 4;
+    const chem  = (data.battery.chemistry || 'liion').toLowerCase();
     const sel = el('battery-cells');
     if (sel) sel.value = String(cells);
-    batteryGauge.setCells(cells);
     const chemSel = el('battery-chemistry');
-    if (chemSel) chemSel.value = (data.battery.chemistry || 'liion').toLowerCase();
+    if (chemSel) {
+      chemSel.value = chem;
+      // B3 fix 2026-05-16: if backend stores 'lipo' but dropdown has
+      // no matching option, select silently fallbacks to first → next
+      // save destructively overwrites. Detect mismatch + force liion.
+      if (chemSel.value !== chem) {
+        chemSel.value = 'liion';
+        console.warn(`Battery chemistry '${chem}' not in dropdown — UI showing liion`);
+      }
+    }
+    // W4: pass chemistry so LiFePO4 packs get correct thresholds
+    batteryGauge.setCells(cells, chem);
+    // B5 fix 2026-05-16: render preview immediately on first load
+    // (was: preview empty until operator wiggled a dropdown).
+    if (typeof updateBatteryPreview === 'function') updateBatteryPreview();
   }
 }
 
@@ -9072,19 +9115,28 @@ async function saveBatteryCells() {
   const btn = document.querySelector('#spanel-battery button[onclick*="saveBatteryCells"]');
   try {
     await withSaveFeedback(btn, async () => {
-      const data = await api('/settings/config', 'POST', {
+      // B4 fix 2026-05-16: apiDetail so backend error messages
+      // ('invalid value(s): battery.cells') surface in toast instead
+      // of generic 'Failed' for ANY rejection.
+      const res = await apiDetail('/settings/config', 'POST', {
         'battery.cells':     cells,
         'battery.chemistry': chemistry,
       });
-      if (!data || data.status !== 'ok') throw new Error('failed');
-      batteryGauge.setCells(cells);
-      toast(`Battery: ${cells}S ${chemistry.toUpperCase()} — abort @ ${(cells * perCell).toFixed(1)} V`, 'ok');
-      if (status) { status.textContent = `${cells}S ${chemistry} — abort @ ${(cells * perCell).toFixed(1)} V`; status.className = 'settings-status ok'; }
-      return data;
+      if (!res.ok) throw new Error(res.error || 'failed');
+      // W4: pass chemistry to gauge so LiFePO4 thresholds apply
+      batteryGauge.setCells(cells, chemistry);
+      toast(`Battery: ${cells}S ${chemistry.toUpperCase()} — abort @ ${(cells * perCell).toFixed(1)} V (hot-applied)`, 'ok');
+      // B6 fix 2026-05-16: signal density — drop the duplicate status
+      // text. Toast + withSaveFeedback button checkmark = 2 clear
+      // signals; status text was a 3rd redundant one (CLAUDE.md
+      // 'Signal density: 2 clear > 3 loud').
+      if (status) status.textContent = '';
+      return res.data;
     });
-  } catch {
-    toast('Failed to save battery config', 'error');
-    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+  } catch (e) {
+    const msg = (e && e.message) || 'failed';
+    toast('Save failed: ' + msg, 'error');
+    if (status) { status.textContent = 'Error: ' + msg; status.className = 'settings-status error'; }
   }
 }
 

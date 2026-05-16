@@ -110,7 +110,23 @@ def _slave_host() -> str:
 
 
 def _battery_cells() -> int:
-    return _cached_cfg().getint('battery', 'cells', fallback=4)
+    # E5 fix 2026-05-16: tolerate empty/garbage 'cells=' without
+    # crashing /status. configparser.getint raises on non-int strings;
+    # cells='' → ValueError → 500 → entire status tab dead until cfg fix.
+    try:
+        v = int(_cached_cfg().get('battery', 'cells', fallback='4').strip() or '4')
+        return v if v > 0 else 4
+    except (ValueError, TypeError):
+        return 4
+
+
+def _battery_chemistry() -> str:
+    """W4 fix 2026-05-16: expose chemistry to /status so BatteryGauge
+    can pick the correct per-cell thresholds (LiFePO4 vs Li-ion).
+    Was: gauge hardcoded LiPo math → LiFePO4 packs read as red-empty
+    even when full."""
+    chem = _cached_cfg().get('battery', 'chemistry', fallback='liion').strip().lower()
+    return chem if chem in ('liion', 'lipo', 'lifepo4') else 'liion'
 
 
 def _robot_name() -> str:
@@ -452,6 +468,7 @@ def get_status():
         'vesc_l_rpm':        (_fresh_telem('L') or {}).get('rpm'),
         'vesc_r_rpm':        (_fresh_telem('R') or {}).get('rpm'),
         'battery_cells':     _battery_cells(),
+        'battery_chemistry': _battery_chemistry(),
         'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
         'slave_host':        _slave_host(),
         'master_wlan0':      _iface_ip('wlan0'),

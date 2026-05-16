@@ -863,6 +863,24 @@ def set_config():
             except Exception as e:
                 log.warning("Hot-swap audio_startup_lat failed: %s", e)
 
+    # B1/E1 fix 2026-05-16: hot-swap battery cells+chemistry so the
+    # undervoltage abort threshold reflects the operator's save WITHOUT
+    # a Master reboot. Was: toast said new abort but ChoreoPlayer kept
+    # stale threshold until reboot → safety regression on next choreo.
+    if 'battery.cells' in updated or 'battery.chemistry' in updated:
+        import master.registry as reg
+        if reg.choreo:
+            try:
+                # Read final canonical values from cfg (covers the case
+                # where only one of the two fields was in updated)
+                _final_cfg = configparser.ConfigParser()
+                _final_cfg.read(LOCAL_CFG)
+                _c = int(_final_cfg.get('battery', 'cells', fallback='4'))
+                _ch = _final_cfg.get('battery', 'chemistry', fallback='liion').strip().lower()
+                reg.choreo.set_battery(_c, _ch)
+            except Exception as e:
+                log.warning("Hot-swap battery failed: %s", e)
+
     return jsonify({'status': 'ok', 'updated': updated})
 
 
