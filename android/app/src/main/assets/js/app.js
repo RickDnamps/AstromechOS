@@ -7556,9 +7556,10 @@ class BTController {
         if (o.value === val) { o.text = text; break; }
       }
     };
-    setOpt('bt-map-panel1', 'BTN_WEST',   l.WEST);
-    setOpt('bt-map-panel2', 'BTN_NORTH',  l.NORTH);
-    setOpt('bt-map-audio',  'BTN_EAST',   l.EAST);
+    // 2026-05-16: only the E-STOP dropdown remains in the legacy mapping
+    // table — panel_dome/panel_body/audio rows were removed (now handled
+    // via Custom Button Actions, per-MAC). setOpt is now a no-op for
+    // missing elements (graceful).
     setOpt('bt-map-estop',  'BTN_MODE',   l.MODE);
   }
 
@@ -7590,14 +7591,16 @@ class BTController {
 
   // Sauvegarde config complète sur le serveur
   async saveFullConfig() {
+    // 2026-05-16: legacy button mappings (panel_dome, panel_body, audio)
+    // removed from the UI — operator now binds those via 🎯 CAPTURE NEW
+    // BUTTON in CUSTOM BUTTON ACTIONS. Only axes + E-STOP remain here.
+    // Backend still accepts the legacy keys for backward compat but
+    // no longer dispatches them.
     const mappings = {
-      throttle:   el('bt-map-throttle')?.value         || 'ABS_Y',
-      steer:      el('bt-map-steer')?.value            || 'ABS_X',
-      dome:       el('bt-map-dome')?.value             || 'ABS_RX',
-      panel_dome: el('bt-map-panel1')?.value           || 'BTN_WEST',
-      panel_body: el('bt-map-panel2')?.value           || 'BTN_NORTH',
-      audio:      el('bt-map-audio')?.value            || 'BTN_EAST',
-      estop:      el('bt-map-estop')?.value            || 'BTN_MODE',
+      throttle:   el('bt-map-throttle')?.value || 'ABS_Y',
+      steer:      el('bt-map-steer')?.value    || 'ABS_X',
+      dome:       el('bt-map-dome')?.value     || 'ABS_RX',
+      estop:      el('bt-map-estop')?.value    || 'BTN_MODE',
     };
     const cfg = {
       gamepad_type:       el('bt-gamepad-type')?.value          || 'ps',

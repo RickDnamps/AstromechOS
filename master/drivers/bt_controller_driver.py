@@ -876,11 +876,10 @@ class BTControllerDriver:
         if getattr(reg, 'estop_active', False):
             return
 
-        # CUSTOM MAPPINGS — operator-defined per-device. Runs BEFORE the
-        # legacy fixed-action branches so the operator's binding takes
-        # precedence if the same button is also assigned to panel_dome
-        # / panel_body / audio. Rising-edge only (no release dispatch);
-        # released= path is reserved for the legacy panel hold-to-open.
+        # CUSTOM MAPPINGS — operator-defined per-device. Only action
+        # dispatch path remaining since 2026-05-16 (legacy panel_dome /
+        # panel_body / audio branches removed — operator binds those
+        # via 🎯 CAPTURE NEW BUTTON instead). Rising-edge only.
         if pressed and self._active_device_mac:
             profile = (self._cfg.get('device_profiles', {}) or {}).get(self._active_device_mac, {})
             custom = profile.get('custom_button_mappings', []) or []
@@ -892,67 +891,13 @@ class BTControllerDriver:
                     self._fire_custom_mapping(cm, reg)
                     return  # consume — do NOT fall through to legacy dispatch
 
-        # Dome panel (held = open, released = closed)
-        if _is(m.get('panel_dome', 'BTN_WEST')):
-            # Audit finding BT H-1 2026-05-15: guard FIRST so the
-            # attribute lookup `reg.dome_servo.open` doesn't raise
-            # AttributeError when dome_servo is None (would be
-            # swallowed by the outer except Exception). Operator
-            # presses panel → nothing happens silently.
-            if (pressed or released) and reg.dome_servo:
-                direction = 'open' if pressed else 'close'
-                log.info("BT: %s_all dome_servo (config-aware)", direction)
-                try:
-                    from master.api.servo_bp import _read_panels_cfg, DOME_SERVOS, _panel_angle, _panel_speed
-                    cfg    = _read_panels_cfg()
-                    method = reg.dome_servo.open if pressed else reg.dome_servo.close
-                    threads = [
-                        threading.Thread(
-                            target=method,
-                            args=(n, _panel_angle(n, direction, cfg), _panel_speed(n, cfg)),
-                            daemon=True,
-                        )
-                        for n in DOME_SERVOS
-                    ]
-                    for t in threads:
-                        t.start()
-                except Exception as e:
-                    log.warning("dome %s_all: %s", direction, e)
-
-        # Body panel (held = open, released = closed)
-        elif _is(m.get('panel_body', 'BTN_NORTH')):
-            # Audit finding BT H-1 2026-05-15: guard reg.servo BEFORE
-            # accessing .open/.close attribute.
-            if (pressed or released) and reg.servo:
-                direction = 'open' if pressed else 'close'
-                log.info("BT: %s_all body_servo (config-aware)", direction)
-                try:
-                    from master.api.servo_bp import _read_panels_cfg, BODY_SERVOS, _panel_angle, _panel_speed
-                    cfg    = _read_panels_cfg()
-                    method = reg.servo.open if pressed else reg.servo.close
-                    if reg.servo:
-                        for n in BODY_SERVOS:
-                            method(n, _panel_angle(n, direction, cfg), _panel_speed(n, cfg))
-                    elif reg.uart:
-                        for n in BODY_SERVOS:
-                            reg.uart.send('SRV', f'{n},{_panel_angle(n, direction, cfg)},{_panel_speed(n, cfg)}')
-                except Exception as e:
-                    log.warning("body %s_all: %s", direction, e)
-
-        # Random sound (rising edge)
-        elif _is(m.get('audio', 'BTN_EAST')):
-            if pressed and reg.uart:
-                # Audit reclass R4 2026-05-15: was hard-coded
-                # 'happy' — operator could config their gamepad audio
-                # button via mappings but always got happy category.
-                # New bt_config key `audio_category` defaults to
-                # 'happy' but operator can override (e.g. 'scared',
-                # 'cantina'). Validated against _CATEGORY_NAME_RE
-                # by bt_bp at save time.
-                cat = self._cfg.get('audio_category', 'happy')
-                log.info("BT: S:RANDOM:%s", cat)
-                try: reg.uart.send('S', f'RANDOM:{cat}')
-                except OSError as e: log.warning(f"audio send: {e}")
+        # Legacy fixed-action branches (panel_dome / panel_body / audio)
+        # removed 2026-05-16. All actions now go through Custom Button
+        # Mappings (per-MAC, configured via 🎯 CAPTURE NEW BUTTON in
+        # the BT Gamepad panel). E-STOP remains the only hardcoded
+        # action — see the _is(estop) branch above. The legacy mapping
+        # KEYS in self._cfg['mappings'] are kept for backward compat
+        # but no longer dispatched here.
 
     def _fire_custom_mapping(self, cm: dict, reg) -> None:
         """Dispatch a custom mapping via the shared dispatch_action helper.
