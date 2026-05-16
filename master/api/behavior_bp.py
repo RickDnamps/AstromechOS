@@ -375,14 +375,20 @@ def save_config():
                 return jsonify({'ok': False, 'error': f'idle_mode must be one of {sorted(_VALID_IDLE_MODES)}'}), 400
             _set('idle_mode', mode)
         if 'idle_audio_category' in data:
-            # Validate against actual audio categories on disk
+            # Validate against actual audio categories on disk.
+            # B13 fix 2026-05-16: strict regex check FIRST so a malformed
+            # value can't slip through even if the audio index can't be
+            # loaded. Was: empty valid_cats → accept anything → log
+            # injection / surprise behavior on Slave.
             cat = str(data['idle_audio_category']).strip().lower()
+            if cat and not _re.match(r'^[a-z0-9_-]{1,32}$', cat):
+                return jsonify({'ok': False, 'error': 'audio category must be lowercase alphanumeric (1-32 chars)'}), 400
             try:
                 from master.api.audio_bp import _get_index
                 valid_cats = set(_get_index().get('categories', {}).keys())
             except Exception:
-                valid_cats = set()   # can't validate — accept anything
-            if valid_cats and cat and cat not in valid_cats:
+                valid_cats = None
+            if cat and valid_cats is not None and cat not in valid_cats:
                 return jsonify({'ok': False, 'error': f'unknown audio category: {cat}'}), 400
             _set('idle_audio_category', cat)
         if 'idle_choreo_list'    in data:

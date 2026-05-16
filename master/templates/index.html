@@ -1306,6 +1306,15 @@
           <div id="beh-mode-not-ready" class="settings-card-warn" style="display:none">
             ⚠ <span id="beh-mode-not-ready-text">—</span>
           </div>
+          <!-- W17 fix 2026-05-16: presets fill the form fields (no auto-save) -->
+          <div class="beh-presets" style="display:flex;gap:6px;margin:6px 0">
+            <button class="btn btn-sm" onclick="behaviorPanel.preset('conservative')"
+                    title="30min timeout · sounds only · dome off">🪶 Conservative</button>
+            <button class="btn btn-sm" onclick="behaviorPanel.preset('playful')"
+                    title="8min · sounds+lights · dome on">🎉 Playful</button>
+            <button class="btn btn-sm" onclick="behaviorPanel.preset('demo')"
+                    title="4min · choreos · dome off">🎬 Demo</button>
+          </div>
           <div class="form-group" style="display:flex;align-items:center;gap:12px">
             <label class="toggle-label">
               <input type="checkbox" id="beh-alive-enabled">
@@ -1316,7 +1325,9 @@
           <div class="form-group">
             <!-- B6/B20 fix 2026-05-16: max=1440 to match backend clamp -->
             <label class="ctrl-label">TRIGGER AFTER (minutes of inactivity) <span class="ctrl-hint">— 1 to 1440 (24h)</span></label>
-            <input type="number" id="beh-idle-timeout" class="input-text input-sm" min="1" max="1440" value="10" style="width:70px">
+            <input type="number" id="beh-idle-timeout" class="input-text input-sm" min="1" max="1440" value="10" style="width:70px"
+                   oninput="behaviorPanel._updateTimeoutPreview()">
+            <span id="beh-timeout-preview" class="ctrl-hint" style="margin-left:8px"></span>
           </div>
           <div class="form-group">
             <label class="ctrl-label">MODE</label>
@@ -1326,6 +1337,8 @@
               <option value="lights">Lights only</option>
               <option value="choreo">Choreo</option>
             </select>
+            <!-- W9 fix 2026-05-16: contextual safety note per mode -->
+            <div id="beh-mode-note" class="settings-card-note" style="margin-top:4px"></div>
           </div>
           <div id="beh-audio-cat-row" class="form-group">
             <label class="ctrl-label">AUDIO CATEGORY</label>

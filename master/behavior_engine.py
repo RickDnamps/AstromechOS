@@ -131,7 +131,15 @@ class BehaviorEngine:
                 self._tick()
             except Exception:
                 log.exception("BehaviorEngine tick error")
-            self._stop_event.wait(timeout=5.0)
+            # P3 fix 2026-05-16: tick 5s when ALIVE on (needs responsive
+            # idle check), 30s when off (just polling enabled flag).
+            # Reduces idle CPU/GIL pressure significantly when operator
+            # never enables ALIVE.
+            try:
+                alive = self._cfg.getboolean('behavior', 'alive_enabled', fallback=False)
+            except Exception:
+                alive = False
+            self._stop_event.wait(timeout=5.0 if alive else 30.0)
 
     def _run_startup(self) -> None:
         """Play startup choreo after boot delay (if enabled)."""

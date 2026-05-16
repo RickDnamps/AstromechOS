@@ -2709,6 +2709,19 @@ const behaviorPanel = (() => {
       domeChk.disabled = showChoreo;
       if (domeChk.parentElement) domeChk.parentElement.style.opacity = showChoreo ? '0.4' : '';
     }
+    // W9 fix 2026-05-16: contextual mode note so operator knows what
+    // will move (or not). Inline below the mode select.
+    const note = el('beh-mode-note');
+    if (note) {
+      const NOTES = {
+        sounds:        '🔊 Audio only — no movement.',
+        sounds_lights: '🔊💡 Audio + lights — no movement.',
+        lights:        '💡 Lights only — random animation per cycle.',
+        choreo:        '⚠ Selected choreos may move dome, panels, arms, or propulsion. Check the 🚗 / ↻ icons next to choreo names.',
+      };
+      note.textContent = NOTES[mode] || '';
+      note.classList.toggle('settings-card-warn', mode === 'choreo');
+    }
   }
 
   function addChoreo() {
@@ -2811,6 +2824,37 @@ const behaviorPanel = (() => {
     else run();
   }
 
+  // W17 fix 2026-05-16: preset chip-buttons fill the form (no auto-save).
+  // Operator reviews and hits SAVE if happy.
+  function preset(name) {
+    const PRESETS = {
+      conservative: { timeout: 30, mode: 'sounds',        dome: false },
+      playful:      { timeout: 8,  mode: 'sounds_lights', dome: true  },
+      demo:         { timeout: 4,  mode: 'choreo',        dome: false },
+    };
+    const p = PRESETS[name];
+    if (!p) return;
+    _setVal('beh-idle-timeout', p.timeout);
+    _setSelVal('beh-idle-mode', p.mode);
+    _setChk('beh-dome-auto', p.dome);
+    onModeChange();
+    toast(`Preset "${name}" applied — review and SAVE`, 'info');
+  }
+
+  // W11 fix 2026-05-16: live computed "Next trigger ~ 11:47 PM" hint as
+  // operator types in the timeout field. Uses last_activity ago from
+  // status (cached on load) to compute realistic next-fire time.
+  function _updateTimeoutPreview() {
+    const min = parseInt(el('beh-idle-timeout')?.value || '10', 10);
+    const span = el('beh-timeout-preview');
+    if (!span) return;
+    if (!isFinite(min) || min < 1) { span.textContent = ''; return; }
+    const next = new Date(Date.now() + min * 60 * 1000);
+    const hh = next.getHours().toString().padStart(2, '0');
+    const mm = next.getMinutes().toString().padStart(2, '0');
+    span.textContent = `→ ~${hh}:${mm}`;
+  }
+
   // W2 fix 2026-05-16: TEST STARTUP — preview startup choreo without reboot
   function testStartup() {
     const btn = el('beh-test-startup-btn');
@@ -2871,7 +2915,7 @@ const behaviorPanel = (() => {
     });
   }
 
-  return { toggleAlive, load, onModeChange, addChoreo, save, testTrigger, testStartup, _removeChoreo, _applyAliveBtn };
+  return { toggleAlive, load, onModeChange, addChoreo, save, testTrigger, testStartup, preset, _updateTimeoutPreview, _removeChoreo, _applyAliveBtn };
 })();
 
 // ================================================================

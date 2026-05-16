@@ -413,6 +413,11 @@ def main() -> None:
     flask_thread.start()
     log.info(f"Flask started on port {flask_port}")
 
+    # B8/E5 fix 2026-05-16: bootstrap last_activity to now so the engine
+    # respects the idle_timeout_min on the first run. Was: defaults to
+    # 0.0 → since_activity = HUGE → ALIVE fired within 30s of boot.
+    import time as _time
+    reg.last_activity = _time.monotonic()
     behavior_engine.start()
     log.info("BehaviorEngine started")
 
