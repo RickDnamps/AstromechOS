@@ -1294,7 +1294,7 @@ function switchSettingsPanel(panelId) {
   }
 
   // Lazy-load panel data when opening
-  if (panelId === 'network' || panelId === 'deploy' || panelId === 'system') loadSettings();
+  if (panelId === 'network' || panelId === 'deploy' || panelId === 'system' || panelId === 'hats') loadSettings();
   if (panelId === 'servos')      loadServoSettings();
   if (panelId === 'arms')        armsConfig.load();
   if (panelId === 'behavior')    behaviorPanel.load();
