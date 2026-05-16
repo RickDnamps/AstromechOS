@@ -125,7 +125,7 @@ Hardware IDs · Editable labels · Per-panel open/close/speed · Saved to JSON
 <td align="center" width="50%">
 
 ### 🔧 Config — BT Gamepad
-BT scan/pair/unpair · Button remapping · Deadzone · Inactivity timeout · Battery % · RSSI
+Premium header (icon + LED status + MAC pill + battery bar + signal dBm) · 2×2 axis grouping (DRIVE / LOOK + future camera tilt) · Deadzone · Inactivity timeout · **Per-MAC Custom Button Actions** (press-to-capture · bind any button to choreo/sound/panels/arms · independent profiles per controller) · BT scan/pair/unpair (collapsible)
 
 ![Config Bluetooth](Screenshots/Config_Menu_Bluetooth.png)
 
@@ -165,7 +165,8 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 |---|---|
 | 🎭 **48 behavioral sequences** | One-click coordinated performances — sound · dome · panels · lights · loop mode |
 | 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC · audio · servos · lights · admin-guarded Save/Delete |
-| 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo direct to Pi · zero lag · battery % · RSSI · fully remappable |
+| 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo/NVIDIA Shield direct to Pi · zero lag · battery % · RSSI · 2×2 axis grouping (DRIVE / LOOK) · premium header card with status LED + MAC pill |
+| 🎯 **BT Custom Button Actions** | **Per-controller profiles** keyed by MAC — bind ANY button to `play_choreo` / `play_sound` / `play_random_audio` / `arms_toggle` / `body_panel_toggle` / `dome_panel_toggle`. **Press-to-capture** workflow: click 🎯 CAPTURE NEW BUTTON, press the physical button, it's bound. Two NVIDIA Shields plug in → each remembers its own bindings independently. MAC resolution falls back to `bluetoothctl` for controllers that don't expose `evdev.uniq` (NVIDIA Shield, several 8BitDo). Validation by action type at save AND at trigger (defense-in-depth) |
 | 🔊 **324 authentic astromech sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included |
 | 🛡️ **Triple safety watchdog** | App 600ms · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
@@ -328,6 +329,7 @@ Or press the physical dome button (short press). Updates itself over-the-air —
 | **3** | Choreography engine — 48 expressive behavioral sequences (`.chor`) | ✅ |
 | **4** | REST API + web dashboard + Android app + Choreography editor + BT gamepad + lights plugin + VESC diagnostic + camera stream + admin system + safety locks + Cockpit Status Panel + theme system + HAT/screen diagnostic | ✅ |
 | **4+** | Universal VESC safety helper · Slave boot banner config resync · paired-side CAN liveness · E-STOP/Reset E-STOP separation with kid-safe stow · event-driven choreo scheduler · UART RTT calibration tool with hot-swap · service worker cache versioned per deploy | ✅ |
+| **4++** | BT Gamepad **Custom Button Actions** (per-MAC profiles, press-to-capture) · MAC fallback via `bluetoothctl` for controllers without `evdev.uniq` (NVIDIA Shield) · premium header card refonte (icon + status LED + MAC pill + vitals) | ✅ |
 | **5** | Vision — person tracking · face detection · contextual AI responses (on-device) | 🔄 |
 
 ### 🔬 Built-in calibration tools

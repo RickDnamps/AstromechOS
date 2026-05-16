@@ -150,6 +150,32 @@ All POST endpoints accept and return `application/json`.
 
 ---
 
+## BT Gamepad (evdev controller)
+
+| Method | Path | Body / Notes |
+|--------|------|------|
+| GET | `/bt/status` | `{bt_connected, bt_enabled, bt_name, bt_battery, bt_rssi, bt_gamepad_type, bt_inactivity_timeout, bt_inactivity_pause, active_device_mac, device_profiles:{MAC:{name, last_seen, custom_button_mappings:[…]}}}` · LAN-open |
+| POST | `/bt/enable` | admin · `{enabled:bool}` · disables motion if false |
+| POST | `/bt/config` | admin · `{gamepad_type, deadzone, inactivity_timeout, mappings:{…}}` — preset button mappings + axes |
+| POST | `/bt/estop_reset` | LAN-open · clears E-STOP from gamepad button (safety endpoint) |
+| POST | `/bt/scan/start` | admin · starts 8s `bluetoothctl --timeout 8 scan on` |
+| GET | `/bt/scan/devices` | admin · returns scan results (cached for the panel) |
+| POST | `/bt/pair` | admin · `{mac}` — pair + trust + connect |
+| POST | `/bt/unpair` | admin · `{mac}` — remove from bluetoothctl |
+
+### Custom Button Actions (per-MAC profiles)
+
+| Method | Path | Body / Notes |
+|--------|------|------|
+| POST | `/bt/capture/start` | admin · enters press-to-capture mode for 10s (driver fills `_capture_result` on next button press, under `_capture_lock`) |
+| GET | `/bt/capture/poll` | admin · `{state:'idle'\|'listening'\|'captured'\|'expired', button:'BTN_A'\|null, remaining_ms}` — frontend polls every 200ms while editor open |
+| POST | `/bt/capture/cancel` | admin · drops the capture window |
+| POST | `/bt/custom_mapping` | admin · `{mac, action:'add'\|'update'\|'remove', mapping:{id, button, action:{type, target}, icon?, label?}}` — atomic save under cfg lock |
+
+**Action types**: `arms_toggle` · `body_panel_toggle` · `dome_panel_toggle` · `play_choreo` · `play_sound` · `play_random_audio` · `none`. Validation per type at save AND at trigger (defense-in-depth). Profile auto-created via `_ensure_device_profile(MAC, name)` on first controller connect. MAC resolution: `evdev.uniq` → `bluetoothctl devices Connected` name-match fallback (NVIDIA Shield et al don't populate uniq).
+
+---
+
 ## Lock Mode
 
 | Method | Path | Body / Notes |
