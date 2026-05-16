@@ -9312,9 +9312,11 @@ function startAppHeartbeat() {
     if (_hbWorker) return;
     try {
       // Inline worker — no separate .js file to ship.
-      // Bug M2 fix 2026-05-15: worker now parses the response and posts
-      // back to main thread so we can sync estop_active at 200ms cadence
-      // instead of waiting for /status (2s).
+      // 2026-05-15 revert M2: back to fire-and-forget. The response-
+      // parsing variant caused the user's tablet to stop sending HBs
+      // after deploy (root cause TBD — possibly SW caching, possibly
+      // a race in the chained promise). Reverting to the proven
+      // simple form. M2 sync via heartbeat is deferred.
       const workerSrc = `
         let _url = '';
         let _timer = null;
@@ -9324,10 +9326,7 @@ function startAppHeartbeat() {
             _url = d.url;
             if (_timer) clearInterval(_timer);
             _timer = setInterval(() => {
-              fetch(_url, { method: 'POST' })
-                .then(r => r.ok ? r.json() : null)
-                .then(body => { if (body) self.postMessage({ type: 'hb', data: body }); })
-                .catch(() => {});
+              fetch(_url, { method: 'POST' }).catch(() => {});
             }, 200);
           } else if (d.type === 'stop') {
             if (_timer) { clearInterval(_timer); _timer = null; }
@@ -9336,11 +9335,6 @@ function startAppHeartbeat() {
       `;
       const blob = new Blob([workerSrc], { type: 'application/javascript' });
       _hbWorker = new Worker(URL.createObjectURL(blob));
-      _hbWorker.onmessage = (e) => {
-        if (e.data && e.data.type === 'hb' && e.data.data) {
-          _syncFromHeartbeat(e.data.data);
-        }
-      };
       _hbWorker.postMessage({ type: 'start', url: base() + '/heartbeat' });
     } catch (e) {
       // Fallback to main-thread interval if Worker creation fails (very
@@ -9356,19 +9350,8 @@ function startAppHeartbeat() {
         toast('Heartbeat fallback active — heavy renders may trigger false E-STOP', 'warn');
       }
       _hbWorker = { _fallback: setInterval(() => {
-        fetch(base() + '/heartbeat', { method: 'POST' })
-          .then(r => r.ok ? r.json() : null)
-          .then(body => { if (body) _syncFromHeartbeat(body); })
-          .catch(() => {});
+        fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
       }, 200) };
-    }
-  }
-  // Bug M2 fix: sync estop_active from heartbeat response — faster
-  // than the 2s /status poll. Reuses _setEstopUI which handles the
-  // _estopTripped state + UI text + body class.
-  function _syncFromHeartbeat(data) {
-    if (data.estop_active !== undefined && data.estop_active !== _estopTripped) {
-      _setEstopUI(!!data.estop_active);
     }
   }
   function _hbStop() {

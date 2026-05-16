@@ -724,19 +724,15 @@ def app_heartbeat():
     """
     Application heartbeat — App → Master, every 200ms.
     If this heartbeat stops for >600ms → emergency stop (AppWatchdog).
-    Ultra-lightweight endpoint: just a timestamp update + safety state.
+    Ultra-lightweight endpoint: just a timestamp update.
 
-    Bug M2 fix 2026-05-15: also returns estop_active + stow_in_progress
-    so the frontend can sync the E-STOP button state at 200ms cadence
-    instead of waiting for /status (2s). User scenario: WiFi blip →
-    AppWatchdog auto-recover clears estop_active → operator sees
-    'EMERGENCY STOP' instead of stale 'RESET E-STOP' within 200ms.
+    2026-05-15 (revert): M2 had this returning JSON {estop_active,
+    stow_in_progress} but the user's tablet stopped sending HBs after
+    deploy → false E-STOP fired. Reverting to 204 No Content for now —
+    M2 will be reintroduced via a different channel.
     """
     app_watchdog.feed()
-    return jsonify({
-        'estop_active': reg.estop_active,
-        'stow_in_progress': bool(getattr(reg, 'stow_in_progress', False)),
-    })
+    return '', 204
 
 
 # Slew speed used by the Reset E-STOP safe-home sequence.
