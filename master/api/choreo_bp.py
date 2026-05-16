@@ -334,6 +334,16 @@ def _build_list_rows() -> list:
 
 @choreo_bp.get('/choreo/list')
 def choreo_list():
+    """PERF-H1+H2 fix 2026-05-16: previous code had two branches that
+    were functionally identical (the isinstance(cached_rows, list)
+    check was always False since rows are stored as dict). Unified to
+    a single path that always calls _build_list_rows() — which itself
+    is per-file-mtime cached (lines 290-296) so the actual JSON parse
+    only fires for changed files. The dir_mtime gate is now a true
+    short-circuit when the dir hasn't moved AND we have a cache: we
+    skip the per-file stat loop too, returning cached rows directly.
+    Falls through to _build_list_rows on any uncertainty.
+    """
     os.makedirs(_CHOREO_DIR, exist_ok=True)
     try:
         dir_mtime = os.path.getmtime(_CHOREO_DIR)
@@ -341,13 +351,17 @@ def choreo_list():
         dir_mtime = 0.0
     with _list_cache_lock:
         cached_rows = _LIST_CACHE.get('rows')
-        if (isinstance(cached_rows, list)
+        # True fast path: dir hasn't changed since last call AND we
+        # have a populated cache → return cached rows directly. File
+        # CONTENT changes don't bump dir_mtime, so this could miss an
+        # edit-without-rename for up to one cache miss window. But
+        # choreo_save() explicitly invalidates the cache (see below),
+        # so editor saves are picked up immediately.
+        if (isinstance(cached_rows, dict)
+                and cached_rows
                 and _LIST_CACHE.get('dir_mtime') == dir_mtime):
-            rows, new_mtimes = _build_list_rows()
-            _LIST_FILE_MTIMES.clear(); _LIST_FILE_MTIMES.update(new_mtimes)
-            _LIST_CACHE['rows'] = {r['name']: r for r in rows}
-            return jsonify(rows)
-        # Cold path: rebuild everything.
+            return jsonify(list(cached_rows.values()))
+        # Cold/changed path: rebuild.
         rows, new_mtimes = _build_list_rows()
         _LIST_CACHE['dir_mtime'] = dir_mtime
         _LIST_CACHE['rows']      = {r['name']: r for r in rows}
@@ -366,12 +380,22 @@ def get_categories():
         mtime = os.path.getmtime(_CATEGORIES_PATH)
     except OSError:
         mtime = 0.0
+    # EDGE-C1 fix 2026-05-16: return categories.json mtime in
+    # X-Categories-Version header. Reorder POSTs send it back as
+    # If-Match; mismatch → 409 conflict (admin A drags, admin B's
+    # POST lands first → A's version is stale → A gets 409 + refresh
+    # instead of silently overwriting B). Backwards-compat preserved
+    # — body is still the plain array the frontend expects.
     if _CATS_CACHE.get('rows') is not None and _CATS_CACHE.get('mtime') == mtime:
-        return jsonify(_CATS_CACHE['rows'])
+        resp = jsonify(_CATS_CACHE['rows'])
+        resp.headers['X-Categories-Version'] = str(mtime)
+        return resp
     cats = sorted(_load_categories(), key=lambda c: c.get('order', _ORDER_FALLBACK))
     _CATS_CACHE['mtime'] = mtime
     _CATS_CACHE['rows']  = cats
-    return jsonify(cats)
+    resp = jsonify(cats)
+    resp.headers['X-Categories-Version'] = str(mtime)
+    return resp
 
 
 def _norm_cat_id(raw: str) -> str:
@@ -443,6 +467,25 @@ def manage_categories():
             return jsonify({'error': 'category not found'}), 404
 
         elif action == 'reorder':
+            # EDGE-C1 fix 2026-05-16: optional optimistic concurrency check.
+            # Client sends If-Match header with the version it last saw
+            # (from GET /choreo/categories X-Categories-Version). If the
+            # current mtime differs, the client's snapshot is stale →
+            # return 409 instead of silently overwriting a concurrent
+            # admin's reorder. Optional so legacy clients keep working.
+            if_match = request.headers.get('If-Match')
+            if if_match:
+                try:
+                    current_mtime = os.path.getmtime(_CATEGORIES_PATH)
+                except OSError:
+                    current_mtime = 0.0
+                # Compare as floats with small tolerance for FS precision
+                if abs(float(if_match) - current_mtime) > 0.001:
+                    return jsonify({
+                        'error': 'version conflict',
+                        'message': 'Another admin changed categories — refresh and retry',
+                        'current_version': current_mtime,
+                    }), 409
             new_order_raw = data.get('order', [])
             new_order = [_norm_cat_id(x) for x in new_order_raw if isinstance(x, str)]
             new_order = [x for x in new_order if x]
@@ -661,7 +704,14 @@ def choreo_rename():
                 try:
                     reg.choreo.update_running_name(new_name)
                 except AttributeError:
-                    pass
+                    # EDGE-H1 fix 2026-05-16: log the orphan instead of
+                    # silently swallow. If a future ChoreoPlayer refactor
+                    # drops update_running_name, ops sees the WARN in
+                    # journalctl + the symptom is documented.
+                    log.warning(
+                        "ChoreoPlayer.update_running_name missing — "
+                        "running highlight will orphan until %s ends",
+                        new_name)
     # Cascade the rename into shortcuts.json so any Drive-tab macro
     # button targeting the old name follows the move. User-reported
     # 2026-05-15: renaming a choreo left stale shortcuts pointing at
@@ -833,6 +883,14 @@ def choreo_save():
     os.makedirs(_CHOREO_DIR, exist_ok=True)
     with _chor_file_lock:
         _atomic_write_chor(path, chor)
+    # PERF-H1+H2 fix 2026-05-16: explicitly invalidate the list cache
+    # on save. os.replace() bumps parent dir mtime on most filesystems,
+    # but the file's own mtime change (without rename) wouldn't — so
+    # this is belt-and-suspenders to guarantee /choreo/list sees the
+    # change on next poll regardless of FS behavior.
+    with _list_cache_lock:
+        _LIST_CACHE['rows'] = {}
+        _LIST_FILE_MTIMES.pop(name, None)
     log.info("Choreo saved: %s", name)
     return jsonify({'status': 'ok', 'name': name})
 
@@ -1063,6 +1121,18 @@ def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> boo
     if getattr(reg, 'stow_in_progress', False):
         log.warning("safe_play(%s): refused — stow_in_progress", log_label)
         return False
+    # Bug H1 fix 2026-05-16: Child Lock (mode 2) gate. /motion/drive and
+    # /shortcuts both refuse propulsion in Child Lock, but /choreo/play
+    # bypassed this — a propulsion-using choreo would drive the VESCs
+    # despite the lock. Parent leaves tablet in Child Lock = safety
+    # expectation violated. Now: refuse any choreo with tracks.propulsion
+    # under Child Lock. Dome/audio/lights/panels still allowed (matches
+    # the documented 3-tier lock model: Child Lock = no propulsion).
+    if getattr(reg, 'lock_mode', 0) == 2:
+        tracks = (chor or {}).get('tracks', {}) or {}
+        if tracks.get('propulsion'):
+            log.warning("safe_play(%s): refused — Child Lock blocks propulsion", log_label)
+            return False
     if not _play_lock.acquire(timeout=5.0):
         log.warning("safe_play(%s): play queue busy", log_label)
         return False

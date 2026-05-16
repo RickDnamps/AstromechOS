@@ -4600,6 +4600,18 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .status-pill:hover { opacity: 0.85; }
 
+/* WOW S4 fix 2026-05-16: pill drag ghost + chosen feedback so admin
+ * reordering categories sees where the dragged pill will land. */
+.seq-pill.seq-pill-ghost {
+  opacity: 0.35;
+  background: rgba(var(--cyan-rgb, 0 255 200), 0.15);
+  border-color: var(--cyan, #00ffaa);
+}
+.seq-pill.seq-pill-chosen {
+  cursor: grabbing;
+  box-shadow: 0 0 12px rgba(var(--cyan-rgb, 0 255 200), 0.45);
+}
+
 /* WOW L2-W 2026-05-16: profile row dirty indicator. Operator drags
  * a profile slider and forgets SAVE — small amber accent on the row
  * + amber border on the slider so unsaved change is unmissable. */

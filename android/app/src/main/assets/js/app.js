@@ -5259,11 +5259,20 @@ class ScriptEngine {
     }
     this._loadInFlight = (async () => {
       try {
-        const [scripts, cats] = await Promise.all([
+        // EDGE-C1 fix 2026-05-16: raw fetch for /choreo/categories so
+        // we can read the X-Categories-Version header (api() returns
+        // body only). Used by _savePillOrder's If-Match check.
+        const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+        const [scripts, catsRes] = await Promise.all([
           api('/choreo/list'),
-          api('/choreo/categories'),
+          fetch(base + '/choreo/categories').catch(() => null),
         ]);
-        this._scripts    = scripts    || [];
+        let cats = [];
+        if (catsRes && catsRes.ok) {
+          cats = await catsRes.json().catch(() => []);
+          this._categoriesVersion = catsRes.headers.get('X-Categories-Version') || null;
+        }
+        this._scripts    = scripts || [];
         this._categories = (cats || []).slice().sort((a, b) => (a.order || 0) - (b.order || 0));
         this._renderPills();
         this._renderGrid();
@@ -5365,7 +5374,19 @@ class ScriptEngine {
       this._pillSortable = Sortable.create(container, {
         animation: 150,
         filter: '[data-cat="all"], .pill-add',
-        onEnd: () => this._savePillOrder(),
+        // EDGE-C2 fix 2026-05-16: track active pill drag so the 15s
+        // periodic reload doesn't destroy Sortable mid-gesture
+        // (would orphan the ghost). Same pattern as _dragActive for
+        // card drags.
+        // S4 fix: drop-target visual hint (matches the card→pill
+        // drag styling).
+        ghostClass: 'seq-pill-ghost',
+        chosenClass: 'seq-pill-chosen',
+        onStart: () => { this._pillDragActive = true; },
+        onEnd:   () => {
+          this._pillDragActive = false;
+          this._savePillOrder();
+        },
       });
     }
 
@@ -5373,17 +5394,45 @@ class ScriptEngine {
     if (hint) hint.style.display = isAdmin ? 'block' : 'none';
   }
 
-  _savePillOrder() {
+  async _savePillOrder() {
     const pills = el('seq-pills').querySelectorAll('.seq-pill[data-cat]');
     const order = [...pills].map(p => p.dataset.cat).filter(id => id !== 'all');
-    // F-9 (audit 2026-05-15): surface failure. Previously fire-and-forget
-    // — a 401 (admin lock expired mid-drag) or 5xx silently kept the
-    // server-side order stale; the next 15s reload snapped pills back
-    // to their old positions with no explanation.
-    api('/choreo/categories', 'POST', { action: 'reorder', order })
-      .then(d => {
-        if (!d) toast('Reorder failed — admin re-auth may be needed', 'error');
+    // EDGE-C1 fix 2026-05-16: send If-Match with the version we last
+    // saw so concurrent admin reorders are detected (409). Without it,
+    // last-writer-wins silently destroys the first admin's drag.
+    // Falls back gracefully if _categoriesVersion isn't set yet
+    // (server still accepts request without If-Match).
+    try {
+      const base = (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE) ? window.R2D2_API_BASE : '';
+      const headers = { 'Content-Type': 'application/json' };
+      if (typeof adminGuard !== 'undefined' && adminGuard.getToken) {
+        const tok = adminGuard.getToken(); if (tok) headers['X-Admin-Pw'] = tok;
+      }
+      if (this._categoriesVersion) headers['If-Match'] = this._categoriesVersion;
+      const res = await fetch(base + '/choreo/categories', {
+        method: 'POST', headers,
+        body: JSON.stringify({ action: 'reorder', order }),
       });
+      if (res.status === 409) {
+        toast('Another admin reordered — refreshing pills', 'warn');
+        await this.load();
+        return;
+      }
+      if (!res.ok) {
+        toast('Reorder failed — admin re-auth may be needed', 'error');
+        return;
+      }
+      // Refresh version token from response (server's new mtime)
+      const data = await res.json();
+      this._categoriesVersion = res.headers.get('X-Categories-Version')
+        || this._categoriesVersion;
+      if (data && data.conflict) {
+        toast('Pills refreshed — server had extra categories', 'info');
+        await this.load();
+      }
+    } catch (e) {
+      toast('Reorder network error', 'error');
+    }
   }
 
   selectCategory(catId) {
@@ -5810,10 +5859,15 @@ class ScriptEngine {
   // ── Inline rename ─────────────────────────────────────────────
 
   _startRename(card, name) {
+    // M1 fix 2026-05-16: track the rename in progress so the 15s
+    // periodic reload doesn't destroy the inline input mid-edit
+    // (would fire blur with partial value). Cleared in save()/Escape.
+    this._renamingName = name;
     const labelEl = card.querySelector('.seq-card-label');
     const current = labelEl.textContent;
     const input = document.createElement('input');
     input.className = 'input-text';
+    input.maxLength = 64;  // L1 fix: match server _LABEL_MAX_LEN
     input.style.cssText = 'width:100%;font-size:10px;padding:2px 4px;text-align:center;';
     input.value = current;
     labelEl.replaceWith(input);
@@ -5844,16 +5898,14 @@ class ScriptEngine {
           }
         }
       } catch {}
+      this._renamingName = null;   // M1 fix: clear guard
       await this.load();
     };
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter') save();
       if (e.key === 'Escape') {
-        saving = true;   // suppress the impending blur-save
-        // F-20 (audit 2026-05-15): restore the original label client-
-        // side without re-fetching /choreo/list + /choreo/categories.
-        // The old `this.load()` did a full network round-trip to undo
-        // a single character of typing.
+        saving = true;
+        this._renamingName = null;   // M1 fix: clear guard
         const restored = document.createElement('span');
         restored.className = 'seq-card-label';
         restored.textContent = current;
@@ -5867,6 +5919,24 @@ class ScriptEngine {
 
   play(event, name, loop = false) {
     if (event && event.stopPropagation) event.stopPropagation();
+    // M2 fix 2026-05-16: single-instance player — clear any other
+    // 'running' state first so two quick clicks don't show two cards
+    // running (backend serializes via _play_lock, only the second
+    // actually plays).
+    if (this._running.size > 0) {
+      this._running.forEach(prev => {
+        if (prev !== name) {
+          const prevCard = el(`seq-card-${prev}`);
+          if (prevCard) {
+            prevCard.classList.remove('running', 'looping');
+            const fill = el(`seq-prog-${prev}`);
+            if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+          }
+        }
+      });
+      this._running.clear();
+      this._looping.clear();
+    }
     this._running.add(name);
     if (loop) this._looping.add(name); else this._looping.delete(name);
     const card = el(`seq-card-${name}`);
@@ -5885,22 +5955,26 @@ class ScriptEngine {
     if (meta && (meta.uses_propulsion || meta.uses_dome)) {
       _setChoreoLockUI(!!meta.uses_propulsion, !!meta.uses_dome, name);
     }
+    // EDGE-H3 fix 2026-05-16: .catch() for network drops mid-call.
+    // api() returns null on non-2xx but THROWS on AbortError /
+    // network failure → without .catch the optimistic _running.add
+    // never gets rolled back → card stuck running until next /status
+    // poll. Same rollback path as the if(!d) branch.
+    const rollback = () => {
+      this._running.delete(name);
+      this._looping.delete(name);
+      if (card) {
+        card.classList.remove('running', 'looping');
+        const fill = el(`seq-prog-${name}`);
+        if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+      }
+      if (meta && (meta.uses_propulsion || meta.uses_dome)) {
+        _setChoreoLockUI(false, false, '');
+      }
+    };
     api('/choreo/play', 'POST', { name, loop }).then(d => {
       if (!d) {
-        this._running.delete(name);
-        this._looping.delete(name);
-        if (card) {
-          card.classList.remove('running', 'looping');
-          const fill = el(`seq-prog-${name}`);
-          if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
-        }
-        // Bug H2 fix 2026-05-15: roll back via _setChoreoLockUI(false,
-        // false, '') so the JS vars are reset too (not just CSS classes).
-        // Otherwise StatusPoller's next wantProp/wantDome comparison
-        // would not trigger re-sync.
-        if (meta && (meta.uses_propulsion || meta.uses_dome)) {
-          _setChoreoLockUI(false, false, '');
-        }
+        rollback();
         toast(`Failed to start ${name.toUpperCase()} — see logs`, 'error');
       } else {
         toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
@@ -5934,6 +6008,12 @@ class ScriptEngine {
           }, ms);
         }
       }
+    }).catch(() => {
+      // EDGE-H3 fix 2026-05-16: catch the throw path (AbortError /
+      // network drop). Without this the optimistic _running.add would
+      // leak — card stuck running for up to 2s until /status sync.
+      rollback();
+      toast(`Network drop — ${name.toUpperCase()} state may be stale`, 'warn');
     });
   }
 
@@ -5979,9 +6059,20 @@ class ScriptEngine {
   _startProgress(card, name) {
     const fill = el(`seq-prog-${name}`);
     if (!fill) return;
-    const dur = parseFloat(card.dataset.duration) || 5;
+    // EDGE-H4 fix 2026-05-16: `|| 5` treats a real 0-duration choreo
+    // (just-saved empty .chor) as 5s placeholder, animating the
+    // progress bar for nothing → highlight stuck for 5s. Use isFinite
+    // + >0 check; instant-finish choreos snap fill to 100% and the
+    // self-clear timer in play() will clean up.
+    const dur = parseFloat(card.dataset.duration);
     fill.style.transition = 'none';
     fill.style.width = '0%';
+    if (!isFinite(dur) || dur <= 0) {
+      // Instant finish — show full bar momentarily and let the
+      // status poll / self-clear timer remove the running highlight.
+      requestAnimationFrame(() => { fill.style.width = '100%'; });
+      return;
+    }
     requestAnimationFrame(() => {
       fill.style.transition = `width ${dur}s linear`;
       fill.style.width = '100%';
@@ -5990,17 +6081,27 @@ class ScriptEngine {
 
   updateRunning(running) {
     const names = new Set(running.map(s => s.name));
-    // WOW polish G5 2026-05-15: scroll the newly-running card into
-    // view if it's off-screen. Operator triggered a choreo from a
-    // shortcut or BT pad and wants to see its progress bar even if
-    // the card is below the fold. Edge-trigger on transition.
+    // PERF-M1 fix 2026-05-16: short-circuit when nothing changed.
+    // Avoids the 48-card querySelectorAll + per-card class toggle
+    // walk every 2s status poll.
     const prev = this._running || new Set();
+    const sameSet = (prev.size === names.size)
+                  && [...names].every(n => prev.has(n));
+    if (sameSet) return;
+    // WOW polish G5 2026-05-15: scroll the newly-running card into
+    // view if it's off-screen.
+    // M3 fix 2026-05-16: also start the progress bar for sequences
+    // triggered externally (BT pad, shortcut, behavior engine) —
+    // updateRunning is the only path that catches those, but the
+    // old code only toggled .running class without animating the
+    // bar → operator saw highlight but bar stayed at 0%.
     for (const name of names) {
       if (!prev.has(name)) {
         const card = el(`seq-card-${name}`);
         if (card && typeof card.scrollIntoView === 'function') {
           card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
+        if (card) this._startProgress(card, name);
       }
     }
     this._running = names;
@@ -9750,7 +9851,9 @@ async function init() {
   // the timer ticks.
   setInterval(() => {
     if (document.querySelector('.tab.active')?.dataset.tab !== 'sequences') return;
-    if (scriptEngine._dragActive) return;
+    if (scriptEngine._dragActive)     return;
+    if (scriptEngine._pillDragActive) return;   // EDGE-C2 fix
+    if (scriptEngine._renamingName)   return;   // M1 fix: don't blow up inline rename input
     scriptEngine.load();
   }, 15000);
 
