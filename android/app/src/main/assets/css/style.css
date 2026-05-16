@@ -4616,43 +4616,10 @@ select.chor-dirty {
 .pwd-match-indicator.ok    { color: var(--green, #00cc66); }
 .pwd-match-indicator.error { color: var(--red, #ff2244); }
 
-/* WOW polish D5 2026-05-15: E-STOP overlay prompt — centered text
- * inside the red border so novice operator knows next step. */
-.estop-prompt {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.85);
-  border: 2px solid var(--red, #ff2244);
-  border-radius: 10px;
-  padding: 16px 28px;
-  text-align: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-#estop-overlay.active .estop-prompt {
-  opacity: 1;
-}
-.estop-prompt-title {
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: 3px;
-  color: var(--red, #ff2244);
-  margin-bottom: 6px;
-  text-shadow: 0 0 10px rgba(255, 34, 68, 0.6);
-}
-.estop-prompt-sub {
-  font-size: 11px;
-  letter-spacing: 1px;
-  color: var(--text, #fff);
-  opacity: 0.85;
-}
-.estop-prompt-sub b {
-  color: var(--amber, #ffaa44);
-  font-weight: 700;
-}
+/* WOW polish D5 2026-05-15 — REMOVED 2026-05-15: user said the
+ * pulsing red border + the bottom-bar button changing to
+ * RESET E-STOP already communicate clearly. Adding centered prompt
+ * text on top was visual noise on top of an already-loud signal. */
 
 /* WOW polish 2026-05-15: drag-active upload zone — green glow,
  * thicker border, pulsing animation. Operator gets unmistakable
