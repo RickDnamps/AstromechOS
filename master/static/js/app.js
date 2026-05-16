@@ -3912,22 +3912,34 @@ class ServoPanel {
     // slew duration instead of jumping to 100% instantly. The UI used
     // to lie about state during the (10-speed)*3ms × steps slew. Now
     // the fill animates in parallel with the physical motion.
+    // 2026-05-16 user-reported: switch to apiDetail so 403/503 surface
+    // the actual reason (E-STOP, stow, choreo) instead of silent fail.
     const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
     const cur   = this._state[name] === 'open' ? 100 : 0;
-    api(`${this._apiPrefix}/open`, 'POST', { name }).then(d => {
-      if (d) { toast(`${label}: OPEN`, 'ok'); this._animateFill(name, cur, 100, speed); }
+    apiDetail(`${this._apiPrefix}/open`, 'POST', { name }).then(res => {
+      if (res.ok) {
+        toast(`${label}: OPEN`, 'ok');
+        this._animateFill(name, cur, 100, speed);
+        this._state[name] = 'open';
+      } else {
+        toast(res.error || `${label}: OPEN refused`, 'error');
+      }
     });
-    this._state[name] = 'open';
   }
 
   close(name) {
     const label = el(`sc-label-${name}`)?.value || name;
     const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
     const cur   = this._state[name] === 'open' ? 100 : 0;
-    api(`${this._apiPrefix}/close`, 'POST', { name }).then(d => {
-      if (d) { toast(`${label}: CLOSE`, 'ok'); this._animateFill(name, cur, 0, speed); }
+    apiDetail(`${this._apiPrefix}/close`, 'POST', { name }).then(res => {
+      if (res.ok) {
+        toast(`${label}: CLOSE`, 'ok');
+        this._animateFill(name, cur, 0, speed);
+        this._state[name] = 'close';
+      } else {
+        toast(res.error || `${label}: CLOSE refused`, 'error');
+      }
     });
-    this._state[name] = 'close';
   }
 
   async saveAngles() {
@@ -4021,13 +4033,23 @@ function _renderHatBlocks(container, hats, apiPrefix, side) {
     openAllBtn.className = 'btn btn-active';
     openAllBtn.textContent = 'OPEN ALL';
     openAllBtn.addEventListener('click', () => {
-      api(`/servo/${side}/open_all`, 'POST').then(() => toast(`${label} open`, 'ok'));
+      // User-reported 2026-05-16: was using api().then(() => toast OK)
+      // which fired the green toast even on 403 (E-STOP) — operator
+      // saw success while nothing physically moved. apiDetail surfaces
+      // backend error messages so the toast tells the actual reason.
+      apiDetail(`/servo/${side}/open_all`, 'POST').then(res => {
+        if (res.ok) toast(`${label} open`, 'ok');
+        else        toast(res.error || `${label} open refused`, 'error');
+      });
     });
     const closeAllBtn = document.createElement('button');
     closeAllBtn.className = 'btn btn-dark';
     closeAllBtn.textContent = 'CLOSE ALL';
     closeAllBtn.addEventListener('click', () => {
-      api(`/servo/${side}/close_all`, 'POST').then(() => toast(`${label} closed`, 'ok'));
+      apiDetail(`/servo/${side}/close_all`, 'POST').then(res => {
+        if (res.ok) toast(`${label} closed`, 'ok');
+        else        toast(res.error || `${label} close refused`, 'error');
+      });
     });
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn';
