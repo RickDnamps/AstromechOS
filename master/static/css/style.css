@@ -3628,6 +3628,10 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   height: 160px;
   overflow-y: auto;
   line-height: 1.55;
+  /* E1 fix 2026-05-16: wrap long traceback lines instead of clipping
+     past right edge. Operators couldn't see end of stack traces. */
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .diag-log-box .diag-line-err  { color: var(--red); }
 .diag-log-box .diag-line-warn { color: var(--orange); }

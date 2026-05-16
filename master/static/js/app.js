@@ -8169,6 +8169,14 @@ const diagPanel = {
   _filter: 'ALL',
   _autoTimer: null,
   _tailTimer: null,
+  // B1/P2 fix 2026-05-16: in-flight guards to prevent duplicate
+  // subprocess spawns under rapid clicks + admin tab spam.
+  _inFlightLogs: false,
+  _inFlightStats: false,
+  _inFlightPing: false,
+  // E7 fix 2026-05-16: generation token — discards out-of-order
+  // log replies after rapid filter switching.
+  _loadGen: 0,
 
   // WOW polish I8 2026-05-15: live log tail mode. Toggle button
   // auto-refreshes logs every 2s + scroll-locks to bottom so
@@ -8190,6 +8198,10 @@ const diagPanel = {
       btn.classList.add('btn-active');
     }
     const doTail = async () => {
+      // P2 fix 2026-05-16: skip when tab hidden — Android WebView
+      // doesn't throttle setInterval, so a backgrounded diag tab with
+      // TAIL ON burns Pi CPU 24/7.
+      if (document.hidden) return;
       const panel = el('spanel-diagnostics');
       if (!panel || !panel.classList.contains('active')) {
         clearInterval(this._tailTimer);
@@ -8209,14 +8221,16 @@ const diagPanel = {
   },
 
   load() {
+    // P2 fix 2026-05-16: also clear _tailTimer on re-entry so a re-load
+    // doesn't leave an orphan TAIL timer racing with the new auto timer.
+    if (this._tailTimer) { clearInterval(this._tailTimer); this._tailTimer = null; }
+    const btn = el('diag-tail-btn');
+    if (btn) { btn.textContent = '▶ TAIL'; btn.classList.remove('btn-active'); }
     this.loadLogs();
     this.loadStats();
-    // WOW polish I4 2026-05-15: auto-refresh stats every 5s while
-    // diagnostics panel is visible. Old behavior required manual
-    // REFRESH click — defeats the purpose of a diagnostics tab where
-    // operator is watching live values.
     if (this._autoTimer) clearInterval(this._autoTimer);
     this._autoTimer = setInterval(() => {
+      if (document.hidden) return;  // P2 fix: skip when tab hidden
       const panel = el('spanel-diagnostics');
       if (!panel || !panel.classList.contains('active')) {
         clearInterval(this._autoTimer);
@@ -8236,35 +8250,47 @@ const diagPanel = {
   },
 
   async loadLogs() {
-    const box    = el('diag-log-output');
-    const status = el('diag-log-status');
-    if (!box) return;
-    box.textContent = 'Loading...';
-    // B-114 (audit 2026-05-15): route through api() so X-Admin-Pw is
-    // attached. /diagnostics/logs is admin-only since B-64; raw fetch
-    // would silently 401.
-    const data = await api(`/diagnostics/logs?filter=${encodeURIComponent(this._filter)}`);
-    if (!data) {
-      box.innerHTML = '<span class="cockpit-err">Error — admin re-auth may be needed</span>';
-      if (status) status.textContent = '';
-      return;
+    // B1 fix 2026-05-16: in-flight guard prevents duplicate journalctl
+    // subprocess spawns under rapid clicks or auto-tick during slow Pi.
+    if (this._inFlightLogs) return;
+    this._inFlightLogs = true;
+    // E7 fix: generation token for out-of-order rejection on filter spam
+    const myGen = ++this._loadGen;
+    try {
+      const box    = el('diag-log-output');
+      const status = el('diag-log-status');
+      if (!box) return;
+      box.textContent = 'Loading...';
+      const data = await api(`/diagnostics/logs?filter=${encodeURIComponent(this._filter)}`);
+      // E7: bail if newer load already fired
+      if (myGen !== this._loadGen) return;
+      if (!data) {
+        box.innerHTML = '<span class="cockpit-err">Error — admin re-auth may be needed</span>';
+        if (status) status.textContent = '';
+        return;
+      }
+      if (!data.lines || data.lines.length === 0) {
+        box.innerHTML = '<span style="color:var(--dim)">— no entries —</span>';
+        if (status) status.textContent = '';
+        return;
+      }
+      box.innerHTML = data.lines.map(l => {
+        const cls = /error|critical|exception|traceback/i.test(l) ? 'diag-line-err'
+                  : /warning/i.test(l)                             ? 'diag-line-warn'
+                  : 'diag-line-info';
+        return `<div class="${cls}">${escapeHtml(l)}</div>`;
+      }).join('');
+      box.scrollTop = box.scrollHeight;
+      if (status) status.textContent = `${data.lines.length} lines`;
+    } finally {
+      this._inFlightLogs = false;
     }
-    if (!data.lines || data.lines.length === 0) {
-      box.innerHTML = '<span style="color:var(--dim)">— no entries —</span>';
-      if (status) status.textContent = '';
-      return;
-    }
-    box.innerHTML = data.lines.map(l => {
-      const cls = /error|critical|exception|traceback/i.test(l) ? 'diag-line-err'
-                : /warning/i.test(l)                             ? 'diag-line-warn'
-                : 'diag-line-info';
-      return `<div class="${cls}">${escapeHtml(l)}</div>`;
-    }).join('');
-    box.scrollTop = box.scrollHeight;
-    if (status) status.textContent = `${data.lines.length} lines`;
   },
 
   async loadStats() {
+    if (this._inFlightStats) return;
+    this._inFlightStats = true;
+    try {
     const box = el('diag-stats-output');
     if (!box) return;
     // B-115 (audit 2026-05-15): route through api() — /diagnostics/stats
@@ -8292,26 +8318,40 @@ const diagPanel = {
       row('UART errors',   s.errors != null ? (s.errors > 0 ? warn(s.errors) : ok(s.errors)) : dim('—')) +
       row('Slave CPU',     s.cpu_pct  != null ? `${s.cpu_pct}%`  : dim('—')) +
       row('Slave temp',    s.cpu_temp != null ? `${s.cpu_temp}°C` : dim('—'));
+    } finally {
+      this._inFlightStats = false;
+    }
   },
 
   async ping() {
-    const result = el('diag-ping-result');
-    if (result) { result.style.color = 'var(--dim)'; result.textContent = 'Pinging…'; }
-    // B-115: api() for consistency + admin header attach (/diagnostics/
-    // ping_slave is admin-only since B-65).
-    const data = await api('/diagnostics/ping_slave', 'POST');
-    if (!result) return;
-    if (!data) {
-      result.style.color = 'var(--red)';
-      result.textContent = '✗ Error (admin re-auth may be needed)';
-      return;
-    }
-    if (data.ok) {
-      result.style.color = 'var(--green)';
-      result.textContent = `✓ ${data.ms} ms`;
-    } else {
-      result.style.color = 'var(--red)';
-      result.textContent = `✗ ${data.error || 'timeout'} (${data.ms} ms)`;
+    // E6 fix 2026-05-16: in-flight guard prevents spamming PING.
+    if (this._inFlightPing) return;
+    this._inFlightPing = true;
+    const btn = document.querySelector('button[onclick*="diagPanel.ping"]');
+    if (btn) btn.disabled = true;
+    try {
+      const result = el('diag-ping-result');
+      if (result) { result.style.color = 'var(--dim)'; result.textContent = 'Pinging…'; }
+      const data = await api('/diagnostics/ping_slave', 'POST');
+      if (!result) return;
+      if (!data) {
+        result.style.color = 'var(--red)';
+        result.textContent = '✗ Error (admin re-auth may be needed)';
+        return;
+      }
+      if (data.ok) {
+        // W4 fix 2026-05-16: color-tier the OK result instead of all-green
+        const ms = data.ms || 0;
+        const tier = ms < 50 ? 'var(--ok)' : ms < 200 ? 'var(--warn)' : 'var(--err)';
+        result.style.color = tier;
+        result.textContent = `✓ ${ms} ms`;
+      } else {
+        result.style.color = 'var(--red)';
+        result.textContent = `✗ ${data.error || 'timeout'} (${data.ms} ms)`;
+      }
+    } finally {
+      this._inFlightPing = false;
+      if (btn) btn.disabled = false;
     }
   },
 };

@@ -38,6 +38,7 @@ Diagnostics Blueprint — system logs, UART stats, slave ping.
 import configparser
 import re
 import subprocess
+import threading
 import time
 import logging
 from flask import Blueprint, request, jsonify
@@ -50,6 +51,20 @@ log = logging.getLogger(__name__)
 from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG
 
 diagnostics_bp = Blueprint('diagnostics', __name__)
+
+# B2 fix 2026-05-16: serialize i2cdetect spawns. Concurrent runs would
+# contend the I2C bus mid-PCA9685 PWM write → servo glitches during
+# dome arm motion if operator spams SCAN while a choreo plays.
+_i2c_scan_lock = threading.Lock()
+
+# B9 fix 2026-05-16: hoisted module-level (was compiled per-request).
+# B4 fix: extended secret pattern to catch Authorization/Bearer/Cookie
+# variants + pwd/passwd shortforms. Defense-in-depth — admin-only
+# endpoint but logs may travel via screenshots/SSH paste.
+_LINE_CAP = 4096
+_SECRET_RE = re.compile(
+    r'(?i)(password|passwd|pwd|psk|x-admin-pw|secret|token|api[_-]?key|authorization|bearer|cookie)\s*[:=]?\s*\S+',
+)
 
 
 def _slave_host() -> str:
@@ -80,26 +95,29 @@ def diag_logs():
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=2)
         lines = result.stdout.strip().splitlines()
-        # Audit finding M-6 2026-05-15: defense-in-depth secret filter.
-        # Admin-only endpoint AND no current log line includes
-        # passwords today (verified by grep), but if a future driver
-        # bug ever logs a config dump, redact before returning. Also
-        # cap each line at 4KB so a misbehaving driver dumping data
-        # can't balloon the response.
-        _LINE_CAP = 4096
-        _SECRET_RE = re.compile(
-            r'(?i)(password|psk|x-admin-pw|secret|token|api[_-]?key)\s*[:=]\s*\S+',
-        )
+        # B9 fix: _LINE_CAP + _SECRET_RE now hoisted to module level.
+        # E2 fix 2026-05-16: total-payload cap (was 50 × 4KB = 200KB
+        # worst case per poll × multi-admin = bandwidth spike).
+        _TOTAL_CAP = 64 * 1024
+        total = 0
         cleaned = []
         for ln in lines:
             ln = _SECRET_RE.sub(r'\1=***REDACTED***', ln)
             if len(ln) > _LINE_CAP:
                 ln = ln[:_LINE_CAP] + ' …[truncated]'
+            if total + len(ln) > _TOTAL_CAP:
+                cleaned.append(f'…{len(lines) - len(cleaned)} more lines truncated (payload cap)')
+                break
+            total += len(ln)
             cleaned.append(ln)
         return jsonify({'lines': cleaned, 'filter': level})
     except subprocess.TimeoutExpired:
         log.warning("journalctl timed out (>2s)")
         return jsonify({'lines': [], 'filter': level, 'error': 'journalctl timeout'}), 504
+    except FileNotFoundError:
+        # P6 fix 2026-05-16: distinguish from generic OSError so operator
+        # on a non-systemd box gets a clear install hint.
+        return jsonify({'lines': [], 'filter': level, 'error': 'journalctl not available (systemd required)'}), 503
     except OSError as e:
         # Audit finding L-7 2026-05-15: str(e) on a ConnectionError /
         # FileNotFoundError leaks paths + LAN topology. Hard-code a
@@ -174,19 +192,29 @@ def diag_uart_rtt():
 
     stats = reg.uart.get_rtt_stats()
     recommendation = None
-    if stats['p50_ms'] is not None:
-        # Use median to discount the 100ms read-timeout outliers; one-way
-        # hop ≈ RTT/2; clamp+round to a stable, easy-to-reason-about value.
+    # B6 fix 2026-05-16: require ≥20 samples before recommending. Was:
+    # 1-3 samples (Master just booted) could produce wildly off
+    # recommendation that operator might APPLY → bad body_servo_uart_lat
+    # persisted to local.cfg.
+    if stats['p50_ms'] is not None and stats.get('count', 0) >= 20:
         one_way = stats['p50_ms'] / 2.0
         recommendation = max(5, min(50, int(round(one_way / 5.0) * 5)))
+
+    # E5 fix 2026-05-16: getattr defensive against future refactor of
+    # ChoreoPlayer (e.g. _body_uart_lat becomes a method).
+    current_lat = 25
+    if reg.choreo:
+        try:
+            current_lat = int(round(getattr(reg.choreo, '_body_uart_lat', 0.025) * 1000))
+        except (TypeError, ValueError):
+            current_lat = 25
 
     return jsonify({
         **stats,
         'window_s': 40,
         'recommended_body_uart_lat_ms': recommendation,
-        'current_body_uart_lat_ms': int(round(
-            (reg.choreo._body_uart_lat * 1000) if reg.choreo else 25
-        )),
+        'current_body_uart_lat_ms': current_lat,
+        'samples_ready': stats.get('count', 0) >= 20,  # frontend can disable APPLY
     })
 
 
@@ -202,25 +230,32 @@ def diag_i2c_scan():
     """
     import subprocess as _sp
     import re as _re
+    # B2 fix 2026-05-16: non-blocking lock so concurrent SCAN clicks /
+    # admin tabs serialize. Was: parallel i2cdetect runs contended I2C
+    # bus mid-PCA9685 PWM write → servo glitches during dome arm motion.
+    if not _i2c_scan_lock.acquire(blocking=False):
+        return jsonify({'ok': False, 'error': 'i2c scan already in progress'}), 429
     try:
-        r = _sp.run(['i2cdetect', '-y', '1'],
-                    capture_output=True, text=True, timeout=5, check=False)
-    except FileNotFoundError:
-        return jsonify({'ok': False, 'error': 'i2cdetect not installed (apt install i2c-tools)'}), 503
-    except _sp.TimeoutExpired:
-        return jsonify({'ok': False, 'error': 'i2cdetect timeout (bus stuck?)'}), 503
-    except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
-    if r.returncode != 0:
-        err = (r.stderr or '').strip()[:200] or f'rc={r.returncode}'
-        return jsonify({'ok': False, 'error': err}), 500
-    # Parse the grid: lines like "40: 40 -- 42 -- -- -- -- -- ..."
-    detected = []
-    for line in r.stdout.splitlines():
-        m = _re.match(r'^([0-9a-fA-F]{2}):\s*(.*)$', line)
-        if not m:
-            continue
-        for cell in m.group(2).split():
-            if _re.match(r'^[0-9a-fA-F]{2}$', cell):
-                detected.append(int(cell, 16))
-    return jsonify({'ok': True, 'detected': sorted(set(detected))})
+        try:
+            r = _sp.run(['i2cdetect', '-y', '1'],
+                        capture_output=True, text=True, timeout=5, check=False)
+        except FileNotFoundError:
+            return jsonify({'ok': False, 'error': 'i2cdetect not installed (apt install i2c-tools)'}), 503
+        except _sp.TimeoutExpired:
+            return jsonify({'ok': False, 'error': 'i2cdetect timeout (bus stuck?)'}), 503
+        except Exception as e:
+            return jsonify({'ok': False, 'error': str(e)}), 500
+        if r.returncode != 0:
+            err = (r.stderr or '').strip()[:200] or f'rc={r.returncode}'
+            return jsonify({'ok': False, 'error': err}), 500
+        detected = []
+        for line in r.stdout.splitlines():
+            m = _re.match(r'^([0-9a-fA-F]{2}):\s*(.*)$', line)
+            if not m:
+                continue
+            for cell in m.group(2).split():
+                if _re.match(r'^[0-9a-fA-F]{2}$', cell):
+                    detected.append(int(cell, 16))
+        return jsonify({'ok': True, 'detected': sorted(set(detected))})
+    finally:
+        _i2c_scan_lock.release()
