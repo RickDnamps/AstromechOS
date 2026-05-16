@@ -168,7 +168,7 @@ let _activeTheme = 'default';
 // ----------------------------------------------------------------
 // Theme application
 // ----------------------------------------------------------------
-function applyTheme(id) {
+function applyTheme(id, persist = true) {
   let vars = null;
   if (_THEMES[id]) {
     vars = _THEMES[id].vars;
@@ -177,16 +177,21 @@ function applyTheme(id) {
     if (custom) vars = custom.vars;
   }
   if (!vars && id !== 'default') return;
-  _activeTheme = id;
   const root = document.documentElement;
   root.removeAttribute('style');
   if (id !== 'default' && vars) {
     Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
-  localStorage.setItem('astromech-theme', id);
-  document.querySelectorAll('.theme-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.theme === id)
-  );
+  // WOW polish X4 2026-05-15: persist=false for ephemeral hover preview.
+  // Only commit to localStorage + flip active state when the change is
+  // a real selection (click), not a hover preview.
+  if (persist) {
+    _activeTheme = id;
+    localStorage.setItem('astromech-theme', id);
+    document.querySelectorAll('.theme-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.theme === id)
+    );
+  }
 }
 
 // ----------------------------------------------------------------
@@ -385,6 +390,22 @@ function deleteCustomTheme(id) {
   if (_activeTheme === id) applyTheme('default');
 }
 
+// WOW polish X4 2026-05-15: theme hover preview. Hover a theme card →
+// the whole UI re-skins ephemerally; mouseleave restores. Click still
+// commits via applyTheme. Prevents risky "click to apply" surprises.
+let _themePreviewActive = null;
+function _previewThemeEphemeral(id) {
+  if (_themePreviewActive) return;   // already previewing
+  _themePreviewActive = _activeTheme;
+  applyTheme(id, /*persist=*/false);
+}
+function _restoreActiveTheme() {
+  if (!_themePreviewActive) return;
+  const restoreId = _themePreviewActive;
+  _themePreviewActive = null;
+  applyTheme(restoreId, /*persist=*/false);
+}
+
 function _renderThemePicker() {
   const grid = document.getElementById('theme-grid');
   if (!grid) return;
@@ -393,7 +414,9 @@ function _renderThemePicker() {
     const btn = document.createElement('button');
     btn.className = 'theme-btn' + (id === _activeTheme ? ' active' : '');
     btn.dataset.theme = id;
-    btn.onclick = () => applyTheme(id);
+    btn.onmouseenter = () => _previewThemeEphemeral(id);
+    btn.onmouseleave = () => _restoreActiveTheme();
+    btn.onclick = () => { _themePreviewActive = null; applyTheme(id); };
     // B-44 (audit 2026-05-15): theme labels for built-ins are
     // constants — but the same render code path is used for custom
     // themes (line below) where the label comes from operator input
@@ -413,12 +436,10 @@ function _renderThemePicker() {
     const btn = document.createElement('button');
     btn.className = 'theme-btn' + (t.id === _activeTheme ? ' active' : '');
     btn.dataset.theme = t.id;
-    // User-reported 2026-05-15: clicking a custom theme used to open
-    // the editor instead of applying it — so the .active border never
-    // moved from "Default" because applyTheme() was never called.
-    // Now: click = apply (like built-in themes). Edit pencil + delete X
-    // (below) handle their respective actions via stopPropagation.
-    btn.onclick = () => applyTheme(t.id);
+    // WOW polish X4: hover preview for custom themes too.
+    btn.onmouseenter = () => _previewThemeEphemeral(t.id);
+    btn.onmouseleave = () => _restoreActiveTheme();
+    btn.onclick = () => { _themePreviewActive = null; applyTheme(t.id); };
     // B-44 mirror — custom theme labels are the real XSS sink. DOM
     // build with textContent for the label.
     const csw = document.createElement('span');
@@ -6006,22 +6027,29 @@ const btPairing = {
   startScan() {
     api('/bt/scan/start', 'POST').then(r => {
       if (!r) return;
-      el('bt-scan-btn').disabled = true;
-      el('bt-scan-label').textContent = '⏳ SCANNING...';
-      el('bt-scan-status').textContent = 'Scan active — 15 seconds...';
-      // Countdown
+      const btn = el('bt-scan-btn');
+      // WOW polish X2 2026-05-15: pulse animation while scanning so
+      // the button visibly reflects activity (was just disabled+text).
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('bt-scanning');
+      }
+      el('bt-scan-label').textContent = '⏳ SCANNING…';
+      el('bt-scan-status').textContent = 'Scan active — 15 seconds…';
       let remaining = 15;
       this._scanTimer = setInterval(() => {
         remaining--;
-        el('bt-scan-status').textContent = `Scan active — ${remaining}s remaining...`;
+        el('bt-scan-status').textContent = `Scan active — ${remaining}s remaining…`;
         if (remaining <= 0) {
           clearInterval(this._scanTimer);
-          el('bt-scan-btn').disabled = false;
+          if (btn) {
+            btn.disabled = false;
+            btn.classList.remove('bt-scanning');
+          }
           el('bt-scan-label').innerHTML = '&#x1F50D; SCAN (15s)';
           el('bt-scan-status').textContent = 'Scan complete.';
         }
       }, 1000);
-      // Poll devices toutes les 2s pendant le scan
       this._pollTimer = setInterval(() => this.refresh(), 2000);
       setTimeout(() => { clearInterval(this._pollTimer); this.refresh(); }, 16000);
     });
@@ -6048,13 +6076,32 @@ const btPairing = {
     // addEventListener so the name never reaches an HTML interpolation
     // context. address/name flow through dataset and the handler reads
     // them via target.closest().
+    // WOW polish X2 2026-05-15: sort by RSSI desc + add signal bars.
+    // BT discovered devices come with .rssi (dBm, negative; closer to 0
+    // = stronger). Mapping to 1-4 bars uses standard rough thresholds.
+    const sorted = [...list].sort((a, b) => (b.rssi ?? -100) - (a.rssi ?? -100));
     el2.replaceChildren();
-    list.forEach(d => {
+    sorted.forEach(d => {
       const row = document.createElement('div');
       row.className = 'bt-pair-row';
+      // Signal bars (only if RSSI is provided)
+      if (typeof d.rssi === 'number') {
+        const rssi = d.rssi;
+        const lit = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+        const cls = rssi >= -65 ? '' : rssi >= -75 ? 'weak' : 'bad';
+        const bars = document.createElement('span');
+        bars.className = 'signal-bars';
+        bars.title = `${rssi} dBm`;
+        for (let i = 1; i <= 4; i++) {
+          const b = document.createElement('span');
+          b.className = `signal-bar signal-bar-${i} ${i <= lit ? 'lit ' + cls : ''}`;
+          bars.appendChild(b);
+        }
+        row.appendChild(bars);
+      }
       const nameSpan = document.createElement('span');
       nameSpan.className = 'bt-pair-name';
-      nameSpan.textContent = d.name || '';
+      nameSpan.textContent = d.name || '(unnamed device)';
       const addrSpan = document.createElement('span');
       addrSpan.className = 'bt-pair-addr';
       addrSpan.textContent = d.address || '';
@@ -7749,14 +7796,22 @@ const shortcutsEditor = {
     if (!left || !right) return;
     left.replaceChildren();
     right.replaceChildren();
+    // WOW polish M2 2026-05-15: preview now uses the exact same
+    // .shortcut-btn structure as shortcutsRunner on Drive — operator
+    // sees pixel-identical buttons in Settings preview vs Drive. WYSIWYG.
     const n = this._shortcuts.length;
     const leftN = Math.ceil(n / 2);
     this._shortcuts.forEach((sc, idx) => {
       const dest = idx < leftN ? left : right;
       const b = document.createElement('div');
-      b.className = 'shortcut-preview-btn';
-      // textContent prevents the operator's icon/label from injecting HTML.
-      b.textContent = sc.icon || sc.label?.[0] || '?';
+      b.className = 'shortcut-btn';   // identical to Drive runner
+      const icon = document.createElement('span');
+      icon.className = 'shortcut-icon';
+      icon.textContent = sc.icon || sc.label?.[0] || '?';
+      const label = document.createElement('span');
+      label.className = 'shortcut-label';
+      label.textContent = sc.label || '';
+      b.append(icon, label);
       b.title = sc.label || '';
       dest.appendChild(b);
     });
@@ -7992,11 +8047,12 @@ const armsConfig = {
       const sel  = id === selected ? ' selected' : '';
       return `<option value="${escapeHtml(id)}"${sel}>${escapeHtml(text)}</option>`;
     }).join('');
-    let html = `<div class="arms-grid">
+    let html = `<div class="arms-grid arms-grid-with-test">
       <div class="arms-gh">#</div>
       <div class="arms-gh">Arm servo</div>
       <div class="arms-gh">Body panel</div>
-      <div class="arms-gh">Delay (s)</div>`;
+      <div class="arms-gh">Delay (s)</div>
+      <div class="arms-gh">Test</div>`;
     for (let i = 0; i < this._count; i++) {
       const delay = (this._delays[i] ?? 0.5).toFixed(1);
       html += `
@@ -8008,10 +8064,44 @@ const armsConfig = {
         <option value="">— none —</option>${mkOpts(panelServos, this._panels[i])}
       </select>
       <input id="arm-delay-${i}" type="number" class="input-text" min="0.1" max="5.0" step="0.1"
-             value="${delay}" style="width:60px;font-size:.82em;padding:3px 4px">`;
+             value="${delay}" style="width:60px;font-size:.82em;padding:3px 4px">
+      <button class="btn btn-sm arms-test-btn" data-arm-idx="${i}" title="Open panel → wait delay → open arm → close all (uses current row values)">▶ TEST</button>`;
     }
     html += '</div>';
     container.innerHTML = html;
+    // WOW polish H3 2026-05-15: wire the TEST buttons. Operator can
+    // validate a row's panel+arm+delay BEFORE saving — proves the
+    // hardware mapping is right.
+    container.querySelectorAll('.arms-test-btn').forEach(btn => {
+      btn.addEventListener('click', () => this._testRow(parseInt(btn.dataset.armIdx, 10)));
+    });
+  },
+
+  async _testRow(idx) {
+    const armServo   = el(`arm-servo-${idx}`)?.value || '';
+    const panelServo = el(`arm-panel-${idx}`)?.value || '';
+    const delay      = parseFloat(el(`arm-delay-${idx}`)?.value) || 0.5;
+    if (!armServo) { toast('Pick an arm servo first', 'warn'); return; }
+    const btn = document.querySelector(`.arms-test-btn[data-arm-idx="${idx}"]`);
+    try {
+      await withSaveFeedback(btn, async () => {
+        // Open panel (if any), wait delay, open arm, then close both
+        // after a brief hold so operator can see the result. Uses the
+        // generic /servo/<side>/open endpoint with the current selections.
+        if (panelServo) {
+          await api('/servo/body/open', 'POST', { name: panelServo });
+          await new Promise(r => setTimeout(r, delay * 1000));
+        }
+        await api('/servo/body/open', 'POST', { name: armServo });
+        await new Promise(r => setTimeout(r, 1500));
+        await api('/servo/body/close', 'POST', { name: armServo });
+        await new Promise(r => setTimeout(r, delay * 1000));
+        if (panelServo) await api('/servo/body/close', 'POST', { name: panelServo });
+        return { status: 'ok' };
+      }, { saving: 'TESTING…', saved: 'OK ✓', failed: 'FAILED' });
+    } catch {
+      toast('Test failed — check logs', 'error');
+    }
   },
 
   onCountChange() {
@@ -8270,14 +8360,54 @@ function showRebootOverlay(title, sub, countdownSec, autoReconnect) {
 
 async function systemUpdate() {
   if (!confirm('Force update?\n\ngit pull + rsync Slave + reboot Slave')) return;
-  toast('Update started…', 'info');
-  // B-112 (audit 2026-05-15): explicit error path (same rationale as B-113).
+  // WOW polish I2 2026-05-15: full-screen progress overlay during the
+  // 30-90s deploy so operator isn't staring at a frozen UI wondering
+  // 'did it work?'. Polls /system/version every 3s — when the SHA
+  // changes, deploy succeeded; if Master goes offline (Pi reboot
+  // during deploy) we transition to the reboot overlay.
+  const startSha = await api('/system/version').then(v => v?.commit || '').catch(() => '');
+  showRebootOverlay('UPDATING', 'git pull → rsync Slave → restart services', 60, false);
+  const countEl  = el('reboot-overlay-countdown');
+  const statusEl = el('reboot-overlay-status');
+  if (countEl) countEl.textContent = '⬇';
+  if (statusEl) statusEl.textContent = 'pulling latest commits…';
+
   const d = await api('/system/update', 'POST');
   if (!d) {
-    toast('Update failed — admin re-auth may be needed', 'error');
+    if (statusEl) {
+      statusEl.textContent = 'Update failed — admin re-auth may be needed';
+      statusEl.className = 'reboot-overlay-status error';
+    }
+    setTimeout(() => el('reboot-overlay')?.classList.remove('active'), 3000);
     return;
   }
-  toast('Update in progress — Slave will reboot', 'ok');
+  if (statusEl) statusEl.textContent = 'deploying — waiting for new version…';
+  let attempts = 0;
+  const poll = setInterval(async () => {
+    attempts++;
+    try {
+      const v = await api('/system/version');
+      const curSha = v?.commit || '';
+      if (curSha && startSha && curSha !== startSha) {
+        clearInterval(poll);
+        if (countEl) countEl.textContent = '✓';
+        if (statusEl) {
+          statusEl.textContent = `Deployed ${curSha.substring(0,7)} — reloading…`;
+          statusEl.className = 'reboot-overlay-status ok';
+        }
+        setTimeout(() => location.reload(), 1800);
+      } else if (statusEl && attempts <= 30) {
+        statusEl.textContent = `deploying — ${attempts*3}s elapsed`;
+      }
+    } catch {/* still updating */}
+    if (attempts > 45) {   // 135s timeout
+      clearInterval(poll);
+      if (statusEl) {
+        statusEl.textContent = 'Timed out — check Slave logs · /diagnostics';
+        statusEl.className = 'reboot-overlay-status error';
+      }
+    }
+  }, 3000);
 }
 
 async function systemRollback() {
