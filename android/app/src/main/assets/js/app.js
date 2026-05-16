@@ -813,7 +813,6 @@ class LockManager {
 
   setKidsSpeed(val) {
     this._kidsSpeed = val;
-    localStorage.setItem('kidsSpeedLimit', val);
     const v = el('kids-speed-val');
     if (v) v.textContent = val + '%';
     if (this._mode === 1) this._applyKidsSpeed();
@@ -821,8 +820,11 @@ class LockManager {
     // POST. Slider oninput fires per pixel of drag → ~55 POSTs at
     // 30Hz, all serialized on _cfg_write_lock. Coalesce into one
     // POST 250ms after the operator stops dragging.
+    // LOW #7 fix 2026-05-15: also debounce localStorage write (was
+    // sync IPC per pixel on Android WebView — ~55 writes/drag).
     if (this._kidsSendTimer) clearTimeout(this._kidsSendTimer);
     this._kidsSendTimer = setTimeout(() => {
+      try { localStorage.setItem('kidsSpeedLimit', val); } catch {}
       api('/lock/set', 'POST', {
         mode: this._mode,
         kids_speed_limit: val / 100,
@@ -907,13 +909,13 @@ class LockManager {
     // the admin password via hmac.compare_digest and also persists
     // the lock_mode change to local.cfg [security] so a Master
     // reboot keeps the operator's choice.
+    // LOW polish 2026-05-15: route through api() for consistency
+    // (LAN-open endpoint so X-Admin-Pw header isn't needed, but the
+    // api() helper handles timeouts, AbortController, and base URL
+    // resolution uniformly — raw fetch bypassed all of that).
     try {
-      const res = await fetch('/lock/unlock', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pwd, mode: 0 }),
-      });
-      if (res.ok) {
+      const res = await api('/lock/unlock', 'POST', { password: pwd, mode: 0 });
+      if (res && res.status === 'ok') {
         el('lock-modal').classList.add('hidden');
         this._applyMode(0);
         return;
@@ -1697,6 +1699,10 @@ class VirtualJoystick {
     this._keepAlive = null;
     this.x = 0;
     this.y = 0;
+    // LOW polish 2026-05-15: reset throttle timestamp on release so
+    // the operator's next press fires immediately instead of being
+    // throttled by the residual _lastSend from the previous session.
+    this._lastSend = 0;
     this.ring.classList.remove('active');
     this.knob.style.transform = 'translate(-50%, -50%)';
     // WOW polish D3: reset the gradient color on release so the knob
@@ -2634,6 +2640,14 @@ let _camRefreshTimer = null;  // periodic stream refresh to prevent Chrome memor
 let _camResumeRetry  = null;  // retry interval after screen wake / tab return
 let _camErrored      = false; // true when img.onerror fires (mjpg_streamer down)
 
+// LOW polish 2026-05-15: single helper to clear the camera poll timer
+// + null the ref. The old code had 8+ inline `clearInterval(_camPollTimer)`
+// calls; some left the ref non-null which could mask a "still running"
+// state in conditional logic later. One source of truth = no leak risk.
+function _clearCamPollTimer() {
+  if (_camPollTimer) { clearInterval(_camPollTimer); _camPollTimer = null; }
+}
+
 function _camBase() {
   return (typeof window.R2D2_API_BASE === 'string' && window.R2D2_API_BASE)
     ? window.R2D2_API_BASE : '';
@@ -2722,7 +2736,7 @@ async function _takeCameraStream() {
 }
 
 function _startCamPoll() {
-  clearInterval(_camPollTimer);
+  _clearCamPollTimer();
   _camPollTimer = setInterval(async () => {
     if (!_camToken || !_camEnabled) return;
     const r = await fetch(_camBase() + '/camera/status')
@@ -2733,7 +2747,7 @@ function _startCamPoll() {
       if (r.active_token < _camToken) {
         // Flask restarted (token reset to 0) — auto-reclaim silently
         _camToken = null;
-        clearInterval(_camPollTimer);
+        _clearCamPollTimer();
         setTimeout(() => _takeCameraStream(), 500);
       } else {
         // Another client claimed the slot — show overlay
@@ -2744,14 +2758,14 @@ function _startCamPoll() {
         if (img)   { img.src = ''; img.style.display = 'none'; }
         if (bg)    bg.style.display = 'block';
         if (taken) taken.style.display = 'flex';
-        clearInterval(_camPollTimer);
+        _clearCamPollTimer();
       }
     } else if (_camErrored) {
       // Same Flask token but stream errored — mjpg_streamer restarted (e.g. resolution change)
       // Try to reclaim; if mjpg_streamer is back up Flask will serve the stream again
       _camErrored = false;
       _camToken   = null;
-      clearInterval(_camPollTimer);
+      _clearCamPollTimer();
       setTimeout(() => _takeCameraStream(), 1000);
     }
   }, 3000);
@@ -2766,7 +2780,7 @@ function _pauseCameraStream() {
   if (img && img.src) {
     img.src = '';   // forces the browser to drop the MJPEG socket
   }
-  if (_camPollTimer) { clearInterval(_camPollTimer); _camPollTimer = null; }
+  _clearCamPollTimer();
   // Tell server we're releasing so the next viewer can claim.
   if (_camToken) {
     fetch(_camBase() + '/camera/release', {
@@ -2796,7 +2810,7 @@ function _toggleCamera() {
   if (_camEnabled) {
     _takeCameraStream();
   } else {
-    clearInterval(_camPollTimer);
+    _clearCamPollTimer();
     clearInterval(_camRefreshTimer);
     clearInterval(_camResumeRetry);
     _camToken = null;
@@ -2829,7 +2843,7 @@ function _initCamVisibilityHandler() {
   document.addEventListener('visibilitychange', () => {
     if (!_camEnabled) return;
     if (document.hidden) {
-      clearInterval(_camPollTimer);
+      _clearCamPollTimer();
       clearInterval(_camRefreshTimer);
       clearInterval(_camResumeRetry);
       const img = el('cam-stream');
