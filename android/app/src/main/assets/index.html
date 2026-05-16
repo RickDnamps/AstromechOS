@@ -2103,8 +2103,23 @@
             <div class="hat-row-meta" id="slave-motor-hat-meta"></div>
           </div>
           <p class="settings-note admin-only">⚠️ Never put the Motor HAT address in Slave servo HATs — this protects the motor driver from servo commands.</p>
-          <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
+          <!-- W9 fix 2026-05-16: defaults always visible + Reset button -->
+          <p class="settings-note settings-note-dim admin-only">
+            Defaults: Master <code>0x40</code> · Slave HATs <code>0x41</code> · Slave Motor <code>0x40</code>
+            <button class="btn btn-sm" style="margin-left:8px" onclick="resetHatDefaults()">↺ Reset</button>
+          </p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">
+            <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
+            <!-- W14 fix 2026-05-16: i2cdetect scan button -->
+            <button class="btn btn-sm admin-only" onclick="scanI2cBus()" title="Detect physically-present HATs on Master I2C">🔍 SCAN I2C</button>
+          </div>
           <div class="settings-status" id="hardware-config-status"></div>
+          <div id="i2c-scan-result" class="settings-status" style="margin-top:6px"></div>
+          <!-- B15 fix 2026-05-16: persistent 'reboot required' banner after Master HAT save -->
+          <div id="hat-reboot-banner" class="hat-reboot-banner" style="display:none">
+            ⚠ Master HAT config changed — reboot Master to apply.
+            <button class="btn btn-sm btn-warn" style="margin-left:8px" onclick="confirmAction('Reboot Master now?', '/system/reboot')">REBOOT NOW</button>
+          </div>
         </section>
 
         <section class="card settings-card" style="margin-top:12px">

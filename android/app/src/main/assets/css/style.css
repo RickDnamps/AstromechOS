@@ -4753,6 +4753,29 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* HATs — batch 3 polish (2026-05-16) */
+
+/* B15 — persistent 'Master reboot required' banner */
+.hat-reboot-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 170, 68, 0.12);
+  border: 1px solid var(--amber, #ffaa44);
+  border-radius: 4px;
+  color: var(--amber, #ffaa44);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+/* W9 — dim variant of settings-note for defaults reference */
+.settings-note.settings-note-dim { opacity: 0.65; }
+.settings-note code {
+  background: rgba(var(--blue-rgb, 0 170 255), 0.1);
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-family: var(--font-data, monospace);
+}
+
 /* HATs — batch 2 polish (2026-05-16) */
 
 /* W1 + W2 — HAT row meta (live health + servo count preview) */

@@ -10436,6 +10436,61 @@ function validateHatField(inputId, single = false) {
 // Cache latest /status snapshot for HAT health lookups
 let _lastStatusForHats = null;
 
+// W9 fix 2026-05-16: reset HAT inputs to single-HAT defaults
+function resetHatDefaults() {
+  if (!confirm('Reset HAT addresses to single-HAT defaults? (You still need to SAVE to persist.)')) return;
+  const m = el('master-hats-input'); if (m) m.value = '0x40';
+  const s = el('slave-hats-input');  if (s) s.value = '0x41';
+  const mh= el('slave-motor-hat-input'); if (mh) mh.value = '0x40';
+  validateHatField('master-hats-input');
+  validateHatField('slave-hats-input');
+  validateHatField('slave-motor-hat-input', true);
+  if (typeof toast === 'function') toast('Defaults loaded — click SAVE to persist', 'info');
+}
+
+// W14 fix 2026-05-16: i2cdetect scan via new diagnostics endpoint.
+// Operator clicks SCAN → backend runs i2cdetect → returns detected
+// addrs → frontend shows chips with quick-fill action.
+async function scanI2cBus() {
+  const out = el('i2c-scan-result');
+  if (out) { out.textContent = 'Scanning I2C bus...'; out.className = 'settings-status'; }
+  const res = await apiDetail('/diagnostics/i2c_scan').catch(() => null);
+  if (!res || !res.ok) {
+    if (out) { out.textContent = '✗ ' + (res?.error || 'scan failed'); out.className = 'settings-status error'; }
+    return;
+  }
+  const d = res.data || {};
+  if (!out) return;
+  out.innerHTML = '';
+  const title = document.createElement('div');
+  const addrs = Array.isArray(d.detected) ? d.detected : [];
+  title.textContent = addrs.length
+    ? `Detected ${addrs.length} I2C device${addrs.length>1?'s':''} on Master:`
+    : 'No I2C devices detected on Master (HAT not powered / not connected?)';
+  out.appendChild(title);
+  addrs.forEach(addr => {
+    const chip = document.createElement('button');
+    chip.className = 'btn btn-sm';
+    chip.style.cssText = 'margin:4px 4px 0 0;font-family:var(--font-data);font-size:11px';
+    const inPcaRange = (addr >= 0x40 && addr <= 0x77);
+    chip.textContent = `0x${addr.toString(16)}${inPcaRange ? '' : ' (not PCA9685)'}`;
+    if (!inPcaRange) chip.disabled = true;
+    chip.onclick = () => {
+      const m = el('master-hats-input');
+      if (m) {
+        const cur = m.value.trim();
+        const hex = '0x' + addr.toString(16);
+        if (!cur) m.value = hex;
+        else if (!cur.split(',').map(p => p.trim()).includes(hex)) m.value = cur + ', ' + hex;
+        validateHatField('master-hats-input');
+        toast(`Appended ${hex} to Master HATs`, 'info');
+      }
+    };
+    out.appendChild(chip);
+  });
+  out.className = 'settings-status ok';
+}
+
 // W5 fix 2026-05-16: client-side hex validation (matches backend
 // _HAT_ADDR_RE + PCA9685 0x40-0x77 range + dedup).
 function _validateHatList(s, opts = {}) {
@@ -10515,6 +10570,13 @@ async function saveHardwareConfig() {
       else                                     msgOk = 'Saved — Slave auto-restarting';
       toast(msgOk, 'ok');
       if (status) { status.textContent = '✓ ' + msgOk; status.className = 'settings-status ok'; }
+      // B15 fix 2026-05-16: persistent banner with REBOOT NOW button
+      // so operator doesn't forget. Survives until they reboot or
+      // dismiss the page.
+      if (masterHatChanged) {
+        const banner = el('hat-reboot-banner');
+        if (banner) banner.style.display = '';
+      }
       // B8 fix: poll Slave sync status ~4s after save (SCP + restart ~3s)
       if (slaveHatChanged) {
         setTimeout(async () => {

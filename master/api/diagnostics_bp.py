@@ -188,3 +188,39 @@ def diag_uart_rtt():
             (reg.choreo._body_uart_lat * 1000) if reg.choreo else 25
         )),
     })
+
+
+@diagnostics_bp.get('/diagnostics/i2c_scan')
+@require_admin
+def diag_i2c_scan():
+    """W14 fix 2026-05-16: scan Master I2C bus and return detected addrs.
+    Frontend uses this in the HATs panel ('SCAN I2C' button) so operator
+    can detect physically-present HATs without SSH + i2cdetect.
+
+    Runs i2cdetect -y 1 (Pi I2C bus 1), parses the grid output. Only
+    addresses in 0x03-0x77 (i2cdetect default range) are returned.
+    """
+    import subprocess as _sp
+    import re as _re
+    try:
+        r = _sp.run(['i2cdetect', '-y', '1'],
+                    capture_output=True, text=True, timeout=5, check=False)
+    except FileNotFoundError:
+        return jsonify({'ok': False, 'error': 'i2cdetect not installed (apt install i2c-tools)'}), 503
+    except _sp.TimeoutExpired:
+        return jsonify({'ok': False, 'error': 'i2cdetect timeout (bus stuck?)'}), 503
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    if r.returncode != 0:
+        err = (r.stderr or '').strip()[:200] or f'rc={r.returncode}'
+        return jsonify({'ok': False, 'error': err}), 500
+    # Parse the grid: lines like "40: 40 -- 42 -- -- -- -- -- ..."
+    detected = []
+    for line in r.stdout.splitlines():
+        m = _re.match(r'^([0-9a-fA-F]{2}):\s*(.*)$', line)
+        if not m:
+            continue
+        for cell in m.group(2).split():
+            if _re.match(r'^[0-9a-fA-F]{2}$', cell):
+                detected.append(int(cell, 16))
+    return jsonify({'ok': True, 'detected': sorted(set(detected))})
