@@ -398,8 +398,13 @@ class BTControllerDriver:
                         continue
                 except ImportError:
                     pass
-                if getattr(reg, 'lock_mode', 0) == 2:
-                    continue
+                # E2 fix 2026-05-16: split lock_mode==2 gate so dome
+                # keep-alive still fires under Child Lock (per spec:
+                # 'drive bloqué, dome/sounds/lights libres'). Was: this
+                # 'continue' skipped BOTH drive AND dome keep-alives,
+                # forcing BT operator to wiggle the stick to keep dome
+                # turning. Per-section gate fixes it.
+                child_locked = getattr(reg, 'lock_mode', 0) == 2
                 if self._is_vesc_unsafe(reg):
                     continue
                 # Snapshot drive + dome state under the instance lock. Without
@@ -409,7 +414,7 @@ class BTControllerDriver:
                 # tearing but not the cross-field ordering. With the lock,
                 # writers always update active+last atomically together.
                 with self._lock:
-                    drive_active = self._drive_active
+                    drive_active = self._drive_active and not child_locked
                     last_drive   = self._last_drive
                     dome_active  = self._dome_active
                     last_dome    = self._last_dome

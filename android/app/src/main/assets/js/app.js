@@ -819,11 +819,22 @@ function toast(msg, type = 'info', action = null) { toastMgr.show(msg, type, act
 class LockManager {
   constructor() {
     this._mode         = 0;   // 0=Normal 1=Kids 2=ChildLock
-    this._kidsSpeed    = parseInt(localStorage.getItem('kidsSpeedLimit') || '20');
+    // W21 fix 2026-05-16: use per-robot localStorage helper (CLAUDE.md
+    // pattern). _lsGet falls back to legacy key for migration.
+    this._kidsSpeed    = parseInt(_lsGet('kidsSpeedLimit') || '20');
     this._prevSpeed    = null;
-    this._kidsTimer    = null;
-    this._kidsTimedOut = false;
+    // B4/E4 fix 2026-05-16: use wall-clock timestamp instead of
+    // setTimeout. Hidden-tab browser throttling paused the timer →
+    // _kidsTimedOut stayed false past 5min wall time → escalation
+    // skipped the password modal. Now: store entry timestamp,
+    // compute (now - ts) on demand inside onBtnClick.
+    this._kidsEnterTs  = 0;
     this._KIDS_TIMEOUT = 5 * 60 * 1000;   // 5 minutes
+  }
+
+  // B4/E4 helper — replaces the setTimeout-based _kidsTimedOut flag
+  get _kidsTimedOut() {
+    return this._kidsEnterTs > 0 && (Date.now() - this._kidsEnterTs) >= this._KIDS_TIMEOUT;
   }
 
   get mode() { return this._mode; }
@@ -836,6 +847,28 @@ class LockManager {
     document.body.dataset.lockMode = '0';
     const dlabel = el('drive-lock-label');
     if (dlabel) dlabel.textContent = 'LOCK';
+    // B10/B14 fix 2026-05-16: synchronously fetch /status once at init
+    // so the UI reflects the SERVER lock_mode + kids_speed_limit
+    // immediately instead of showing Normal for ~2s until the first
+    // StatusPoller tick. Operator opening the page in ChildLock no
+    // longer sees a misleading 'unlocked' state.
+    api('/status').then(d => {
+      if (!d) return;
+      // Prefer server kids_speed_limit over localStorage (was: localStorage
+      // wins, leading to UI/server divergence on fresh tablets where
+      // localStorage defaulted to 20% but server was at 50%).
+      if (typeof d.kids_speed_limit === 'number') {
+        const serverPct = Math.round(d.kids_speed_limit * 100);
+        this._kidsSpeed = serverPct;
+        _lsSet('kidsSpeedLimit', String(serverPct));
+        if (s) { s.value = serverPct; syncHoloSlider(s); }
+        if (v) v.textContent = serverPct + '%';
+      }
+      // syncFromStatus handles the mode UI sync
+      if (typeof d.lock_mode === 'number' && d.lock_mode !== 0) {
+        this.syncFromStatus(d.lock_mode);
+      }
+    }).catch(() => {});
   }
 
   setKidsSpeed(val) {
@@ -851,7 +884,7 @@ class LockManager {
     // sync IPC per pixel on Android WebView — ~55 writes/drag).
     if (this._kidsSendTimer) clearTimeout(this._kidsSendTimer);
     this._kidsSendTimer = setTimeout(() => {
-      try { localStorage.setItem('kidsSpeedLimit', val); } catch {}
+      _lsSet('kidsSpeedLimit', String(val));   // W21: per-robot
       api('/lock/set', 'POST', {
         mode: this._mode,
         kids_speed_limit: val / 100,
@@ -1030,19 +1063,14 @@ class LockManager {
     const dlabel = el('drive-lock-label');
     if (dlabel) dlabel.textContent = ['LOCK', 'KIDS', 'CHILD'][mode];
 
-    // F-7: always clear an existing Kids timer BEFORE deciding what to do.
-    // Re-entering mode 1 without this would leave the previous timer alive,
-    // and it could fire later setting _kidsTimedOut=true to a now-irrelevant
-    // mode. Same for transitioning Kids→Child without going through Normal.
-    if (this._kidsTimer) { clearTimeout(this._kidsTimer); this._kidsTimer = null; }
-
+    // B4/E4 fix 2026-05-16: use _kidsEnterTs (wall-clock) instead of
+    // setTimeout. Hidden tabs throttle timers; wall-clock diff is robust.
     if (mode === 1) {
-      this._prevSpeed    = Math.round(_speedLimit * 100);
-      this._kidsTimedOut = false;
+      this._prevSpeed   = Math.round(_speedLimit * 100);
+      this._kidsEnterTs = Date.now();
       this._applyKidsSpeed();
-      this._kidsTimer = setTimeout(() => { this._kidsTimedOut = true; }, this._KIDS_TIMEOUT);
     } else {
-      this._kidsTimedOut = false;
+      this._kidsEnterTs = 0;
       if (mode === 0 && prev !== 0 && this._prevSpeed !== null) {
         const s = el('speed-slider');
         if (s) { s.value = this._prevSpeed; setSpeed(this._prevSpeed); }
@@ -1092,18 +1120,18 @@ class LockManager {
       document.querySelectorAll('.lock-mode-btn').forEach(b => {
         b.classList.toggle('active', parseInt(b.dataset.mode) === lockMode);
       });
-      // F-5: mirror _applyMode's cleanup for the Kids timer + prev speed.
-      // Without this, an external lock-mode change (another tab, BT controller
-      // toggle) would leave a dangling _kidsTimer and never restore the user's
-      // pre-Kids speed slider. _applyMode is NOT called here on purpose —
-      // syncFromStatus reflects the server's already-applied state, so we
-      // skip the api('/lock/set') POST and the toast.
-      if (this._kidsTimer) { clearTimeout(this._kidsTimer); this._kidsTimer = null; }
-      this._kidsTimedOut = false;
+      // F-5 + B4/E4 + E6 fix 2026-05-16: mirror _applyMode's cleanup
+      // for the Kids entry timestamp + prev speed. _applyMode is NOT
+      // called here on purpose — syncFromStatus reflects the server's
+      // already-applied state, so we skip the api('/lock/set') POST.
+      this._kidsEnterTs = 0;
       if (lockMode === 1) {
-        this._prevSpeed = Math.round(_speedLimit * 100);
+        // E6 fix: only snapshot _prevSpeed if coming from Normal.
+        // Otherwise (transient 1→0→1 across two polls) we'd snapshot
+        // the kids cap as if it were the operator's preference.
+        if (prev === 0) this._prevSpeed = Math.round(_speedLimit * 100);
+        this._kidsEnterTs = Date.now();
         this._applyKidsSpeed();
-        this._kidsTimer = setTimeout(() => { this._kidsTimedOut = true; }, this._KIDS_TIMEOUT);
       } else if (lockMode === 0 && prev !== 0 && this._prevSpeed !== null) {
         const s = el('speed-slider');
         if (s) { s.value = this._prevSpeed; setSpeed(this._prevSpeed); }
