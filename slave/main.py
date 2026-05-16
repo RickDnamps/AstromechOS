@@ -189,6 +189,11 @@ def main() -> None:
             _msg_type = 'S' if _i == 0 else f'S{_i + 1}'
             uart.register_callback(_msg_type, audio.make_channel_handler(_i))
         uart.register_callback('VOL', audio.handle_volume)
+        # E3 fix 2026-05-15: hot-reload sounds_index.json on Master
+        # SFTP sync of a new upload. Without this, the slave's
+        # in-memory _index stays at the boot snapshot and rejects
+        # 'sound not found' for anything uploaded since boot.
+        uart.register_callback('SIDX', lambda payload: audio.reload_index())
         last = 'S' if _audio_channels == 1 else f'S{_audio_channels}'
         log.info("Audio: %d channels registered (%s)", _audio_channels,
                  'S:' if _audio_channels == 1 else f'S: … {last}:')

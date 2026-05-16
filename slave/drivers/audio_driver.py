@@ -119,6 +119,26 @@ class AudioDriver(BaseDriver):
     # BaseDriver
     # ------------------------------------------------------------------
 
+    def reload_index(self) -> bool:
+        """E3 fix 2026-05-15: hot-reload sounds_index.json so a newly
+        uploaded sound is immediately playable without restarting the
+        slave service. Called from UART handler on `SIDX:RELOAD`.
+        Same loader as setup(); _index swap is atomic (single dict
+        ref assignment, GIL-safe). Returns True on success.
+        """
+        try:
+            with open(_INDEX_FILE, encoding='utf-8') as f:
+                data = json.load(f)
+            new_index = data.get('categories', {})
+            with self._lock:
+                self._index = new_index
+            total = sum(len(v) for v in self._index.values())
+            log.info(f"AudioDriver: index reloaded — {total} sounds in {len(self._index)} categories")
+            return True
+        except (OSError, json.JSONDecodeError) as e:
+            log.warning("AudioDriver: index reload failed: %s", e)
+            return False
+
     def setup(self) -> bool:
         if not os.path.isfile(_INDEX_FILE):
             log.error(f"sounds_index.json not found: {_INDEX_FILE}")

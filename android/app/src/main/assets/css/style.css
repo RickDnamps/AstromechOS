@@ -4592,6 +4592,21 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .status-pill:hover { opacity: 0.85; }
 
+/* WOW H1 2026-05-15: currently-playing sound card highlight.
+ * Cyan border + pulse so operator sees WHICH card is live in the
+ * grid (the now-playing bar at bottom is too small for a glance). */
+.sound-btn.playing {
+  background: rgba(var(--cyan-rgb, 0 255 200), 0.18);
+  border-color: var(--cyan, #00ffaa);
+  color: var(--cyan, #00ffaa);
+  box-shadow: 0 0 14px rgba(var(--cyan-rgb, 0 255 200), 0.55);
+  animation: sound-playing-pulse 1.6s ease-in-out infinite;
+}
+@keyframes sound-playing-pulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(var(--cyan-rgb, 0 255 200), 0.55); }
+  50%      { box-shadow: 0 0 22px rgba(var(--cyan-rgb, 0 255 200), 0.85); }
+}
+
 /* WOW HW1 2026-05-15: speed effective hint (60% × 50% = 30%) */
 .ctrl-effective {
   display: inline-block;

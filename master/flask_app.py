@@ -109,6 +109,23 @@ def create_app() -> Flask:
     except Exception:
         log.exception("cleanup_stale_tmp_files failed at startup")
 
+    # Audit finding Audio E4 2026-05-15: sweep orphan *.mp3.tmp files
+    # on the Slave that accumulated from interrupted SFTP uploads.
+    # Cheap (single dir listing) and runs in background so a slow
+    # Slave doesn't delay boot.
+    try:
+        import threading as _thr_cleanup
+        from master.api.audio_bp import cleanup_orphan_tmp_files
+        _thr_cleanup.Thread(
+            target=lambda: log.info(
+                "Audio .tmp orphan cleanup: removed %d files",
+                cleanup_orphan_tmp_files()),
+            name='audio-tmp-cleanup',
+            daemon=True,
+        ).start()
+    except Exception:
+        log.exception("cleanup_orphan_tmp_files failed at startup")
+
     # ------------------------------------------------------------------
     # Activity tracking — update last_activity on user-driven POSTs.
     # /heartbeat fires every 200ms from the dashboard polling loop and would

@@ -4032,6 +4032,30 @@ class AudioBoard {
         btn.textContent = this._formatSound(s);
         grid.appendChild(btn);
       });
+    } else {
+      // WOW H2 fix 2026-05-15: empty category guidance instead of just
+      // showing the RANDOM button alone (which is useless on empty
+      // category anyway — it would 409). Operator with a fresh
+      // category sees what to do.
+      const isAdmin = adminGuard.unlocked;
+      const empty = document.createElement('div');
+      empty.className = 'audio-empty';
+      empty.style.gridColumn = '1 / -1';
+      empty.innerHTML = '';
+      const icon = document.createElement('div');
+      icon.style.fontSize = '36px';
+      icon.style.opacity = '0.4';
+      icon.textContent = '📁';
+      const title = document.createElement('div');
+      title.style.cssText = 'font-size:12px;letter-spacing:2px;margin-top:8px;color:var(--text)';
+      title.textContent = `${label.toUpperCase()} — NO SOUNDS YET`;
+      const sub = document.createElement('div');
+      sub.style.cssText = 'font-size:10px;letter-spacing:1px;margin-top:6px;opacity:0.7';
+      sub.textContent = isAdmin
+        ? 'Drop MP3 files in the upload zone below ⬇'
+        : 'Ask an admin to add sounds.';
+      empty.append(icon, title, sub);
+      grid.appendChild(empty);
     }
 
     // Delegated click handler — idempotent (wired once per page lifetime).
@@ -4073,8 +4097,13 @@ class AudioBoard {
   playRandom(cat) {
     const c = cat || this._currentCat || 'happy';
     this._lastRandomCat = c;
+    // WOW M4-W fix 2026-05-15: pulse the RANDOM button during the
+    // ~500ms cold-start, parity with per-sound buttons. Operator gets
+    // the same 'click registered' feedback regardless of trigger path.
+    const randomBtn = document.querySelector(`.sound-btn-random[data-random="${CSS.escape(c)}"]`);
+    if (randomBtn) randomBtn.classList.add('sound-loading');
     api('/audio/random', 'POST', { category: c }).then(d => {
-      // F-10: same check — only flip UI when server confirmed.
+      if (randomBtn) randomBtn.classList.remove('sound-loading');
       if (d && d.status === 'ok') {
         const label = this._CAT_LABELS[c] || c;
         this.setPlaying(true, `🎲 ${label}`);
@@ -4091,8 +4120,17 @@ class AudioBoard {
       // of what _timedSound has become in the meantime (another client,
       // background poll, etc.).
       this._repeatTarget = this._timedSound || this._lastRandomCat || null;
+      // WOW M3-W fix 2026-05-15: toast feedback so operator knows the
+      // toggle did something, especially when armed BEFORE any play
+      // (target captured at next play).
+      if (this._repeatTarget) {
+        toast(`🔁 Repeat ON — will loop ${this._repeatTarget}`, 'info');
+      } else {
+        toast('🔁 Repeat armed — next sound will loop', 'info');
+      }
     } else {
       this._repeatTarget = null;
+      toast('🔁 Repeat OFF', 'info');
     }
     this._saveModes();
     el('now-playing-repeat')?.classList.toggle('active', this._repeat);
@@ -4228,6 +4266,19 @@ class AudioBoard {
     const waveform = el('waveform');
     const text     = el('now-playing-text');
     if (waveform) waveform.classList.toggle('playing', active);
+
+    // WOW H1 fix 2026-05-15: visually highlight the playing card in
+    // the grid, not just the bottom now-playing bar. Operator's eyes
+    // are on the grid when they just clicked; the bottom bar is a
+    // glance-second confirmation. Cyan pulse border + class on the
+    // matching .sound-btn[data-sound="name"]. Cleared from siblings
+    // so only one card is lit at a time.
+    document.querySelectorAll('.sound-btn.playing').forEach(b =>
+      b.classList.remove('playing'));
+    if (active && name && !name.startsWith('🎲')) {
+      const card = document.querySelector(`.sound-btn[data-sound="${CSS.escape(name)}"]`);
+      if (card) card.classList.add('playing');
+    }
 
     // Category badge on specific sounds
     let displayName = active ? name : 'IDLE';

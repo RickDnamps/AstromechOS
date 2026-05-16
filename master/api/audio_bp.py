@@ -94,6 +94,47 @@ _play_timer: threading.Timer | None = None
 # clobber the in-memory index mid-rebuild.
 _audio_state_lock = threading.Lock()
 
+# E1 fix 2026-05-15: serialize SFTP sync threads so the remote
+# sounds_index.json reflects the latest local state instead of a
+# stale snapshot captured at upload-thread start. Two simultaneous
+# uploads with the old code: thread A captures index{A}, thread B
+# captures index{A+B}, both run SFTP in parallel, if A's SFTP
+# finishes LAST the remote index reverts to {A only}. Now: SFTP
+# threads acquire this lock + refetch the latest index inside it.
+_sftp_lock = threading.Lock()
+
+
+def cleanup_orphan_tmp_files() -> int:
+    """E4 fix 2026-05-15: scan the Slave's sounds dir for orphan
+    *.mp3.tmp files left by SFTP drops mid-upload. Called once at
+    Master startup. Returns count removed (or -1 on error).
+
+    These accumulate over multi-day events with flaky WiFi — each
+    failed upload leaves a tmp behind that's never reaped.
+    """
+    try:
+        import paramiko
+        c = paramiko.SSHClient()
+        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        c.connect(**_slave_sftp_creds())
+        sftp = c.open_sftp()
+        try:
+            count = 0
+            for entry in sftp.listdir(_SLAVE_SOUNDS):
+                if entry.endswith('.mp3.tmp'):
+                    try:
+                        sftp.remove(f'{_SLAVE_SOUNDS}/{entry}')
+                        count += 1
+                    except Exception:
+                        pass
+            return count
+        finally:
+            sftp.close()
+            c.close()
+    except Exception as e:
+        log.warning('Orphan .tmp cleanup skipped: %s', e)
+        return -1
+
 # Strict filename allow-list — only the characters actually present in
 # the existing 317 R2-D2 sound files. Excludes hyphen (the upload
 # sanitizer collapses it to '_') so the validation here matches what
@@ -530,8 +571,12 @@ def _persist_volume(vol: int) -> None:
                 cfg.add_section('audio')
             cfg.set('audio', 'volume', str(vol))
             write_cfg_atomic(cfg, _LOCAL_CFG)
-    except OSError:
-        pass   # transient FS error — next /volume will retry
+    except (OSError, configparser.Error) as e:
+        # L6 fix 2026-05-15: log instead of silent swallow. Next
+        # /volume will retry, but the operator needs to see this in
+        # journalctl if cfg is corrupted (broader catch than just
+        # OSError — configparser.Error catches malformed local.cfg).
+        log.warning("_persist_volume failed: %s", e)
 
 
 # Hydrate reg.audio_volume at module import so any /audio/play arriving
@@ -864,29 +909,48 @@ def _sftp_sync_sound(local_mp3: str, stem: str, index: dict) -> None:
 
     B-3 + B-4: credentials from cfg, atomic put for both the MP3 and the
     index. mpg123 on the slave can never see a truncated MP3 or a
-    half-written index file."""
-    try:
-        import paramiko
-        c = paramiko.SSHClient()
-        c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        c.connect(**_slave_sftp_creds())
-        sftp = c.open_sftp()
+    half-written index file.
+
+    E1 fix 2026-05-15: serialize via _sftp_lock + refetch the LATEST
+    index inside the lock instead of using the captured snapshot.
+    Two simultaneous uploads no longer can clobber each other's entry
+    in the remote sounds_index.json.
+    """
+    with _sftp_lock:
+        # Refetch fresh index — captured `index` arg may be stale if
+        # another upload has landed in the meantime.
         try:
-            remote_sounds = _SLAVE_SOUNDS
-            _sftp_atomic_put(sftp, f'{remote_sounds}/{stem}.mp3', local_mp3)
-            data = json.dumps(index, indent=2, ensure_ascii=False).encode('utf-8')
-            _sftp_atomic_put(sftp, f'{remote_sounds}/sounds_index.json', data)
-        finally:
-            sftp.close()
-            c.close()
-        log.info('Audio upload: synced %s.mp3 to slave (atomic)', stem)
-    except (OSError, IOError) as e:
-        log.warning(
-            'Audio upload: SFTP sync failed — %s. File saved locally only.',
-            e,
-        )
-    except ImportError:
-        log.warning('Audio upload: paramiko not installed — file saved locally only')
+            with open(_SOUNDS_INDEX, 'rb') as f:
+                fresh_index = json.loads(f.read().decode('utf-8'))
+        except (OSError, json.JSONDecodeError):
+            fresh_index = index   # fall back to caller's snapshot
+        try:
+            import paramiko
+            c = paramiko.SSHClient()
+            c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            c.connect(**_slave_sftp_creds())
+            sftp = c.open_sftp()
+            try:
+                remote_sounds = _SLAVE_SOUNDS
+                _sftp_atomic_put(sftp, f'{remote_sounds}/{stem}.mp3', local_mp3)
+                data = json.dumps(fresh_index, indent=2, ensure_ascii=False).encode('utf-8')
+                _sftp_atomic_put(sftp, f'{remote_sounds}/sounds_index.json', data)
+                # E3 fix: tell Slave to reload its in-memory index so
+                # the new sound is immediately playable without a
+                # service restart.
+                try:
+                    if reg.uart:
+                        reg.uart.send('SIDX', 'RELOAD')
+                except Exception:
+                    pass
+            finally:
+                sftp.close()
+                c.close()
+            log.info('Audio upload: synced %s.mp3 to slave (atomic)', stem)
+        except (OSError, IOError) as e:
+            log.warning('Audio upload: SFTP sync failed — %s. File saved locally only.', e)
+        except ImportError:
+            log.warning('Audio upload: paramiko not installed — file saved locally only')
 
 
 # ── BT Speaker proxy (forwards to slave port 5001) ────────────────────────────

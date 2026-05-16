@@ -288,12 +288,21 @@ def _reload_lights_driver(backend: str) -> dict:
     return {'ok': True}
 
 
+_channels_restart_lock = threading.Lock()
+_channels_restart_pending = False
+
 def _sync_audio_channels(channels: int) -> None:
     """
     Write audio_channels to slave/config/slave.cfg locally,
     SCP it to the Slave, then restart both services (delayed to let
     the HTTP response complete first).
+
+    M2 fix 2026-05-15: gate so two concurrent /audio/channels saves
+    can't both spawn a restart thread. The second save still updates
+    the cfg, but only one restart fires within the 2s window.
+    Idempotent — the surviving restart picks up the latest disk state.
     """
+    global _channels_restart_pending
     slave_cfg_path = _SLAVE_CFG
     slave_host     = _resolve_slave_ssh_target()   # B-61: from cfg, not hardcoded
 
@@ -322,12 +331,25 @@ def _sync_audio_channels(channels: int) -> None:
     except Exception as e:
         log.warning("Failed to SCP slave.cfg: %s", e)
 
-    # Delayed restart (2s) — lets the HTTP response reach the client first
+    # M2 fix 2026-05-15: gate so concurrent saves don't spawn 2 restart
+    # threads. First save wins; second updates cfg only (the still-pending
+    # restart will pick up the latest disk state).
+    with _channels_restart_lock:
+        if _channels_restart_pending:
+            log.info("Channels restart already pending — skipping duplicate restart for %d", channels)
+            return
+        _channels_restart_pending = True
+
     def _delayed_restart():
-        time.sleep(2)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
-        time.sleep(1)
-        subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-master'], check=False)
+        global _channels_restart_pending
+        try:
+            time.sleep(2)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-slave'], check=False)
+            time.sleep(1)
+            subprocess.run(['sudo', 'systemctl', 'restart', 'astromech-master'], check=False)
+        finally:
+            with _channels_restart_lock:
+                _channels_restart_pending = False
 
     threading.Thread(target=_delayed_restart, daemon=True).start()
     log.info("Services scheduled to restart in 2s (audio_channels=%d)", channels)
@@ -721,7 +743,17 @@ def set_config():
 @settings_bp.post('/settings/audio/profile/apply')
 @require_admin
 def apply_audio_profile():
-    """Applies a saved volume profile immediately. Body: {"profile": "convention"}"""
+    """Applies a saved volume profile immediately. Body: {"profile": "convention"}
+
+    H3 fix 2026-05-15: apply the SAME cubic curve as the master volume
+    slider (_sliderToAlsa in JS). Without this, profile MAISON saved at
+    slider position 85% would push raw 85 to ALSA = different physical
+    volume than dragging the master slider to 85% (which pushes
+    cubic(85)≈42 to ALSA). Operator UX expected: 'recall the volume
+    I had when I saved the profile' — only consistent if both paths
+    use the same curve. Returns both slider position (for UI sync) and
+    the alsa value (for transparency).
+    """
     import master.registry as reg
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = data.get('profile', '').strip().lower()
@@ -729,12 +761,17 @@ def apply_audio_profile():
     if name not in _defaults:
         return jsonify({'error': 'Unknown profile — use convention, maison, or exterieur'}), 400
     cfg = _read_cfg()
-    vol = _safe_int(cfg.get('audio', f'profile_{name}', fallback=str(_defaults[name])), _defaults[name])
-    reg.audio_volume = vol
+    slider_pos = _safe_int(cfg.get('audio', f'profile_{name}', fallback=str(_defaults[name])), _defaults[name])
+    slider_pos = max(0, min(100, slider_pos))
+    # Cubic curve — matches _sliderToAlsa(v) = round(pow(v/100, 1/3) * 100)
+    alsa_val = round((slider_pos / 100) ** (1/3) * 100) if slider_pos > 0 else 0
+    reg.audio_volume = alsa_val
     if reg.uart:
-        reg.uart.send('VOL', str(vol))
-    log.info("Audio profile applied: %s → %d%%", name, vol)
-    return jsonify({'status': 'ok', 'profile': name, 'volume': vol})
+        reg.uart.send('VOL', str(alsa_val))
+    log.info("Audio profile applied: %s → slider %d%% → ALSA %d%%",
+             name, slider_pos, alsa_val)
+    return jsonify({'status': 'ok', 'profile': name,
+                    'volume': slider_pos, 'alsa': alsa_val})
 
 
 def _get_admin_password() -> str:
