@@ -389,7 +389,12 @@ def get_status():
         # slider can show '60% × 50% = 30%' effective output. Operator
         # at a show wonders 'why is the bot sluggish' — the answer is
         # the scale. Now visible directly on Drive.
-        'power_scale':       float(getattr(reg.vesc, '_speed_limit', 1.0)) if reg.vesc else 1.0,
+        # 2026-05-15 fix: read reg.vesc_power_scale (the registry-stored
+        # value), NOT reg.vesc._speed_limit which is a private VescDriver
+        # attribute that stays at the default 1.0 until manually pushed.
+        # /vesc/config exposes power_scale=0.6 but /status was showing
+        # 1.0 — divergence caught live by user testing the HW1 hint.
+        'power_scale':       float(getattr(reg, 'vesc_power_scale', 1.0)),
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
         'camera_found':      len(glob.glob('/dev/video*')) > 0,
         'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],
