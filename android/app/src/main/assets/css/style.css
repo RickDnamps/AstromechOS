@@ -4208,20 +4208,34 @@ select.input-text option { background: var(--input-option); }
   font-weight: 700;
 }
 
-/* WOW polish X1 2026-05-15: Settings nav section grouping. Visual
- * hierarchy so the 16 sub-panels feel organized vs alphabet-soup. */
+/* WOW polish X1 2026-05-15: Settings nav section dividers. Updated
+ * 2026-05-15: redesigned so they read clearly as section headers
+ * NOT clickable buttons — horizontal line + label inset on the
+ * line, much smaller text, indented & dimmed so they sit visually
+ * BEHIND the buttons. */
 .settings-nav-section-label {
-  display: block;
-  padding: 14px 14px 4px 14px;
-  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px 6px 14px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 2.5px;
   color: var(--text-dim, #666);
   text-transform: uppercase;
+  opacity: 0.55;
   pointer-events: none;
   user-select: none;
 }
-.settings-nav-section-label:first-child { padding-top: 6px; }
+.settings-nav-section-label:first-child { padding-top: 8px; }
+.settings-nav-section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right,
+    rgba(255, 255, 255, 0.12),
+    transparent);
+}
 
 /* WOW polish X5 2026-05-15 — REVERTED 2026-05-15: the 350ms
  * unconditional fade made every panel switch feel sluggish even
