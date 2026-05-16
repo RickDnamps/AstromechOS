@@ -487,6 +487,12 @@ _wifi_scan_lock = threading.Lock()
 _wifi_scan_cache = {'ts': 0.0, 'data': None}
 _WIFI_SCAN_TTL_S = 5.0
 
+# B5/E3 fix 2026-05-16: shared wlan1/wlan0 mutation lock. 2 admins
+# (web + script) hitting /settings/wifi or /settings/hotspot
+# concurrently raced on the nmcli delete+add+up cycle → NM ended in
+# inconsistent state with cfg pointing one way and NM another.
+_nm_apply_lock = threading.Lock()
+
 
 @settings_bp.get('/settings/wifi/scan')
 @require_admin
@@ -556,6 +562,16 @@ def wifi_scan():
 @require_admin
 def set_wifi():
     """Updates wlan1 credentials and attempts to connect."""
+    # B5/E3 fix 2026-05-16: serialize concurrent WiFi/hotspot mutations
+    if not _nm_apply_lock.acquire(blocking=False):
+        return jsonify({'error': 'another network operation in progress — retry in a few seconds'}), 429
+    try:
+        return _set_wifi_impl()
+    finally:
+        _nm_apply_lock.release()
+
+
+def _set_wifi_impl():
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     ssid     = data.get('ssid', '').strip()
     password = data.get('password', '').strip()
@@ -613,8 +629,37 @@ def set_wifi():
         _write_key('home_wifi', 'password', prev_pwd)
         return jsonify({'error': f'nmcli error: {err}', 'rolled_back': True}), 500
 
-    rc2, _, _ = _run(['nmcli', 'connection', 'up', INTERNET_CON])
+    rc2, _, up_err = _run(['nmcli', 'connection', 'up', INTERNET_CON])
     connected = rc2 == 0
+
+    # E9 fix 2026-05-16: if 'up' failed AND the error hints at bad
+    # credentials (vs out-of-range), roll back so a typo doesn't
+    # poison the boot-time autoconnect. NM error codes:
+    #   4 = activation timeout (could be wrong pwd OR weak signal)
+    #   stderr 'secrets were required' = definitely wrong pwd
+    # Conservative: only rollback on explicit auth signal — out-of-
+    # range packs save fine to retry later.
+    if not connected and 'secrets' in (up_err or '').lower():
+        log.warning("nmcli up wlan1 failed — credentials rejected — rolling back")
+        _write_key('home_wifi', 'ssid', prev_ssid)
+        _write_key('home_wifi', 'password', prev_pwd)
+        _run(['nmcli', 'connection', 'delete', INTERNET_CON])
+        # Re-add previous if any
+        if prev_ssid:
+            prev_cmd = ['nmcli', 'connection', 'add',
+                        'type', 'wifi', 'ifname', 'wlan1',
+                        'con-name', INTERNET_CON,
+                        'ssid', prev_ssid,
+                        'connection.autoconnect', 'yes',
+                        'connection.autoconnect-priority', '10']
+            if prev_pwd:
+                prev_cmd += ['wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', prev_pwd]
+            _run(prev_cmd)
+            _run(['nmcli', 'connection', 'up', INTERNET_CON])
+        return jsonify({
+            'error': 'wrong password — credentials rolled back to previous',
+            'rolled_back': True,
+        }), 401
 
     log.info(f"WiFi wlan1 updated: ssid={ssid}, connected={connected}")
     return jsonify({'status': 'ok', 'connected': connected,
@@ -625,6 +670,15 @@ def set_wifi():
 @require_admin
 def set_hotspot():
     """Updates hotspot credentials for wlan0 and restarts the hotspot."""
+    if not _nm_apply_lock.acquire(blocking=False):
+        return jsonify({'error': 'another network operation in progress — retry in a few seconds'}), 429
+    try:
+        return _set_hotspot_impl()
+    finally:
+        _nm_apply_lock.release()
+
+
+def _set_hotspot_impl():
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     # B7 fix 2026-05-16: don't .strip() password — WPA-PSK accepts
     # leading/trailing space. Stripping silently makes 'hunter2 ' →

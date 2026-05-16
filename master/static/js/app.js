@@ -8630,6 +8630,8 @@ async function loadSettings() {
   if (data.wifi) {
     const ssid = el('wifi-ssid');
     if (ssid) ssid.value = data.wifi.ssid || '';
+    // E13 fix 2026-05-16: cache for no-op skip in applyWifi
+    window._loadedWifiSsid = data.wifi.ssid || '';
     const status = el('wifi-status');
     if (status) {
       if (data.wifi.connected) {
@@ -8645,6 +8647,7 @@ async function loadSettings() {
   if (data.hotspot) {
     const ssid = el('hotspot-ssid');
     if (ssid) ssid.value = data.hotspot.ssid || '';
+    window._loadedHotspotSsid = data.hotspot.ssid || '';
     const status = el('hotspot-status');
     if (status) {
       status.textContent = data.hotspot.active
@@ -10084,22 +10087,44 @@ function onScanSelect(ssid) {
   if (ssid) { const f = el('wifi-ssid'); if (f) f.value = ssid; }
 }
 
+// W1/E16 fix 2026-05-16: withSaveFeedback wrapper for visual parity +
+// button disabled during in-flight (prevents double-fire). Uses
+// apiDetail to surface backend error messages.
 async function applyWifi() {
   const ssid     = (el('wifi-ssid')?.value || '').trim();
   const password = el('wifi-password')?.value || '';
+  // E4 fix 2026-05-16: validate BEFORE confirm (was showing
+  // 'Switch wlan1 to ""?' on empty SSID).
   if (!ssid) { toast('SSID required', 'error'); return; }
-  // B-92 (audit 2026-05-15): confirm before the NM delete+add cycle.
-  // The backend deletes the existing wlan1 connection, then recreates
-  // it — wlan1 drops for a few seconds even on a name typo. Confirm
-  // step mirrors what applyHotspot already does (and tasks like
-  // network rename should have warning UX).
-  if (!confirm(`Switch wlan1 to "${ssid}"?\n\nThe current wlan1 connection will be dropped during reconnect.`)) return;
-  toast('Connecting...', 'info');
-  const data = await api('/settings/wifi', 'POST', { ssid, password });
-  if (!data)       { toast('Network error', 'error'); return; }
-  if (data.error)  { toast(data.error, 'error'); return; }
-  toast(data.message || (data.connected ? 'wlan1 connected' : 'Config saved'), data.connected ? 'ok' : 'warn');
-  await loadSettings();
+  // E13 fix 2026-05-16: no-op short-circuit if same SSID + blank pwd
+  // (don't drop wlan1 for a redundant click).
+  const loadedSsid = window._loadedWifiSsid || '';
+  if (ssid === loadedSsid && !password) {
+    toast('No changes — skipping wlan1 cycle', 'info');
+    return;
+  }
+  if (!confirm(`Switch wlan1 to "${ssid}"?\n\nThe current wlan1 connection will be dropped during reconnect. If your browser is on wlan1, you'll lose the page — reconnect via the hotspot (192.168.4.1) to verify.`)) return;
+  const btn = document.querySelector('#spanel-network button[onclick*="applyWifi"]');
+  const run = async () => {
+    const res = await apiDetail('/settings/wifi', 'POST', { ssid, password });
+    if (!res.ok) {
+      // B6 fix 2026-05-16: explicit guidance when wlan1 dropped the
+      // request itself (network error after disconnect).
+      if (res.error === 'timeout' || res.status === 0) {
+        toast('wlan1 dropped — reconnect via hotspot (192.168.4.1) to verify status', 'warn');
+      } else {
+        toast(res.error || 'Connection failed', 'error');
+      }
+      return false;
+    }
+    const d = res.data || {};
+    toast(d.message || (d.connected ? 'wlan1 connected ✓' : 'Config saved — will connect on next boot'),
+          d.connected ? 'ok' : 'warn');
+    await loadSettings();
+    return true;
+  };
+  if (btn && typeof withSaveFeedback === 'function') withSaveFeedback(btn, run);
+  else run();
 }
 
 async function applyHotspot() {
@@ -10107,15 +10132,32 @@ async function applyHotspot() {
   const password = el('hotspot-password')?.value || '';
   if (!ssid) { toast('SSID required', 'error'); return; }
   if (password && password.length < 8) { toast('Password: minimum 8 characters', 'error'); return; }
-  if (!confirm(`Apply hotspot SSID "${ssid}"? Clients will be disconnected.`)) return;
-  toast('Applying hotspot...', 'info');
-  const data = await api('/settings/hotspot', 'POST', { ssid, password });
-  if (!data)      { toast('Network error', 'error'); return; }
-  if (data.error) { toast(data.error, 'error'); return; }
-  toast('Hotspot updated', 'ok');
-  const pw = el('hotspot-password');
-  if (pw) pw.value = '';
-  await loadSettings();
+  // E14 fix 2026-05-16: no-op short-circuit
+  const loadedHotspot = window._loadedHotspotSsid || '';
+  if (ssid === loadedHotspot && !password) {
+    toast('No changes — skipping hotspot restart', 'info');
+    return;
+  }
+  if (!confirm(`Apply hotspot SSID "${ssid}"?\n\nALL WiFi clients (including this browser if you're on the hotspot) will be disconnected for ~5s.`)) return;
+  const btn = document.querySelector('#spanel-network button[onclick*="applyHotspot"]');
+  const run = async () => {
+    const res = await apiDetail('/settings/hotspot', 'POST', { ssid, password });
+    if (!res.ok) {
+      if (res.error === 'timeout' || res.status === 0) {
+        toast('Hotspot restarting — reconnect with new credentials within 30s', 'warn');
+      } else {
+        toast(res.error || 'Hotspot update failed', 'error');
+      }
+      return false;
+    }
+    toast('Hotspot updated ✓ — clients reconnect required', 'ok');
+    const pw = el('hotspot-password');
+    if (pw) pw.value = '';
+    await loadSettings();
+    return true;
+  };
+  if (btn && typeof withSaveFeedback === 'function') withSaveFeedback(btn, run);
+  else run();
 }
 
 // B-74 (audit 2026-05-15): snapshot of last-loaded config values so
