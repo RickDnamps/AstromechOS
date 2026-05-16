@@ -2750,7 +2750,21 @@ window.addEventListener('blur', _releaseAllControlInputs);
 // ~600ms of unintended drive. Now both events release joysticks +
 // clear keys.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) _releaseAllControlInputs();
+  if (document.hidden) {
+    _releaseAllControlInputs();
+    // Audit reclass C2 2026-05-15: pause _chorMon rAF loop too —
+    // Android WebView doesn't auto-throttle rAF for hidden tabs the
+    // way desktop Chrome does. Operator minimizes browser, monitor
+    // keeps drawing dots = battery + CPU drain ("tablette chauffe").
+    if (typeof _chorMon !== 'undefined' && _chorMon.pause) _chorMon.pause();
+  } else {
+    // Resume only if back on the Choreo tab — else the monitor
+    // would restart for nothing.
+    const onChoreo = document.querySelector('.tab.active')?.dataset.tab === 'choreo';
+    if (onChoreo && typeof _chorMon !== 'undefined' && _chorMon.resume) {
+      _chorMon.resume();
+    }
+  }
 });
 
 // F-9: serialize E-STOP / RESET button so rapid clicks (or a click during
@@ -5248,20 +5262,10 @@ class ScriptEngine {
     }
     api('/choreo/play', 'POST', { name, loop }).then(d => {
       if (!d) {
-        // F-6 (audit 2026-05-15): surface play failure to the operator.
-        // Previously the rollback was silent — operator clicked Play,
-        // the running highlight flashed, then disappeared, with no
-        // hint about why. A 503 from the backend (play queue busy,
-        // VESC offline, etc.) deserves a toast so the user knows to
-        // retry rather than assume the click didn't register.
         this._running.delete(name);
         this._looping.delete(name);
         if (card) {
           card.classList.remove('running', 'looping');
-          // F-30 (audit 2026-05-15): also reset the progress bar so it
-          // doesn't keep filling toward 100% as if the sequence were
-          // playing. Without this, a failed play left a phantom
-          // progress fill animating for the next dur seconds.
           const fill = el(`seq-prog-${name}`);
           if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
         }
@@ -5269,6 +5273,29 @@ class ScriptEngine {
       } else {
         toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
         poller.poll();
+        // Audit reclass C1 (Perf L-3) 2026-05-15: the status poller
+        // runs at 2s, so a choreo shorter than 2s ends server-side
+        // but the card stays "running" for up to 2s after. Operator
+        // sees stale highlight → "did it fire?". Server's play
+        // response includes `duration` — schedule a self-clear at
+        // duration + 500ms safety so the highlight tracks the real
+        // playback end within 500ms instead of 2s. Loop mode is
+        // exempt (no fixed end). Status poll still clears for any
+        // edge case (abort, manual stop) on its own cadence.
+        if (!loop && d.duration && isFinite(d.duration) && d.duration > 0) {
+          const ms = Math.ceil(d.duration * 1000) + 500;
+          setTimeout(() => {
+            // Only clear if we still think it's the running one
+            // (avoid wiping a newer playback started in between).
+            if (this._running.has(name)) {
+              this._running.delete(name);
+              this._looping.delete(name);
+              const c = el(`seq-card-${name}`);
+              if (c) c.classList.remove('running', 'looping');
+              poller.poll();   // confirm with the server
+            }
+          }, ms);
+        }
       }
     });
   }
@@ -9533,7 +9560,13 @@ const choreoEditor = (() => {
       if (scroll) {
         const r = scroll.getBoundingClientRect();
         // Soft-delete with UNDO when dragged out of the timeline area.
-        if (e2.clientY < r.top || e2.clientY > r.bottom) {
+        // Audit reclass C4 2026-05-15: 24px grace margin so an
+        // operator overshooting by 1-5px while repositioning a
+        // block doesn't trigger an accidental delete. UNDO toast
+        // mitigates but operator still gets startled. Wider zone
+        // = clearer "I meant to throw it away" intent.
+        const GRACE = 24;
+        if (e2.clientY < r.top - GRACE || e2.clientY > r.bottom + GRACE) {
           _softDeleteWithUndo(track, idx);
           return;
         }
