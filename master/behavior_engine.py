@@ -70,10 +70,36 @@ class BehaviorEngine:
         if enabled:
             # Reset activity timer so idle doesn't fire immediately
             self._reg.last_activity = time.monotonic()
+            # E11 fix 2026-05-16: also reset _last_idle_trigger so the
+            # 30s gap is honored from THIS enable (was stale from hours-old
+            # previous activation, could allow immediate fire if combined
+            # with E2 negative idle_timeout exploit).
+            self._last_idle_trigger = time.monotonic()
             log.info("ALIVE mode ON")
         else:
             log.info("ALIVE mode OFF")
+        # B2 fix 2026-05-16: refuse to start dome auto rotation while
+        # safety chain is engaged. Stop path runs unconditionally
+        # (release ownership) so toggling OFF always stops the dome.
+        if enabled and self._is_safety_locked():
+            log.warning("set_alive(True): safety chain engaged — dome auto NOT started")
+            return
         self._sync_dome_auto(enabled)
+
+    def _is_safety_locked(self) -> bool:
+        """B1/B2 fix 2026-05-16: centralized safety gate. ALIVE motion
+        side effects (dome rotation, choreo, sounds, lights) must respect
+        E-STOP, stow, and Child Lock — same invariant as motion_bp /
+        servo_bp. CLAUDE.md 'Safety chain invariant'."""
+        if getattr(self._reg, 'estop_active', False):
+            return True
+        if getattr(self._reg, 'stow_in_progress', False):
+            return True
+        # lock_mode==2 = Child Lock — blocks motion-class behaviors
+        # (sounds and lights are operator-level, see ALIVE gate below)
+        if getattr(self._reg, 'lock_mode', 0) == 2:
+            return True
+        return False
 
     # ------------------------------------------------------------------
     # Background loop
@@ -159,10 +185,31 @@ class BehaviorEngine:
         if not alive:
             return False
 
+        # B1 fix 2026-05-16: skip if E-STOP / stow_in_progress engaged.
+        # Was: only _trigger_choreo was gated via safe_play. Audio + lights
+        # paths fired UART commands during declared emergency. Per
+        # CLAUDE.md safety chain invariant.
+        if self._is_safety_locked():
+            return False
+
+        # B8/E5/E19 fix 2026-05-16: at boot reg.last_activity is 0.0 →
+        # since_activity = now - 0 = huge → fired idle within 30s of boot
+        # regardless of idle_timeout_min. Treat 0.0 as 'never touched' →
+        # bootstrap last_activity here so the first full timeout window
+        # is honored.
+        if self._reg.last_activity <= 0:
+            self._reg.last_activity = now
+            return False
+
         if self._reg.choreo.is_playing():
             return False
 
-        idle_timeout_s = self._cfg.getfloat('behavior', 'idle_timeout_min', fallback=10.0) * 60.0
+        # E2 fix 2026-05-16: clamp idle_timeout AT READ SITE. Hand-edited
+        # local.cfg with idle_timeout_min=0 or negative used to make the
+        # timeout 0s → engine fired every 30s indefinitely (only blocked
+        # by _MIN_IDLE_GAP_S). Minimum 1 minute.
+        raw_timeout = self._cfg.getfloat('behavior', 'idle_timeout_min', fallback=10.0)
+        idle_timeout_s = max(60.0, raw_timeout * 60.0)
         since_activity = now - self._reg.last_activity
         if since_activity < idle_timeout_s:
             return False
@@ -268,14 +315,28 @@ class BehaviorEngine:
     # ------------------------------------------------------------------
 
     def _sync_dome_auto(self, alive_on: bool) -> None:
-        """Enable/disable dome auto rotation when ALIVE is toggled."""
+        """Enable/disable dome auto rotation when ALIVE is toggled.
+
+        B4 fix 2026-05-16: STOP path always runs unconditionally — we
+        need to release dome ownership regardless of the current cfg
+        flag. Previously: operator enables ALIVE with dome_auto=true →
+        dome rotating. Operator edits dome_auto=false (no set_alive
+        call). Operator clicks ALIVE OFF → _sync_dome_auto(False) early-
+        returns because cfg flag is false → dome KEEPS rotating forever.
+        Now: stop path bypasses the gate; only START honors the flag."""
         try:
+            if not alive_on:
+                # Always release dome ownership when ALIVE going OFF.
+                if self._reg.dome:
+                    self._reg.dome.set_random(False)
+                    log.debug("Dome auto → False (ALIVE off, unconditional stop)")
+                return
             dome_auto = self._cfg.getboolean('behavior', 'dome_auto_on_alive', fallback=True)
             if not dome_auto:
                 return
             if self._reg.dome:
-                self._reg.dome.set_random(alive_on)
-                log.debug("Dome auto → %s (ALIVE=%s)", alive_on, alive_on)
+                self._reg.dome.set_random(True)
+                log.debug("Dome auto → True (ALIVE on)")
         except Exception:
             log.exception("Dome auto sync failed")
 

@@ -137,6 +137,19 @@ def _rewrite_behavior_choreo(transform) -> int:
             write_cfg_atomic(parser, _CFG_PATH)
             # Invalidate the mtime cache so the next read picks up the change
             _BEHAVIOR_CFG_CACHE['mtime'] = 0.0
+            # B7 fix 2026-05-16: ALSO refresh the BehaviorEngine's
+            # private self._cfg snapshot. Previously the engine kept
+            # reading stale old_target from its in-memory parser; on
+            # next idle trigger, os.path.isfile() failed → skipped
+            # silently. Now in sync.
+            try:
+                import master.registry as _r
+                if getattr(_r, 'behavior_engine', None) is not None:
+                    fresh = configparser.ConfigParser()
+                    fresh.read(_CFG_PATH)
+                    _r.behavior_engine._cfg = fresh
+            except Exception:
+                _log.exception("behavior_bp cascade: failed to refresh engine cfg snapshot")
             _log.info("behavior_bp cascade: %d values rewritten", changed)
     return changed
 
@@ -305,9 +318,36 @@ def save_config():
             _set('idle_choreo_list', ','.join(items))
         if 'dome_auto_on_alive'  in data: _set('dome_auto_on_alive',  'true' if data['dome_auto_on_alive'] else 'false')
 
+        # E22 fix 2026-05-16: refuse dome_auto + idle_mode=choreo combo
+        # backend-side too (frontend disables the checkbox but SSH/curl
+        # bypasses). When choreo mode owns dome via tracks, ALIVE's
+        # random rotation would race the choreo's dome commands →
+        # motor jitter.
+        final_mode = parser.get('behavior', 'idle_mode', fallback='choreo')
+        final_dome_auto = parser.getboolean('behavior', 'dome_auto_on_alive', fallback=True)
+        if final_mode == 'choreo' and final_dome_auto:
+            return jsonify({
+                'ok': False,
+                'error': 'dome_auto_on_alive cannot be true when idle_mode is choreo (choreos may own dome)',
+            }), 400
+
+        # E12 fix 2026-05-16: if cascade or save leaves idle_choreo_list
+        # empty AND idle_mode is choreo, the engine would log spam every
+        # 30s ('idle_choreo_list is empty'). Demote to 'sounds' so the
+        # operator gets predictable behavior instead of silent failure.
+        if final_mode == 'choreo':
+            final_list = parser.get('behavior', 'idle_choreo_list', fallback='').strip()
+            if not final_list:
+                parser.set('behavior', 'idle_mode', 'sounds')
+                log.warning("save_config: idle_mode=choreo with empty list — demoted to 'sounds'")
+
         try:
             cfg_path = os.path.normpath(_CFG_PATH)
             write_cfg_atomic(parser, cfg_path)
+            # E4 fix 2026-05-16: invalidate the GET cache so /behavior/
+            # status reflects the save immediately, regardless of
+            # filesystem mtime granularity.
+            _BEHAVIOR_CFG_CACHE['mtime'] = 0.0
             # B-236 / B-237 (remaining tabs audit 2026-05-15): snapshot-
             # on-write. Mutating the engine's existing parser via
             # `.read(path)` while _tick reads from it could see torn
