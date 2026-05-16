@@ -5606,6 +5606,27 @@ class ScriptEngine {
       card.classList.toggle('looping', loop);
       this._startProgress(card, name);
     }
+    // 2026-05-15: optimistic joystick lock — apply visual immediately
+    // on Play click using the uses_propulsion/uses_dome flags from
+    // /choreo/list. Operator was experiencing 0-2s lag between click
+    // and lock visual (waiting for /status poll). The server-side
+    // lock kicks in as soon as the player starts; this aligns the
+    // VISUAL with the actual state. StatusPoller's later sync will
+    // correct any mismatch (e.g. if play was rejected).
+    const meta = this._scripts.find(s => s.name === name);
+    if (meta) {
+      if (meta.uses_propulsion) {
+        document.body.classList.add('choreo-prop-locked', 'choreo-locked');
+      }
+      if (meta.uses_dome) {
+        document.body.classList.add('choreo-dome-locked', 'choreo-locked');
+      }
+      if (meta.uses_propulsion || meta.uses_dome) {
+        const nm = (name || '').toUpperCase();
+        document.documentElement.style.setProperty('--choreo-name',
+          `"🎬 ${nm.replace(/"/g, '\\"')}"`);
+      }
+    }
     api('/choreo/play', 'POST', { name, loop }).then(d => {
       if (!d) {
         this._running.delete(name);
@@ -5614,6 +5635,13 @@ class ScriptEngine {
           card.classList.remove('running', 'looping');
           const fill = el(`seq-prog-${name}`);
           if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
+        }
+        // 2026-05-15: roll back the optimistic lock if play was rejected.
+        // StatusPoller will also fix it within 2s but instant rollback
+        // feels cleaner.
+        if (meta && (meta.uses_propulsion || meta.uses_dome)) {
+          document.body.classList.remove('choreo-prop-locked', 'choreo-dome-locked', 'choreo-locked');
+          document.documentElement.style.removeProperty('--choreo-name');
         }
         toast(`Failed to start ${name.toUpperCase()} — see logs`, 'error');
       } else {
@@ -11572,16 +11600,32 @@ const choreoEditor = (() => {
           await api('/choreo/save', 'POST', { chor: preview });
           playName = '__preview__';
         }
+        // 2026-05-15: optimistic joystick lock — apply visual immediately
+        // before the API roundtrip so operator doesn't experience the
+        // 0-2s poll lag. The editor has the live _chor in memory so we
+        // can read the track lengths directly.
+        const usesProp = !!(_chor.tracks?.propulsion?.length);
+        const usesDome = !!(_chor.tracks?.dome?.length);
+        if (usesProp) document.body.classList.add('choreo-prop-locked', 'choreo-locked');
+        if (usesDome) document.body.classList.add('choreo-dome-locked', 'choreo-locked');
+        if (usesProp || usesDome) {
+          const nm = (_chor.meta.name || '').toUpperCase();
+          document.documentElement.style.setProperty('--choreo-name',
+            `"🎬 ${nm.replace(/"/g, '\\"')}"`);
+        }
         const result = await api('/choreo/play', 'POST', { name: playName });
-        if (result) {
+        if (!result) {
+          // Roll back optimistic lock if play rejected.
+          if (usesProp || usesDome) {
+            document.body.classList.remove('choreo-prop-locked', 'choreo-dome-locked', 'choreo-locked');
+            document.documentElement.style.removeProperty('--choreo-name');
+          }
+        } else {
           if (playName === '__preview__' && isAdmin) {
             toast(`Preview playing — press Save to keep this choreography`, 'warn');
           } else {
             toast(`Playing: ${_chor.meta.name}`, 'ok');
           }
-          // WOW polish L3 2026-05-15: PLAY button playing-state visual.
-          // Operator can see at a glance that the editor's loaded choreo
-          // is actively playing on the robot. Cleared by _stopPolling.
           const pb = el('chor-btn-play');
           if (pb) { pb.classList.add('chor-playing'); pb.textContent = '▶ PLAYING…'; }
           _startPolling();

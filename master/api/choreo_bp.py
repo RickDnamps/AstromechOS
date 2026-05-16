@@ -309,16 +309,25 @@ def _build_list_rows() -> list:
         def _count(track_key):
             t = _tracks.get(track_key, [])
             return len(t) if isinstance(t, list) else 0
+        # WOW polish 2026-05-15: pre-compute lock flags so the frontend
+        # can apply joystick lock VISUAL optimistically on Play click
+        # (no waiting for the next /status poll). User-reported latency
+        # between clicking a choreo that uses propulsion and seeing the
+        # joystick lock — bridged by these per-row hints.
+        _uses_prop = _count('propulsion') > 0
+        _uses_dome = _count('dome') > 0
         rows.append({
-            'name':         name,
-            'label':        meta.get('label', '') or '',
-            'category':     meta.get('category', '') or _SYSTEM_CATEGORY,
-            'emoji':        meta.get('emoji', '') or _auto_emoji(name),
-            'duration':     meta.get('duration', 0),
-            'audio_count':  _count('audio'),
-            'dome_count':   _count('dome'),
-            'body_count':   _count('body'),
-            'lights_count': _count('lights'),
+            'name':            name,
+            'label':           meta.get('label', '') or '',
+            'category':        meta.get('category', '') or _SYSTEM_CATEGORY,
+            'emoji':           meta.get('emoji', '') or _auto_emoji(name),
+            'duration':        meta.get('duration', 0),
+            'audio_count':     _count('audio'),
+            'dome_count':      _count('dome'),
+            'body_count':      _count('body'),
+            'lights_count':    _count('lights'),
+            'uses_propulsion': _uses_prop,
+            'uses_dome':       _uses_dome,
         })
     return rows, new_mtimes
 
