@@ -1647,11 +1647,15 @@
             <div class="form-group">
               <label>Available networks</label>
               <div class="row">
-                <select id="wifi-scan-list" class="input-text" onchange="onScanSelect(this.value)">
+                <!-- Hidden select for form state (kept for compat) -->
+                <select id="wifi-scan-list" class="input-text" onchange="onScanSelect(this.value)" style="display:none">
                   <option value="">— Click Scan —</option>
                 </select>
-                <button class="btn" id="btn-scan" onclick="scanWifi()">SCAN</button>
+                <button class="btn" id="btn-scan" onclick="scanWifi()" style="flex:0 0 auto">SCAN</button>
               </div>
+              <!-- WOW polish I5 2026-05-15: custom scan results list with
+                   SVG signal bars + lock icons. Populated by scanWifi(). -->
+              <div id="wifi-scan-card-list" class="wifi-scan-card-list"></div>
             </div>
             <div class="form-group">
               <label>SSID</label>
@@ -1991,11 +1995,25 @@
           </div>
           <div class="settings-row">
             <label class="settings-label">New password</label>
-            <input type="password" id="admin-pwd-new" class="settings-input" placeholder="New password (min 4 chars)">
+            <input type="password" id="admin-pwd-new" class="settings-input"
+                   placeholder="New password (min 4 chars)"
+                   oninput="updatePwdStrength()"
+                   onkeydown="checkCapsLock(event, 'admin-pwd-caps-new')">
+            <!-- WOW polish I7 2026-05-15: live strength meter -->
+            <div class="pwd-strength-meter" id="admin-pwd-strength">
+              <div class="pwd-strength-bar" id="admin-pwd-strength-bar"></div>
+              <span class="pwd-strength-label" id="admin-pwd-strength-label">enter a password</span>
+            </div>
+            <div id="admin-pwd-caps-new" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
           </div>
           <div class="settings-row">
             <label class="settings-label">Confirm</label>
-            <input type="password" id="admin-pwd-confirm" class="settings-input" placeholder="Confirm new password">
+            <input type="password" id="admin-pwd-confirm" class="settings-input"
+                   placeholder="Confirm new password"
+                   oninput="updatePwdMatch()"
+                   onkeydown="checkCapsLock(event, 'admin-pwd-caps-confirm')">
+            <div id="admin-pwd-match" class="pwd-match-indicator"></div>
+            <div id="admin-pwd-caps-confirm" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
           </div>
           <button class="btn btn-primary" onclick="adminChangePassword()">CHANGE PASSWORD</button>
           <div class="settings-status" id="admin-pwd-status"></div>

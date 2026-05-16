@@ -1260,7 +1260,16 @@ function switchSettingsPanel(panelId) {
   const btn   = document.querySelector(`.settings-nav-item[data-panel="${panelId}"]`);
   const panel = el(`spanel-${panelId}`);
   if (btn)   btn.classList.add('active');
-  if (panel) panel.classList.add('active');
+  if (panel) {
+    panel.classList.add('active');
+    // WOW polish X5 2026-05-15: brief loading skeleton on panels that
+    // lazy-fetch data on open. Removed automatically on next paint
+    // after the load() call below (load is async; UI re-renders).
+    if (['network','servos','arms','behavior','audio','diagnostics','shortcuts','deploy'].includes(panelId)) {
+      panel.classList.add('panel-loading');
+      setTimeout(() => panel.classList.remove('panel-loading'), 350);
+    }
+  }
 
   // VESC fast poll only while VESC panel is visible
   if (panelId === 'vesc') _startVescTabPoll();
@@ -1289,6 +1298,58 @@ function switchSettingsPanel(panelId) {
       b.classList.toggle('active', parseInt(b.dataset.mode) === (lockMgr._mode ?? 0));
     });
   }
+}
+
+// WOW polish I7 2026-05-15: admin password strength meter + Caps Lock
+// warning. Operator setting a weak password gets immediate visual
+// feedback before submitting. Caps Lock detection prevents the classic
+// "I typed the right password but Caps was on" admin-lockout.
+function updatePwdStrength() {
+  const inp   = el('admin-pwd-new');
+  const bar   = el('admin-pwd-strength-bar');
+  const label = el('admin-pwd-strength-label');
+  if (!inp || !bar || !label) return;
+  const v = inp.value || '';
+  let score = 0;
+  if (v.length >= 4)  score++;
+  if (v.length >= 8)  score++;
+  if (v.length >= 12) score++;
+  if (/[a-z]/.test(v) && /[A-Z]/.test(v)) score++;
+  if (/[0-9]/.test(v)) score++;
+  if (/[^a-zA-Z0-9]/.test(v)) score++;
+  const tiers = [
+    { pct: 0,   label: 'too short',  color: 'var(--text-dim)' },
+    { pct: 15,  label: 'very weak',  color: 'var(--red, #ff2244)' },
+    { pct: 30,  label: 'weak',       color: 'var(--red, #ff2244)' },
+    { pct: 50,  label: 'fair',       color: 'var(--amber, #ffaa44)' },
+    { pct: 70,  label: 'good',       color: 'var(--amber, #ffaa44)' },
+    { pct: 85,  label: 'strong',     color: 'var(--green, #00cc66)' },
+    { pct: 100, label: 'very strong', color: 'var(--green, #00cc66)' },
+  ];
+  const t = tiers[Math.min(score, tiers.length - 1)];
+  bar.style.width = t.pct + '%';
+  bar.style.background = t.color;
+  label.textContent = v ? t.label : 'enter a password';
+  label.style.color = t.color;
+}
+function updatePwdMatch() {
+  const a = el('admin-pwd-new');
+  const b = el('admin-pwd-confirm');
+  const ind = el('admin-pwd-match');
+  if (!a || !b || !ind) return;
+  if (!b.value) { ind.textContent = ''; ind.className = 'pwd-match-indicator'; return; }
+  if (a.value === b.value) {
+    ind.textContent = '✓ passwords match';
+    ind.className = 'pwd-match-indicator ok';
+  } else {
+    ind.textContent = '✗ passwords do not match';
+    ind.className = 'pwd-match-indicator error';
+  }
+}
+function checkCapsLock(ev, indicatorId) {
+  const ind = el(indicatorId);
+  if (!ind || !ev.getModifierState) return;
+  ind.classList.toggle('hidden', !ev.getModifierState('CapsLock'));
 }
 
 // WOW polish I1 2026-05-15: load + render the current commit info
@@ -3467,16 +3528,24 @@ class ServoPanel {
 
   open(name) {
     const label = el(`sc-label-${name}`)?.value || name;
+    // WOW polish H2 2026-05-15: animate the fill bar over the actual
+    // slew duration instead of jumping to 100% instantly. The UI used
+    // to lie about state during the (10-speed)*3ms × steps slew. Now
+    // the fill animates in parallel with the physical motion.
+    const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
+    const cur   = this._state[name] === 'open' ? 100 : 0;
     api(`${this._apiPrefix}/open`, 'POST', { name }).then(d => {
-      if (d) { toast(`${label}: OPEN`, 'ok'); this._setFill(name, 100); }
+      if (d) { toast(`${label}: OPEN`, 'ok'); this._animateFill(name, cur, 100, speed); }
     });
     this._state[name] = 'open';
   }
 
   close(name) {
     const label = el(`sc-label-${name}`)?.value || name;
+    const speed = parseInt(el(`sc-speed-${name}`)?.value) || 10;
+    const cur   = this._state[name] === 'open' ? 100 : 0;
     api(`${this._apiPrefix}/close`, 'POST', { name }).then(d => {
-      if (d) { toast(`${label}: CLOSE`, 'ok'); this._setFill(name, 0); }
+      if (d) { toast(`${label}: CLOSE`, 'ok'); this._animateFill(name, cur, 0, speed); }
     });
     this._state[name] = 'close';
   }
@@ -3507,6 +3576,20 @@ class ServoPanel {
   _setFill(name, pct) {
     const f = el(`servo-fill-${name}`);
     if (f) f.style.width = pct + '%';
+  }
+
+  // WOW polish H2 2026-05-15: animate fill matching physical slew.
+  // Backend formula: step=2°, delay=(10-speed)*3ms per step.
+  // 90° travel × speed=3 ≈ 945ms; × speed=10 ≈ ~135ms.
+  _animateFill(name, from, to, speed) {
+    const f = el(`servo-fill-${name}`);
+    if (!f) return;
+    const stepCount = Math.max(1, Math.abs(45));   // ~90°/2°
+    const perStep   = Math.max(1, (10 - Math.max(1, Math.min(10, speed))) * 3);
+    const totalMs   = stepCount * perStep;
+    f.style.transition = `width ${totalMs}ms linear`;
+    f.style.width = to + '%';
+    setTimeout(() => { if (f) f.style.transition = ''; }, totalMs + 50);
   }
 }
 
@@ -6406,10 +6489,25 @@ document.addEventListener('click', (e) => {
 // ================================================================
 const diagPanel = {
   _filter: 'ALL',
+  _autoTimer: null,
 
   load() {
     this.loadLogs();
     this.loadStats();
+    // WOW polish I4 2026-05-15: auto-refresh stats every 5s while
+    // diagnostics panel is visible. Old behavior required manual
+    // REFRESH click — defeats the purpose of a diagnostics tab where
+    // operator is watching live values.
+    if (this._autoTimer) clearInterval(this._autoTimer);
+    this._autoTimer = setInterval(() => {
+      const panel = el('spanel-diagnostics');
+      if (!panel || !panel.classList.contains('active')) {
+        clearInterval(this._autoTimer);
+        this._autoTimer = null;
+        return;
+      }
+      this.loadStats();
+    }, 5000);
   },
 
   setFilter(f) {
@@ -7954,25 +8052,73 @@ const armsConfig = {
 
 async function scanWifi() {
   const btn = el('btn-scan');
-  if (btn) { btn.textContent = 'SCANNING...'; btn.disabled = true; }
+  if (btn) {
+    btn.textContent = 'SCANNING…';
+    btn.disabled = true;
+    btn.classList.add('bt-scanning');   // re-use the pulse animation
+  }
   const data = await api('/settings/wifi/scan');
-  if (btn) { btn.textContent = 'SCAN'; btn.disabled = false; }
+  if (btn) {
+    btn.textContent = 'SCAN';
+    btn.disabled = false;
+    btn.classList.remove('bt-scanning');
+  }
 
-  const sel = el('wifi-scan-list');
+  // WOW polish I5 2026-05-15: render results as a custom card list
+  // instead of <select> so we can show actual SVG signal bars + lock
+  // icons. <option> can't be styled with SVG. The hidden select stays
+  // for fallback compatibility (form value tracking).
+  const sel  = el('wifi-scan-list');
+  const list = el('wifi-scan-card-list');
   if (!sel) return;
 
   if (!data || !data.networks || data.networks.length === 0) {
     sel.innerHTML = '<option value="">No networks found</option>';
+    if (list) list.replaceChildren();
     toast('No networks detected on wlan1', 'warn');
     return;
   }
+  // Sort by signal desc
+  const nets = [...data.networks].sort((a, b) => (b.signal || 0) - (a.signal || 0));
 
+  // Hidden select for form state
   sel.innerHTML = '<option value="">— Select network —</option>' +
-    data.networks.map(n => {
-      const bars = n.signal >= 75 ? '++++ ' : n.signal >= 50 ? '+++  ' : n.signal >= 25 ? '++   ' : '+    ';
-      const sec  = n.security ? ' [WPA]' : '';
-      return `<option value="${escapeHtml(n.ssid)}">${bars}${escapeHtml(n.ssid)}${sec} (${n.signal}%)</option>`;
-    }).join('');
+    nets.map(n => `<option value="${escapeHtml(n.ssid)}">${escapeHtml(n.ssid)}</option>`).join('');
+
+  // Visible card list with SVG bars + lock icon
+  if (list) {
+    list.replaceChildren();
+    nets.forEach(n => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'wifi-scan-card';
+      row.dataset.ssid = n.ssid;
+      row.addEventListener('click', () => {
+        sel.value = n.ssid;
+        onScanSelect(n.ssid);
+        list.querySelectorAll('.wifi-scan-card').forEach(c => c.classList.remove('selected'));
+        row.classList.add('selected');
+      });
+      // Signal bars (1-4 lit based on %)
+      const bars = document.createElement('span');
+      bars.className = 'signal-bars';
+      const lit = n.signal >= 75 ? 4 : n.signal >= 50 ? 3 : n.signal >= 25 ? 2 : 1;
+      const cls = n.signal >= 50 ? '' : n.signal >= 25 ? 'weak' : 'bad';
+      for (let i = 1; i <= 4; i++) {
+        const b = document.createElement('span');
+        b.className = `signal-bar signal-bar-${i} ${i <= lit ? 'lit ' + cls : ''}`;
+        bars.appendChild(b);
+      }
+      const ssidEl = document.createElement('span');
+      ssidEl.className = 'wifi-scan-ssid';
+      ssidEl.textContent = n.ssid;
+      const meta = document.createElement('span');
+      meta.className = 'wifi-scan-meta';
+      meta.textContent = `${n.signal}%${n.security ? ' · 🔒' : ''}`;
+      row.append(bars, ssidEl, meta);
+      list.appendChild(row);
+    });
+  }
 }
 
 function onScanSelect(ssid) {
