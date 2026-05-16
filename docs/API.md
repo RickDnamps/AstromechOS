@@ -27,12 +27,17 @@ All POST endpoints accept and return `application/json`.
 
 ## Audio
 
-| Method | Path | Body |
+| Method | Path | Body / Notes |
 |--------|------|------|
-| POST | `/audio/play` | `{"sound":"Happy001"}` |
-| POST | `/audio/random` | `{"category":"happy"}` |
-| POST | `/audio/stop` | — |
-| POST | `/audio/volume` | `{"volume":79}` |
+| POST | `/audio/play` | `{"sound":"Happy001"}` — LAN-open |
+| POST | `/audio/random` | `{"category":"happy"}` — LAN-open, 409 if category empty |
+| POST | `/audio/stop` | LAN-open |
+| POST | `/audio/volume` | `{"volume":79}` — LAN-open (2026-05-15 fix: was admin-gated, but volume is a basic operator control like play) |
+| POST | `/audio/upload` | admin · multipart MP3 file · 12MB per-file cap · rejects <1KB · sanitizes filename · auto-resolves name collisions · SFTP-syncs to Slave + sends `SIDX:RELOAD` UART |
+| DELETE | `/audio/sound/<name>` | admin · removes from sounds_index.json + local + remote (SFTP) · cascades `play_sound` shortcuts to action='none' · NOT cascaded into choreo audio tracks (intentional: re-upload same name restores) |
+| GET | `/audio/index` | `{categories: {cat_name: [sound1, sound2, …]}}` — single source for both category names and per-category sound counts |
+| GET | `/audio/categories` | DEPRECATED — derive counts from `/audio/index` instead (saves 1 round-trip per refresh) |
+| POST | `/settings/audio/profile/apply` | admin · `{"profile":"convention\|maison\|exterieur"}` — applies the cubic-curve transform `_sliderToAlsa` so saved profile matches master slider physical volume (2026-05-15 fix: was raw, profiles sounded different from slider position they were saved at) |
 
 ---
 
@@ -123,8 +128,8 @@ All POST endpoints accept and return `application/json`.
 | POST | `/choreo/play` | `{"name":"foo","loop":true}` |
 | POST | `/choreo/stop` | — |
 | GET | `/choreo/status` | `{running, name, progress, loop, abort_reason}` |
-| GET | `/choreo/categories` | `[{id, label, emoji, order}, …]` |
-| POST | `/choreo/categories` | Create / update / reorder / delete categories |
+| GET | `/choreo/categories` | `[{id, label, emoji, order}, …]` — also returns `X-Categories-Version` header (mtime as float) used by reorder POSTs as `If-Match` for optimistic concurrency |
+| POST | `/choreo/categories` | Create / update / reorder / delete categories. Supports optional `If-Match` header on `reorder` action — server returns 409 'version conflict' if it doesn't match current mtime (prevents 2 admins silently overwriting each other's drag). Backwards-compat: header is optional, legacy clients without it pass through. |
 | POST | `/choreo/category` | `{"name":"foo.chor","category":"emotion"}` |
 | POST | `/choreo/emoji` | `{"name":"foo.chor","emoji":"🎭"}` |
 | POST | `/choreo/label` | `{"name":"foo.chor","label":"My Label"}` |
