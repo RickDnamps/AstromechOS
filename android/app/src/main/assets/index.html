@@ -2074,30 +2074,20 @@
             <b>Slave servo / motor HAT</b> change → Slave service auto-restarts (~5s).
           </p>
           <div class="settings-row admin-only">
-            <label class="settings-label">
-              Master servo HAT addresses (I2C)
-              <!-- W6 fix 2026-05-16: REBOOT badge — match Settings pattern -->
-              <span class="badge badge-reboot" title="Changing this requires a Master reboot (~30s)">REBOOT</span>
-            </label>
+            <label class="settings-label">Master servo HAT addresses (I2C)</label>
             <input type="text" id="master-hats-input" class="settings-input" placeholder="0x40, 0x42, ..." maxlength="60"
                    oninput="validateHatField('master-hats-input')">
             <!-- W1+W2 fix 2026-05-16: HAT-health live status + servo count preview -->
             <div class="hat-row-meta" id="master-hats-meta"></div>
           </div>
           <div class="settings-row admin-only">
-            <label class="settings-label">
-              Slave servo HAT addresses (I2C)
-              <span class="badge badge-live" title="Slave service auto-restarts (~5s)">LIVE</span>
-            </label>
+            <label class="settings-label">Slave servo HAT addresses (I2C)</label>
             <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41, 0x42, ..." maxlength="60"
                    oninput="validateHatField('slave-hats-input')">
             <div class="hat-row-meta" id="slave-hats-meta"></div>
           </div>
           <div class="settings-row admin-only">
-            <label class="settings-label">
-              Slave Motor HAT address (I2C)
-              <span class="badge badge-live" title="Slave service auto-restarts (~5s)">LIVE</span>
-            </label>
+            <label class="settings-label">Slave Motor HAT address (I2C)</label>
             <input type="text" id="slave-motor-hat-input" class="settings-input" placeholder="0x40" maxlength="10"
                    oninput="validateHatField('slave-motor-hat-input', true)">
             <div class="hat-row-meta" id="slave-motor-hat-meta"></div>
@@ -2125,10 +2115,7 @@
         <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">UART LATENCY</h2>
           <div class="settings-row admin-only">
-            <label class="settings-label">
-              Body servo UART latency (ms)
-              <span class="badge badge-live" title="Hot-swap — takes effect at next choreo play()">HOT</span>
-            </label>
+            <label class="settings-label">Body servo UART latency (ms)</label>
             <input type="number" id="body-uart-lat-input" class="settings-input" min="0" max="200" step="1" placeholder="25">
             <span id="body-uart-lat-saved" class="hat-saved-pulse">✓ saved</span>
           </div>
