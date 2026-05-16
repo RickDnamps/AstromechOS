@@ -2750,6 +2750,29 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   flex-wrap: wrap;
   gap: 6px;
 }
+/* S12 fix 2026-05-16: phone width — pills wrapping into 3-4 rows
+ * pushes the grid below the fold. Switch to horizontal scroll +
+ * snap on narrow viewports so the operator sees the grid right
+ * after the pill row regardless of category count. */
+@media (max-width: 540px) {
+  .seq-pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .seq-pill {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+  .seq-pills::-webkit-scrollbar { height: 3px; }
+  .seq-pills::-webkit-scrollbar-thumb {
+    background: rgba(var(--blue-rgb), 0.3);
+    border-radius: 2px;
+  }
+}
 .seq-pill {
   display: flex;
   align-items: center;
@@ -4599,6 +4622,21 @@ body[data-lock-mode="2"] .drive-wrapper {
   transition: opacity 0.15s;
 }
 .status-pill:hover { opacity: 0.85; }
+
+/* L2 fix 2026-05-16: global .hidden utility. Pre-existing scoped
+ * rules (.admin-modal.hidden, .admin-pwd-error.hidden, …) covered
+ * specific cases, but seq-admin-hint + seq-operator-hint relied on
+ * a generic .hidden that didn't exist → both flickered visible for
+ * one paint frame before JS toggled them via style.display. */
+.hidden { display: none !important; }
+
+/* S9 fix 2026-05-16: empty category pill (count=0) is useful for
+ * admin (drag sequences into it) but pointless for non-admin —
+ * tapping just loads an empty grid. Disable taps for non-admin
+ * to save a confusing click. Admin keeps full access. */
+body:not(.admin-unlocked) .seq-pill.is-empty {
+  pointer-events: none;
+}
 
 /* WOW S2 fix 2026-05-16: prop/dome lock indicators on cards.
  * Top-left corner so they don't clash with last-played (top-right)

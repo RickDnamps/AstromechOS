@@ -526,6 +526,33 @@ function escapeHtml(s) {
 // API Helper
 // ================================================================
 
+// S11 fix 2026-05-16: per-robot localStorage namespacing helpers.
+// Multiple AstromechOS instances managed from the same browser
+// would otherwise share last-played markers (operator switches
+// from R2 to BB-8, sees R2's green dot on the wrong card).
+// _robotKey returns a namespaced key once the StatusPoller has
+// cached the robot name; before that, returns the legacy key
+// for backwards-compat reads.
+let _cachedRobotName = '';
+function _setCachedRobotName(name) {
+  _cachedRobotName = (name || '').trim();
+}
+function _lsKey(baseKey) {
+  if (!_cachedRobotName) return baseKey;   // fallback to legacy
+  return baseKey + ':' + _cachedRobotName;
+}
+// Read with fallback to legacy key for migration.
+function _lsGet(baseKey) {
+  try {
+    const namespaced = localStorage.getItem(_lsKey(baseKey));
+    if (namespaced !== null) return namespaced;
+    return localStorage.getItem(baseKey);   // legacy fallback
+  } catch { return null; }
+}
+function _lsSet(baseKey, value) {
+  try { localStorage.setItem(_lsKey(baseKey), value); } catch {}
+}
+
 // WOW polish 2026-05-15: universal save-button feedback helper.
 // Wrap any async save: disables the button, shows Saving…, then
 // Saved ✓ pulse, then restores. Failure path shows Failed in red,
@@ -4024,7 +4051,7 @@ class AudioBoard {
       // WOW polish 2026-05-15: highlight the last sound the operator
       // played (persisted in localStorage). Helps re-trigger quickly.
       let lastSound = null;
-      try { lastSound = localStorage.getItem('astromech-last-sound'); } catch {}
+      lastSound = _lsGet('astromech-last-sound');
       const isAdmin = adminGuard.unlocked;
       data.sounds.forEach(s => {
         const btn = document.createElement('button');
@@ -4110,7 +4137,7 @@ class AudioBoard {
       if (d && d.status === 'ok') {
         this.setPlaying(true, sound);
         // WOW polish: persist last-played for visual marker on next render.
-        try { localStorage.setItem('astromech-last-sound', sound); } catch {}
+        _lsSet('astromech-last-sound', sound);
         if (card) {
           // Clear any previous last-played markers, mark this one.
           document.querySelectorAll('.sound-card.last-played')
@@ -5650,7 +5677,7 @@ class ScriptEngine {
     // PERF-M2 fix 2026-05-16: hoist localStorage read OUT of the
     // forEach. 48 cards × sync IPC read = waste. Read once.
     let _lastPlayed = null;
-    try { _lastPlayed = localStorage.getItem('astromech-last-choreo'); } catch {}
+    _lastPlayed = _lsGet('astromech-last-choreo');
     scripts.forEach(s => {
       const isRunning = this._running.has(s.name);
       const isLooping = this._looping.has(s.name);
@@ -5688,6 +5715,11 @@ class ScriptEngine {
         const handle = document.createElement('div');
         handle.className = 'seq-card-handle';
         handle.textContent = '⠿';
+        // L3 fix 2026-05-16: clarify the handle's purpose. It's not
+        // wired to anything itself — the card body is the drag origin —
+        // but the icon advertises 'this is draggable'. Title makes the
+        // affordance explicit (was: looked like an unwired UI element).
+        handle.title = 'Drag onto a category pill to recategorize';
         card.appendChild(handle);
       }
 
@@ -5903,14 +5935,31 @@ class ScriptEngine {
       if (!pill || pill.dataset.cat === 'all') return;
       const cat = this._categories.find(c => c.id === pill.dataset.cat);
       const display = cat?.label || pill.dataset.cat;
-      api('/choreo/set-category', 'POST', { name, category: pill.dataset.cat })
+      // EDGE-L1 fix 2026-05-16: optimistic local mutation instead of
+      // full reload. Old code refetched both /choreo/list and
+      // /choreo/categories just to flip one card's category — wasted
+      // bandwidth + full grid rebuild flicker. Now: mutate the
+      // _scripts entry in-place + targeted re-render. Status poll
+      // catches divergence within 2s if the POST failed somehow.
+      const newCat = pill.dataset.cat;
+      const meta = this._scripts.find(s => s.name === name);
+      const oldCat = meta?.category;
+      if (meta) meta.category = newCat;
+      // Re-render the grid (cheap — uses cached _scripts) so the card
+      // visually moves to/from the active category view immediately.
+      this._renderPills();
+      this._renderGrid();
+      api('/choreo/set-category', 'POST', { name, category: newCat })
         .then(d => {
           if (!d) {
+            // Rollback on failure.
+            if (meta) meta.category = oldCat;
+            this._renderPills();
+            this._renderGrid();
             toast(`Failed to move to ${display} — admin re-auth may be needed`, 'error');
             return;
           }
           toast(`Moved to ${display}`, 'ok');
-          this.load();
         });
     };
 
@@ -6085,7 +6134,7 @@ class ScriptEngine {
       } else {
         toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
         // WOW polish 2026-05-15: persist last-played for the marker.
-        try { localStorage.setItem('astromech-last-choreo', name); } catch {}
+        _lsSet('astromech-last-choreo', name);
         document.querySelectorAll('.seq-card.last-played')
           .forEach(c => c.classList.remove('last-played'));
         if (card) card.classList.add('last-played');
@@ -7481,6 +7530,9 @@ class StatusPoller {
 
     // Robot name — update header and pre-fill settings input
     if (data.robot_name) {
+      // S11 fix 2026-05-16: cache for the per-robot localStorage
+      // namespacing helpers (_lsKey/_lsGet/_lsSet).
+      _setCachedRobotName(data.robot_name);
       const headerName = el('header-robot-name');
       if (headerName) headerName.textContent = data.robot_name;
       const nameInput = el('robot-name-input');
