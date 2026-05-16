@@ -969,6 +969,17 @@ def system_estop_reset():
             t.start()
         # Wait for all arm sequences before continuing — guarantees panels do
         # not start retracting until the arms they shield are fully home.
+        # 2026-05-16: max travel + per-arm sleep tracked so we can wait
+        # for Slave-side ramps to actually complete (UART is fire-and-
+        # forget; thread returns instantly after send + per-arm delay).
+        max_arm_travel = 0
+        for i in range(arms_cfg['count']):
+            for srv in (arms_cfg['servos'][i], arms_cfg['panels'][i]):
+                if not srv: continue
+                travel = abs(_panel_angle(srv, 'open', panels_cfg)
+                             - _panel_angle(srv, 'close', panels_cfg))
+                if travel > max_arm_travel:
+                    max_arm_travel = travel
         for t in arm_threads:
             t.join(timeout=10.0)
             # Audit finding Safety M-2 2026-05-15: log timeout. If a
@@ -978,13 +989,30 @@ def system_estop_reset():
             # step assumes the previous one completed).
             if t.is_alive():
                 log.warning("safe_home: arm thread %s did not finish in 10s — proceeding", t.name)
+        # Wait for Slave-side panel ramp to actually finish (the arm
+        # thread returned after sending UART, but Slave is still ramping).
+        # Each arm sends 2 SRV commands (arm + panel) processed
+        # sequentially by Slave's UART dispatch — so wait worst case
+        # 2 × ramp_time per arm.
+        if arm_threads and max_arm_travel > 0:
+            per_ramp_s = (max_arm_travel / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
+            wait_s = min(5.0, 2.0 * per_ramp_s + 0.20)
+            _time.sleep(wait_s)
+            log.info(f"Safe-home: waited {wait_s:.2f}s for arm/panel Slave ramps")
 
         # ── Step 3: remaining body servos (skip arm-managed ones) in parallel ──
         if reg.servo:
             body_threads = []
+            max_body_travel_deg = 0   # track widest angle delta for sleep below
             for name in BODY_SERVOS:
                 if name in arm_set:
                     continue
+                # Estimate expected travel — operator may have opened then
+                # E-STOPped, so worst case is full open→close span.
+                travel = abs(_panel_angle(name, 'open', panels_cfg)
+                             - _panel_angle(name, 'close', panels_cfg))
+                if travel > max_body_travel_deg:
+                    max_body_travel_deg = travel
                 def _close_body(n=name):
                     try:
                         reg.servo.close(n,
@@ -998,6 +1026,22 @@ def system_estop_reset():
                 bt.start()
             for bt in body_threads:
                 bt.join(timeout=5.0)
+            # User-reported 2026-05-16: body servos run on Slave via fire-
+            # and-forget UART — reg.servo.close() returns in ms while the
+            # actual physical ramp runs on Slave for ~1-2s. Worse: the
+            # Slave's UART dispatch thread processes SRV commands
+            # SEQUENTIALLY (per-message _move_ramp blocks). So N body
+            # servos = N × ramp_time on the Slave, not parallel.
+            # Sleep estimated worst-case time so stow_in_progress flag
+            # matches physical reality before UI sees it flip false.
+            n_body = len(body_threads)
+            if n_body > 0 and max_body_travel_deg > 0:
+                # step=2°, delay=(10-speed)*0.003 — matches Slave's ramp.
+                per_ramp_s = (max_body_travel_deg / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
+                total_s = n_body * per_ramp_s + 0.20   # margin
+                _time.sleep(min(8.0, total_s))   # cap 8s as safety
+                log.info(f"Safe-home: waited {min(8.0, total_s):.2f}s "
+                         f"for {n_body} body servos to finish slave-side ramp")
 
         # ── Step 4: dome servos in parallel ──
         # NOTE: dome_servo_driver does NOT export a module-level SERVO_MAP —
