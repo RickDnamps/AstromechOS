@@ -424,7 +424,8 @@ def system_version():
     Returns current commit SHA + subject + author date so operator
     knows what's actually deployed BEFORE clicking UPDATE."""
     import subprocess
-    repo = SCRIPTS_DIR.parent if SCRIPTS_DIR else None
+    from pathlib import Path
+    repo = Path(SCRIPTS_DIR).parent if SCRIPTS_DIR else None
     out = {'version': _read_version()}
     if repo and repo.exists():
         try:
@@ -453,7 +454,8 @@ def system_deploy_status():
     operator sees behind_count BEFORE clicking UPDATE. Cached 60s to
     avoid hammering GitHub. Returns gracefully if offline."""
     import subprocess, time as _t
-    repo = SCRIPTS_DIR.parent if SCRIPTS_DIR else None
+    from pathlib import Path
+    repo = Path(SCRIPTS_DIR).parent if SCRIPTS_DIR else None
     if not repo or not repo.exists():
         return jsonify({'error': 'repo not found'}), 503
     cache_key = '_deploy_status_cache'
