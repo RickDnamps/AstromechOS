@@ -1070,38 +1070,70 @@
           <h2 class="card-title">BT GAMEPAD — <span class="robot-name">R2-D2</span></h2>
           <!-- W4/W11 fix 2026-05-16: lock/bench mode pills visible in BT panel -->
           <div id="bt-mode-pills" class="bt-mode-pills" style="display:none"></div>
+          <!-- 2026-05-16 redesign: premium SVG icon with status LED,
+               2-line info block (status + name + MAC pill), vitals
+               grouped right (BAT bar + SIG dBm stacked). Old layout
+               was flat and the MAC was invisible on controllers that
+               don't expose evdev.uniq. -->
           <div class="bt-status-row">
-            <svg class="gamepad-icon" width="48" height="32" viewBox="0 0 48 32">
-              <rect x="4" y="8" width="40" height="18" rx="8" fill="none" stroke="currentColor" stroke-width="1.5"/>
-              <rect x="0" y="14" width="12" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
-              <rect x="36" y="14" width="12" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="1.2"/>
-              <rect x="14" y="11" width="3" height="8" rx="1" fill="currentColor" opacity="0.7"/>
-              <rect x="12" y="13" width="7" height="3" rx="1" fill="currentColor" opacity="0.7"/>
-              <circle cx="32" cy="13" r="1.5" fill="currentColor" opacity="0.7"/>
-              <circle cx="36" cy="16" r="1.5" fill="currentColor" opacity="0.7"/>
-              <circle cx="32" cy="19" r="1.5" fill="currentColor" opacity="0.7"/>
-              <circle cx="28" cy="16" r="1.5" fill="currentColor" opacity="0.7"/>
-              <circle cx="22" cy="14" r="1.5" fill="currentColor" opacity="0.5"/>
-              <circle cx="26" cy="14" r="1.5" fill="currentColor" opacity="0.5"/>
+            <svg class="gamepad-icon" width="56" height="40" viewBox="0 0 56 40" fill="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="gp-body" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="currentColor" stop-opacity="0.18"/>
+                  <stop offset="1" stop-color="currentColor" stop-opacity="0.06"/>
+                </linearGradient>
+              </defs>
+              <!-- Controller body: stylised gamepad silhouette with grips -->
+              <path d="M 14 10
+                       Q 4 10 4 22
+                       Q 4 33 13 34
+                       Q 16 34 17 30
+                       L 19 26
+                       Q 22 24 28 24
+                       Q 34 24 37 26
+                       L 39 30
+                       Q 40 34 43 34
+                       Q 52 33 52 22
+                       Q 52 10 42 10
+                       Z"
+                    fill="url(#gp-body)"
+                    stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <!-- Status LED (top center) - animates via CSS when connected -->
+              <circle class="gamepad-led" cx="28" cy="7" r="1.7" fill="currentColor" opacity="0.4"/>
+              <!-- D-pad cross (left) -->
+              <rect x="10" y="19" width="9" height="3.2" rx="1" fill="currentColor" opacity="0.9"/>
+              <rect x="12.9" y="16.1" width="3.2" height="9" rx="1" fill="currentColor" opacity="0.9"/>
+              <!-- Action buttons diamond (right) -->
+              <circle cx="40" cy="15.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <circle cx="44" cy="20.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <circle cx="40" cy="25.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <circle cx="36" cy="20.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <!-- Shoulder hint (subtle top edges of grips) -->
+              <path d="M 9 12 Q 7 11 5 13" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" stroke-linecap="round"/>
+              <path d="M 47 12 Q 49 11 51 13" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" stroke-linecap="round"/>
             </svg>
             <div class="bt-info">
               <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
               <div id="bt-device-name" class="bt-device-name">—</div>
-              <div id="bt-device-mac" class="bt-device-mac" title="Controller MAC address">—</div>
+              <div id="bt-device-mac" class="bt-device-mac" title="Controller MAC address" style="display:none">—</div>
             </div>
-            <label class="toggle-label" style="margin-left:auto" title="Enable/disable BT controller">
+            <label class="toggle-label bt-toggle" title="Enable/disable BT controller">
               <input type="checkbox" id="bt-enable-toggle" checked onchange="btController.setEnabled(this.checked)">
               <span class="toggle-switch"></span>
               ON
             </label>
-            <div class="bt-battery-wrap" style="margin-left:8px;display:flex;align-items:center;gap:6px">
-              <span style="font-size:9px;color:#4a7a9b;letter-spacing:.05em">BAT</span>
-              <div id="bt-battery-bar" class="bt-battery-bar">
-                <div id="bt-battery-fill" style="width:0%"></div>
+            <div class="bt-vitals">
+              <div class="bt-vital-row" title="Controller battery">
+                <span class="bt-vital-label">BAT</span>
+                <div id="bt-battery-bar" class="bt-battery-bar">
+                  <div id="bt-battery-fill" style="width:0%"></div>
+                </div>
+                <span id="bt-battery-pct" class="bt-battery-pct">--%</span>
               </div>
-              <span id="bt-battery-pct">--%</span>
-              <span style="font-size:9px;color:#4a7a9b;letter-spacing:.05em;margin-left:4px">SIG</span>
-              <span id="bt-rssi-val" style="font-size:10px;color:#7eb8d4;font-family:inherit">--</span>
+              <div class="bt-vital-row" title="Bluetooth signal strength (dBm)">
+                <span class="bt-vital-label">SIG</span>
+                <span id="bt-rssi-val" class="bt-rssi-val">--</span>
+              </div>
             </div>
           </div>
           <!-- 2026-05-16 redesign: dense 2-col grid for all configurable

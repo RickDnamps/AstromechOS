@@ -40,6 +40,8 @@ Persistent config: master/config/bt_config.json
 import json
 import logging
 import os
+import re
+import subprocess
 import threading
 import time
 
@@ -394,6 +396,43 @@ class BTControllerDriver:
     # Device detection
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _resolve_device_mac(dev) -> str | None:
+        """Best-effort MAC resolution for an evdev gamepad.
+
+        Order: dev.uniq (HID descriptor) → bluetoothctl Connected name
+        match. Many controllers (NVIDIA Shield, several 8BitDo models)
+        don't expose uniq via evdev, so the bluetoothctl fallback is
+        what keeps per-device profiles stable across reconnects.
+
+        Returns canonical uppercase colon-separated MAC, or None.
+        """
+        _MAC_RE = re.compile(r'([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})')
+        # Path 1: HID-advertised uniq (PS4/PS5 + most Xbox One BT firmwares)
+        uniq = (getattr(dev, 'uniq', '') or '').strip()
+        m = _MAC_RE.fullmatch(uniq) if uniq else None
+        if m:
+            return m.group(1).upper()
+        # Path 2: bluetoothctl Connected list, match by device name
+        try:
+            out = subprocess.run(
+                ['bluetoothctl', 'devices', 'Connected'],
+                capture_output=True, text=True, timeout=2
+            ).stdout or ''
+        except Exception:
+            out = ''
+        dev_name = (getattr(dev, 'name', '') or '').strip()
+        for line in out.splitlines():
+            parts = line.split(None, 2)
+            if len(parts) >= 3 and parts[0] == 'Device':
+                mac = parts[1].upper()
+                name = parts[2].strip()
+                if _MAC_RE.fullmatch(mac) and dev_name and (
+                    name == dev_name or name.startswith(dev_name[:24])
+                ):
+                    return mac
+        return None
+
     def _find_gamepad(self):
         if not EVDEV_OK:
             return None
@@ -429,10 +468,12 @@ class BTControllerDriver:
                         self._device_name = dev.name[:32]
                         self._prev_btns   = {}
                         # Custom mappings: capture active MAC for per-device
-                        # profile lookup in _handle_button. evdev's `uniq`
-                        # field carries the controller's BT MAC (uppercase
-                        # canonical form used as profile dict key).
-                        self._active_device_mac = (dev.uniq or '').upper() or None
+                        # profile lookup in _handle_button. Try evdev's uniq
+                        # first (PS4/PS5/Xbox advertise it), fall back to
+                        # bluetoothctl Connected lookup (NVIDIA Shield et al
+                        # don't expose uniq). MAC is the per-device profile
+                        # dict key — must be stable across reconnects.
+                        self._active_device_mac = self._resolve_device_mac(dev)
                     # B2 fix 2026-05-16: clear stale inactivity pause flag
                     # left over from previous session (operator powered
                     # down a paused controller — flag persisted across

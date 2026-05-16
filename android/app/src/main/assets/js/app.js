@@ -7459,23 +7459,42 @@ class BTController {
     const tog = el('bt-enable-toggle');
     if (tog) tog.checked = this._piEnabled;
 
-    // Sync nom + MAC depuis Pi si manette Pi connectée
+    // 2026-05-16 redesign: drive the new header card via is-connected
+    // class on the row (header bg accent + LED pulse + MAC pill green
+    // tint all cascade from this single toggle).
+    const row = document.querySelector('#spanel-bluetooth .bt-status-row');
+    const gpIcon = document.querySelector('#spanel-bluetooth .gamepad-icon');
     if (this._piConnected) {
+      if (row)    row.classList.add('is-connected');
+      if (gpIcon) gpIcon.classList.add('connected');
       const deviceName = el('bt-device-name');
       if (deviceName && data.bt_name && data.bt_name !== '—') deviceName.textContent = data.bt_name;
       const statusText = el('bt-status-text');
-      if (statusText) { statusText.textContent = 'CONNECTED (Pi)'; statusText.classList.add('connected'); }
-      // 2026-05-16: show MAC so operator can tell two same-model
-      // controllers apart (e.g. two NVIDIA Shields).
+      if (statusText) { statusText.textContent = 'CONNECTED via Pi'; statusText.classList.add('connected'); }
+      // Show MAC so operator can tell two same-model controllers apart
+      // (e.g. two NVIDIA Shields). Pill is hidden if backend couldn't
+      // resolve a MAC (rare — only when both evdev.uniq AND bluetoothctl
+      // fail, e.g. controller via 8BitDo USB dongle in HID mode).
       const macEl = el('bt-device-mac');
       if (macEl) {
         const mac = data.active_device_mac || '';
-        macEl.textContent = mac || '—';
+        macEl.textContent = mac || '';
         macEl.style.display = mac ? '' : 'none';
       }
     } else {
+      if (row)    row.classList.remove('is-connected');
+      if (gpIcon) gpIcon.classList.remove('connected');
+      const statusText = el('bt-status-text');
+      if (statusText) {
+        // Only reset to NOT CONNECTED if the Web Gamepad path isn't
+        // also showing something — _setUI handles its own text.
+        if (!statusText.classList.contains('inactivity-paused')) {
+          statusText.textContent = 'NOT CONNECTED';
+        }
+        statusText.classList.remove('connected');
+      }
       const macEl = el('bt-device-mac');
-      if (macEl) { macEl.textContent = '—'; macEl.style.display = 'none'; }
+      if (macEl) { macEl.textContent = ''; macEl.style.display = 'none'; }
     }
 
     // RSSI

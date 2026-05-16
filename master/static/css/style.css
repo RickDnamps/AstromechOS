@@ -3691,94 +3691,192 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   border-color: var(--blue);
 }
 
-/* BT Controller */
+/* ---------------------------------------------------------------
+   BT Controller header — 2026-05-16 refonte.
+   Layout: [icon] [info stack] [toggle] [vitals stack]
+   Grid columns auto-sized; info column flexes; vitals right-aligned.
+   --------------------------------------------------------------- */
 .bt-status-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   margin-bottom: 14px;
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.3);
+  padding: 12px 16px;
+  background:
+    linear-gradient(135deg,
+      rgba(var(--blue-rgb), 0.06) 0%,
+      rgba(0, 0, 0, 0.40) 60%,
+      rgba(0, 0, 0, 0.50) 100%);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  position: relative;
+  overflow: hidden;
+}
+/* Subtle top accent line, brightens when connected */
+.bt-status-row::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(var(--blue-rgb), 0.25) 50%,
+    transparent 100%);
+  transition: background 0.4s;
+}
+.bt-status-row.is-connected::before {
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 204, 102, 0.55) 50%,
+    transparent 100%);
 }
 
 .gamepad-icon {
   color: var(--text-dim);
   flex-shrink: 0;
-  transition: color 0.3s, filter 0.3s;
+  transition: color 0.35s ease, filter 0.35s ease, transform 0.35s ease;
 }
-
 .gamepad-icon.connected {
   color: var(--green);
-  filter: drop-shadow(0 0 6px var(--green));
+  filter: drop-shadow(0 0 10px rgba(0, 204, 102, 0.45));
+}
+.gamepad-icon .gamepad-led {
+  transition: fill 0.3s, opacity 0.3s;
+}
+.gamepad-icon.connected .gamepad-led {
+  fill: var(--green);
+  opacity: 1;
+  animation: gamepad-led-pulse 2s ease-in-out infinite;
+}
+@keyframes gamepad-led-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
-.bt-info { flex: 1; }
-
+.bt-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;          /* enable text-overflow inside grid cell */
+}
 .bt-status-text {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-dim);
-  letter-spacing: 1px;
+  letter-spacing: 1.4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  transition: color 0.3s;
 }
-
-.bt-status-text.connected { color: var(--green); }
-
+.bt-status-text.connected {
+  color: var(--green);
+  text-shadow: 0 0 8px rgba(0, 204, 102, 0.35);
+}
 .bt-device-name {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--cyan);
-  margin-top: 2px;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.95;
 }
 .bt-device-mac {
-  /* 2026-05-16 (user feedback): was font-size:9px + dim + opacity:0.7
-     → nearly invisible. Bumped to readable cyan mono, matching the
-     MAC styling in .bt-device-card-mac for visual coherence. */
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
   font-size: 10px;
   color: var(--blue, #7eb8d4);
   font-family: var(--font-data, monospace);
-  letter-spacing: 0.6px;
-  margin-top: 2px;
-  padding: 1px 6px;
-  background: rgba(var(--blue-rgb, 0, 180, 255), 0.08);
-  border-radius: 3px;
+  letter-spacing: 0.7px;
+  padding: 2px 9px 2px 7px;
+  background: rgba(var(--blue-rgb, 0, 180, 255), 0.10);
+  border: 1px solid rgba(var(--blue-rgb, 0, 180, 255), 0.22);
+  border-radius: 10px;
+  transition: background 0.3s, border-color 0.3s;
 }
 .bt-device-mac::before {
-  content: 'MAC ';
-  opacity: 0.55;
-  font-weight: 600;
+  content: '⛓';
   font-size: 9px;
-  letter-spacing: 1px;
-  margin-right: 3px;
+  opacity: 0.65;
+  letter-spacing: 0;
+}
+.bt-status-row.is-connected .bt-device-mac {
+  background: rgba(0, 204, 102, 0.08);
+  border-color: rgba(0, 204, 102, 0.25);
+  color: #7be0a3;
 }
 
-.bt-battery-wrap {
+/* ON toggle column — same row as info */
+.bt-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-direction: column;
-  flex-shrink: 0;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
 }
 
+/* Vitals stack (BAT + SIG) — right column */
+.bt-vitals {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 90px;
+}
+.bt-vital-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+}
+.bt-vital-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.10em;
+  opacity: 0.7;
+  min-width: 22px;
+  text-align: right;
+}
 .bt-battery-bar {
-  width: 30px;
+  width: 44px;
   height: 10px;
-  background: rgba(var(--blue-rgb),0.1);
+  background: rgba(var(--blue-rgb), 0.10);
   border: 1px solid var(--border);
   border-radius: 3px;
   overflow: hidden;
+  position: relative;
 }
-
+.bt-battery-bar::after {
+  content: '';
+  position: absolute;
+  top: 2px; bottom: 2px; right: -3px;
+  width: 2px;
+  background: var(--border);
+  border-radius: 0 1px 1px 0;
+}
 .bt-battery-bar div {
   height: 100%;
   background: var(--green);
-  border-radius: 2px;
+  border-radius: 2px 0 0 2px;
   transition: width 0.5s, background 0.5s;
 }
-
 .bt-battery-pct {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+.bt-rssi-val {
+  font-size: 10px;
+  color: #7eb8d4;
+  font-variant-numeric: tabular-nums;
+  min-width: 50px;
+  text-align: right;
 }
 
 .bt-mapping-table {
