@@ -4589,17 +4589,32 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--text);
-  font-family: var(--font);
-  /* WOW polish 2026-05-15: bigger font + tracking so the password
-   * dots look chunky and confident, not whisper-tiny. */
-  font-size: 22px;
-  letter-spacing: 8px;
-  padding: 14px 16px;
+  /* WOW polish 2026-05-15 (v2): chunky round password dots. The
+   * default --font is Orbitron-like which renders the disc glyph
+   * thin. Override to a font family that has a heavy round disc
+   * (Arial/system), bump font-weight to 900, add a text-shadow
+   * stroke to fatten the glyph itself. Result: big solid round
+   * dots instead of whisper-tiny pinpricks. */
+  font-family: 'Arial Black', 'Helvetica', sans-serif;
+  font-weight: 900;
+  font-size: 32px;
+  letter-spacing: 14px;
+  text-shadow: 0 0 1px currentColor, 0 0 2px currentColor;
+  padding: 18px 16px 14px 16px;
   outline: none;
   text-align: center;
   transition: border-color 0.2s;
   box-sizing: border-box;
-  line-height: 1.2;
+  line-height: 1;
+}
+/* Placeholder still uses the project font (Orbitron) at normal size
+ * so the empty input looks consistent with the rest of the UI. */
+.admin-pwd-input::placeholder {
+  font-family: var(--font);
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 2px;
+  text-shadow: none;
 }
 .admin-pwd-input:focus { border-color: var(--blue); box-shadow: 0 0 8px rgba(var(--blue-rgb),0.2); }
 .admin-pwd-error {
