@@ -594,12 +594,17 @@ def get_volume():
 
 
 @audio_bp.post('/volume')
-@require_admin
 def set_volume():
     """Sets the volume. Body: {"volume": 75}  (0-100)
     L-2: persists to local.cfg so the slider position survives a Master
     reboot. The cfg write happens after the UART push so the audible
-    change isn't blocked by FS sync latency."""
+    change isn't blocked by FS sync latency.
+
+    2026-05-15 fix: LAN-open like /audio/play|random|stop — operator
+    user-reported the Drive bottom slider 'did nothing' because they
+    weren't admin-unlocked and the @require_admin made requests 401
+    silently. Volume is a basic operator control, not a config mutation
+    that needs auth. Same trust model as the rest of /audio/*."""
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     try:
         vol = max(0, min(100, int(body.get('volume', 80))))
