@@ -1128,28 +1128,50 @@
               </select>
             </div>
 
-            <!-- Row 2: AXES (4 sub-fields in a single row) -->
+            <!-- Row 2: AXES — 2×2 grouped grid.
+                 LEFT col = DRIVE (throttle + steering — usually L stick)
+                 RIGHT col = LOOK (dome rotation + camera tilt — usually R stick) -->
             <div class="bt-field bt-field-full">
-              <label class="ctrl-label">AXES</label>
-              <div class="bt-axes-row">
-                <select id="bt-map-throttle" class="input-text input-sm" title="Throttle axis">
-                  <option value="ABS_Y">Throttle: L Stick Y</option>
-                  <option value="ABS_RY">Throttle: R Stick Y</option>
-                </select>
-                <select id="bt-map-steer" class="input-text input-sm" title="Steering axis">
-                  <option value="ABS_X">Steering: L Stick X</option>
-                  <option value="ABS_RX">Steering: R Stick X</option>
-                </select>
-                <select id="bt-map-dome" class="input-text input-sm" title="Dome rotation axis">
-                  <option value="ABS_RX">Dome: R Stick X</option>
-                  <option value="ABS_X">Dome: L Stick X</option>
-                </select>
-                <select id="bt-map-camera" class="input-text input-sm"
-                        title="Camera tilt axis — feature pending hardware install">
-                  <option value="ABS_RY">Camera: R Stick Y 🔮</option>
-                  <option value="ABS_Y">Camera: L Stick Y 🔮</option>
-                  <option value="">Camera: (none) 🔮</option>
-                </select>
+              <label class="ctrl-label">AXIS MAPPINGS
+                <span class="ctrl-hint">— stick axes per role</span>
+              </label>
+              <div class="bt-axes-grid">
+                <div class="bt-axes-group">
+                  <div class="bt-axes-group-title">🚗 DRIVE</div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Throttle</span>
+                    <select id="bt-map-throttle" class="input-text input-sm" title="Throttle axis">
+                      <option value="ABS_Y">L Stick Y</option>
+                      <option value="ABS_RY">R Stick Y</option>
+                    </select>
+                  </div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Steering</span>
+                    <select id="bt-map-steer" class="input-text input-sm" title="Steering axis">
+                      <option value="ABS_X">L Stick X</option>
+                      <option value="ABS_RX">R Stick X</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="bt-axes-group">
+                  <div class="bt-axes-group-title">👁 LOOK</div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Dome</span>
+                    <select id="bt-map-dome" class="input-text input-sm" title="Dome rotation axis">
+                      <option value="ABS_RX">R Stick X</option>
+                      <option value="ABS_X">L Stick X</option>
+                    </select>
+                  </div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Camera <span class="bt-axes-pending">🔮</span></span>
+                    <select id="bt-map-camera" class="input-text input-sm"
+                            title="Camera tilt — feature pending hardware install">
+                      <option value="ABS_RY">R Stick Y</option>
+                      <option value="ABS_Y">L Stick Y</option>
+                      <option value="">(none)</option>
+                    </select>
+                  </div>
+                </div>
               </div>
               <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.6">
                 🔮 Camera tilt = future feature (pending camera-on-servos hardware install). Mapping is saved for later.

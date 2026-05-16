@@ -2570,10 +2570,64 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 .bt-field .input-text { width: 100%; }
 .bt-field .holo-slider { width: 100%; }
 
+/* DEPRECATED 2026-05-16: kept only for any stragglers; the panel now
+   uses .bt-axes-grid below. */
 .bt-axes-row {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   gap: 6px;
+}
+
+/* Grouped 2×2 axes layout — DRIVE column + LOOK column.
+   Pro look: each group has its own subdued header + sub-rows
+   (role label + dropdown), border-left accent so the grouping
+   reads as intentional design rather than fields just dumped. */
+.bt-axes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+.bt-axes-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 8px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border-left: 2px solid rgba(var(--blue-rgb, 0, 180, 255), 0.35);
+  border-radius: 0 6px 6px 0;
+}
+.bt-axes-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--blue, #7eb8d4);
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(var(--blue-rgb, 0, 180, 255), 0.12);
+  margin-bottom: 2px;
+}
+.bt-axes-group-row {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.bt-axes-role {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.bt-axes-pending {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+@media (max-width: 640px) {
+  .bt-axes-grid { grid-template-columns: 1fr; }
 }
 
 /* Unified slider row — both DEADZONE + INACTIVITY use the same wrapper
