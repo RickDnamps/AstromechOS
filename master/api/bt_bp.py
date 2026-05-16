@@ -122,7 +122,16 @@ _VALID_BT_MAPPING_ACTIONS = {
     'throttle', 'steer', 'dome',
     'panel_dome', 'panel_body',
     'audio', 'estop', 'turbo',
+    # 'camera' = future feature (camera-on-servos tilt). 2026-05-16:
+    # accept the key in the allowlist so the operator's chosen axis
+    # persists in bt_config.json. No dispatch yet — _handle_axis ignores
+    # this key until the camera-servo hardware is installed.
+    'camera',
 }
+# Mapping keys whose VALUE is allowed to be an empty string (= 'none').
+# Camera is the only one — operator might want to leave camera tilt
+# unmapped on a controller that doesn't have a free stick.
+_BT_MAPPING_ALLOW_EMPTY = {'camera'}
 import re as _re_bt
 # Button code = evdev BTN_*, ABS_*, KEY_*, or generic alphanumeric
 # (covers 'dpad_up' style synthetic codes too). Bounded to 32 chars.
@@ -196,6 +205,11 @@ def bt_config():
                     'error': f'invalid mapping action: {act_s!r} '
                              f'(allowed: {sorted(_VALID_BT_MAPPING_ACTIONS)})',
                 }), 400
+            # Empty value allowed only for keys in _BT_MAPPING_ALLOW_EMPTY
+            # (camera = 'none' selectable). All others must pass the regex.
+            if btn_s == '' and act_s in _BT_MAPPING_ALLOW_EMPTY:
+                clean[act_s] = ''
+                continue
             if not _VALID_BT_BUTTON_RE.match(btn_s):
                 return jsonify({'error': f'invalid button code: {btn_s!r}'}), 400
             clean[act_s] = btn_s
@@ -203,7 +217,10 @@ def bt_config():
         # Was: silent if/elif fallthrough at runtime — first action
         # in the chain wins, the rest never fire (operator's binding
         # looked saved but didn't work).
-        dupes = [b for b in clean.values() if list(clean.values()).count(b) > 1]
+        # Skip empty values in the dupe check (multiple optional axes
+        # can all be 'none').
+        non_empty_vals = [b for b in clean.values() if b != '']
+        dupes = [b for b in non_empty_vals if non_empty_vals.count(b) > 1]
         if dupes:
             return jsonify({
                 'error': f'button(s) bound to multiple actions: {sorted(set(dupes))}',

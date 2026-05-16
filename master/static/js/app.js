@@ -7459,12 +7459,23 @@ class BTController {
     const tog = el('bt-enable-toggle');
     if (tog) tog.checked = this._piEnabled;
 
-    // Sync nom depuis Pi si manette Pi connectée
+    // Sync nom + MAC depuis Pi si manette Pi connectée
     if (this._piConnected) {
       const deviceName = el('bt-device-name');
       if (deviceName && data.bt_name && data.bt_name !== '—') deviceName.textContent = data.bt_name;
       const statusText = el('bt-status-text');
       if (statusText) { statusText.textContent = 'CONNECTED (Pi)'; statusText.classList.add('connected'); }
+      // 2026-05-16: show MAC so operator can tell two same-model
+      // controllers apart (e.g. two NVIDIA Shields).
+      const macEl = el('bt-device-mac');
+      if (macEl) {
+        const mac = data.active_device_mac || '';
+        macEl.textContent = mac || '—';
+        macEl.style.display = mac ? '' : 'none';
+      }
+    } else {
+      const macEl = el('bt-device-mac');
+      if (macEl) { macEl.textContent = '—'; macEl.style.display = 'none'; }
     }
 
     // RSSI
@@ -7600,6 +7611,9 @@ class BTController {
       throttle:   el('bt-map-throttle')?.value || 'ABS_Y',
       steer:      el('bt-map-steer')?.value    || 'ABS_X',
       dome:       el('bt-map-dome')?.value     || 'ABS_RX',
+      // camera = future feature (UI placeholder, no dispatch yet).
+      // '' = unmapped (allowed empty value, see _BT_MAPPING_ALLOW_EMPTY).
+      camera:     el('bt-map-camera')?.value   ?? 'ABS_RY',
       estop:      el('bt-map-estop')?.value    || 'BTN_MODE',
     };
     const cfg = {
@@ -7710,7 +7724,12 @@ const btCustomMappings = {
         opt.value  = mac;
         const prof = this._profiles[mac] || {};
         const name = prof.name || mac;
-        opt.textContent = mac === activeMac ? `${name} (connected)` : name;
+        // 2026-05-16: append last 5 chars of MAC ('…XX:XX') so two
+        // identical-named controllers (e.g. two NVIDIA Shields) can
+        // be told apart.
+        const macTail = mac.length >= 5 ? `…${mac.slice(-5)}` : mac;
+        const suffix  = mac === activeMac ? ` ${macTail} (connected)` : ` ${macTail}`;
+        opt.textContent = name === mac ? mac : `${name}${suffix}`;
         sel.appendChild(opt);
       });
       let chosen = '';

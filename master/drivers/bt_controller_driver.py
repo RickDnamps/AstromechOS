@@ -73,6 +73,11 @@ _DEFAULT_CFG = {
         'throttle':   'ABS_Y',
         'steer':      'ABS_X',
         'dome':       'ABS_RX',
+        # 'camera' = future feature (camera-on-servos tilt). Persisted
+        # in bt_config.json so the operator's choice survives reboot,
+        # but _handle_axis ignores this key until the hardware is
+        # installed and the camera tilt servo channel is wired up.
+        'camera':     'ABS_RY',
         'panel_dome': 'BTN_WEST',
         'panel_body': 'BTN_NORTH',
         'audio':      'BTN_EAST',

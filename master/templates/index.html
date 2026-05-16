@@ -1087,6 +1087,7 @@
             <div class="bt-info">
               <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
               <div id="bt-device-name" class="bt-device-name">—</div>
+              <div id="bt-device-mac" class="bt-device-mac" title="Controller MAC address">—</div>
             </div>
             <label class="toggle-label" style="margin-left:auto" title="Enable/disable BT controller">
               <input type="checkbox" id="bt-enable-toggle" checked onchange="btController.setEnabled(this.checked)">
@@ -1127,7 +1128,7 @@
               </select>
             </div>
 
-            <!-- Row 2: AXES (3 sub-fields in a single row) -->
+            <!-- Row 2: AXES (4 sub-fields in a single row) -->
             <div class="bt-field bt-field-full">
               <label class="ctrl-label">AXES</label>
               <div class="bt-axes-row">
@@ -1143,7 +1144,16 @@
                   <option value="ABS_RX">Dome: R Stick X</option>
                   <option value="ABS_X">Dome: L Stick X</option>
                 </select>
+                <select id="bt-map-camera" class="input-text input-sm"
+                        title="Camera tilt axis — feature pending hardware install">
+                  <option value="ABS_RY">Camera: R Stick Y 🔮</option>
+                  <option value="ABS_Y">Camera: L Stick Y 🔮</option>
+                  <option value="">Camera: (none) 🔮</option>
+                </select>
               </div>
+              <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.6">
+                🔮 Camera tilt = future feature (pending camera-on-servos hardware install). Mapping is saved for later.
+              </p>
             </div>
 
             <!-- Row 3: DEADZONE | INACTIVITY (aligned sliders) -->
