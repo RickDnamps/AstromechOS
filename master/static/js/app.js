@@ -3293,11 +3293,23 @@ function _toggleCamera() {
     _clearCamPollTimer();
     clearInterval(_camRefreshTimer);
     clearInterval(_camResumeRetry);
+    // B1/E8 fix 2026-05-16: send the token in body — backend requires
+    // {token: my_token} OR admin header. Toggle-off was sending neither
+    // → 401 → server-side _active_token never reset → next tablet saw
+    // 'STREAM TAKEN' overlay forever even though no one was viewing.
+    const tokenToRelease = _camToken;
     _camToken = null;
     if (img)   { img.src = ''; img.style.display = 'none'; }
     if (taken) taken.style.display = 'none';
     if (bg)    bg.style.display = 'block';
-    fetch(_camBase() + '/camera/release', { method: 'POST' }).catch(() => {});
+    if (tokenToRelease) {
+      fetch(_camBase() + '/camera/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: tokenToRelease }),
+        keepalive: true,
+      }).catch(() => {});
+    }
   }
 }
 
@@ -9181,36 +9193,58 @@ const cameraConfig = {
     }
     if (status) { status.textContent = `✓ ${resolution} @ ${fps}fps q${quality}`; status.className = 'settings-status ok'; }
     toast(`Camera: ${resolution} @ ${fps}fps`, 'ok');
-    // WOW polish M5 2026-05-15: live preview thumbnail post-restart.
-    // Operator validates the new settings without switching tabs.
-    // Stream takes ~2s to come back, so we delay the img load.
-    setTimeout(() => this._showPreview(), 2200);
+    // E4 fix 2026-05-16: was 2200ms but backend restart is debounced
+    // 2000ms THEN systemctl restart THEN mjpg_streamer cold-start
+    // (~1-3s). Preview at 2.2s hit 503 'Camera not available' EVERY
+    // time. Bumped to 5000ms (debounce 2s + restart 1s + warmup 2s).
+    setTimeout(() => this._showPreview(), 5000);
   },
-  _showPreview() {
+  async _showPreview() {
     const preview = el('cam-preview-thumb');
     if (!preview) return;
+    preview.innerHTML = '<div class="cam-preview-note">Loading preview…</div>';
+    // E3 fix 2026-05-16: was hitting /camera/stream without taking a
+    // token → backend rejected 403 ('No active token') → onerror always
+    // fired. Now POST /camera/take first, then use the token.
+    let token = null;
+    try {
+      const base = (typeof _camBase === 'function' ? _camBase() : '');
+      const r = await fetch(base + '/camera/take', { method: 'POST' });
+      if (r.ok) {
+        const d = await r.json();
+        token = d.token;
+      }
+    } catch(e) { /* fallthrough to error */ }
+    if (!token) {
+      preview.innerHTML = '<div class="cam-preview-err">Stream not available — switch to Drive tab to view live</div>';
+      return;
+    }
     preview.innerHTML = '';
     const img = document.createElement('img');
     img.alt = 'camera preview';
     img.className = 'cam-preview-img';
-    // Cache-bust + take a token via the existing camera flow
     img.onerror = () => {
       preview.innerHTML = '<div class="cam-preview-err">Stream not available — switch to Drive tab to view live</div>';
     };
     img.onload = () => {
       preview.classList.add('cam-preview-loaded');
     };
-    // /camera/stream is the same MJPEG URL the Drive tab uses
     const base = (typeof _camBase === 'function' ? _camBase() : '');
-    img.src = `${base}/camera/stream?_=${Date.now()}`;
+    img.src = `${base}/camera/stream?t=${token}&_=${Date.now()}`;
     preview.appendChild(img);
-    // Auto-hide after 8s to free the stream for Drive
     setTimeout(() => {
       if (img.parentNode) img.parentNode.removeChild(img);
       const note = document.createElement('div');
       note.className = 'cam-preview-note';
       note.textContent = 'Preview closed — open Drive tab for live view';
       preview.appendChild(note);
+      // Release the preview token so Drive tab can claim
+      fetch(`${base}/camera/release`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+        keepalive: true,
+      }).catch(() => {});
     }, 8000);
   },
 };

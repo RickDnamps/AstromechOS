@@ -54,7 +54,11 @@ MJPG_URL = _mjpg_url()
 
 _VALID_RESOLUTIONS = {'640x480', '1280x720', '1920x1080'}
 _VALID_FPS         = {15, 30}
-_VALID_QUALITY     = range(10, 101)
+# B3 fix 2026-05-16: tighten to the slider's step=5 grid. Was range(10,101)
+# which accepted any int 10..100 → curl POST with quality=73 stored 73,
+# but UI slider only snaps to multiples of 5 → next page load showed 75
+# while actual stream ran at 73 (UI lied).
+_VALID_QUALITY     = set(range(10, 101, 5))   # {10, 15, 20, ..., 100}
 
 # B-208 (remaining tabs audit 2026-05-15): debounce timer for the
 # astromech-camera.service restart. Rapid /camera/config POSTs (drag
@@ -74,9 +78,15 @@ def _schedule_camera_restart() -> None:
 
     def _do_restart():
         try:
+            # E6 fix 2026-05-16: explicit timeout — was unbounded, so a
+            # hung systemd (rare but possible on sd-card thrash) parked
+            # the timer thread forever. 10s is generous for restart.
             subprocess.run(['sudo', 'systemctl', 'restart',
-                            'astromech-camera.service'], check=False)
+                            'astromech-camera.service'],
+                           check=False, timeout=10)
             log.info("Camera service restart issued")
+        except subprocess.TimeoutExpired:
+            log.warning("Camera service restart timed out (>10s)")
         except OSError as e:
             log.warning("Camera service restart failed: %s", e)
 
@@ -117,44 +127,63 @@ def _read_cam_env() -> dict:
         pass
     except OSError as e:
         log.warning("camera.env unreadable: %s", e)
+    # B9 fix 2026-05-16: validate resolution before returning. If
+    # camera.env was hand-edited to an unsupported value, the <select>
+    # would silently snap to first option (640x480) → UI lied while
+    # actual stream stayed broken.
+    if cfg['resolution'] not in _VALID_RESOLUTIONS:
+        log.warning("camera.env: invalid CAMERA_RESOLUTION=%r (using default)", cfg['resolution'])
+        cfg['resolution'] = '640x480'
+    if cfg['fps'] not in _VALID_FPS:
+        cfg['fps'] = 30
+    if cfg['quality'] not in _VALID_QUALITY:
+        # Snap to nearest grid step instead of resetting (preserve intent)
+        cfg['quality'] = max(_VALID_QUALITY, key=lambda q: -abs(q - cfg['quality'])) if cfg['quality'] >= 10 else 80
     return cfg
 
 
-def _write_cam_env(resolution: str, fps: int, quality: int) -> None:
-    """B-203 (remaining tabs audit 2026-05-15): atomic tmp+replace.
-    Was open(w) which truncated then wrote — a crash mid-write or a
-    concurrent read by `scripts/camera-start.sh` (which sources this
-    file at service start) would have seen an empty/partial file →
-    fallback defaults kick in silently. Pattern matches settings_bp
-    write_cfg_atomic + chmod 0600 (the env may eventually hold
-    sensitive camera tokens)."""
+def _write_cam_env(resolution: str, fps: int, quality: int) -> bool:
+    """B-203 atomic tmp+replace. Returns True if file actually changed.
+    B5 fix 2026-05-16: skip rotate+write if content is identical to
+    current file. Was: every POST /camera/config rotated .bak even
+    when operator dragged the slider with no net change → 30-step
+    quality drag filled all 3 .bak generations with near-identical
+    values → 'before any of this' state irrecoverable.
+    E5 fix: also skips the os.makedirs syscall + fsync churn.
+    """
+    new_content = (
+        f'CAMERA_RESOLUTION={resolution}\n'
+        f'CAMERA_FPS={fps}\n'
+        f'CAMERA_QUALITY={quality}\n'
+    )
+    # Skip-if-unchanged short-circuit
+    try:
+        with open(_ENV_PATH, 'r') as _f:
+            if _f.read() == new_content:
+                return False
+    except OSError:
+        pass
     os.makedirs(os.path.dirname(_ENV_PATH), exist_ok=True)
-    # User-reported 2026-05-16: rotate .bak before write
     from master.config.config_loader import rotate_backup as _rotate
     _rotate(_ENV_PATH)
     tmp = _ENV_PATH + '.tmp'
     with open(tmp, 'w') as f:
-        f.write(f'CAMERA_RESOLUTION={resolution}\n')
-        f.write(f'CAMERA_FPS={fps}\n')
-        f.write(f'CAMERA_QUALITY={quality}\n')
+        f.write(new_content)
         f.flush()
         try:
             os.fsync(f.fileno())
         except OSError:
             pass
-    # Audit finding Camera M-5 2026-05-15: chmod the TMP file before
-    # os.replace, not the destination after. Previously left a tiny
-    # window where the dest file was world-readable (umask=0o022 →
-    # 0o644 at create time). Now the replaced file inherits 0o600.
     try:
         os.chmod(tmp, 0o600)
     except OSError:
         pass
     os.replace(tmp, _ENV_PATH)
     try:
-        os.chmod(_ENV_PATH, 0o600)   # belt + braces
+        os.chmod(_ENV_PATH, 0o600)
     except OSError:
         pass
+    return True
 
 
 _TAKE_RATE_LIMIT_PER_IP: dict = {}   # ip → (count, window_start)
@@ -175,6 +204,14 @@ def camera_take():
     ip = request.remote_addr or 'unknown'
     now = time.monotonic()
     with _TAKE_LIMIT_LOCK:
+        # E2 fix 2026-05-16: prune stale entries when dict grows. Was
+        # unbounded — long-running Master with DHCP churn accumulated
+        # thousands of dead entries + a hostile LAN device cycling
+        # MACs could exhaust memory.
+        if len(_TAKE_RATE_LIMIT_PER_IP) > 256:
+            cutoff = now - 2 * _TAKE_WINDOW_SECONDS
+            for stale_ip in [ip2 for ip2, (_, ws) in _TAKE_RATE_LIMIT_PER_IP.items() if ws < cutoff]:
+                _TAKE_RATE_LIMIT_PER_IP.pop(stale_ip, None)
         bucket = _TAKE_RATE_LIMIT_PER_IP.get(ip, (0, now))
         count, window_start = bucket
         if now - window_start > _TAKE_WINDOW_SECONDS:
@@ -204,18 +241,26 @@ def camera_stream():
     except (ValueError, TypeError):
         my_token = -1
 
-    if my_token != _active_token or my_token < 1:
+    # E1 fix 2026-05-16: snapshot _active_token under _lock — was read
+    # without the lock, racing /camera/take writer. Rare false-403
+    # ("No active token") when client polled /take and immediately
+    # called /stream with the just-issued token from another thread.
+    with _lock:
+        active_now = _active_token
+    if my_token != active_now or my_token < 1:
         return jsonify({'error': 'No active token — call POST /camera/take first'}), 403
 
-    # Audit finding Camera M-2 2026-05-15: cap concurrent generate()
-    # instances. Token-eviction stops the previous viewer's stream on
-    # the next mjpg_streamer chunk (~33ms at 30fps), but during rapid
-    # reconnects N upstreams can briefly coexist. Cap protects against
-    # rogue clients holding sockets open.
+    # P1 fix 2026-05-16: cap check + increment in ONE critical section.
+    # Was: read-without-lock cap check, then increment under lock →
+    # two concurrent /camera/stream both saw _active_streams=7, both
+    # passed cap, both incremented to 9 (overshoot). Now atomic.
     global _active_streams
-    if _active_streams >= _MAX_ACTIVE_STREAMS:
-        log.warning("Camera stream cap reached (%d)", _active_streams)
-        return jsonify({'error': 'too many active streams'}), 503
+    with _streams_lock:
+        if _active_streams >= _MAX_ACTIVE_STREAMS:
+            log.warning("Camera stream cap reached (%d)", _active_streams)
+            return jsonify({'error': 'too many active streams'}), 503
+        _active_streams += 1
+        slot_acquired = True
 
     try:
         upstream = _requests.get(_mjpg_url(), stream=True, timeout=2)
@@ -224,20 +269,17 @@ def camera_stream():
             'multipart/x-mixed-replace; boundary=boundarydonotcross'
         )
     except _requests.exceptions.ConnectionError:
+        # P1 fix: release slot if upstream connect fails (was leaked
+        # since we incremented before the try/except).
+        with _streams_lock:
+            _active_streams -= 1
         log.warning("Camera not reachable at %s", _mjpg_url())
         return jsonify({'error': 'Camera not available'}), 503
     except _requests.exceptions.RequestException as e:
-        # Audit finding Camera L-5 2026-05-15: narrowed from bare
-        # Exception to RequestException — actual transport errors get
-        # caught here, but a programming bug (e.g. AttributeError)
-        # surfaces in journalctl instead of being swallowed.
+        with _streams_lock:
+            _active_streams -= 1
         log.warning("Camera connect error: %s", e)
         return jsonify({'error': 'Camera error'}), 503
-
-    # Increment active stream count under the dedicated lock.
-    # (global _active_streams already declared above for the cap check.)
-    with _streams_lock:
-        _active_streams += 1
 
     def generate():
         global _active_streams
