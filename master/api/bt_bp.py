@@ -182,6 +182,17 @@ def bt_config():
         patch['mappings'] = clean
 
     ok = reg.bt_ctrl.update_cfg(patch)
+    # E2 fix 2026-05-16: changing inactivity_timeout while gamepad is
+    # actively driving could trip the watchdog instantly (operator
+    # lowered to 1s but had been holding stick for >1s). Refresh the
+    # watermark so the new threshold starts from NOW.
+    if 'inactivity_timeout' in patch:
+        try:
+            import time as _t
+            reg.bt_ctrl._last_input_t = _t.time()
+            reg.bt_ctrl._inactivity_pause = False
+        except Exception:
+            pass
     return jsonify({'status': 'ok' if ok else 'error', 'cfg': reg.bt_ctrl.get_cfg()})
 
 

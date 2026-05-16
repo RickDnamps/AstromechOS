@@ -7510,17 +7510,21 @@ const btPairing = {
   _pollTimer: null,
 
   startScan() {
+    // E12 fix 2026-05-16: clear previous timers on double-click. Was:
+    // rapid SCAN clicks orphaned the prior _scanTimer/_pollTimer; only
+    // the latest got cleared at 15s/16s, prior intervals fired forever
+    // until tab close (~hammered /bt/scan/devices indefinitely).
+    if (this._scanTimer) { clearInterval(this._scanTimer); this._scanTimer = null; }
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
     api('/bt/scan/start', 'POST').then(r => {
       if (!r) return;
       const btn = el('bt-scan-btn');
-      // WOW polish X2 2026-05-15: pulse animation while scanning so
-      // the button visibly reflects activity (was just disabled+text).
       if (btn) {
         btn.disabled = true;
         btn.classList.add('bt-scanning');
       }
-      el('bt-scan-label').textContent = '⏳ SCANNING…';
-      el('bt-scan-status').textContent = 'Scan active — 15 seconds…';
+      const lblEl = el('bt-scan-label');     if (lblEl) lblEl.textContent = '⏳ SCANNING…';
+      const stEl  = el('bt-scan-status');    if (stEl)  stEl.textContent  = 'Scan active — 15 seconds…';
       let remaining = 15;
       this._scanTimer = setInterval(() => {
         remaining--;
@@ -7550,6 +7554,9 @@ const btPairing = {
 
   _renderDiscovered(list) {
     const el2 = el('bt-discovered-list');
+    // E18 fix 2026-05-16: null guard — tab swap could detach the
+    // container before the deferred refresh fires.
+    if (!el2) return;
     if (!list.length) {
       el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— No devices detected —</div>';
       return;
@@ -7603,6 +7610,7 @@ const btPairing = {
 
   _renderPaired(list) {
     const el2 = el('bt-paired-list');
+    if (!el2) return;
     if (!list.length) {
       el2.innerHTML = '<div style="color:var(--txt-dim);font-size:11px">— No paired controller —</div>';
       return;

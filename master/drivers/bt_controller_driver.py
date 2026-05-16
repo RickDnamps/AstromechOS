@@ -338,11 +338,25 @@ class BTControllerDriver:
             log.warning(f"Gamepad disconnected: {e}")
         finally:
             with self._lock:
+                # E4/E8 fix 2026-05-16: close device fd before nulling
+                # so disconnect-during-pairing cycles don't leak fds.
+                # After ~100 power-cycle cycles the leak exhausted fds.
+                old_dev = self._device
                 self._connected   = False
                 self._device      = None
                 self._device_name = '—'
                 self._battery_pct = 0
                 self._rssi        = None
+                # E4 fix: clear stale last-drive so a ghost packet from
+                # the keep-alive thread between disconnect and stop
+                # can't emit one final M:L,R after the connection died.
+                self._last_drive = (0.0, 0.0)
+                self._last_dome  = 0.0
+                self._drive_active = False
+                self._dome_active  = False
+            if old_dev is not None:
+                try: old_dev.close()
+                except Exception: pass
             self._stop_motion()
 
     def _hw_poll_loop(self) -> None:
