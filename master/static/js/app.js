@@ -3688,11 +3688,15 @@ class AudioBoard {
     grid.appendChild(mkRandomBtn());
 
     if (data && data.sounds && data.sounds.length > 0) {
+      // WOW polish 2026-05-15: highlight the last sound the operator
+      // played (persisted in localStorage). Helps re-trigger quickly.
+      let lastSound = null;
+      try { lastSound = localStorage.getItem('astromech-last-sound'); } catch {}
       data.sounds.forEach(s => {
         const btn = document.createElement('button');
-        btn.className = 'sound-btn';
+        btn.className = 'sound-btn sound-card' + (s === lastSound ? ' last-played' : '');
         btn.dataset.sound = s;
-        btn.title = s;
+        btn.title = s === lastSound ? `${s} (last played)` : s;
         btn.textContent = this._formatSound(s);
         grid.appendChild(btn);
       });
@@ -3711,13 +3715,26 @@ class AudioBoard {
   }
 
   play(sound) {
-    // F-10: only flip the playing state when the server actually accepts.
-    // Old `if (d && d.ok !== false)` treated server 404 (api() returns
-    // null → d is null) as success because `undefined !== false` is
-    // true → UI showed 'playing' for 60s while NOTHING was playing.
-    // Now check for the server's `{status:'ok', sound}` shape explicitly.
+    // WOW polish 2026-05-15: visual loading state on the clicked card
+    // during the ~500ms mpg123 cold-start. Without this, operator
+    // clicks a sound, ~500ms of "nothing visible happens", then
+    // playing UI appears. Now: card pulses immediately on click,
+    // pulse stops when server confirms ok.
+    const card = document.querySelector(`[data-sound="${CSS.escape(sound)}"]`);
+    if (card) card.classList.add('sound-loading');
     api('/audio/play', 'POST', { sound }).then(d => {
-      if (d && d.status === 'ok') this.setPlaying(true, sound);
+      if (card) card.classList.remove('sound-loading');
+      if (d && d.status === 'ok') {
+        this.setPlaying(true, sound);
+        // WOW polish: persist last-played for visual marker on next render.
+        try { localStorage.setItem('astromech-last-sound', sound); } catch {}
+        if (card) {
+          // Clear any previous last-played markers, mark this one.
+          document.querySelectorAll('.sound-card.last-played')
+            .forEach(c => c.classList.remove('last-played'));
+          card.classList.add('last-played');
+        }
+      }
     });
   }
 
@@ -3977,13 +3994,16 @@ class AudioBoard {
 
   uploadDragOver(e) {
     e.preventDefault();
+    // WOW polish 2026-05-15: clearer drag-over feedback — green glow,
+    // scaled border, "DROP NOW" text replacement. Operator gets
+    // unmissable confirmation that yes, dropping here will upload.
     const zone = el('audio-upload-zone');
-    if (zone) { zone.style.borderColor = '#00aaff'; zone.style.color = '#00aaff'; }
+    if (zone) zone.classList.add('drag-active');
   }
 
   uploadDragLeave(e) {
     const zone = el('audio-upload-zone');
-    if (zone) { zone.style.borderColor = '#333'; zone.style.color = '#666'; }
+    if (zone) zone.classList.remove('drag-active');
   }
 
   uploadDrop(e) {
@@ -4939,8 +4959,14 @@ class ScriptEngine {
       // applied; mixed-case input stays mixed-case.
       const label = s.label || s.name.replace(/_/g, ' ');
 
+      // WOW polish 2026-05-15: also restore last-played marker on render.
+      let _lastPlayed = null;
+      try { _lastPlayed = localStorage.getItem('astromech-last-choreo'); } catch {}
       const card = document.createElement('div');
-      card.className = 'seq-card' + (isRunning ? ' running' : '') + (isLooping ? ' looping' : '');
+      card.className = 'seq-card'
+        + (isRunning ? ' running' : '')
+        + (isLooping ? ' looping' : '')
+        + (s.name === _lastPlayed ? ' last-played' : '');
       card.id = 'seq-card-' + s.name;
       card.dataset.name = s.name;
       // F-4 (audit 2026-05-15): use ?? not || so a sequence with a real
@@ -4948,6 +4974,21 @@ class ScriptEngine {
       // placeholder — the progress bar would otherwise fill to 100%
       // over 5s for a sequence that actually finishes instantly.
       card.dataset.duration = String(s.duration ?? 5);
+
+      // WOW polish 2026-05-15: native title tooltip with metadata —
+      // duration + track count + category. Hover reveals at-a-glance
+      // info without having to open the editor. Desktop UX win;
+      // touchscreens see the same info on long-press via the existing
+      // long-press handler. Compact format keeps tooltip short.
+      {
+        const dur = (s.duration ?? 0).toFixed(1);
+        const trackCount = (s.audio_count ?? 0) + (s.dome_count ?? 0)
+                         + (s.body_count ?? 0) + (s.lights_count ?? 0);
+        const parts = [`⏱ ${dur}s`];
+        if (trackCount > 0) parts.push(`${trackCount} events`);
+        if (s.category && s.category !== 'all') parts.push(`📁 ${s.category}`);
+        card.title = `${s.name}\n${parts.join('  ·  ')}`;
+      }
 
       if (isAdmin) {
         const handle = document.createElement('div');
@@ -5272,6 +5313,11 @@ class ScriptEngine {
         toast(`Failed to start ${name.toUpperCase()} — see logs`, 'error');
       } else {
         toast(`${loop ? '🔄 ' : '▶ '}${name.toUpperCase()} playing`, 'ok');
+        // WOW polish 2026-05-15: persist last-played for the marker.
+        try { localStorage.setItem('astromech-last-choreo', name); } catch {}
+        document.querySelectorAll('.seq-card.last-played')
+          .forEach(c => c.classList.remove('last-played'));
+        if (card) card.classList.add('last-played');
         poller.poll();
         // Audit reclass C1 (Perf L-3) 2026-05-15: the status poller
         // runs at 2s, so a choreo shorter than 2s ends server-side

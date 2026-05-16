@@ -296,15 +296,29 @@ def _build_list_rows() -> list:
             continue
         try:
             with open(fpath, encoding='utf-8') as f:
-                meta = json.load(f).get('meta', {})
+                _full = json.load(f)
+                meta = _full.get('meta', {})
+                _tracks = _full.get('tracks', {}) or {}
         except (OSError, json.JSONDecodeError):
             meta = {}
+            _tracks = {}
+        # WOW polish 2026-05-15: expose per-track event counts so the
+        # frontend hover tooltip can show "X events" at a glance
+        # without fetching the full .chor. Counted once on the disk
+        # parse we already did — zero added I/O.
+        def _count(track_key):
+            t = _tracks.get(track_key, [])
+            return len(t) if isinstance(t, list) else 0
         rows.append({
-            'name':     name,
-            'label':    meta.get('label', '') or '',
-            'category': meta.get('category', '') or _SYSTEM_CATEGORY,
-            'emoji':    meta.get('emoji', '') or _auto_emoji(name),
-            'duration': meta.get('duration', 0),
+            'name':         name,
+            'label':        meta.get('label', '') or '',
+            'category':     meta.get('category', '') or _SYSTEM_CATEGORY,
+            'emoji':        meta.get('emoji', '') or _auto_emoji(name),
+            'duration':     meta.get('duration', 0),
+            'audio_count':  _count('audio'),
+            'dome_count':   _count('dome'),
+            'body_count':   _count('body'),
+            'lights_count': _count('lights'),
         })
     return rows, new_mtimes
 

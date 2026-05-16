@@ -1710,6 +1710,36 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   box-shadow: 0 4px 12px rgba(var(--blue-rgb),0.2);
 }
 
+/* WOW polish 2026-05-15: visual loading state during mpg123 cold-start
+ * (~500ms). Operator clicks → card pulses → loading is acknowledged
+ * immediately instead of feeling unresponsive. */
+.sound-btn.sound-loading {
+  animation: sound-loading-pulse 0.6s ease-in-out infinite;
+  border-color: var(--amber, #ffaa44);
+  color: var(--amber, #ffaa44);
+}
+@keyframes sound-loading-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 170, 68, 0.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(255, 170, 68, 0); }
+}
+
+/* WOW polish: subtle marker on the last sound the operator played —
+ * a small left border accent + persistent slight glow. Helps
+ * re-trigger the same sound quickly. */
+.sound-btn.last-played {
+  border-left: 3px solid var(--green, #00cc66);
+  position: relative;
+}
+.sound-btn.last-played::after {
+  content: '●';
+  position: absolute;
+  top: 3px;
+  right: 5px;
+  font-size: 7px;
+  color: var(--green, #00cc66);
+  opacity: 0.7;
+}
+
 .sound-btn:active {
   transform: translateY(0);
   background: rgba(var(--blue-rgb),0.25);
@@ -2765,6 +2795,24 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 .seq-card.running .seq-card-loop { display: block; }
 .seq-card.running.looping .seq-card-loop { display: block; }
 .seq-card:not(.looping) .seq-card-loop { display: none; }
+
+/* WOW polish 2026-05-15: last-played sequence marker — small green
+ * dot top-right + subtle accent. Helps re-trigger the last played
+ * choreo when scrolling the grid. */
+.seq-card.last-played::before {
+  content: '●';
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 8px;
+  color: var(--green, #00cc66);
+  text-shadow: 0 0 4px rgba(0, 204, 102, 0.6);
+  z-index: 2;
+  pointer-events: none;
+}
+.seq-card.last-played:not(.running) {
+  border-left: 2px solid var(--green, #00cc66);
+}
 
 /* Soundwave (replaces label while running) */
 .seq-card.running .seq-card-label { display: none; }
@@ -3888,6 +3936,57 @@ select.input-text option { background: var(--input-option); }
 .toast.show        { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.toast-info  { border-color: var(--blue);   color: var(--blue);   box-shadow: 0 0 12px rgba(0,170,255,0.3); }
 .toast.toast-warn  { border-color: var(--amber, #ff8800); color: var(--amber, #ff8800); }
+
+/* WOW polish 2026-05-15: visual badges so operator immediately sees
+ * which settings require a reboot vs which take effect live. Less
+ * surprise = more confidence editing config. */
+.reboot-badge, .live-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-left: 8px;
+  text-transform: uppercase;
+}
+.reboot-badge {
+  background: rgba(255, 170, 68, 0.15);
+  color: var(--amber, #ffaa44);
+  border: 1px solid rgba(255, 170, 68, 0.45);
+}
+.reboot-badge.small { font-size: 8px; padding: 1px 5px; }
+.live-badge {
+  background: rgba(0, 204, 102, 0.12);
+  color: var(--green, #00cc66);
+  border: 1px solid rgba(0, 204, 102, 0.4);
+}
+
+/* WOW polish 2026-05-15: drag-active upload zone — green glow,
+ * thicker border, pulsing animation. Operator gets unmistakable
+ * confirmation that drop is accepted. */
+#audio-upload-zone.drag-active {
+  border-color: var(--green, #00cc66) !important;
+  background: rgba(0, 204, 102, 0.08);
+  color: var(--green, #00cc66) !important;
+  box-shadow: 0 0 18px rgba(0, 204, 102, 0.4) inset;
+  transform: scale(1.01);
+  animation: upload-drag-pulse 0.8s ease-in-out infinite;
+}
+@keyframes upload-drag-pulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(0, 204, 102, 0.4) inset; }
+  50%      { box-shadow: 0 0 28px rgba(0, 204, 102, 0.7) inset; }
+}
+
+/* WOW polish 2026-05-15: save-success pulse on settings-status .ok */
+.settings-status.ok {
+  animation: settings-save-pulse 0.6s ease-out;
+}
+@keyframes settings-save-pulse {
+  0%   { background: rgba(0, 204, 102, 0.3); box-shadow: 0 0 12px rgba(0, 204, 102, 0.5); }
+  100% { background: transparent;             box-shadow: 0 0 0   rgba(0, 204, 102, 0);   }
+}
 .toast.toast-ok    { border-color: var(--green);  color: var(--green);  box-shadow: 0 0 12px rgba(0,204,102,0.3); }
 .toast.toast-error { border-color: var(--red);    color: var(--red);    box-shadow: 0 0 12px rgba(255,34,68,0.3); }
 .toast.toast-warn  { border-color: var(--orange); color: var(--orange); box-shadow: 0 0 12px rgba(255,136,0,0.3); }
