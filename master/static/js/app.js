@@ -7418,7 +7418,10 @@ class BTController {
 
   // ── UI ─────────────────────────────────────────────────────────
   _setUI(connected, name) {
-    const icon       = document.querySelector('.gamepad-icon');
+    // Audit LOW 2026-05-16: scope to #spanel-bluetooth — global
+    // querySelector would pick the wrong icon if a Drive-tab gamepad
+    // indicator gets added later. Matches updateStatus()'s pattern.
+    const icon       = document.querySelector('#spanel-bluetooth .gamepad-icon');
     const statusText = el('bt-status-text');
     const deviceName = el('bt-device-name');
     if (icon)       icon.classList.toggle('connected', connected);

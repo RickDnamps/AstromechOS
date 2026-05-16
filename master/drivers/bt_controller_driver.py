@@ -422,15 +422,32 @@ class BTControllerDriver:
         except Exception:
             out = ''
         dev_name = (getattr(dev, 'name', '') or '').strip()
+        if not dev_name:
+            return None
+        candidates: list[tuple[str, str]] = []
         for line in out.splitlines():
             parts = line.split(None, 2)
             if len(parts) >= 3 and parts[0] == 'Device':
                 mac = parts[1].upper()
                 name = parts[2].strip()
-                if _MAC_RE.fullmatch(mac) and dev_name and (
+                if _MAC_RE.fullmatch(mac) and (
                     name == dev_name or name.startswith(dev_name[:24])
                 ):
-                    return mac
+                    candidates.append((mac, name))
+        if len(candidates) == 1:
+            return candidates[0][0]
+        # Multiple matches — prefer exact name equality (audit LOW 2026-05-16:
+        # two same-model controllers connected at once would otherwise bind
+        # to the first listed MAC, swapping per-device profiles).
+        exact = [c for c in candidates if c[1] == dev_name]
+        if len(exact) == 1:
+            return exact[0][0]
+        if candidates:
+            log.warning(
+                "BT MAC resolve ambiguous for %r: %s — per-device profile "
+                "won't bind until disambiguated", dev_name,
+                [c[0] for c in candidates]
+            )
         return None
 
     def _find_gamepad(self):
@@ -462,18 +479,24 @@ class BTControllerDriver:
             if not self._connected:
                 dev = self._find_gamepad()
                 if dev:
+                    # Resolve MAC BEFORE acquiring self._lock — bluetoothctl
+                    # subprocess can block up to 2s, and self._lock is the
+                    # same lock held by _do_drive / keep-alive / motion
+                    # snapshot. MotionWatchdog cuts drive at 800ms — keeping
+                    # subprocess inside the lock could race-cut a live drive
+                    # session on a slow BlueZ stack. dev is not yet published
+                    # to other threads, so resolution is safe outside.
+                    # (Audit MEDIUM 2026-05-16: lock-held subprocess fix.)
+                    mac = self._resolve_device_mac(dev)
                     with self._lock:
                         self._device      = dev
                         self._connected   = True
                         self._device_name = dev.name[:32]
                         self._prev_btns   = {}
-                        # Custom mappings: capture active MAC for per-device
-                        # profile lookup in _handle_button. Try evdev's uniq
-                        # first (PS4/PS5/Xbox advertise it), fall back to
-                        # bluetoothctl Connected lookup (NVIDIA Shield et al
-                        # don't expose uniq). MAC is the per-device profile
-                        # dict key — must be stable across reconnects.
-                        self._active_device_mac = self._resolve_device_mac(dev)
+                        # Per-device profile dict key — stable across
+                        # reconnects via uniq (PS/Xbox) or bluetoothctl
+                        # name-match fallback (NVIDIA Shield, 8BitDo).
+                        self._active_device_mac = mac
                     # B2 fix 2026-05-16: clear stale inactivity pause flag
                     # left over from previous session (operator powered
                     # down a paused controller — flag persisted across
