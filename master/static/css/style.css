@@ -3965,32 +3965,41 @@ select.input-text option { background: var(--input-option); }
   border: 1px solid rgba(0, 204, 102, 0.4);
 }
 
-/* WOW polish D1+D2 2026-05-15: persistent mode badges strip on Drive.
- * Visible only when bench / kids / child-lock is active. Operator can
- * never forget the current mode = no surprises during demos. */
+/* WOW polish D1+D2 2026-05-15: persistent mode badges as overlay on
+ * the camera feed top-center. Doesn't push layout, doesn't block
+ * camera content (only top strip), always visible when active.
+ * Updated 2026-05-15 from below-topbar block to camera overlay
+ * after user feedback about layout shift. */
 .drive-mode-strip {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 6px 12px;
-  background: rgba(0, 0, 0, 0.4);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 6px;
   justify-content: center;
-  font-size: 11px;
-  letter-spacing: 1px;
+  z-index: 6;
+  pointer-events: none;
+  font-size: 10px;
+  letter-spacing: 1.2px;
   font-weight: 700;
   text-transform: uppercase;
+  max-width: 90%;
 }
 .mode-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 14px;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 12px;
   border: 1px solid;
   white-space: nowrap;
+  backdrop-filter: blur(8px);
+  background-color: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;   /* allow hover for the title tooltip */
 }
-.mode-pill-icon { font-size: 13px; }
+.mode-pill-icon { font-size: 12px; }
 .mode-bench {
   color: var(--amber, #ffaa44);
   border-color: var(--amber, #ffaa44);

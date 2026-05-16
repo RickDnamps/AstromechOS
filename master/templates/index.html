@@ -363,20 +363,6 @@
       <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
     </div>
 
-    <!-- WOW polish 2026-05-15: persistent mode badges strip. Visible
-         whenever bench, kids, or child-lock is active so the operator
-         can never forget the current state. Hidden when normal+safe. -->
-    <div id="drive-mode-strip" class="drive-mode-strip" style="display:none">
-      <span id="mode-bench" class="mode-pill mode-bench" style="display:none">
-        <span class="mode-pill-icon">🛡</span> BENCH — VESC bypass active
-      </span>
-      <span id="mode-kids" class="mode-pill mode-kids" style="display:none">
-        <span class="mode-pill-icon">👶</span> KIDS MODE — speed capped at <span id="mode-kids-pct">50</span>%
-      </span>
-      <span id="mode-lock" class="mode-pill mode-lock" style="display:none">
-        <span class="mode-pill-icon">🔒</span> CHILD LOCK — drive blocked, dome+sounds OK
-      </span>
-    </div>
 
     <div class="drive-main">
 
@@ -412,6 +398,25 @@
         <div class="cam-container">
           <img id="cam-stream" class="cam-stream" alt="" style="display:none">
           <div id="cam-bg" class="cam-bg"></div>
+
+          <!-- WOW polish 2026-05-15: mode badges overlay — sits over
+               the camera feed top-center so it doesn't push the
+               layout. Hidden when normal+safe. Hover/long-press a
+               pill for the full explanation via the title tooltip. -->
+          <div id="drive-mode-strip" class="drive-mode-strip" style="display:none">
+            <span id="mode-bench" class="mode-pill mode-bench" style="display:none"
+                  title="VESC safety bypass enabled — drive works without both VESCs reporting healthy. Turn off before show / outdoor use.">
+              <span class="mode-pill-icon">🛡</span> BENCH
+            </span>
+            <span id="mode-kids" class="mode-pill mode-kids" style="display:none"
+                  title="Kids Mode — drive enabled but speed is capped to a safe limit. Dome + sounds + lights still fully available.">
+              <span class="mode-pill-icon">👶</span> KIDS <span id="mode-kids-pct">50</span>%
+            </span>
+            <span id="mode-lock" class="mode-pill mode-lock" style="display:none"
+                  title="Child Lock — propulsion fully blocked. Dome rotation, sounds, lights and panels remain free for the child to play with.">
+              <span class="mode-pill-icon">🔒</span> LOCK
+            </span>
+          </div>
 
           <!-- HUD overlays -->
           <!-- Speed arc — top-left -->
