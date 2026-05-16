@@ -5038,10 +5038,12 @@ body[data-lock-mode="2"] .drive-wrapper {
 /* One row per custom mapping: [pill][icon][label][type][target][✕] */
 .bt-custom-row {
   display: grid;
-  grid-template-columns: auto auto 1fr auto 1fr auto;
-  gap: 6px;
+  /* 2026-05-16: 4 cols (was 6) — icon + label removed since BT mappings
+     don't surface as visible buttons on the Drive UI. */
+  grid-template-columns: auto auto 1fr auto;
+  gap: 8px;
   align-items: center;
-  padding: 6px 8px;
+  padding: 6px 10px;
   margin-bottom: 4px;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 4px;

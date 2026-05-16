@@ -7796,37 +7796,10 @@ const btCustomMappings = {
     codePill.title       = 'Controller button captured for this mapping';
     row.appendChild(codePill);
 
-    // 2) emoji icon — clickable, opens emojiPicker
-    const iconBtn       = document.createElement('button');
-    iconBtn.type        = 'button';
-    iconBtn.className   = 'shortcut-row-icon';
-    iconBtn.textContent = cm.icon || '⚡';
-    iconBtn.title       = 'Click to pick an emoji';
-    iconBtn.addEventListener('click', () => {
-      if (typeof emojiPicker === 'undefined' || !emojiPicker.open) return;
-      emojiPicker.open(cm.icon || '⚡', (emoji) => {
-        if (!emoji) return;
-        cm.icon = emoji;
-        iconBtn.textContent = emoji;
-        this._saveRow(cm, row);
-      });
-    });
-    row.appendChild(iconBtn);
-
-    // 3) label input
-    const lblInp       = document.createElement('input');
-    lblInp.type        = 'text';
-    lblInp.className   = 'shortcut-row-label';
-    lblInp.value       = cm.label || '';
-    lblInp.maxLength   = 32;
-    lblInp.placeholder = 'Label';
-    lblInp.addEventListener('change', () => {
-      cm.label = lblInp.value;
-      this._saveRow(cm, row);
-    });
-    row.appendChild(lblInp);
-
-    // 4) action type select
+    // 2) action type select
+    // (icon + label removed 2026-05-16 — BT mappings have no visible
+    // button on the Drive UI, unlike Shortcuts; they're invisible
+    // bindings between a controller key and an action.)
     const typeSel     = document.createElement('select');
     typeSel.className = 'shortcut-row-type input-text';
     _BT_ACTION_TYPES.forEach(opt => {
@@ -8056,8 +8029,8 @@ const btCustomMappings = {
       mapping: {
         button,
         action: { type: 'none', target: '' },
-        label:  '',
-        icon:   '⚡',
+        // 2026-05-16: label + icon omitted — BT mappings have no visible
+        // UI button. Backend accepts both fields as optional/empty.
       },
     });
     if (!res.ok) {
@@ -8075,8 +8048,7 @@ const btCustomMappings = {
         id:     cm.id || '',
         button: cm.button,
         action: cm.action || { type: 'none', target: '' },
-        label:  cm.label  || '',
-        icon:   cm.icon   || '⚡',
+        // 2026-05-16: label + icon omitted — no UI button on Drive tab.
       },
     });
     if (!res.ok) {
