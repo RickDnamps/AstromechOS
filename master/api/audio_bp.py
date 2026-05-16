@@ -917,10 +917,22 @@ def delete_sound(sound):
     except Exception as e:
         log.warning("cascade_delete for sound %s failed: %s", sound, e)
 
+    # BT custom mappings cascade — same soft-delete semantics as
+    # shortcuts. Any device profile with a custom button bound to this
+    # sound has its action neutralized to 'none' (preserves label/icon
+    # so the operator notices and can rebind).
+    bt_cascaded = 0
+    try:
+        from master.api.bt_bp import cascade_delete_in_bt
+        bt_cascaded = cascade_delete_in_bt('play_sound', sound)
+    except Exception as e:
+        log.warning("BT cascade_delete for sound %s failed: %s", sound, e)
+
     return jsonify({
         'ok': True, 'sound': sound,
         'removed_from_cats': found_in,
         'shortcuts_neutralized': cascaded,
+        'bt_mappings_neutralized': bt_cascaded,
     })
 
 

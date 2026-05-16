@@ -1193,6 +1193,47 @@
         </section>
 
         <section class="card settings-card" style="margin-top:10px">
+          <h2 class="card-title">CUSTOM BUTTON ACTIONS</h2>
+          <p class="settings-note">
+            Bind any controller button to a Shortcuts-style action.
+            Mappings are per-controller — switching to another paired device loads its own mappings.
+          </p>
+
+          <div class="bt-active-device-row">
+            <label class="ctrl-label">DEVICE PROFILE</label>
+            <select id="bt-device-profile-select" class="input-text" onchange="btCustomMappings.onDeviceChange(this.value)">
+              <option value="">— no controller connected —</option>
+            </select>
+            <button class="btn btn-xs btn-danger" id="bt-delete-profile-btn"
+                    onclick="btCustomMappings.deleteProfile()" title="Forget this device's custom mappings"
+                    style="display:none">🗑 DELETE PROFILE</button>
+          </div>
+
+          <div id="bt-custom-mappings-list" style="margin-top:10px"></div>
+
+          <div class="row mt" style="gap:8px;align-items:center">
+            <button class="btn btn-active" id="bt-capture-btn" onclick="btCustomMappings.startCapture()">
+              🎯 CAPTURE NEW BUTTON
+            </button>
+            <span id="bt-capture-status" style="font-size:11px;color:var(--text-dim)"></span>
+          </div>
+
+          <p class="settings-note" style="font-size:10px;opacity:.7;margin-top:8px">
+            💡 Press a button on your controller, then assign an action. Custom mappings override the default actions above for that button.
+          </p>
+        </section>
+
+        <!-- BT capture modal (full-page overlay) -->
+        <div id="bt-capture-modal" class="bt-capture-modal" style="display:none">
+          <div class="bt-capture-card">
+            <div class="bt-capture-title">🎯 PRESS A BUTTON ON YOUR CONTROLLER</div>
+            <div class="bt-capture-sub">Waiting for input…</div>
+            <div class="bt-capture-countdown"><span id="bt-capture-remaining">10</span>s</div>
+            <button class="btn btn-warn" onclick="btCustomMappings.cancelCapture()">CANCEL</button>
+          </div>
+        </div>
+
+        <section class="card settings-card" style="margin-top:10px">
           <h2 class="card-title">CONTROLLER PAIRING</h2>
           <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 12px">
             Put your controller in discovery mode (hold BT button), then click SCAN.

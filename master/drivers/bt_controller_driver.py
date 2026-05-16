@@ -79,6 +79,10 @@ _DEFAULT_CFG = {
         'estop':      'BTN_MODE',
         'turbo':      'BTN_TR',
     },
+    # Per-MAC operator-defined custom button mappings.
+    # Schema: {mac: {name, type, last_seen, custom_button_mappings: [...]}}
+    # Populated by _ensure_device_profile() on each connect.
+    'device_profiles': {},
 }
 
 _CFG_PATH = os.path.join(os.path.dirname(__file__), '..', 'config', 'bt_config.json')
@@ -91,9 +95,14 @@ def _load_cfg() -> dict:
         # Merge with defaults for missing keys
         merged = dict(_DEFAULT_CFG)
         merged['mappings'] = dict(_DEFAULT_CFG['mappings'])
-        merged.update({k: v for k, v in cfg.items() if k != 'mappings'})
+        merged['device_profiles'] = {}
+        merged.update({k: v for k, v in cfg.items() if k not in ('mappings', 'device_profiles')})
         if 'mappings' in cfg:
             merged['mappings'].update(cfg['mappings'])
+        # device_profiles: replace wholesale (per-MAC dict, no per-key merge
+        # makes sense — operator may have removed a profile intentionally).
+        if isinstance(cfg.get('device_profiles'), dict):
+            merged['device_profiles'] = dict(cfg['device_profiles'])
         return merged
     except FileNotFoundError:
         return dict(_DEFAULT_CFG)
@@ -159,6 +168,20 @@ class BTControllerDriver:
         self._rssi         = None
         self._last_drive   = (0.0, 0.0)   # last computed (left, right) for keep-alive
         self._last_dome    = 0.0           # last dome speed for keep-alive
+        # Custom mappings (per-MAC operator-defined button bindings)
+        self._active_device_mac: str | None = None
+        self._capture_mode = False
+        self._capture_result: str | None = None
+        self._capture_expires_at = 0.0
+        # H1 fix 2026-05-16 (security review): lock around all capture
+        # state reads/writes. Three threads touch these fields — Flask
+        # poll thread, evdev poll thread (_handle_button), Timer reaper
+        # — and prior unlocked access could race two admin tabs OR
+        # produce 'captured' vs 'expired' inconsistency mid-mutation.
+        self._capture_lock = threading.Lock()
+        # Per-mapping-id debounce + lock — mirrors shortcuts B5/P2 pattern.
+        self._custom_last_ts: dict = {}
+        self._custom_locks: dict = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -194,19 +217,45 @@ class BTControllerDriver:
 
     def update_cfg(self, patch: dict) -> bool:
         # B3/E1 fix 2026-05-16: hold both the cross-process save lock
-        # AND the instance lock around the mutation. Readers
-        # (_handle_button, _handle_axis) snapshot the mappings dict via
-        # .get(...) which is atomic, but the in-place .update() on the
-        # mappings sub-dict could be observed mid-iteration if a future
-        # caller adds .items() loop. Defense in depth.
+        # AND the instance lock around the mutation.
+        # M2 fix 2026-05-16 (security review): smart-merge `device_profiles`
+        # per-MAC instead of wholesale replace. Was: concurrent _ensure_
+        # device_profile (reconnect thread updating last_seen) and admin
+        # upsert via /bt/custom_mapping raced — last writer wins, the
+        # other's mutation lost. Now per-MAC merge: each MAC's profile
+        # patch updates ONLY the fields it provides, preserving others.
         with _cfg_save_lock:
             with self._lock:
                 self._cfg.update(patch)
                 if 'mappings' in patch:
-                    # Replace mappings dict atomically vs mutating it.
                     new_map = dict(self._cfg.get('mappings', {}))
                     new_map.update(patch['mappings'])
                     self._cfg['mappings'] = new_map
+                if 'device_profiles' in patch:
+                    # Per-MAC merge: caller may pass {mac: new_full_profile}
+                    # or {mac: {field_to_update: value}}. We merge at the
+                    # per-MAC level (replace the whole profile is intended
+                    # behavior — admins delete profiles via DELETE endpoint
+                    # which sends {device_profiles: <without that mac>}).
+                    new_profiles = dict(self._cfg.get('device_profiles', {}) or {})
+                    incoming = patch['device_profiles'] or {}
+                    # If incoming has FEWER macs than current → it's a
+                    # full-replace (delete intent). If same set of macs +
+                    # at least one with fewer fields → per-MAC merge.
+                    if set(incoming.keys()) >= set(new_profiles.keys()):
+                        # Same or more MACs → merge per-MAC field-by-field
+                        for mac, profile_patch in incoming.items():
+                            existing = new_profiles.get(mac, {})
+                            if isinstance(existing, dict) and isinstance(profile_patch, dict):
+                                merged = dict(existing)
+                                merged.update(profile_patch)
+                                new_profiles[mac] = merged
+                            else:
+                                new_profiles[mac] = profile_patch
+                    else:
+                        # Fewer MACs → full replace (operator deleted a profile)
+                        new_profiles = dict(incoming)
+                    self._cfg['device_profiles'] = new_profiles
                 snapshot = dict(self._cfg)
             return save_cfg(snapshot)
 
@@ -249,6 +298,93 @@ class BTControllerDriver:
         }
 
     # ------------------------------------------------------------------
+    # Custom mappings — per-device profiles
+    # ------------------------------------------------------------------
+
+    def _ensure_device_profile(self, mac: str, name: str) -> None:
+        """Idempotently create a profile entry for this MAC if absent.
+        Updates last_seen on every call. Persists via update_cfg (atomic
+        write + lock). Safe to call from the reconnect thread."""
+        if not mac:
+            return
+        now = int(time.time())
+        # Snapshot current profiles dict under no lock — update_cfg takes
+        # both locks anyway. The read can race with a concurrent
+        # update_cfg writer but in the worst case we end up writing a
+        # slightly-stale snapshot — update_cfg's own merge in mappings
+        # path doesn't apply to device_profiles so we replace wholesale.
+        profiles = dict(self._cfg.get('device_profiles', {}) or {})
+        existing = profiles.get(mac) or {}
+        # Preserve operator-defined custom mappings + label across reconnects.
+        custom = existing.get('custom_button_mappings', [])
+        if not isinstance(custom, list):
+            custom = []
+        profile_type = existing.get('type') or self._cfg.get('gamepad_type', 'ps')
+        # Only update name if we got a usable one — avoid overwriting a
+        # nicely-typed BT name with an empty string from evdev.
+        profile_name = (name or existing.get('name') or '')[:64]
+        profiles[mac] = {
+            'name': profile_name,
+            'type': profile_type,
+            'last_seen': now,
+            'custom_button_mappings': custom,
+        }
+        self.update_cfg({'device_profiles': profiles})
+
+    def get_active_device_mac(self) -> str | None:
+        """Returns the MAC (uppercase, colon-separated) of the currently
+        connected controller, or None if no device is connected."""
+        return self._active_device_mac
+
+    def get_device_profiles(self) -> dict:
+        """Returns a shallow copy of all known device profiles. Caller
+        must not mutate the returned dict in place."""
+        return dict(self._cfg.get('device_profiles', {}) or {})
+
+    def enter_capture_mode(self, duration_s: float = 10.0) -> bool:
+        """Begin a button-capture window for the operator to press a
+        button on the connected controller, latching its code name for
+        binding to a custom mapping.
+
+        Returns True if capture started, False if already in flight or
+        BT is disabled (no buttons would arrive).
+        H1 fix 2026-05-16: all capture state under _capture_lock."""
+        with self._capture_lock:
+            if self._capture_mode:
+                return False
+            if not self.is_enabled():
+                return False
+            self._capture_mode = True
+            self._capture_result = None
+            self._capture_expires_at = time.monotonic() + float(duration_s)
+        log.info("BT capture mode: listening for %.1fs", duration_s)
+        return True
+
+    def get_capture_state(self) -> dict:
+        """Returns the current capture state for polling from the UI.
+        Side effect: transitions from 'listening' to 'expired' when the
+        deadline passes — polling drives the state machine forward.
+        H1 fix 2026-05-16: atomic snapshot under _capture_lock so two
+        admin tabs can't observe inconsistent state mid-mutation."""
+        with self._capture_lock:
+            if self._capture_result is not None:
+                return {'state': 'captured', 'button': self._capture_result, 'remaining_ms': 0}
+            if not self._capture_mode:
+                return {'state': 'idle', 'button': None, 'remaining_ms': 0}
+            remaining = max(0.0, self._capture_expires_at - time.monotonic())
+            if remaining <= 0:
+                self._capture_mode = False
+                return {'state': 'expired', 'button': None, 'remaining_ms': 0}
+            return {'state': 'listening', 'button': None, 'remaining_ms': int(remaining * 1000)}
+
+    def cancel_capture(self) -> None:
+        """Operator pressed Cancel in the UI — drop the capture window.
+        H1 fix 2026-05-16: under _capture_lock."""
+        with self._capture_lock:
+            self._capture_mode = False
+            self._capture_result = None
+
+    # ------------------------------------------------------------------
     # Device detection
     # ------------------------------------------------------------------
 
@@ -286,6 +422,11 @@ class BTControllerDriver:
                         self._connected   = True
                         self._device_name = dev.name[:32]
                         self._prev_btns   = {}
+                        # Custom mappings: capture active MAC for per-device
+                        # profile lookup in _handle_button. evdev's `uniq`
+                        # field carries the controller's BT MAC (uppercase
+                        # canonical form used as profile dict key).
+                        self._active_device_mac = (dev.uniq or '').upper() or None
                     # B2 fix 2026-05-16: clear stale inactivity pause flag
                     # left over from previous session (operator powered
                     # down a paused controller — flag persisted across
@@ -293,6 +434,14 @@ class BTControllerDriver:
                     # reconnect until next physical input timeout).
                     self._inactivity_pause = False
                     self._last_input_t = time.time()
+                    # Idempotently create/refresh the device profile so the
+                    # UI's "known devices" list reflects this controller
+                    # even before the operator binds anything.
+                    if self._active_device_mac:
+                        try:
+                            self._ensure_device_profile(self._active_device_mac, dev.name)
+                        except Exception:
+                            log.exception("ensure_device_profile failed")
                     log.info(f"Gamepad connected: {dev.name}")
                     self._poll_loop()   # blocking until disconnection
             self._stop_evt.wait(5)
@@ -359,6 +508,13 @@ class BTControllerDriver:
                 self._last_dome  = 0.0
                 self._drive_active = False
                 self._dome_active  = False
+                # Custom mappings: drop active MAC so post-disconnect
+                # _handle_button paths can't index a stale profile.
+                # Cancel any in-flight button-capture session — the
+                # controller it was listening to is gone.
+                self._active_device_mac = None
+                self._capture_mode = False
+                self._capture_result = None
             if old_dev is not None:
                 try: old_dev.close()
                 except Exception: pass
@@ -687,6 +843,23 @@ class BTControllerDriver:
 
         log.debug(f"BTN codes={code_names} pressed={pressed} released={released}")
 
+        # CAPTURE MODE — operator is binding a button to a custom mapping.
+        # H1 fix 2026-05-16: under _capture_lock so concurrent get_capture_state
+        # from a Flask thread observes consistent state.
+        # M1 fix 2026-05-16: alias-aware E-STOP filter — evdev returns alias
+        # tuples (e.g. ['BTN_B','BTN_EAST']). If estop_code is ANYWHERE in
+        # the tuple, refuse to capture (don't just check code_names[0]).
+        # Prevents dead-button footgun on controllers that emit E-STOP as
+        # an aliased keycode.
+        if self._capture_mode and pressed and event.type == ecodes.EV_KEY:
+            estop_code = m.get('estop', 'BTN_MODE')
+            with self._capture_lock:
+                if self._capture_mode and code_names and estop_code not in code_names:
+                    self._capture_result = code_names[0]
+                    self._capture_mode = False
+                    log.info("BT capture: latched %s", code_names[0])
+            return  # consume — do NOT fall through to action dispatch
+
         # E-Stop — always processed even if controller is "disabled"
         # via UI toggle (B7 fix 2026-05-16: gate moved out of _poll_loop
         # so this branch can still fire).
@@ -702,6 +875,22 @@ class BTControllerDriver:
         # If E-Stop active → ignore everything else
         if getattr(reg, 'estop_active', False):
             return
+
+        # CUSTOM MAPPINGS — operator-defined per-device. Runs BEFORE the
+        # legacy fixed-action branches so the operator's binding takes
+        # precedence if the same button is also assigned to panel_dome
+        # / panel_body / audio. Rising-edge only (no release dispatch);
+        # released= path is reserved for the legacy panel hold-to-open.
+        if pressed and self._active_device_mac:
+            profile = (self._cfg.get('device_profiles', {}) or {}).get(self._active_device_mac, {})
+            custom = profile.get('custom_button_mappings', []) or []
+            for cm in custom:
+                if not isinstance(cm, dict):
+                    continue
+                bound = cm.get('button')
+                if bound and bound in code_names:
+                    self._fire_custom_mapping(cm, reg)
+                    return  # consume — do NOT fall through to legacy dispatch
 
         # Dome panel (held = open, released = closed)
         if _is(m.get('panel_dome', 'BTN_WEST')):
@@ -764,6 +953,52 @@ class BTControllerDriver:
                 log.info("BT: S:RANDOM:%s", cat)
                 try: reg.uart.send('S', f'RANDOM:{cat}')
                 except OSError as e: log.warning(f"audio send: {e}")
+
+    def _fire_custom_mapping(self, cm: dict, reg) -> None:
+        """Dispatch a custom mapping via the shared dispatch_action helper.
+
+        Uses the cm['id'] as a synthetic 'sid' for per-id debounce parity
+        with Shortcuts (B5/P2 pattern). Each mapping gets its own lock so
+        rapid autorepeats / re-press cannot double-fire while a previous
+        dispatch is in flight (some controllers send a key-down twice on
+        bouncy buttons).
+
+        Lazy-imports dispatch_action to avoid a circular import at module
+        load (shortcuts_bp transitively imports registry which constructs
+        BTControllerDriver during boot)."""
+        sid = f"btmap:{cm.get('id', 'unknown')}"
+        action = cm.get('action', {}) or {}
+        a_type = action.get('type', 'none')
+        a_target = action.get('target', '') or ''
+
+        # Per-id debounce — mirrors shortcuts B5/P2. 150ms is well under
+        # any reasonable operator double-tap but eats hardware bounce.
+        now = time.monotonic()
+        last = self._custom_last_ts.get(sid, 0.0)
+        if (now - last) < 0.15:
+            return
+        self._custom_last_ts[sid] = now
+
+        # Per-id non-blocking lock — if a previous dispatch is still
+        # running, drop this press. Prevents double-fire on autorepeat
+        # without serializing all custom-mapping presses behind one lock.
+        lk = self._custom_locks.setdefault(sid, threading.Lock())
+        if not lk.acquire(blocking=False):
+            return
+        try:
+            # Lazy import to dodge circular import at module load time.
+            from master.api.shortcuts_bp import dispatch_action
+            new_state, err, _http = dispatch_action(sid, a_type, a_target)
+            if err:
+                log.warning("BT custom mapping refused: %s (%s/%s)",
+                            err, a_type, a_target)
+            else:
+                log.info("BT custom mapping fired: %s/%s → %s",
+                         a_type, a_target, new_state)
+        except Exception:
+            log.exception("BT custom mapping dispatch crashed")
+        finally:
+            lk.release()
 
     def _trigger_estop(self, reg) -> None:
         """B4 fix 2026-05-16: delegate to the canonical /system/estop

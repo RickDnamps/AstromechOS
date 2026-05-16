@@ -672,6 +672,46 @@ def trigger_shortcut(sid: str):
         lk.release()
 
 
+def dispatch_action(sid: str, a_type: str, a_target: str,
+                    current: str = 'off') -> tuple[str, str | None, int]:
+    """BT Custom Mappings reuse: shared dispatch helper.
+    Takes action inline (no shortcuts.json lookup).
+    Returns (new_state, error_msg_or_None, http_status).
+    Honors all safety gates + per-handler exceptions identically to
+    _trigger_shortcut_impl. Caller is responsible for the per-sid lock
+    + debounce.
+
+    Used by:
+    - shortcuts_bp _trigger_shortcut_impl (wrapper: reads shortcuts.json
+      then calls this)
+    - bt_controller_driver _fire_custom_mapping (custom button mappings
+      bound to BT controller buttons)
+    """
+    handler = _ACTIONS.get(a_type)
+    if handler is None:
+        return ('off', f'no handler for action: {a_type}', 500)
+
+    # Safety chain — same gates as _trigger_shortcut_impl
+    if reg.estop_active and current != 'on' and a_type != 'none':
+        return ('off', 'E-STOP active — reset to use shortcuts', 403)
+    if getattr(reg, 'stow_in_progress', False) and a_type in ('arms_toggle', 'body_panel_toggle', 'dome_panel_toggle'):
+        return ('off', 'stow in progress — wait for servos to settle', 503)
+    if reg.lock_mode == 2 and a_type in ('arms_toggle', 'body_panel_toggle', 'dome_panel_toggle', 'play_choreo'):
+        return ('off', 'Child Lock — only sounds/lights/dome rotation allowed', 403)
+
+    try:
+        new_state = handler(a_target, current)
+        return (new_state, None, 200)
+    except _ShortcutBusy as e:
+        return ('off', str(e), 409)
+    except _ShortcutRefused as e:
+        return ('off', str(e), 503)
+    except Exception as e:
+        log.exception("dispatch_action failed: %s (action=%s target=%s)",
+                      sid, a_type, a_target)
+        return ('off', f'action failed: {e}', 500)
+
+
 def _trigger_shortcut_impl(sid: str):
     data = _read_shortcuts()
     sc = next((s for s in data.get('shortcuts', []) if s.get('id') == sid), None)
@@ -682,46 +722,14 @@ def _trigger_shortcut_impl(sid: str):
     current = state.get(sid, 'off')
     a_type   = sc.get('action', {}).get('type', 'none')
     a_target = sc.get('action', {}).get('target', '')
-    handler  = _ACTIONS.get(a_type)
-    if handler is None:
-        return jsonify({'error': f'no handler for action: {a_type}'}), 500
 
-    # Bug H1 fix 2026-05-15: gate on safety state. Previous comment
-    # claimed handlers honored the safety chain "automatically" but
-    # audio + arms_toggle had no freeze gate, and panel toggles set
-    # state='on' even though the frozen driver silently no-op'd.
-    # Result: audio shortcut played sounds during E-STOP, panel state
-    # persisted as 'on' for panels that never moved.
-    #
-    # Closing a panel (current=='on' → off) is still allowed during
-    # E-STOP — it's a stop-firing/recover action. Only OPENING /
-    # firing new motion is blocked.
-    if reg.estop_active and current != 'on' and a_type != 'none':
-        return jsonify({'error': 'E-STOP active — reset to use shortcuts'}), 403
-    if getattr(reg, 'stow_in_progress', False) and a_type in ('arms_toggle', 'body_panel_toggle', 'dome_panel_toggle'):
-        return jsonify({'error': 'stow in progress — wait for servos to settle'}), 503
-    if reg.lock_mode == 2 and a_type in ('arms_toggle', 'body_panel_toggle', 'dome_panel_toggle', 'play_choreo'):
-        return jsonify({'error': 'Child Lock — only sounds/lights/dome rotation allowed'}), 403
+    new_state, err, status = dispatch_action(sid, a_type, a_target, current)
+    if err is not None:
+        return jsonify({'error': err, 'state': new_state}), status
 
-    try:
-        new_state = handler(a_target, current)
-    except _ShortcutBusy as e:
-        # B3 fix: surface 'another sequence playing' as 409 instead of
-        # silent 'off' → frontend toast.
-        return jsonify({'error': str(e), 'state': 'off'}), 409
-    except _ShortcutRefused as e:
-        # B2/B4 fix: refused by safety / UART → 503 → frontend toast.
-        return jsonify({'error': str(e), 'state': 'off'}), 503
-    except Exception as e:
-        log.exception("Shortcut trigger failed: %s (action=%s target=%s)",
-                      sid, a_type, a_target)
-        return jsonify({'error': f'action failed: {e}'}), 500
-
-    # 'fired' is transient — store as 'off' so the persisted state
-    # reflects "nothing currently extended/open" for one-shot actions.
+    # 'fired' is transient — persist as 'off' so dots reflect "nothing
+    # currently extended/open" for one-shot actions.
     state[sid] = 'off' if new_state == 'fired' else new_state
-    # Persist non-fired transitions so a Master restart re-renders the
-    # correct indicator dots.
     if new_state != 'fired':
         try:
             _persist_state()

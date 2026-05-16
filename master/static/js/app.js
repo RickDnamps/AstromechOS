@@ -1638,6 +1638,7 @@ function switchSettingsPanel(panelId) {
   }
   if (panelId === 'diagnostics') diagPanel.load();
   if (panelId === 'shortcuts')   shortcutsEditor.load();
+  if (panelId === 'bluetooth')   { try { btCustomMappings.load(); } catch {} }
   if (panelId === 'battery')     { try { updateBatteryPreview(); } catch {} }
   if (panelId === 'camera')      { try { updateCameraBitrateHint(); } catch {} }
   if (panelId === 'deploy')      { try { loadDeployCommitInfo(); } catch {} }
@@ -7646,6 +7647,460 @@ const btController = new BTController();
 btController._piEnabled   = true;
 btController._piConnected = false;
 function saveBTConfig() { btController.saveFullConfig(); }
+
+// ================================================================
+// BT Custom Button Mappings — per-controller user-defined bindings
+// ================================================================
+// Operator can capture any button on a paired controller and bind it
+// to a Shortcuts-style action (choreo, sound, panel toggle, etc.).
+// Mappings are persisted server-side per MAC (device profile) so a
+// switch between paired controllers loads the right set automatically.
+const _BT_ACTION_TYPES = [
+  { value: 'none',                label: '— none —' },
+  { value: 'arms_toggle',         label: '🦾 Arm toggle' },
+  { value: 'body_panel_toggle',   label: '🚪 Body panel toggle' },
+  { value: 'dome_panel_toggle',   label: '🔘 Dome panel toggle' },
+  { value: 'play_choreo',         label: '🎭 Play choreo' },
+  { value: 'play_sound',          label: '🎵 Play sound' },
+  { value: 'play_random_audio',   label: '🎲 Play random (category)' },
+  { value: 'play_animation',      label: '💡 Play lights animation' },
+];
+
+const btCustomMappings = {
+  _activeMac:        null,
+  _profiles:         {},
+  _captureTimer:     null,
+  _capturePollTimer: null,
+  _scripts:          null,   // cache /choreo/list
+  _sounds:           null,   // cache flat list of sounds
+  _cats:             null,   // cache audio categories map
+
+  async load() {
+    const status = await api('/bt/status');
+    if (!status) return;
+    this._profiles  = status.device_profiles || {};
+    const activeMac = status.active_device_mac || null;
+
+    // Lazy-fetch dropdown sources (choreos + sounds + categories)
+    // once per session — same pattern as shortcutsEditor.load.
+    await this._loadScripts();
+    await this._loadSounds();
+
+    // Build the device selector. Preserve the current selection if
+    // possible, otherwise default to active MAC, otherwise first
+    // profile, otherwise empty.
+    const sel = el('bt-device-profile-select');
+    if (!sel) return;
+    const previous = sel.value;
+    sel.replaceChildren();
+
+    const macs = Object.keys(this._profiles);
+    if (macs.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '— no controller paired yet —';
+      sel.appendChild(opt);
+      this._activeMac = null;
+    } else {
+      macs.forEach(mac => {
+        const opt  = document.createElement('option');
+        opt.value  = mac;
+        const prof = this._profiles[mac] || {};
+        const name = prof.name || mac;
+        opt.textContent = mac === activeMac ? `${name} (connected)` : name;
+        sel.appendChild(opt);
+      });
+      let chosen = '';
+      if (previous && this._profiles[previous]) chosen = previous;
+      else if (activeMac && this._profiles[activeMac]) chosen = activeMac;
+      else chosen = macs[0];
+      sel.value = chosen;
+      this._activeMac = chosen;
+    }
+
+    const delBtn = el('bt-delete-profile-btn');
+    if (delBtn) delBtn.style.display = this._activeMac ? '' : 'none';
+
+    this._render();
+  },
+
+  async _loadScripts() {
+    if (this._scripts) return this._scripts;
+    const d = await api('/choreo/list');
+    this._scripts = (d && (d.scripts || d.choreos)) || [];
+    return this._scripts;
+  },
+
+  async _loadSounds() {
+    if (this._sounds) return;
+    const idx = await api('/audio/index');
+    this._cats   = (idx && idx.categories) || {};
+    this._sounds = Object.values(this._cats).flat();
+  },
+
+  onDeviceChange(mac) {
+    this._activeMac = mac || null;
+    const delBtn = el('bt-delete-profile-btn');
+    if (delBtn) delBtn.style.display = this._activeMac ? '' : 'none';
+    this._render();
+  },
+
+  _render() {
+    const container = el('bt-custom-mappings-list');
+    if (!container) return;
+    container.replaceChildren();
+
+    if (!this._activeMac) {
+      const hint = document.createElement('div');
+      hint.style.color    = 'var(--text-dim)';
+      hint.style.fontSize = '11px';
+      hint.textContent    = '— select a device to view its mappings —';
+      container.appendChild(hint);
+      return;
+    }
+
+    const profile = this._profiles[this._activeMac] || {};
+    const list    = profile.custom_button_mappings || [];
+    if (list.length === 0) {
+      const hint = document.createElement('div');
+      hint.style.color    = 'var(--text-dim)';
+      hint.style.fontSize = '11px';
+      hint.textContent    = '— no custom mappings yet — click 🎯 CAPTURE NEW BUTTON to add one —';
+      container.appendChild(hint);
+      return;
+    }
+    list.forEach(cm => container.appendChild(this._buildRow(cm)));
+  },
+
+  // XSS-safe row builder — createElement + textContent throughout.
+  // Layout: [button-pill] [icon] [label-input] [type-select] [target-cell] [✕]
+  _buildRow(cm) {
+    const row = document.createElement('div');
+    row.className = 'bt-custom-row';
+    row.dataset.id = cm.id || '';
+
+    // 1) read-only button code pill (BTN_THUMBL etc.)
+    const codePill = document.createElement('code');
+    codePill.className   = 'bt-btn-code-pill';
+    codePill.textContent = cm.button || '?';
+    codePill.title       = 'Controller button captured for this mapping';
+    row.appendChild(codePill);
+
+    // 2) emoji icon — clickable, opens emojiPicker
+    const iconBtn       = document.createElement('button');
+    iconBtn.type        = 'button';
+    iconBtn.className   = 'shortcut-row-icon';
+    iconBtn.textContent = cm.icon || '⚡';
+    iconBtn.title       = 'Click to pick an emoji';
+    iconBtn.addEventListener('click', () => {
+      if (typeof emojiPicker === 'undefined' || !emojiPicker.open) return;
+      emojiPicker.open(cm.icon || '⚡', (emoji) => {
+        if (!emoji) return;
+        cm.icon = emoji;
+        iconBtn.textContent = emoji;
+        this._saveRow(cm, row);
+      });
+    });
+    row.appendChild(iconBtn);
+
+    // 3) label input
+    const lblInp       = document.createElement('input');
+    lblInp.type        = 'text';
+    lblInp.className   = 'shortcut-row-label';
+    lblInp.value       = cm.label || '';
+    lblInp.maxLength   = 32;
+    lblInp.placeholder = 'Label';
+    lblInp.addEventListener('change', () => {
+      cm.label = lblInp.value;
+      this._saveRow(cm, row);
+    });
+    row.appendChild(lblInp);
+
+    // 4) action type select
+    const typeSel     = document.createElement('select');
+    typeSel.className = 'shortcut-row-type input-text';
+    _BT_ACTION_TYPES.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt.value;
+      o.textContent = opt.label;
+      if ((cm.action?.type || 'none') === opt.value) o.selected = true;
+      typeSel.appendChild(o);
+    });
+    typeSel.addEventListener('change', () => {
+      cm.action = { type: typeSel.value, target: '' };
+      // Rebuild the target cell (and persist once a valid target is picked)
+      const targetCell = row.querySelector('.bt-custom-target-cell');
+      if (targetCell) {
+        targetCell.replaceChildren();
+        targetCell.appendChild(this._buildActionTargetInput(cm, () => this._saveRow(cm, row)));
+      }
+      this._saveRow(cm, row);
+    });
+    row.appendChild(typeSel);
+
+    // 5) target cell — dynamic per action type
+    const targetCell = document.createElement('div');
+    targetCell.className     = 'bt-custom-target-cell';
+    targetCell.style.minWidth = '0';
+    targetCell.appendChild(this._buildActionTargetInput(cm, () => this._saveRow(cm, row)));
+    row.appendChild(targetCell);
+
+    // 6) delete button
+    const delBtn       = document.createElement('button');
+    delBtn.className   = 'btn btn-xs';
+    delBtn.textContent = '✕';
+    delBtn.title       = 'Delete this mapping';
+    delBtn.addEventListener('click', () => this.deleteMapping(cm.id));
+    row.appendChild(delBtn);
+
+    return row;
+  },
+
+  // Builds the right-hand "target" picker for whichever action type
+  // is currently selected on this mapping. Mirrors shortcutsEditor's
+  // _buildTargetInput logic. onChange fires whenever the operator
+  // picks a real option so the row auto-saves.
+  _buildActionTargetInput(cm, onChange) {
+    const type = cm.action?.type || 'none';
+    if (type === 'none') {
+      const s = document.createElement('span');
+      s.style.color    = 'var(--text-dim)';
+      s.style.fontSize = '10px';
+      s.textContent    = '—';
+      return s;
+    }
+
+    const mkSelect = (options, currentValue) => {
+      const sel = document.createElement('select');
+      sel.className = 'shortcut-row-target input-text';
+      let firstValid = '';
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.value;
+        opt.textContent = o.text;
+        if (o.disabled) opt.disabled = true;
+        if (o.value === currentValue) opt.selected = true;
+        if (!firstValid && !o.disabled && o.value !== '') firstValid = o.value;
+        sel.appendChild(opt);
+      });
+      const validMatch = currentValue !== '' && options.some(o => o.value === currentValue);
+      if (!validMatch && firstValid) {
+        sel.value = firstValid;
+        cm.action.target = firstValid;
+      }
+      sel.addEventListener('change', () => {
+        cm.action.target = sel.value;
+        if (typeof onChange === 'function') onChange();
+      });
+      return sel;
+    };
+
+    if (type === 'arms_toggle') {
+      const count = (typeof armsConfig !== 'undefined' && armsConfig._count) || 0;
+      if (count === 0) {
+        return mkSelect([{value: '', text: '(configure arms first)', disabled: true}], cm.action.target);
+      }
+      const options = [];
+      for (let i = 1; i <= count; i++) {
+        const sid = (armsConfig._servos || [])[i - 1] || '';
+        const lbl = sid ? (armsConfig._labels?.[sid] || '') : '';
+        const text = (lbl && lbl !== sid) ? lbl : `Arm ${i}`;
+        options.push({value: String(i), text});
+      }
+      return mkSelect(options, cm.action.target);
+    }
+    if (type === 'body_panel_toggle' || type === 'dome_panel_toggle') {
+      const prefix = type === 'body_panel_toggle' ? 'Servo_S' : 'Servo_M';
+      const options = [{value: '', text: '(pick a servo)'}];
+      const allPanels = (typeof _servoCfg !== 'undefined' && _servoCfg.panels) || {};
+      const ids = Object.keys(allPanels)
+        .filter(id => id.startsWith(prefix))
+        .sort((a, b) => {
+          const na = parseInt(a.replace(prefix, ''), 10);
+          const nb = parseInt(b.replace(prefix, ''), 10);
+          return (isNaN(na) ? 0 : na) - (isNaN(nb) ? 0 : nb);
+        });
+      ids.forEach(id => {
+        const lbl = allPanels[id]?.label;
+        const text = (lbl && lbl !== id) ? `${lbl} (${id})` : id;
+        options.push({value: id, text});
+      });
+      if (ids.length === 0) {
+        options.push({value: '', text: '(none configured in Calibration)', disabled: true});
+      }
+      return mkSelect(options, cm.action.target);
+    }
+    if (type === 'play_choreo') {
+      const options = [{value: '', text: '(pick a choreo)'}];
+      (this._scripts || []).forEach(s => {
+        options.push({value: s.name, text: s.label || s.name});
+      });
+      return mkSelect(options, cm.action.target);
+    }
+    if (type === 'play_sound') {
+      const options = [{value: '', text: '(pick a sound)'}];
+      (this._sounds || []).forEach(s => options.push({value: s, text: s}));
+      return mkSelect(options, cm.action.target);
+    }
+    if (type === 'play_random_audio') {
+      const options = [{value: '', text: '(pick a category)'}];
+      Object.keys(this._cats || {}).sort().forEach(c => options.push({value: c, text: c}));
+      return mkSelect(options, cm.action.target);
+    }
+    if (type === 'play_animation') {
+      const options = [{value: '', text: '(pick an animation)'}];
+      const anims = (typeof animData !== 'undefined' && animData.animations) || [];
+      anims.forEach(a => {
+        const code = String(a.code ?? a.mode ?? a.id ?? '');
+        const name = a.name || a.label || `T${code}`;
+        if (code) options.push({value: code, text: `T${code} — ${name}`});
+      });
+      if (anims.length === 0) {
+        options.push({value: '', text: '(visit Lights tab first)', disabled: true});
+      }
+      return mkSelect(options, cm.action.target);
+    }
+    const span = document.createElement('span');
+    span.textContent = '—';
+    return span;
+  },
+
+  async startCapture() {
+    if (!this._activeMac) {
+      toast('Connect a controller first', 'warn');
+      return;
+    }
+    const btn = el('bt-capture-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '🎯 LISTENING…'; }
+    const res = await apiDetail('/bt/capture/start', 'POST');
+    if (!res.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = '🎯 CAPTURE NEW BUTTON'; }
+      toast(res.error || 'capture failed', 'error');
+      return;
+    }
+    const modal = el('bt-capture-modal');
+    if (modal) modal.style.display = 'flex';
+    let remaining = 10;
+    const rEl = el('bt-capture-remaining');
+    if (rEl) rEl.textContent = String(remaining);
+    this._captureTimer = setInterval(() => {
+      remaining--;
+      const r = el('bt-capture-remaining');
+      if (r) r.textContent = String(Math.max(0, remaining));
+      if (remaining <= 0) {
+        this._stopCapturePolling();
+        this._closeModal();
+        const btn2 = el('bt-capture-btn');
+        if (btn2) { btn2.disabled = false; btn2.textContent = '🎯 CAPTURE NEW BUTTON'; }
+      }
+    }, 1000);
+    this._capturePollTimer = setInterval(() => this._pollCapture(), 300);
+  },
+
+  async _pollCapture() {
+    const res = await apiDetail('/bt/capture/poll');
+    if (!res.ok) return;
+    const d = res.data || {};
+    if (d.state === 'captured' && d.button) {
+      this._stopCapturePolling();
+      this._closeModal();
+      const btn = el('bt-capture-btn');
+      if (btn) { btn.disabled = false; btn.textContent = '🎯 CAPTURE NEW BUTTON'; }
+      toast(`Captured: ${d.button}`, 'ok');
+      await this._addNewMapping(d.button);
+    } else if (d.state === 'expired' || d.state === 'cancelled' || d.state === 'idle') {
+      // 'idle' guards a race where the server already cleared state
+      // (e.g. the operator clicked CANCEL before the poll landed).
+      this._stopCapturePolling();
+      this._closeModal();
+      const btn = el('bt-capture-btn');
+      if (btn) { btn.disabled = false; btn.textContent = '🎯 CAPTURE NEW BUTTON'; }
+    }
+  },
+
+  _stopCapturePolling() {
+    if (this._captureTimer)     { clearInterval(this._captureTimer);     this._captureTimer = null; }
+    if (this._capturePollTimer) { clearInterval(this._capturePollTimer); this._capturePollTimer = null; }
+  },
+
+  _closeModal() {
+    const modal = el('bt-capture-modal');
+    if (modal) modal.style.display = 'none';
+  },
+
+  async cancelCapture() {
+    await api('/bt/capture/cancel', 'POST');
+    this._stopCapturePolling();
+    this._closeModal();
+    const btn = el('bt-capture-btn');
+    if (btn) { btn.disabled = false; btn.textContent = '🎯 CAPTURE NEW BUTTON'; }
+  },
+
+  async _addNewMapping(button) {
+    if (!this._activeMac) {
+      toast('No active device — connect a controller first', 'warn');
+      return;
+    }
+    const res = await apiDetail('/bt/custom_mapping', 'POST', {
+      device_mac: this._activeMac,
+      mapping: {
+        button,
+        action: { type: 'none', target: '' },
+        label:  '',
+        icon:   '⚡',
+      },
+    });
+    if (!res.ok) {
+      toast(res.error || 'save failed', 'error');
+      return;
+    }
+    await this.load();
+  },
+
+  async _saveRow(cm, row) {
+    if (!this._activeMac) return;
+    const res = await apiDetail('/bt/custom_mapping', 'POST', {
+      device_mac: this._activeMac,
+      mapping: {
+        id:     cm.id || '',
+        button: cm.button,
+        action: cm.action || { type: 'none', target: '' },
+        label:  cm.label  || '',
+        icon:   cm.icon   || '⚡',
+      },
+    });
+    if (!res.ok) {
+      toast(res.error || 'save failed', 'error');
+      return;
+    }
+    // Pick up server-assigned id on first save
+    const saved = res.data?.mapping || res.data;
+    if (saved && saved.id && !cm.id) {
+      cm.id = saved.id;
+      if (row) row.dataset.id = cm.id;
+    }
+  },
+
+  async deleteMapping(id) {
+    if (!id) return;
+    if (!confirm('Delete this mapping?')) return;
+    const res = await apiDetail('/bt/custom_mapping/' + encodeURIComponent(id),
+                                'DELETE', { device_mac: this._activeMac });
+    if (!res.ok) { toast(res.error || 'delete failed', 'error'); return; }
+    await this.load();
+  },
+
+  async deleteProfile() {
+    if (!this._activeMac) return;
+    const profile = this._profiles[this._activeMac] || {};
+    const name = profile.name || this._activeMac;
+    if (!confirm(`Delete the entire profile for "${name}"?\n\nAll custom mappings for this controller will be lost.`)) return;
+    const res = await apiDetail('/bt/device_profile/' + encodeURIComponent(this._activeMac), 'DELETE');
+    if (!res.ok) { toast(res.error || 'delete failed', 'error'); return; }
+    toast('Profile deleted', 'ok');
+    await this.load();
+  },
+};
 
 // ================================================================
 // BT Pairing UI

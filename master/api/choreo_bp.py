@@ -744,6 +744,15 @@ def choreo_rename():
         behavior_cascade_rename('play_choreo', old_name, new_name)
     except Exception:
         log.exception("behavior cascade_rename failed for choreo %s → %s", old_name, new_name)
+    # BT custom mappings cascade — same pattern as shortcuts. If a BT
+    # controller had a custom button bound to play_choreo with the old
+    # name, the binding follows the rename instead of breaking silently
+    # at trigger time. Lazy import to avoid choreo_bp ↔ bt_bp circular.
+    try:
+        from master.api.bt_bp import cascade_rename_in_bt
+        cascade_rename_in_bt('play_choreo', old_name, new_name)
+    except Exception:
+        log.exception("BT cascade_rename failed for choreo %s → %s", old_name, new_name)
     log.info(f"Choreo renamed: {old_name} → {new_name}")
     return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
 
@@ -980,6 +989,15 @@ def choreo_delete(name: str):
                 behavior_cascade_delete('play_choreo', name)
             except Exception:
                 log.exception("behavior cascade_delete failed for choreo %s", name)
+            # BT custom mappings cascade — neutralize any custom button
+            # on any device profile that was bound to this choreo. Soft-
+            # delete (action becomes 'none') so the operator sees a dead
+            # button and can rebind it (matches shortcuts behavior).
+            try:
+                from master.api.bt_bp import cascade_delete_in_bt
+                cascade_delete_in_bt('play_choreo', name)
+            except Exception:
+                log.exception("BT cascade_delete failed for choreo %s", name)
             log.info(f"Choreo deleted: {name}")
             return jsonify({'status': 'ok', 'name': name})
         except OSError as e:
