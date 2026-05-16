@@ -411,7 +411,14 @@ def _sync_audio_channels(channels: int) -> None:
 
 @settings_bp.get('/settings')
 def get_settings():
-    """Returns the full configuration (local.cfg + network state)."""
+    """Returns the full configuration (local.cfg + network state).
+    B4 fix 2026-05-16: SSIDs + slave host + GitHub URL stripped when
+    no admin header — was leaking those to any LAN client. Settings
+    tab is admin-protected via tab guard; legitimate operators are
+    always admin-unlocked when calling this. Stripping doesn't break
+    them but blocks recon by anonymous LAN attackers."""
+    from master.api._admin_auth import _check_admin
+    is_admin = _check_admin(request)
     cfg = _read_cfg()
 
     # wlan1 state
@@ -422,26 +429,28 @@ def get_settings():
     # wlan0 state (hotspot)
     wlan0_state = _nm_field('wlan0', 'GENERAL.STATE')
 
+    # B4: mask sensitive fields when no admin token
+    _mask_ssid = lambda s: s if is_admin else (('•' * min(len(s), 8)) if s else '')
     return jsonify({
         'wifi': {
-            'ssid':       cfg.get('home_wifi', 'ssid',     fallback=''),
+            'ssid':       _mask_ssid(cfg.get('home_wifi', 'ssid', fallback='')),
             'connected':  '100' in wlan1_state,
-            'connection': wlan1_conn,
-            'ip':         wlan1_ip.split('/')[0] if wlan1_ip else '',
+            'connection': wlan1_conn if is_admin else '',
+            'ip':         (wlan1_ip.split('/')[0] if wlan1_ip else '') if is_admin else '',
         },
         'hotspot': {
-            'ssid':         cfg.get('hotspot', 'ssid', fallback='AstromechOS'),
+            'ssid':         _mask_ssid(cfg.get('hotspot', 'ssid', fallback='AstromechOS')),
             'password_set': bool(cfg.get('hotspot', 'password', fallback='')),
             'ip':           '192.168.4.1',
             'active':       '100' in wlan0_state,
         },
         'github': {
-            'repo_url':          cfg.get('github', 'repo_url',          fallback=''),
-            'branch':            cfg.get('github', 'branch',            fallback='main'),
+            'repo_url':          cfg.get('github', 'repo_url', fallback='') if is_admin else '',
+            'branch':            cfg.get('github', 'branch',   fallback='main') if is_admin else '',
             'auto_pull_on_boot': cfg.getboolean('github', 'auto_pull_on_boot', fallback=True),
         },
         'slave': {
-            'host': cfg.get('slave', 'host', fallback='r2-slave.local'),
+            'host': cfg.get('slave', 'host', fallback='r2-slave.local') if is_admin else '',
         },
         'hardware': {
             'master_hats':       cfg.get('i2c_servo_hats', 'master_hats', fallback='0x40'),
@@ -468,38 +477,79 @@ def get_settings():
     })
 
 
+# B2/P1 fix 2026-05-16: cache scan results + scan lock to prevent LAN
+# DoS. Anyone on the LAN/hotspot could spam SCAN → each call burns
+# Flask thread up to 15s + thrashes wlan1 radio. Now:
+# - @require_admin (matches other settings mutation endpoints)
+# - threading.Lock prevents concurrent nmcli scan from same Master
+# - 5s cached result (rescan = expensive RF op, no value in re-running)
+_wifi_scan_lock = threading.Lock()
+_wifi_scan_cache = {'ts': 0.0, 'data': None}
+_WIFI_SCAN_TTL_S = 5.0
+
+
 @settings_bp.get('/settings/wifi/scan')
+@require_admin
 def wifi_scan():
-    """Scans available WiFi networks on wlan1."""
-    # Trigger a rescan (non-blocking, error ignored if wlan1 is absent)
-    _run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', 'wlan1'], timeout=5)
+    """Scans available WiFi networks on wlan1. Admin-gated + cached.
+    B2/P1 fix 2026-05-16."""
+    now = time.monotonic()
+    # Return cached scan if fresh enough — protects against burst clicks
+    if _wifi_scan_cache['data'] is not None and (now - _wifi_scan_cache['ts']) < _WIFI_SCAN_TTL_S:
+        return jsonify(_wifi_scan_cache['data'])
+    if not _wifi_scan_lock.acquire(blocking=False):
+        # Another scan already in flight — return cached if any, else 429
+        if _wifi_scan_cache['data'] is not None:
+            return jsonify(_wifi_scan_cache['data'])
+        return jsonify({'error': 'scan in progress — retry shortly'}), 429
+    try:
+        # P2 fix 2026-05-16: shorter rescan timeout (3s vs 5s) — radio rescan
+        # rarely needs the full window and a stale rescan burns a thread.
+        _run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', 'wlan1'], timeout=3)
 
-    rc, out, _ = _run(
-        ['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list', 'ifname', 'wlan1'],
-        timeout=10
-    )
+        rc, out, _ = _run(
+            ['nmcli', '-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY,FREQ',
+             'device', 'wifi', 'list', 'ifname', 'wlan1'],
+            timeout=10
+        )
 
-    networks = []
-    if rc == 0:
-        for line in out.splitlines():
-            # nmcli -t: escapes ':' in SSID as '\:'
-            # split from the right to isolate SIGNAL and SECURITY
-            parts = line.rsplit(':', 2)
-            if len(parts) == 3:
-                ssid     = parts[0].replace('\\:', ':')
-                signal   = int(parts[1]) if parts[1].isdigit() else 0
-                security = parts[2]
-                if ssid:
-                    networks.append({'ssid': ssid, 'signal': signal, 'security': security})
+        networks = []
+        if rc == 0:
+            for line in out.splitlines():
+                # nmcli -t: escapes ':' in SSID as '\:'
+                # New format: IN-USE:SSID:SIGNAL:SECURITY:FREQ
+                # IN-USE is '*' if currently connected, empty otherwise.
+                parts = line.rsplit(':', 4)
+                if len(parts) == 5:
+                    in_use   = parts[0].strip() == '*'
+                    ssid     = parts[1].replace('\\:', ':')
+                    signal   = int(parts[2]) if parts[2].isdigit() else 0
+                    security = parts[3]
+                    try:
+                        freq_mhz = int(parts[4]) if parts[4].isdigit() else 0
+                    except ValueError:
+                        freq_mhz = 0
+                    band = '5G' if freq_mhz >= 5000 else ('2.4G' if freq_mhz >= 2400 else '')
+                    if ssid:
+                        networks.append({
+                            'ssid': ssid, 'signal': signal, 'security': security,
+                            'in_use': in_use, 'band': band,
+                        })
 
-        # Deduplicate (keep strongest signal) and sort
+        # Deduplicate (keep strongest signal, prefer in_use entry) and sort
         seen: dict[str, dict] = {}
         for n in networks:
-            if n['ssid'] not in seen or n['signal'] > seen[n['ssid']]['signal']:
+            cur = seen.get(n['ssid'])
+            if cur is None or n['signal'] > cur['signal'] or (n['in_use'] and not cur['in_use']):
                 seen[n['ssid']] = n
-        networks = sorted(seen.values(), key=lambda x: -x['signal'])
+        networks = sorted(seen.values(), key=lambda x: (-int(x['in_use']), -x['signal']))
 
-    return jsonify({'networks': networks})
+        result = {'networks': networks}
+        _wifi_scan_cache['data'] = result
+        _wifi_scan_cache['ts']   = time.monotonic()
+        return jsonify(result)
+    finally:
+        _wifi_scan_lock.release()
 
 
 @settings_bp.post('/settings/wifi')
@@ -522,6 +572,9 @@ def set_wifi():
     # SSID containing \n would inject a fake [section] on next read.
     if any(c in ssid for c in '\n\r\x00') or any(c in password for c in '\n\r\x00'):
         return jsonify({'error': 'SSID/password contains illegal control char'}), 400
+    # B9 fix 2026-05-16: IEEE 802.11 caps SSID at 32 bytes.
+    if len(ssid.encode('utf-8')) > 32:
+        return jsonify({'error': 'SSID too long (max 32 bytes per IEEE 802.11)'}), 400
 
     # B-73 (remaining tabs audit 2026-05-15): snapshot existing
     # ssid/password BEFORE persisting so we can roll back local.cfg if
@@ -573,18 +626,42 @@ def set_wifi():
 def set_hotspot():
     """Updates hotspot credentials for wlan0 and restarts the hotspot."""
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
+    # B7 fix 2026-05-16: don't .strip() password — WPA-PSK accepts
+    # leading/trailing space. Stripping silently makes 'hunter2 ' →
+    # 'hunter2' → cfg/nmcli desync vs AP. SSID strip is fine
+    # (real SSIDs never have edge whitespace).
     ssid     = data.get('ssid', '').strip()
-    password = data.get('password', '').strip()
+    password = str(data.get('password', '') or '')
 
     if not ssid:
         return jsonify({'error': 'SSID required'}), 400
+    # B1 fix 2026-05-16: parity with set_wifi — reject --option-like
+    # SSID/password (nmcli treats leading - as a flag) + control chars
+    # (newline injection into local.cfg via ConfigParser).
+    if ssid.startswith('-') or (password and password.startswith('-')):
+        return jsonify({'error': 'SSID/password cannot start with "-"'}), 400
+    if any(c in ssid for c in '\n\r\x00') or any(c in password for c in '\n\r\x00'):
+        return jsonify({'error': 'SSID/password contains illegal control char'}), 400
+    # B9 fix 2026-05-16: IEEE 802.11 caps SSID at 32 BYTES (not chars).
+    if len(ssid.encode('utf-8')) > 32:
+        return jsonify({'error': 'SSID too long (max 32 bytes per IEEE 802.11)'}), 400
+    # E5 fix 2026-05-16: whitespace-only password would silently become
+    # an OPEN AP (server saw len > 0 but no actual secret material).
+    if password and not password.strip():
+        return jsonify({'error': 'Hotspot password cannot be whitespace-only'}), 400
     if password and len(password) < 8:
         return jsonify({'error': 'Hotspot password: minimum 8 characters (WPA2)'}), 400
-    # Audit finding L-2 2026-05-15: WPA2 max PSK is 63 chars per
-    # IEEE 802.11i. A 1 MB password would bloat local.cfg and fail
-    # nmcli anyway. Cap at the standard limit.
+    # Audit finding L-2 2026-05-15: WPA2 max PSK is 63 chars per IEEE 802.11i.
     if password and len(password) > 63:
         return jsonify({'error': 'Hotspot password: maximum 63 characters (WPA2 limit)'}), 400
+
+    # B3 fix 2026-05-16: snapshot previous creds for rollback on nmcli fail
+    # (parity with set_wifi B-73). Was: cfg persisted before nmcli ran →
+    # rc!=0 left cfg pointing at bad creds → reboot used the bad config
+    # → hotspot broken silently.
+    _old_cfg = _read_cfg()
+    prev_ssid = _old_cfg.get('hotspot', 'ssid', fallback='AstromechOS')
+    prev_pwd  = _old_cfg.get('hotspot', 'password', fallback='')
 
     # Save
     _write_key('hotspot', 'ssid', ssid)
@@ -595,15 +672,35 @@ def set_hotspot():
     modify_cmd = ['nmcli', 'connection', 'modify', HOTSPOT_CON, 'ssid', ssid]
     if password:
         modify_cmd += ['wifi-sec.psk', password]
-    _run(modify_cmd)
+    rc_mod, _, err_mod = _run(modify_cmd)
+    if rc_mod != 0:
+        log.error(f"nmcli modify hotspot failed: {err_mod} — rolling back local.cfg")
+        _write_key('hotspot', 'ssid', prev_ssid)
+        if prev_pwd:
+            _write_key('hotspot', 'password', prev_pwd)
+        return jsonify({'error': f'nmcli error: {err_mod}', 'rolled_back': True}), 500
 
     # Restart the hotspot (clients disconnect then reconnect)
     _run(['nmcli', 'connection', 'down', HOTSPOT_CON])
     rc, _, err = _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
 
+    if rc != 0:
+        # B3: bring-up failed too — restore prev creds + try one nmcli modify
+        # so old AP returns. Best-effort.
+        log.error(f"nmcli up hotspot failed: {err} — rolling back creds")
+        _write_key('hotspot', 'ssid', prev_ssid)
+        if prev_pwd:
+            _write_key('hotspot', 'password', prev_pwd)
+        restore_cmd = ['nmcli', 'connection', 'modify', HOTSPOT_CON, 'ssid', prev_ssid]
+        if prev_pwd:
+            restore_cmd += ['wifi-sec.psk', prev_pwd]
+        _run(restore_cmd)
+        _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
+        return jsonify({'error': f'nmcli up failed: {err}', 'rolled_back': True}), 500
+
     log.info(f"Hotspot updated: ssid={ssid}")
     return jsonify({
-        'status': 'ok' if rc == 0 else 'partial',
+        'status': 'ok',
         'warning': 'WiFi clients must reconnect with the new credentials',
     })
 
