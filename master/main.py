@@ -241,6 +241,12 @@ def main() -> None:
         reg.kids_speed_limit = max(0.0, min(1.0, _saved_kids))
     except (ValueError, TypeError):
         reg.kids_speed_limit = 0.5
+    # Batch 3 fix 2026-05-16: child_dome_speed_limit (dome cap under Child Lock)
+    try:
+        _saved_child_dome = cfg.getfloat('security', 'child_dome_speed_limit', fallback=0.3)
+        reg.child_dome_speed_limit = max(0.05, min(1.0, _saved_child_dome))
+    except (ValueError, TypeError):
+        reg.child_dome_speed_limit = 0.3
 
     # ------------------------------------------------------------------
     # Phase 2 — Propulsion / dome / servo drivers

@@ -111,6 +111,11 @@ web_last_dome_t:  float = 0.0
 # Kids Mode speed limit (0.0..1.0) — synchronized from JS via /lock/set
 kids_speed_limit: float = 0.5
 
+# Batch 3 fix 2026-05-16: per spec, Child Lock (mode 2) blocks drive
+# entirely but lets the kid spin the dome — at a SLOWER cap than Kids
+# mode (Child is stricter). See project_kids_child_mode_spec memory.
+child_dome_speed_limit: float = 0.3
+
 # Behavior engine — timestamp of last user interaction (monotonic)
 last_activity: float = 0.0
 

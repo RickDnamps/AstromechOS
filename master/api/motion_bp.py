@@ -143,9 +143,32 @@ def _dome_gate():
             return jsonify({'status': 'blocked', 'reason': 'choreo_active'}), 503
     if is_dome_ramp_active():
         return jsonify({'status': 'blocked', 'reason': 'safety_ramp'}), 503
-    if reg.lock_mode == 2:
-        return jsonify({'status': 'blocked', 'reason': 'child_lock'}), 403
+    # Batch 3 fix 2026-05-16: lock_mode==2 (Child Lock) DOES NOT block
+    # dome rotation per spec — kid can still spin the dome and play
+    # sounds. Speed is capped via _dome_cap() applied at endpoint level.
+    # See: project_kids_child_mode_spec memory.
     return None
+
+
+def _dome_cap(speed: float) -> float:
+    """Batch 3 fix 2026-05-16: per spec, BOTH lock modes apply a dome
+    speed cap (was: Kids didn't cap dome at all = kid spins 12kg dome
+    at full speed; Child blocked dome entirely = inconsistent with
+    'kid can still play').
+
+    - Mode 0 Normal: no cap
+    - Mode 1 Kids: cap = kids_speed_limit (default 0.5)
+    - Mode 2 Child: cap = child_dome_speed_limit (default 0.3, slower
+      than Kids — Child is stricter)
+    """
+    mode = getattr(reg, 'lock_mode', 0)
+    if mode == 1:
+        cap = float(getattr(reg, 'kids_speed_limit', 0.5))
+    elif mode == 2:
+        cap = float(getattr(reg, 'child_dome_speed_limit', 0.3))
+    else:
+        return speed
+    return max(-1.0, min(1.0, speed * cap))
 
 
 # ------------------------------------------------------------------
@@ -292,14 +315,11 @@ def dome_turn():
     body  = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     reg.web_last_dome_t = time.monotonic()
     speed = _clamp(_safe_float(body.get('speed', 0.0)))
+    # Batch 3 fix 2026-05-16: apply per-mode dome cap (Kids 0.5, Child 0.3).
+    speed = _dome_cap(speed)
 
-    # Audit finding Safety H-2 2026-05-15: parity with /motion/drive
-    # which calls cancel_ramp() to wake a stalled dome ramp on
-    # operator resume. Without this, a re-press during the 400ms
-    # ramp was silently 503'd (gate refuses while ramp active) and
-    # the operator's intent was dropped.
     cancel_ramp()
-    motion_watchdog.feed_dome(speed)          # feed the watchdog
+    motion_watchdog.feed_dome(speed)
 
     if reg.dome:
         reg.dome.turn(speed)

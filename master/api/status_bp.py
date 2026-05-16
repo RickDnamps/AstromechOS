@@ -439,6 +439,7 @@ def get_status():
         'audio_current':     reg.audio_current,
         'lock_mode':         reg.lock_mode,
         'kids_speed_limit':  float(getattr(reg, 'kids_speed_limit', 0.5)),
+        'child_dome_speed_limit': float(getattr(reg, 'child_dome_speed_limit', 0.3)),
         'estop_active':      reg.estop_active,
         # Audit finding Safety L-5 2026-05-15: surface stow_in_progress
         # so the frontend can swap the E-STOP button text to
@@ -650,8 +651,8 @@ import threading as _threading_lock
 _lock_state_lock = _threading_lock.Lock()
 
 
-def _persist_lock_mode(mode: int, kids_limit: float | None) -> bool:
-    """Write lock_mode + kids_speed_limit to local.cfg [security] under
+def _persist_lock_mode(mode: int, kids_limit: float | None, child_dome_limit: float | None = None) -> bool:
+    """Write lock_mode + kids_speed_limit + child_dome_speed_limit to local.cfg [security] under
     the shared _cfg_write_lock so a Master reboot preserves the state.
     Audit finding CR-2 (2026-05-15): lock mode lived only in memory.
     Returns True on successful persist, False on any error (B5 fix
@@ -670,6 +671,8 @@ def _persist_lock_mode(mode: int, kids_limit: float | None) -> bool:
             cfg.set('security', 'lock_mode', str(mode))
             if kids_limit is not None:
                 cfg.set('security', 'kids_speed_limit', f'{kids_limit:.3f}')
+            if child_dome_limit is not None:
+                cfg.set('security', 'child_dome_speed_limit', f'{child_dome_limit:.3f}')
             # write_cfg_atomic signature is (cfg, path) — NOT (path, cfg).
             write_cfg_atomic(cfg, LOCAL_CFG)
         return True
@@ -734,8 +737,27 @@ def lock_set():
             except (TypeError, ValueError):
                 return jsonify({'error': 'kids_speed_limit must be a finite number (0.05-0.60)'}), 400
             reg.kids_speed_limit = kids
+        # Batch 3 fix 2026-05-16: child_dome_speed_limit also configurable
+        child_dome = None
+        if 'child_dome_speed_limit' in body:
+            from master.api._admin_auth import _check_admin
+            if not _check_admin(request):
+                return jsonify({'error': 'admin auth required to change child_dome_speed_limit'}), 401
+            try:
+                raw = body.get('child_dome_speed_limit', 0.3)
+                if isinstance(raw, bool):
+                    raise ValueError('bool not accepted')
+                child_dome = float(raw)
+                import math
+                if not math.isfinite(child_dome):
+                    raise ValueError('not finite')
+                # Child speed must stay below Kids (Child is stricter per spec)
+                child_dome = max(0.05, min(0.50, child_dome))
+            except (TypeError, ValueError):
+                return jsonify({'error': 'child_dome_speed_limit must be a finite number (0.05-0.50)'}), 400
+            reg.child_dome_speed_limit = child_dome
         reg.lock_mode = mode
-        persisted = _persist_lock_mode(mode, kids)
+        persisted = _persist_lock_mode(mode, kids, child_dome)
     if not persisted:
         # B5 fix: surface persistence failure so operator sees the issue
         return jsonify({

@@ -865,6 +865,16 @@ class BTControllerDriver:
             st = reg.choreo.get_status() or {}
             if st.get('uses_dome'):
                 return
+        # Batch 3 fix 2026-05-16: apply per-mode dome speed cap to keep
+        # BT input parity with web /motion/dome/turn (uses _dome_cap()).
+        # Kids = kids_speed_limit · Child = child_dome_speed_limit (slower).
+        mode = getattr(reg, 'lock_mode', 0)
+        if mode == 1:
+            cap = float(getattr(reg, 'kids_speed_limit', 0.5))
+            speed = max(-1.0, min(1.0, speed * cap))
+        elif mode == 2:
+            cap = float(getattr(reg, 'child_dome_speed_limit', 0.3))
+            speed = max(-1.0, min(1.0, speed * cap))
         if abs(speed) > 0.01:
             motion_watchdog.feed_dome(speed)
             if reg.dome:
