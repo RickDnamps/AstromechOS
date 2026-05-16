@@ -11205,19 +11205,24 @@ const choreoEditor = (() => {
       // is NOT the one the operator currently has loaded in the
       // editor, the playhead would sweep across the WRONG timeline
       // and _syncChorMonitor would read events from the LOADED chor
-      // (not the playing one) → garbage visuals. Detect mismatch,
-      // freeze the playhead at 0, and show a banner instead.
+      // (not the playing one) → garbage visuals.
+      //
+      // 2026-05-15 (user-reported bug): also freeze when NOTHING is
+      // loaded — previous logic let !loadedName fall through to
+      // sameChoreo=true so a startup-triggered choreo would advance
+      // an empty editor's playhead. The playhead only makes sense
+      // when it reflects the LOADED chor's progress.
       const loadedName = (_chor && _chor.meta && _chor.meta.name) || '';
-      const sameChoreo = !status.name || !loadedName || status.name === loadedName;
       const ph = document.getElementById('chor-playhead');
       const tc = document.getElementById('chor-timecode');
+      const sameChoreo = loadedName && status.name && status.name === loadedName;
       if (sameChoreo) {
         if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
         if (tc) tc.textContent = _fmtTime(status.t_now || 0);
         _syncChorMonitor(status.t_now || 0);
       } else {
         if (ph) ph.style.left = '0px';
-        if (tc) tc.textContent = `▶ ${status.name}`;
+        if (tc) tc.textContent = status.name ? `▶ ${status.name}` : '0:00';
       }
       _updateTelem(status.telem || null);
       _updateAlarms(status.abort_reason || null);
