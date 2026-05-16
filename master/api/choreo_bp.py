@@ -314,8 +314,12 @@ def _build_list_rows() -> list:
         # (no waiting for the next /status poll). User-reported latency
         # between clicking a choreo that uses propulsion and seeing the
         # joystick lock — bridged by these per-row hints.
-        _uses_prop = _count('propulsion') > 0
-        _uses_dome = _count('dome') > 0
+        _uses_prop   = _count('propulsion') > 0
+        _uses_dome   = _count('dome') > 0
+        # E10 fix 2026-05-16: also pre-compute lights lockout flag so
+        # the Lights tab can grey out the chips during a lights-using
+        # choreo (same pattern as the prop/dome optimistic lock).
+        _uses_lights = _count('lights') > 0
         rows.append({
             'name':            name,
             'label':           meta.get('label', '') or '',
@@ -328,6 +332,7 @@ def _build_list_rows() -> list:
             'lights_count':    _count('lights'),
             'uses_propulsion': _uses_prop,
             'uses_dome':       _uses_dome,
+            'uses_lights':     _uses_lights,
         })
     return rows, new_mtimes
 

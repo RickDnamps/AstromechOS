@@ -3453,71 +3453,101 @@ function _handleKeys() {
 class TeecesController {
   constructor() {
     this._currentMode = 'random';
-    this._initFLD();
-    this._initPSI();
-  }
-
-  _initFLD() {
-    const PSI_COLORS = [
-      '#ff2244','#ff8800','#ffee00','#00cc66',
-      '#00aaff','#8844ff','#ff44aa','#ffffff'
-    ];
-
-    // Build FLD dots (3 rows x 10 dots)
-    for (let row = 0; row < 3; row++) {
-      const rowEl = el(`fld-row-${row}`);
-      if (!rowEl) continue;
-      rowEl.innerHTML = '';
-      for (let col = 0; col < 10; col++) {
-        const dot = document.createElement('div');
-        dot.className = 'fld-dot';
-        rowEl.appendChild(dot);
-      }
-    }
-    // Set initial mode
-    this._applyFLDMode('random');
-
-    // Build PSI swatches
-    const swatches = el('psi-swatches');
-    if (swatches) {
-      swatches.innerHTML = PSI_COLORS.map((c, i) => `
-        <div class="psi-swatch" style="background:${c};box-shadow:0 0 8px ${c}40"
-             onclick="teecesController.setPSI(${i+1})" title="PSI mode ${i+1}"></div>
-      `).join('');
-    }
-  }
-
-  _initPSI() {
-    // PSI dots start blue
-    const pl = el('psi-left');
-    const pr = el('psi-right');
-    if (pl) { pl.style.background = '#00aaff'; pl.style.boxShadow = '0 0 10px #00aaff'; }
-    if (pr) { pr.style.background = '#00aaff'; pr.style.boxShadow = '0 0 10px #00aaff'; }
-  }
-
-  _applyFLDMode(mode) {
-    const preview = el('fld-preview');
-    if (!preview) return;
-    preview.className = `fld-preview mode-${mode}`;
+    this._currentAnim = null;   // last animation T-code, for chip re-sync
+    // B3 fix 2026-05-16: removed _initFLD()/_initPSI()/_applyFLDMode() —
+    // they targeted DOM IDs (fld-row-0/1/2, fld-preview, psi-swatches,
+    // psi-left, psi-right) that no longer exist. All the if (!el) continue
+    // guards no-op'd silently for months; the only side-effect was a
+    // latent XSS in the swatch innerHTML template if someone ever
+    // re-added those IDs.
   }
 
   setMode(mode) {
     this._currentMode = mode;
-    api(`/teeces/${mode}`, 'POST').then(d => {
-      if (d) toast(`Teeces: ${mode.toUpperCase()}`, 'ok');
-    });
-    document.querySelectorAll('[id^="teeces-btn-"]').forEach(b => b.classList.remove('btn-active'));
+    this._currentAnim = null;
+    // W3 fix 2026-05-16: withSaveFeedback on the RANDOM/OFF buttons
+    // so the operator gets a spinner + Saved ✓ instead of silent wait.
     const btn = el(`teeces-btn-${mode}`);
+    const send = () => api(`/teeces/${mode}`, 'POST').then(d => {
+      if (d) toast(`Teeces: ${mode.toUpperCase()}`, 'ok');
+      return d;
+    });
+    if (btn && typeof withSaveFeedback === 'function') {
+      withSaveFeedback(btn, send);
+    } else {
+      send();
+    }
+    document.querySelectorAll('[id^="teeces-btn-"]').forEach(b => b.classList.remove('btn-active'));
     if (btn) btn.classList.add('btn-active');
-    this._applyFLDMode(mode);
+    document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
     _domeSim.setMode(mode);
   }
 
-  sendText(text, display = 'fld') {
+  sendText(text, display = 'fld_top') {
     if (!text) return;
-    api('/teeces/text', 'POST', { text, display }).then(d => {
-      if (d) toast(`${display.toUpperCase()}: "${text}"`, 'ok');
+    // W3 fix 2026-05-16: SEND button feedback (was silent ~150-300ms wait)
+    const btn = document.querySelector('#tab-lights .row.mt button.btn');
+    const send = () => api('/teeces/text', 'POST', { text, display }).then(d => {
+      if (d) {
+        // B10 fix 2026-05-16: use server-sanitized text in the toast.
+        toast(`${display.toUpperCase().replace('_',' ')}: "${d.text || text}"`, 'ok');
+      } else {
+        toast('SEND failed — check admin lock', 'error');
+      }
+      return d;
     });
+    if (btn && typeof withSaveFeedback === 'function') {
+      withSaveFeedback(btn, send);
+    } else {
+      send();
+    }
+  }
+
+  /** B4/B5/E3 + W1/W2 fix 2026-05-16: sync UI from /status data.
+   *  Backend now exposes data.teeces_mode (string: 'random'|'off'|'leia'|
+   *  'text'|'animation:N'). Frontend re-derives chip + button state every
+   *  poll so UI never lies after reload / cross-device / choreo bypass. */
+  syncFromStatus(mode) {
+    if (!mode || mode === this._currentMode) {
+      // Anim sub-state can change even when mode string is same
+      if (mode === 'animation' || (mode && mode.startsWith('animation:'))) {
+        this._syncAnimChip(mode);
+      }
+      return;
+    }
+    this._currentMode = mode;
+    // Top buttons (RANDOM/OFF) — strip all then re-add if applicable
+    document.querySelectorAll('[id^="teeces-btn-"]').forEach(b => b.classList.remove('btn-active'));
+    if (mode === 'random' || mode === 'off') {
+      el(`teeces-btn-${mode}`)?.classList.add('btn-active');
+      document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
+      this._currentAnim = null;
+    }
+    // Animation chips
+    if (mode === 'animation' || (mode && mode.startsWith('animation:'))) {
+      this._syncAnimChip(mode);
+    } else {
+      document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
+    }
+    // Mode badge
+    if (_domeSim && _domeSim.setMode) _domeSim.setMode(
+      mode === 'leia' ? 'leia' :
+      mode === 'off'  ? 'off'  :
+      mode === 'text' ? 'text' :
+      (mode && mode.startsWith('animation:')) ? 'random' :
+      'random'
+    );
+  }
+
+  _syncAnimChip(mode) {
+    const num = (mode && mode.startsWith('animation:'))
+      ? parseInt(mode.slice('animation:'.length), 10)
+      : null;
+    if (num === this._currentAnim) return;
+    this._currentAnim = num;
+    document.querySelectorAll('.anim-chip').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('[id^="teeces-btn-"]').forEach(b => b.classList.remove('btn-active'));
+    if (num) el(`anim-btn-${num}`)?.classList.add('active');
   }
 
   updateCardTitle(backend) {
@@ -3534,10 +3564,6 @@ class TeecesController {
     const PSI_COLORS = ['#ff2244','#ff8800','#ffee00','#00cc66','#00aaff','#8844ff','#ff44aa','#ffffff'];
     const color = PSI_COLORS[modeNum - 1] || '#00aaff';
     _domeSim.updatePSI(color);
-    // highlight active swatch
-    document.querySelectorAll('.psi-swatch').forEach((s, i) => {
-      s.classList.toggle('active', i === modeNum - 1);
-    });
   }
 }
 
@@ -7554,6 +7580,23 @@ class StatusPoller {
     } else if ((wantProp || wantDome) && data.choreo_name) {
       const lbl = el('choreo-lock-label');
       if (lbl && lbl.textContent !== data.choreo_name) lbl.textContent = data.choreo_name;
+    }
+
+    // E10 fix 2026-05-16: per-axis Lights tab lockout. Operator clicking
+    // an animation chip during a lights-using choreo races UART writes
+    // with the choreo's lights events → flicker / wrong final state.
+    // Body class greys out chips via CSS .choreo-lights-locked rule.
+    const wantLights = !!(data.choreo_playing && data.choreo_uses_lights);
+    if (wantLights !== document.body.classList.contains('choreo-lights-locked')) {
+      document.body.classList.toggle('choreo-lights-locked', wantLights);
+    }
+
+    // B4/B5/E3 + W1/W2 fix 2026-05-16: sync Lights chip + RANDOM/OFF
+    // buttons from authoritative backend state. Without this, the UI
+    // lies after page reload OR after any animation/text/raw click
+    // OR if a choreo changed lights state.
+    if (typeof teecesController !== 'undefined' && teecesController.syncFromStatus) {
+      teecesController.syncFromStatus(data.teeces_mode);
     }
 
     // Cockpit pills — always updated (panel may be closed)

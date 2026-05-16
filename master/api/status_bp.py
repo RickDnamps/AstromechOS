@@ -334,8 +334,19 @@ def get_status():
     _choreo_status  = reg.choreo.get_status() if reg.choreo else {}
     _choreo_playing = bool(_choreo_status.get('playing'))
     _choreo_name    = _choreo_status.get('name') if _choreo_playing else None
-    _choreo_uses_prop = bool(_choreo_status.get('uses_propulsion')) if _choreo_playing else False
-    _choreo_uses_dome = bool(_choreo_status.get('uses_dome'))       if _choreo_playing else False
+    _choreo_uses_prop   = bool(_choreo_status.get('uses_propulsion')) if _choreo_playing else False
+    _choreo_uses_dome   = bool(_choreo_status.get('uses_dome'))       if _choreo_playing else False
+    _choreo_uses_lights = bool(_choreo_status.get('uses_lights'))     if _choreo_playing else False
+    # B4/B5/E3 fix 2026-05-16: surface the current Teeces/AstroPixels
+    # mode (canonical string) so the frontend can re-sync chip+button
+    # state on every poll. Without this, the UI lied after page reload
+    # or after any animation/text/raw click (the matching backend
+    # endpoints DID update _mode but it was never exposed).
+    try:
+        from master.api.teeces_bp import current_teeces_mode
+        _teeces_mode = current_teeces_mode()
+    except Exception:
+        _teeces_mode = None
     return jsonify({
         'robot_name':        _robot_name(),
         'robot_icon':        _robot_icon(),
@@ -372,6 +383,8 @@ def get_status():
         'choreo_name':            _choreo_name,
         'choreo_uses_propulsion': _choreo_uses_prop,
         'choreo_uses_dome':       _choreo_uses_dome,
+        'choreo_uses_lights':     _choreo_uses_lights,
+        'teeces_mode':            _teeces_mode,
         # Bug B3 fix 2026-05-15: surface choreo abort_reason globally so
         # the StatusPoller can toast an undervoltage/overheat/uart_loss
         # event even when operator is on a non-Choreo tab. Previously

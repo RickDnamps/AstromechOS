@@ -262,6 +262,7 @@ class ChoreoPlayer:
             # all motion at once.
             'uses_propulsion': False,
             'uses_dome':       False,
+            'uses_lights':     False,
         }
 
     def _resolve_servo_id(self, name: str) -> str:
@@ -410,6 +411,7 @@ class ChoreoPlayer:
                 't_now':           0.0,
                 'uses_propulsion': False,
                 'uses_dome':       False,
+                'uses_lights':     False,
             })
         # Audit finding Player L-3 2026-05-15: clear last-commanded
         # servo positions so the next play() starts slews from a
@@ -624,6 +626,10 @@ class ChoreoPlayer:
         # même chose pour le dome'.
         uses_propulsion = bool(tracks.get('propulsion'))
         uses_dome       = bool(tracks.get('dome'))
+        # E10 fix 2026-05-16: per-axis lockout for lights too (matches
+        # the prop/dome pattern). Frontend Lights tab dims chips during
+        # a lights-using choreo to prevent operator/choreo races.
+        uses_lights     = bool(tracks.get('lights'))
         with self._status_lock:
             self._status.update({
                 'playing':         True,
@@ -632,6 +638,7 @@ class ChoreoPlayer:
                 't_now':           0.0,
                 'uses_propulsion': uses_propulsion,
                 'uses_dome':       uses_dome,
+                'uses_lights':     uses_lights,
             })
 
         t_start = time.monotonic()
@@ -713,6 +720,7 @@ class ChoreoPlayer:
                 'telem':           self._last_telem,
                 'uses_propulsion': False,
                 'uses_dome':       False,
+                'uses_lights':     False,
             })
 
     def _release_slot(self, i: int) -> None:

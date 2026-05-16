@@ -51,7 +51,21 @@ from master.lights.base_controller import sanitize_lights_text
 
 teeces_bp = Blueprint('teeces', __name__, url_prefix='/teeces')
 
+# B4/B5/E3 fix 2026-05-16: `_mode` is a canonical string the frontend
+# StatusPoller reads via /status.teeces_mode to re-sync chip+button
+# state. Was previously only updated by random/leia/off endpoints —
+# animation/text/raw never touched it, so /teeces/state lied (and the
+# UI lied too because it depends on this). Now ALL mutation endpoints
+# update _mode with one of:
+#   'random' | 'off' | 'leia' | 'text' | 'raw' | 'animation:<N>' | 'psi'
+# `current_teeces_mode()` is the safe read for status_bp (returns
+# 'random' default if module not yet imported).
 _mode = 'random'
+
+
+def current_teeces_mode() -> str:
+    """Module-public accessor — used by status_bp to expose mode in /status."""
+    return _mode
 
 # /teeces/raw command allowlist. Real JawaLite commands look like
 # `<addr>T<mode>` or `<addr>M<text>` etc. The firmware Teeces also
@@ -144,6 +158,7 @@ def teeces_text():
     command is built — without this, an embedded \\r terminates the
     FLD frame early and the rest of the operator's string runs as a
     fresh JawaLite command (audit H-3 2026-05-15)."""
+    global _mode
     body    = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     text    = _sanitize_text(body.get('text', ''))
     display = str(body.get('display', 'fld_top')).lower()
@@ -152,6 +167,7 @@ def teeces_text():
             'error': "display must be one of: fld_top, fld_bottom, fld_both, rld, all (or legacy fld/both)",
         }), 400
     _dispatch_text(text, display)
+    _mode = 'text'   # B4/B5 fix: surface mode change to /status
     return jsonify({'status': 'ok', 'text': text, 'display': display})
 
 
@@ -166,6 +182,8 @@ def teeces_psi():
         return jsonify({'error': 'mode must be an integer'}), 400
     if reg.teeces:
         reg.teeces.psi(mode)
+    global _mode
+    _mode = 'psi'   # B4/B5 fix: surface PSI activity to /status
     return jsonify({'status': 'ok', 'mode': mode})
 
 
@@ -189,6 +207,8 @@ def teeces_psi_seq():
         else:
             _TEECES_MAP = {'normal':1,'flash':1,'alarm':3,'redalert':3,'leia':1,'failure':1,'march':1}
             reg.teeces.psi(_TEECES_MAP.get(sequence, 1))
+    global _mode
+    _mode = 'psi'   # B4/B5 fix: surface PSI activity to /status
     return jsonify({'status': 'ok', 'target': target, 'sequence': sequence})
 
 
@@ -219,6 +239,8 @@ def teeces_animation():
     if reg.teeces:
         reg.teeces.animation(mode)
     name = BaseLightsController.ANIMATIONS.get(mode, f'T{mode}')
+    global _mode
+    _mode = f'animation:{mode}'   # B4/B5 fix: chip re-sync via /status
     return jsonify({'status': 'ok', 'mode': mode, 'name': name})
 
 
@@ -237,6 +259,8 @@ def teeces_raw():
         return jsonify({'error': 'invalid cmd — alphanumeric + JawaLite operators only, ≤32 chars'}), 400
     if reg.teeces:
         reg.teeces.raw(cmd)
+    global _mode
+    _mode = 'raw'   # B4/B5 fix: surface raw send to /status
     return jsonify({'status': 'ok', 'cmd': cmd})
 
 

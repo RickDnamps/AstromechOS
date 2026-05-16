@@ -1166,6 +1166,33 @@ body[data-lock-mode="2"] #js-left-ring::after {
   position: relative;
 }
 
+/* E10 fix 2026-05-16: Lights chip lockout during a lights-using
+ * choreo. Greys + disables pointer events so the operator can't
+ * race UART writes with the choreo's lights events. Matches the
+ * prop/dome lockout pattern below. */
+body.choreo-lights-locked .anim-chip,
+body.choreo-lights-locked #teeces-btn-random,
+body.choreo-lights-locked #teeces-btn-off,
+body.choreo-lights-locked #teeces-text,
+body.choreo-lights-locked #teeces-display {
+  filter: grayscale(0.6) brightness(0.55);
+  pointer-events: none;
+  cursor: not-allowed;
+}
+body.choreo-lights-locked .anim-grid::before {
+  content: '🎬 CHOREO USING LIGHTS';
+  display: block;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--amber, #ffaa44);
+  padding: 4px;
+  margin-bottom: 6px;
+  border: 1px dashed var(--amber, #ffaa44);
+  border-radius: 4px;
+  opacity: 0.8;
+}
+
 /* ─── Choreo per-axis lockout overlay ────────────────────────────
  * Per-axis classes: a choreo that uses 'propulsion' track sets
  * body.choreo-prop-locked → veil over LEFT joystick only. Same
