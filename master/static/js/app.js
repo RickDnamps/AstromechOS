@@ -8047,11 +8047,42 @@ const cockpitPanel = {
   },
 
   updateBtn(data) {
-    const alerts  = this._buildAlerts(data);
-    const hasDanger = alerts.some(a => a.cls === 'err');
-    const hasWarn   = !hasDanger && alerts.some(a => a.cls === 'warn');
+    // Bug fix 2026-05-16: user-reported STATUS pill stayed GREEN on
+    // page reload even with bench_mode ON — only turned amber after
+    // click. _buildAlerts WAS pushing the bench warn correctly, but
+    // some path was skipping the call. Defensive rewrite: compute
+    // hasDanger/hasWarn DIRECTLY from data fields here so even if
+    // _buildAlerts throws we still color the pill correctly.
     const btn = el('cockpit-btn');
-    if (!btn) return;
+    if (!btn || !data) return;
+
+    // Direct danger checks (any one = red)
+    const hasDanger = !!(
+      data.estop_active ||
+      !data.vesc_l_ok || !data.vesc_r_ok ||
+      !data.uart_ready ||
+      (data.temperature != null && data.temperature >= 75) ||
+      (data.slave_temp  != null && data.slave_temp  >= 75) ||
+      (data.vesc_l_temp != null && data.vesc_l_temp >= 70) ||
+      (data.vesc_r_temp != null && data.vesc_r_temp >= 70)
+    );
+
+    // Direct warn checks (any one = amber, unless danger active)
+    const hasWarn = !hasDanger && !!(
+      data.vesc_bench_mode ||
+      data.lock_mode === 2 ||                          // child lock
+      (data.uart_health == null && data.uart_ready) || // slave unreachable
+      (data.temperature != null && data.temperature >= 60) ||
+      (data.slave_temp  != null && data.slave_temp  >= 60) ||
+      (data.vesc_l_temp != null && data.vesc_l_temp >= 50) ||
+      (data.vesc_r_temp != null && data.vesc_r_temp >= 50) ||
+      data.dome_servo_ready === false ||
+      data.servo_ready === false ||
+      data.camera_found === false ||
+      data.display_ready === false ||
+      (typeof data.uart_crc_errors === 'number' && data.uart_crc_errors > 0)
+    );
+
     btn.classList.toggle('danger', hasDanger);
     btn.classList.toggle('alert',  hasWarn);
   },
