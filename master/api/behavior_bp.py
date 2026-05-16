@@ -294,8 +294,16 @@ def get_status():
         if not teeces_ok:
             idle_mode_ready = False
             idle_mode_reason = (idle_mode_reason + '; ' if idle_mode_reason else '') + 'lights driver not ready'
+    # W7 fix 2026-05-16: surface last-fired idle choreo so frontend can
+    # show a green-dot marker on the matching pill (parité Audio/Sequences)
+    be = reg.behavior_engine
+    last_choreo = getattr(be, '_last_choreo_name', '') if be else ''
+    last_choreo_ts = getattr(be, '_last_choreo_ts', 0.0) if be else 0.0
+    last_choreo_ago = round(now - last_choreo_ts, 1) if last_choreo_ts > 0 else None
     return jsonify({
         'alive_enabled':       alive_enabled,
+        'last_idle_choreo':    last_choreo,
+        'last_idle_choreo_ago_s': last_choreo_ago,
         'startup_enabled':     cfg.getboolean('behavior', 'startup_enabled',     fallback=False),
         'startup_delay':       cfg.getfloat  ('behavior', 'startup_delay',       fallback=5.0),
         'startup_choreo':      cfg.get       ('behavior', 'startup_choreo',      fallback='startup.chor'),

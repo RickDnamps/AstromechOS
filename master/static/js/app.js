@@ -2646,6 +2646,8 @@ const behaviorPanel = (() => {
       // B12 fix 2026-05-16: dedup the idle_choreo_list in case hand-edit or
       // pre-cascade leaked duplicates
       _choreoList = Array.from(new Set(d.idle_choreo_list || []));
+      // W7 fix 2026-05-16: capture last-fired idle choreo for pill marker
+      behaviorPanel._lastIdleChoreo = d.last_idle_choreo || '';
 
       Promise.all([
         api('/choreo/list'),
@@ -2725,9 +2727,12 @@ const behaviorPanel = (() => {
     // B-200 (remaining tabs audit 2026-05-15): build pills with DOM
     // primitives instead of innerHTML interpolation (XSS via filename).
     container.replaceChildren();
+    const lastPlayed = behaviorPanel._lastIdleChoreo || '';
     _choreoList.forEach((name, idx) => {
       const pill = document.createElement('span');
       pill.className = 'beh-choreo-pill';
+      // W7 fix 2026-05-16: highlight last-fired idle choreo
+      if (name === lastPlayed) pill.classList.add('last-played');
       // W3 fix 2026-05-16: prefix with lock icons if choreo moves bot
       const locks = _locksFor(name);
       if (locks) {

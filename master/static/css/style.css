@@ -4782,6 +4782,22 @@ body[data-lock-mode="2"] .drive-wrapper {
   margin-left: 4px;
   opacity: 0.8;
 }
+/* W7: last-fired idle choreo marker (parité Audio/Sequences green dot) */
+.beh-choreo-pill.last-played {
+  position: relative;
+  border-color: var(--ok, #00cc66);
+}
+.beh-choreo-pill.last-played::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok, #00cc66);
+  box-shadow: 0 0 6px var(--ok, #00cc66);
+}
 
 /* L2 fix 2026-05-16: global .hidden utility. Pre-existing scoped
  * rules (.admin-modal.hidden, .admin-pwd-error.hidden, …) covered

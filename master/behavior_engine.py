@@ -46,6 +46,8 @@ class BehaviorEngine:
         self._stop_event = threading.Event()
         self._last_idle_trigger: float = 0.0
         self._alive_was_on: bool = False  # track dome auto state
+        self._last_choreo_name: str = ''  # W7: surfaced in /behavior/status
+        self._last_choreo_ts:   float = 0.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -175,20 +177,26 @@ class BehaviorEngine:
         if not self._should_trigger_idle(now):
             return
 
-        self._last_idle_trigger = now
         mode = self._cfg.get('behavior', 'idle_mode', fallback='choreo')
 
+        # B14 fix 2026-05-16: only advance _last_idle_trigger if the
+        # trigger ACTUALLY dispatched. Previously, every safe_play
+        # reject (lock_mode, busy, etc.) burned a 30s cooldown. Now
+        # a refused choreo lets the next tick retry immediately.
+        fired = False
         if mode == 'sounds':
-            self._trigger_sounds()
+            fired = self._trigger_sounds()
         elif mode == 'sounds_lights':
-            self._trigger_sounds()
-            self._trigger_lights()
+            fired = self._trigger_sounds()
+            self._trigger_lights()  # lights don't gate the cooldown
         elif mode == 'lights':
-            self._trigger_lights()
+            fired = self._trigger_lights()
         elif mode == 'choreo':
-            self._trigger_choreo()
+            fired = self._trigger_choreo()
         else:
             log.warning("Unknown idle_mode: %s", mode)
+        if fired:
+            self._last_idle_trigger = now
 
     # ------------------------------------------------------------------
     # Guard
@@ -242,26 +250,26 @@ class BehaviorEngine:
     # Reaction implementations
     # ------------------------------------------------------------------
 
-    def _trigger_sounds(self) -> None:
+    def _trigger_sounds(self) -> bool:
         """Send UART random audio command for idle reaction.
 
         Schedules a delayed reset of reg.audio_playing so subsequent
-        sounds/sounds_lights idle triggers are NOT permanently blocked by
-        a flag that nothing ever clears. Mirrors the timer pattern used by
-        api/audio_bp.play_random — same 60s ceiling for unknown-duration
-        random sounds.
-        """
+        sounds/sounds_lights idle triggers are NOT permanently blocked
+        by a flag that nothing ever clears. Returns True if the command
+        was actually dispatched (B14: cooldown only on actual dispatch)."""
         try:
             category = self._cfg.get('behavior', 'idle_audio_category', fallback='happy')
-            if self._reg.uart:
-                self._reg.uart.send('S', f'RANDOM:{category}')
-                self._reg.audio_playing = True
-                self._schedule_audio_reset()
-                log.info("ALIVE sounds: category=%s", category)
-            else:
+            if not self._reg.uart:
                 log.warning("ALIVE sounds: UART not available")
+                return False
+            self._reg.uart.send('S', f'RANDOM:{category}')
+            self._reg.audio_playing = True
+            self._schedule_audio_reset()
+            log.info("ALIVE sounds: category=%s", category)
+            return True
         except Exception:
             log.exception("ALIVE sounds trigger failed")
+            return False
 
     def _schedule_audio_reset(self, seconds: float = 60.0) -> None:
         """Clear reg.audio_playing after the given delay so the idle gate
@@ -276,19 +284,28 @@ class BehaviorEngine:
         t.start()
         self._audio_reset_timer = t
 
-    def _trigger_lights(self) -> None:
-        """Trigger random lights animation via Teeces/AstroPixels controller."""
+    def _trigger_lights(self) -> bool:
+        """Trigger random lights animation via Teeces/AstroPixels controller.
+        Returns True if dispatched (B14 cooldown gate)."""
         try:
-            if self._reg.teeces:
-                self._reg.teeces.random_mode()
-                log.info("ALIVE lights: random_mode triggered")
-            else:
-                log.warning("ALIVE lights: teeces not available")
+            if not (self._reg.teeces and self._reg.teeces.is_ready()):
+                log.warning("ALIVE lights: teeces driver not ready")
+                return False
+            self._reg.teeces.random_mode()
+            log.info("ALIVE lights: random_mode triggered")
+            return True
         except Exception:
             log.exception("ALIVE lights trigger failed")
+            return False
 
-    def _trigger_choreo(self) -> None:
-        """Pick a random choreo from idle_choreo_list and play it."""
+    # B21 fix 2026-05-16: track last-played choreo to avoid same-twice-
+    # in-a-row randomness annoyance. Operator perceives ALIVE as less
+    # repetitive even with a 2-choreo list.
+    _last_choreo_name: str = ''
+
+    def _trigger_choreo(self) -> bool:
+        """Pick a random choreo from idle_choreo_list and play it.
+        Returns True if safe_play dispatched the choreo (B14 cooldown gate)."""
         try:
             raw = self._cfg.get('behavior', 'idle_choreo_list', fallback='')
             # Audit finding CR-6: tolerate legacy '.chor' suffix per
@@ -304,26 +321,42 @@ class BehaviorEngine:
                 choreo_list.append(c)
             if not choreo_list:
                 log.warning("idle_choreo_list is empty — nothing to play")
-                return
+                return False
 
-            choreo_name = random.choice(choreo_list)
+            # B21: prefer not to repeat the last one if there are alternatives
+            candidates = [c for c in choreo_list if c != self._last_choreo_name]
+            if not candidates:
+                candidates = choreo_list   # only 1 entry total → no choice
+            choreo_name = random.choice(candidates)
             choreo_path = os.path.join(self._choreo_dir, choreo_name + '.chor')
             if not os.path.isfile(choreo_path):
                 log.warning("ALIVE choreo not found: %s", choreo_path)
-                return
+                return False
 
             choreo_data = self._load_choreo(choreo_path)
-            if choreo_data:
-                log.info("ALIVE choreo: %s", choreo_name)
-                # B-8: route through choreo_bp.safe_play so concurrent
-                # Sequences-tab clicks and behavior triggers contend on
-                # the same _play_lock. Lazy import — choreo_bp imports
-                # the registry which holds reg.behavior_engine, so a
-                # top-level import would be circular.
-                from master.api.choreo_bp import safe_play
-                safe_play(choreo_data, log_label='behavior')
+            if not choreo_data:
+                return False
+            log.info("ALIVE choreo: %s", choreo_name)
+            # B-8: route through choreo_bp.safe_play so concurrent
+            # Sequences-tab clicks and behavior triggers contend on
+            # the same _play_lock. Lazy import — choreo_bp imports
+            # the registry which holds reg.behavior_engine, so a
+            # top-level import would be circular.
+            from master.api.choreo_bp import safe_play
+            ok = safe_play(choreo_data, log_label='behavior')
+            if ok:
+                # W7 fix 2026-05-16: track for last-played indicator + B21
+                self._last_choreo_name = choreo_name
+                # Expose to /behavior/status
+                self._last_choreo_ts = time.monotonic()
+                return True
+            # E9 fix 2026-05-16: log when safe_play refused so debugging
+            # 'why didn't ALIVE fire?' has a breadcrumb in journalctl
+            log.info("ALIVE choreo refused by safe_play: %s", choreo_name)
+            return False
         except Exception:
             log.exception("ALIVE choreo trigger failed")
+            return False
 
     # ------------------------------------------------------------------
     # Dome auto sync
