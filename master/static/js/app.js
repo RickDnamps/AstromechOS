@@ -6973,10 +6973,20 @@ class StatusPoller {
       if (typeof _updateSpeedEffective === 'function') _updateSpeedEffective();
     }
 
-    // WOW L1-W 2026-05-15: ALIVE button countdown deferred — would
-    // need next_idle_in_s + alive_enabled added to /status (currently
-    // only in /behavior/status). The behavior Settings panel already
-    // shows the countdown pill. Tab-cost not justified for this batch.
+    // WOW L1-W 2026-05-15: ALIVE button title shows next-idle countdown
+    // so operator hovering/long-pressing sees 'Next reaction in 2:34'.
+    const aliveBtn = el('alive-toggle-btn');
+    if (aliveBtn) {
+      if (data.alive_enabled === false) {
+        aliveBtn.title = 'ALIVE mode OFF — click to enable idle reactions';
+      } else if (data.next_idle_in_s != null && data.next_idle_in_s > 0) {
+        const s = Math.floor(data.next_idle_in_s);
+        const m = Math.floor(s / 60), sec = s % 60;
+        aliveBtn.title = `ALIVE mode ON — next reaction in ${m}:${String(sec).padStart(2, '0')}`;
+      } else {
+        aliveBtn.title = 'ALIVE mode — idle reactions';
+      }
+    }
 
     // WOW HW3 2026-05-15: BT controller status pill on Drive bottom.
     // Shown only when a controller is paired+connected. Edge-trigger
@@ -8293,6 +8303,32 @@ const shortcutsRunner = {
       }
 
       btn.addEventListener('click', () => this._trigger(sc.id, btn));
+      // WOW M4-W 2026-05-15: long-press (600ms) opens Settings →
+      // Shortcuts so operator can fix a misconfigured shortcut
+      // without leaving Drive → digging through menus. Uses
+      // pointerdown/up + a guarded timer so a normal click still
+      // fires the action (the timer cancels at <600ms via pointerup).
+      let _lpTimer = null;
+      let _lpFired = false;
+      btn.addEventListener('pointerdown', () => {
+        _lpFired = false;
+        _lpTimer = setTimeout(() => {
+          _lpFired = true;
+          switchTab('settings');
+          switchSettingsPanel('shortcuts');
+          toast('Long-press → edit shortcut', 'info');
+        }, 600);
+      });
+      btn.addEventListener('pointerup', () => {
+        if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+      });
+      btn.addEventListener('pointerleave', () => {
+        if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+      });
+      // Suppress the synthetic click if long-press fired (otherwise
+      // we'd both switch panels AND trigger the action).
+      btn.addEventListener('click', (e) => { if (_lpFired) { e.stopImmediatePropagation(); _lpFired = false; } }, true);
+      btn.title = (sc.label || '') + ' — long-press to edit';
       dest.appendChild(btn);
       this._btnById[sc.id] = btn;
     });

@@ -289,6 +289,27 @@ def _fresh_telem(side: str, max_age: float = 2.0) -> dict | None:
     return telem
 
 
+def _compute_next_idle_s():
+    """WOW L1-W 2026-05-15: compute seconds until next idle reaction,
+    or None if alive disabled / no last_activity. Mirrors the calc in
+    behavior_bp.get_status."""
+    be = reg.behavior_engine
+    if not be:
+        return None
+    try:
+        alive = be._cfg.getboolean('behavior', 'alive_enabled', fallback=False)
+        if not alive:
+            return None
+        idle_timeout_min = be._cfg.getfloat('behavior', 'idle_timeout_min', fallback=10.0)
+        last = reg.last_activity
+        if last <= 0:
+            return None
+        idle_at = last + (idle_timeout_min * 60.0)
+        return max(0, round(idle_at - _time.monotonic(), 1))
+    except Exception:
+        return None
+
+
 @status_bp.get('/status')
 def get_status():
     """Full AstromechOS system state."""
@@ -395,6 +416,11 @@ def get_status():
         # /vesc/config exposes power_scale=0.6 but /status was showing
         # 1.0 — divergence caught live by user testing the HW1 hint.
         'power_scale':       float(getattr(reg, 'vesc_power_scale', 1.0)),
+        # WOW L1-W 2026-05-15: surface ALIVE state + countdown so the
+        # Drive ALIVE button title shows 'Next reaction in 2:34' without
+        # needing a separate /behavior/status fetch.
+        'alive_enabled':     bool(reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)) if reg.behavior_engine else False,
+        'next_idle_in_s':    _compute_next_idle_s(),
         'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
         'camera_found':      len(glob.glob('/dev/video*')) > 0,
         'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],

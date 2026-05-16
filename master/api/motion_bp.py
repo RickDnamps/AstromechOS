@@ -152,25 +152,43 @@ def _dome_gate():
 # Propulsion
 # ------------------------------------------------------------------
 
+# Edge fix 2026-05-15: track cap-relaxation transitions for ramp-up.
+# {last_seen_cap: previous tick's cap, unlock_from: cap before the
+# transition, unlock_at: time the transition was detected}.
+_kids_cap_state = {'last_seen_cap': 1.0, 'unlock_from': 1.0, 'unlock_at': 0.0}
+
 def _kids_cap(left: float, right: float) -> tuple:
-    """Apply Kids Mode speed cap (B-25). When lock_mode==1, scale both
-    sides by kids_speed_limit so the kid drives the robot slowly. This
-    was previously only enforced on the BT controller path —
-    /motion/drive and /motion/arcade ran at full speed regardless of
-    Kids mode, which contradicted the three-tier lock model documented
-    on lockMgr._applyMode."""
+    """Apply Kids Mode speed cap (B-25). Scales motor output by
+    kids_speed_limit when lock_mode==1.
+
+    Edge fix 2026-05-15: when Kids→Normal happens WHILE driving full
+    throttle, the cap jumps 0.5→1.0 in one tick → motor jumps 50→100%
+    in ~17ms (anti-tip ramp doesn't fire because input INCREASED).
+    Now: detect the transition, capture the from/to caps, and ramp
+    the effective cap UP over 200ms so the unlock is proportional.
+    """
+    cap = 1.0
     if getattr(reg, 'lock_mode', 0) == 1:
-        # Audit finding Motion H-bonus 2026-05-15: re-clamp cap at
-        # read time. status_bp validates kids_speed_limit at write,
-        # but a poisoned registry value (e.g. set to 2.0 by a buggy
-        # plug-in) would silently make Kids Mode FASTER than normal.
-        # Defense in depth — also math.isfinite to reject NaN/Inf.
         cap = float(getattr(reg, 'kids_speed_limit', 0.5))
         if not math.isfinite(cap):
             cap = 0.5
         cap = max(0.0, min(1.0, cap))
-        return left * cap, right * cap
-    return left, right
+    now = time.monotonic()
+    last_seen = _kids_cap_state['last_seen_cap']
+    # Detect relaxation transition — record from/to + timestamp.
+    if cap > last_seen + 0.05:
+        _kids_cap_state['unlock_from'] = last_seen
+        _kids_cap_state['unlock_at']   = now
+    _kids_cap_state['last_seen_cap'] = cap
+    # If we're within the 200ms ramp window post-transition, interpolate.
+    elapsed = now - _kids_cap_state['unlock_at']
+    if elapsed < 0.2:
+        from_cap = _kids_cap_state['unlock_from']
+        frac = elapsed / 0.2
+        eff_cap = from_cap + (cap - from_cap) * frac
+    else:
+        eff_cap = cap
+    return left * eff_cap, right * eff_cap
 
 
 @motion_bp.post('/drive')

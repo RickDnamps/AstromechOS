@@ -109,9 +109,11 @@
   <div class="cockpit-inner">
 
     <div class="cockpit-pills-row">
-      <div class="status-pill" id="ck-pill-hb" title="Application heartbeat — browser ↔ Master (distinct from UART HB Master ↔ Slave)"><span class="pulse-dot"></span>APP HB</div>
-      <div class="status-pill" id="ck-pill-uart" title="UART Master ↔ Slave"><span class="pulse-dot"></span>UART</div>
-      <div class="status-pill" id="ck-pill-bt" title="Bluetooth Controller"><span id="ck-pill-bt-label">BT</span></div>
+      <!-- WOW L2-W 2026-05-15: pills tap-to-expand the cockpit panel
+           so tablet operators get the same details desktop hovers see. -->
+      <div class="status-pill" id="ck-pill-hb" onclick="cockpitPanel.toggle()" title="Application heartbeat — browser ↔ Master (distinct from UART HB Master ↔ Slave). Click for details."><span class="pulse-dot"></span>APP HB</div>
+      <div class="status-pill" id="ck-pill-uart" onclick="cockpitPanel.toggle()" title="UART Master ↔ Slave. Click for details."><span class="pulse-dot"></span>UART</div>
+      <div class="status-pill" id="ck-pill-bt" onclick="cockpitPanel.toggle()" title="Bluetooth Controller. Click for details."><span id="ck-pill-bt-label">BT</span></div>
     </div>
 
     <div>

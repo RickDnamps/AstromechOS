@@ -4585,6 +4585,13 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .battery-mini:hover { opacity: 0.85; }
 
+/* WOW L2-W 2026-05-15: cockpit pills tap-to-expand affordance */
+.status-pill {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.status-pill:hover { opacity: 0.85; }
+
 /* WOW HW1 2026-05-15: speed effective hint (60% × 50% = 30%) */
 .ctrl-effective {
   display: inline-block;
