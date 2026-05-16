@@ -1935,7 +1935,7 @@
             <label class="settings-label">Robot name</label>
             <input type="text" id="robot-name-input" class="settings-input" maxlength="32" placeholder="R2-D2">
           </div>
-          <button class="btn btn-primary admin-only" onclick="saveRobotName()">SAVE NAME</button>
+          <button id="save-robot-name-btn" class="btn btn-primary admin-only" onclick="withSaveFeedback(this, () => saveRobotName())">SAVE NAME</button>
           <div class="settings-status" id="robot-name-status"></div>
           <div class="settings-divider admin-only"></div>
           <div class="settings-row admin-only">
@@ -1946,7 +1946,7 @@
             <label class="settings-label">Slave Pi — location name</label>
             <input type="text" id="slave-location-input" class="settings-input" maxlength="20" placeholder="Body">
           </div>
-          <button class="btn btn-primary admin-only" onclick="saveRobotLocations()">SAVE LOCATIONS</button>
+          <button id="save-robot-loc-btn" class="btn btn-primary admin-only" onclick="withSaveFeedback(this, () => saveRobotLocations())">SAVE LOCATIONS</button>
           <div class="settings-status" id="robot-locations-status"></div>
           <div class="settings-divider admin-only"></div>
           <div class="settings-row admin-only" style="flex-direction:column;align-items:flex-start;gap:10px">
@@ -2006,6 +2006,8 @@
                     <input type="color" id="theme-editor-text" value="#c8d8ea" oninput="previewCustomTheme()">
                     <span class="theme-color-label" id="lbl-text">#c8d8ea</span>
                   </div>
+                  <!-- W5 fix 2026-05-16: WCAG contrast safety net -->
+                  <div id="theme-contrast-indicators" class="theme-contrast-indicators"></div>
                   <div class="theme-editor-section">STATUS</div>
                   <div class="theme-editor-row">
                     <label>OK</label>
@@ -2036,7 +2038,7 @@
                 <!-- Live mini preview — inherits CSS vars from document.documentElement -->
                 <div class="theme-preview-clip">
                   <div class="theme-preview-mini">
-                    <div class="theme-preview-topbar">⚙ AstromechOS<span>R2-D2 ●</span></div>
+                    <div class="theme-preview-topbar">⚙ AstromechOS<span><span class="robot-name">R2-D2</span> ●</span></div>
                     <div class="theme-preview-tabs">
                       <div class="theme-preview-tab active">
                         <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>
@@ -2114,7 +2116,7 @@
                 </div>
               </div>
               <div class="theme-editor-actions">
-                <button class="btn btn-sm" onclick="saveCustomTheme()">SAVE</button>
+                <button id="save-custom-theme-btn" class="btn btn-sm" onclick="withSaveFeedback(this, () => saveCustomTheme())">SAVE</button>
                 <button class="btn btn-sm" onclick="closeThemeEditor()">CANCEL</button>
               </div>
             </div>

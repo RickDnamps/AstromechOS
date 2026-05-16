@@ -1300,23 +1300,56 @@ def delete_icon():
     return jsonify({'status': 'ok'})
 
 
+# B1 fix 2026-05-16: regex for img: filename validation (parity with
+# upload-side _ICON_FILENAME_RE — but allow .svg in addition since
+# pre-shipped SVGs are served; only UPLOAD rejects .svg for XSS).
+_ICON_REF_RE = re.compile(r'^[A-Za-z0-9._\-]{1,64}\.(png|jpg|jpeg|gif|webp|svg)$')
+
+
 @settings_bp.post('/settings/robot_icon')
 @require_admin
 def set_robot_icon():
-    """Saves robot header icon to local.cfg. Body: {\"icon\": \"img:foo.png\"} or {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset."""
+    """Saves robot header icon to local.cfg. Body: {\"icon\": \"img:foo.png\"} or {\"icon\": \"🤖\"} or {\"icon\": \"\"} to reset.
+    B1 fix 2026-05-16: validate format + length + img: target existence.
+    Was: no validation → 10MB string could bloat local.cfg, or img:
+    with traversal/invalid filename could cause 404 spam on every poll."""
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     icon = data.get('icon', '').strip()
+    if len(icon) > 128:
+        return jsonify({'error': 'icon value too long (max 128 chars)'}), 400
+    if icon.startswith('img:'):
+        fname = icon[4:]
+        if not _ICON_REF_RE.match(fname):
+            return jsonify({'error': 'invalid icon filename'}), 400
+        if not os.path.exists(os.path.join(_ICONS_DIR, fname)):
+            return jsonify({'error': 'icon file not found'}), 404
+    elif icon and len(icon) > 16:
+        # Emoji branch — most emojis are 1-4 codepoints, 16 chars cap with ZWJ joiners
+        return jsonify({'error': 'emoji icon too long (max 16 chars)'}), 400
     _write_key('robot', 'icon', icon)
     return jsonify({'status': 'ok', 'icon': icon})
+
+
+# B3/E3 fix 2026-05-16: char allowlist — printable ASCII + Latin-1 +
+# common emoji range. Excludes `:` (corrupts _lsKey namespacing per
+# CLAUDE.md per-robot localStorage memory), `/` `\` `<` `>` and other
+# special chars.
+_ROBOT_NAME_RE = re.compile(r'^[\w \-\.À-ÿ☀-➿\U0001F300-\U0001FAFF]{1,32}$', re.UNICODE)
 
 
 @settings_bp.post('/settings/robot_locations')
 @require_admin
 def set_robot_locations():
-    """Saves master/slave display location names. Body: {\"master_location\":\"Dome\",\"slave_location\":\"Body\"}"""
+    """Saves master/slave display location names. Body: {\"master_location\":\"Dome\",\"slave_location\":\"Body\"}
+    B3 fix 2026-05-16: char allowlist + empty validation."""
     data   = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     master = data.get('master_location', '').strip()[:20]
     slave  = data.get('slave_location',  '').strip()[:20]
+    _LOC_RE = re.compile(r'^[\w \-.]{1,20}$')
+    if master and not _LOC_RE.match(master):
+        return jsonify({'error': 'master_location: letters/digits/space/-/_/. only (1-20 chars)'}), 400
+    if slave and not _LOC_RE.match(slave):
+        return jsonify({'error': 'slave_location: letters/digits/space/-/_/. only (1-20 chars)'}), 400
     if master: _write_key('robot', 'master_location', master)
     if slave:  _write_key('robot', 'slave_location',  slave)
     return jsonify({'status': 'ok', 'master_location': master, 'slave_location': slave})
@@ -1325,13 +1358,18 @@ def set_robot_locations():
 @settings_bp.post('/settings/robot_name')
 @require_admin
 def set_robot_name():
-    """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}"""
+    """Saves robot display name to local.cfg. Body: {\"name\": \"R2-D2\"}
+    B4/E3 fix 2026-05-16: char allowlist — excludes `:` (corrupts
+    multi-robot _lsKey namespacing), `<` `>` `/` `\\` (UI sabotage
+    + path-look-alikes), bidi/zero-width chars (homoglyph spoofing)."""
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     name = data.get('name', '').strip()
     if not name:
         return jsonify({'error': 'name is required'}), 400
     if len(name) > 32:
         return jsonify({'error': 'name too long (max 32 chars)'}), 400
+    if not _ROBOT_NAME_RE.match(name):
+        return jsonify({'error': 'name: letters/digits/space/-/_/./emoji only (no colons or special chars)'}), 400
     _write_key('robot', 'name', name)
     return jsonify({'status': 'ok', 'name': name})
 

