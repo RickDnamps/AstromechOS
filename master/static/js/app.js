@@ -3249,6 +3249,13 @@ function estopReset() {
   // It also fires the 'Ready' toast on the stow_in_progress:true→false
   // transition. Removes 30 extra /status hits per stow + eliminates
   // the race where two writers fight over the same text element.
+  //
+  // User-reported 2026-05-16: button got stuck on STOWING after reset.
+  // Root cause unconfirmed but symptoms point to a missed poll during
+  // the stow window (visibilitychange throttling? worker hiccup?).
+  // Safety belt: 30s fallback timer force-clears STOWING if poller
+  // didn't catch the false transition. Stow runs ~3-5s normally so
+  // 30s is a comfortable upper bound that won't fire under normal ops.
   _estopBusy = true;
   const txt = el('estop-toggle-text');
   if (txt) txt.textContent = 'STOWING…';   // optimistic — poller will sync
@@ -3257,6 +3264,13 @@ function estopReset() {
       toast('Stowing servos…', 'info');
       _setEstopUI(false);
       if (txt) txt.textContent = 'STOWING…';   // poller flips back when done
+      // Safety belt — if poller misses the transition, force-clear after 30s.
+      setTimeout(() => {
+        if (txt && txt.textContent === 'STOWING…' && !_estopTripped) {
+          console.warn('estopReset: 30s timeout fired, force-clearing STOWING text');
+          txt.textContent = 'EMERGENCY STOP';
+        }
+      }, 30000);
     } else {
       if (txt) txt.textContent = 'RESET E-STOP';
       toast('Reset failed', 'error');
@@ -7670,7 +7684,12 @@ class StatusPoller {
     if (estopTxt) {
       if (data.stow_in_progress) {
         estopTxt.textContent = 'STOWING…';
-      } else if (!_estopTripped && estopTxt.textContent === 'STOWING…') {
+      } else if (estopTxt.textContent === 'STOWING…' && !data.estop_active) {
+        // 2026-05-16 user-reported fix: was gating on local _estopTripped
+        // which can desync with the server (poll missed, reload race).
+        // Use server-authoritative data.estop_active instead — if server
+        // says estop is NOT active AND stow is NOT in progress, text
+        // CANNOT legitimately be 'STOWING…' regardless of local cache.
         estopTxt.textContent = 'EMERGENCY STOP';
       }
     }
