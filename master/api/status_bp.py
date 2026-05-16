@@ -351,6 +351,12 @@ def get_status():
         'choreo_name':            _choreo_name,
         'choreo_uses_propulsion': _choreo_uses_prop,
         'choreo_uses_dome':       _choreo_uses_dome,
+        # Bug B3 fix 2026-05-15: surface choreo abort_reason globally so
+        # the StatusPoller can toast an undervoltage/overheat/uart_loss
+        # event even when operator is on a non-Choreo tab. Previously
+        # only the Choreo-tab abort modal saw this (silent abort if op
+        # is elsewhere = SAFETY visibility gap).
+        'choreo_abort_reason':    _choreo_status.get('abort_reason'),
         'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
         'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # consecutive invalid CRC on Master side
         # ms since the last heartbeat ACK from the Slave; None until first ACK.

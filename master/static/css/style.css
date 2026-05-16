@@ -1207,7 +1207,10 @@ body.dome-ramping  .joystick-panel-right .joystick-ring {
  * directly so the "🎬 CHOREO" badge sits over the actual joystick. */
 body.choreo-prop-locked .joystick-panel-left  .joystick-ring::after,
 body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
-  content: '🎬 CHOREO';
+  /* Bug B1 fix 2026-05-15: content driven from --choreo-name CSS var
+   * (set by StatusPoller from data.choreo_name). Operator now knows
+   * WHICH choreo grabbed the joystick, not just 'a choreo'. */
+  content: var(--choreo-name, '"🎬 CHOREO"');
   position: absolute;
   top: 50%;
   left: 50%;
@@ -4418,6 +4421,109 @@ select.input-text option { background: var(--input-option); }
   font-size: 10px;
   color: var(--text-dim);
   font-family: var(--font-data, monospace);
+}
+
+/* WOW polish G1 2026-05-15: choreo category pill count badges */
+.seq-pill-count {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 9px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-dim);
+  vertical-align: middle;
+}
+.seq-pill.active .seq-pill-count {
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--blue);
+}
+.seq-pill.is-empty { opacity: 0.5; }
+.seq-pill.is-empty .seq-pill-count {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+}
+
+/* WOW polish G2 2026-05-15: empty state for sequences grid */
+.seq-grid-empty {
+  grid-column: 1 / -1;
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--text-dim);
+}
+.seq-grid-empty-icon {
+  font-size: 42px;
+  opacity: 0.5;
+  margin-bottom: 14px;
+}
+.seq-grid-empty-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.seq-grid-empty-sub {
+  font-size: 11px;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+/* WOW polish E3 2026-05-15: editor SAVE button + dropdown dirty marker */
+.btn.chor-dirty {
+  position: relative;
+}
+.btn.chor-dirty::before {
+  content: '●';
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 10px;
+  color: var(--amber, #ffaa44);
+  text-shadow: 0 0 6px rgba(255, 170, 68, 0.7);
+  animation: chor-dirty-pulse 1.6s ease-in-out infinite;
+}
+select.chor-dirty {
+  border-color: var(--amber, #ffaa44) !important;
+  box-shadow: 0 0 6px rgba(255, 170, 68, 0.3);
+}
+@keyframes chor-dirty-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
+/* WOW polish E4 2026-05-15: block hover + resize handle reveal.
+ * Dense timelines = misclicks without affordance. Now hover lights
+ * the block + the resize grip becomes visible. */
+.chor-block:hover {
+  filter: brightness(1.25);
+  box-shadow: 0 0 10px currentColor;
+  z-index: 4;
+}
+.chor-block .chor-block-resize {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.chor-block:hover .chor-block-resize {
+  opacity: 1;
+}
+
+/* WOW polish L3 2026-05-15: PLAY button playing-state */
+.btn.chor-playing {
+  background: rgba(0, 204, 102, 0.18);
+  border-color: var(--green, #00cc66);
+  color: var(--green, #00cc66);
+  box-shadow: 0 0 12px rgba(0, 204, 102, 0.5);
+  animation: chor-play-pulse 1.4s ease-in-out infinite;
+}
+@keyframes chor-play-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(0, 204, 102, 0.5); }
+  50%      { box-shadow: 0 0 22px rgba(0, 204, 102, 0.8); }
 }
 
 /* WOW polish H4 2026-05-15: Behavior next-trigger countdown */

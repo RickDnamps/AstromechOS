@@ -2885,6 +2885,13 @@ function _setChoreoLockUI(propLocked, domeLocked, choreoName) {
   document.body.classList.toggle('choreo-locked',      _choreoLocked);
   document.body.classList.toggle('choreo-prop-locked', propLocked);
   document.body.classList.toggle('choreo-dome-locked', domeLocked);
+  // Bug B1 fix 2026-05-15: drive the badge text via CSS var so the
+  // choreo NAME shows on the locked joystick instead of static
+  // '🎬 CHOREO'. Wrap in quotes — CSS content: var() needs the
+  // quoted string form. Fall back to a generic label when name empty.
+  const name = (choreoName || '').toUpperCase();
+  const cssVal = name ? `"🎬 ${name.replace(/"/g, '\\"')}"` : '"🎬 CHOREO"';
+  document.documentElement.style.setProperty('--choreo-name', cssVal);
   const lbl = el('choreo-lock-label');
   if (lbl) lbl.textContent = choreoName || '';
   // Force-release only the joystick whose axis newly locked. A
@@ -5026,11 +5033,22 @@ class ScriptEngine {
       return e;
     };
 
+    // WOW polish G1 2026-05-15: count badges on category pills.
+    // Parité avec Audio tab — operator voit instant "Happy (8) ·
+    // Music (3) · Tests (1)" sans cliquer chaque catégorie.
+    const totalCount = this._scripts.length;
+    const countByCat = {};
+    this._scripts.forEach(s => {
+      const k = s.category || 'newchoreo';
+      countByCat[k] = (countByCat[k] || 0) + 1;
+    });
+
     // ALL pill
     const allActive = this._activeCategory === 'all' ? ' active' : '';
     const allPill = make('seq-pill' + allActive, txt('span', '🌐'),
                           document.createTextNode(' ALL'));
     allPill.dataset.cat = 'all';
+    allPill.appendChild(txt('span', totalCount, 'seq-pill-count'));
     allPill.addEventListener('click', () => this.selectCategory('all'));
     container.appendChild(allPill);
 
@@ -5038,8 +5056,10 @@ class ScriptEngine {
     cats.forEach(c => {
       const active = this._activeCategory === c.id ? ' active' : '';
       const adminCls = isAdmin ? ' admin-mode' : '';
+      const count = countByCat[c.id] || 0;
+      const emptyCls = count === 0 ? ' is-empty' : '';
       const pill = document.createElement('div');
-      pill.className = 'seq-pill' + active + adminCls;
+      pill.className = 'seq-pill' + active + adminCls + emptyCls;
       pill.dataset.cat = c.id;
       pill.addEventListener('click', () => this.selectCategory(c.id));
 
@@ -5049,6 +5069,7 @@ class ScriptEngine {
       }
       pill.appendChild(emojiSpan);
       pill.appendChild(document.createTextNode(' ' + (c.label || '')));
+      pill.appendChild(txt('span', count, 'seq-pill-count'));
 
       if (isAdmin && c.id !== 'newchoreo') {
         const close = txt('span', '✕', 'seq-pill-close');
@@ -5195,12 +5216,38 @@ class ScriptEngine {
       ? this._scripts
       : this._scripts.filter(s => s.category === this._activeCategory);
 
-    // F-1 (audit 2026-05-15): build cards with createElement so s.emoji
-    // can never escape into HTML. Same XSS hazard the pills had — a
-    // user with a malicious emoji string in their .chor would inject
-    // arbitrary JS into the dashboard. textContent + dataset eliminate
-    // every HTML interpolation sink in this render path.
     grid.replaceChildren();
+
+    // WOW polish G2 2026-05-15: empty state guidance instead of
+    // a blank grid. Operator sees clear "nothing here yet" message.
+    if (scripts.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'seq-grid-empty';
+      const icon = document.createElement('div');
+      icon.className = 'seq-grid-empty-icon';
+      icon.textContent = this._activeCategory === 'all' ? '🎬' : '📂';
+      const title = document.createElement('div');
+      title.className = 'seq-grid-empty-title';
+      const sub = document.createElement('div');
+      sub.className = 'seq-grid-empty-sub';
+      if (this._activeCategory === 'all') {
+        title.textContent = this._scripts.length === 0
+          ? 'No sequences yet'
+          : 'No sequences match the current filter';
+        sub.textContent = isAdmin
+          ? 'Open the editor and click + NEW to record your first.'
+          : 'Ask an admin to create sequences.';
+      } else {
+        const catLabel = (this._categories.find(c => c.id === this._activeCategory)?.label) || this._activeCategory;
+        title.textContent = `No sequences in ${catLabel}`;
+        sub.textContent = isAdmin
+          ? 'Switch to ALL to drag sequences here, or click another category.'
+          : 'Try another category.';
+      }
+      empty.append(icon, title, sub);
+      grid.appendChild(empty);
+      return;
+    }
     scripts.forEach(s => {
       const isRunning = this._running.has(s.name);
       const isLooping = this._looping.has(s.name);
@@ -5652,6 +5699,19 @@ class ScriptEngine {
 
   updateRunning(running) {
     const names = new Set(running.map(s => s.name));
+    // WOW polish G5 2026-05-15: scroll the newly-running card into
+    // view if it's off-screen. Operator triggered a choreo from a
+    // shortcut or BT pad and wants to see its progress bar even if
+    // the card is below the fold. Edge-trigger on transition.
+    const prev = this._running || new Set();
+    for (const name of names) {
+      if (!prev.has(name)) {
+        const card = el(`seq-card-${name}`);
+        if (card && typeof card.scrollIntoView === 'function') {
+          card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+    }
     this._running = names;
     // F-39 (audit 2026-05-15): the `_looping` set used to accumulate
     // names whose cards were hidden by the current category filter
@@ -6918,6 +6978,25 @@ class StatusPoller {
         : [];
       scriptEngine.updateRunning(running);
     }
+
+    // Bug B3 fix 2026-05-15: surface choreo abort globally so an
+    // undervoltage/overheat/uart_loss abort fires a toast no matter
+    // which tab the operator is on. Previously the abort modal only
+    // fired if operator was actively on the Choreo tab — silent
+    // safety event otherwise. Edge-trigger on transition empty → set.
+    const _newAbort = data.choreo_abort_reason || null;
+    if (_newAbort && _newAbort !== this._lastAbortReason) {
+      const labels = {
+        uart_loss: 'UART LOSS',
+        undervoltage: 'BATTERY UNDERVOLTAGE',
+        overheat: 'VESC OVERHEAT',
+        overcurrent: 'VESC OVERCURRENT',
+        estop_active: 'E-STOP',
+        stow_in_progress: 'STOW IN PROGRESS',
+      };
+      toast(`⚠ Choreo aborted — ${labels[_newAbort] || _newAbort.toUpperCase()}`, 'error');
+    }
+    this._lastAbortReason = _newAbort;
 
     // Lock mode — sync si reconnexion ou autre client
     if (data.lock_mode !== undefined) {
@@ -9201,6 +9280,17 @@ const choreoEditor = (() => {
   let _pollTimer   = null;
   let _dirty       = false;
   let _existsOnDisk = false;  // true only after an explicit admin Save or loading an existing file
+
+  // WOW polish E3 2026-05-15: reflect _dirty on the SAVE button so
+  // operator can see at a glance there are unsaved changes. Replaces
+  // direct _dirty=true/false assignments via a setter wrapper.
+  function _setDirty(v) {
+    _dirty = !!v;
+    const btn = document.querySelector('#tab-choreo button[onclick*="choreoEditor.save"]');
+    if (btn) btn.classList.toggle('chor-dirty', _dirty);
+    const sel = el('chor-select');
+    if (sel) sel.classList.toggle('chor-dirty', _dirty);
+  }
   // Inspector audio-duration probe — SINGLE reused Audio instance
   // (B-12 / audit Perf H-2 2026-05-15). _probeToken makes stale
   // loadedmetadata callbacks from a previous probe ignorable.
@@ -9659,7 +9749,7 @@ const choreoEditor = (() => {
         if (!_chor.tracks[track]) _chor.tracks[track] = [];
         _chor.tracks[track].push(newItem);
         _chor.tracks[track].sort((a, b) => a.t - b.t);
-        _dirty = true;
+        _setDirty(true);
         _renderTrack(track);
         _refreshLayout();
         if (track === 'audio') _validateAudioOverflow();
@@ -10019,7 +10109,7 @@ const choreoEditor = (() => {
       toast('Block removed from editor — current playback continues from the saved file. Stop and Play to apply.', 'warn');
     }
     _chor.tracks[track].splice(idx, 1);
-    _dirty = true; _selected = null;
+    _setDirty(true); _selected = null;
     _clearInspectorTitle();
     const panel = document.getElementById('chor-props-content');
     if (panel) panel.innerHTML = '<span style="color:var(--text-dim);font-size:10px">Select a block to inspect.</span>';
@@ -10046,7 +10136,7 @@ const choreoEditor = (() => {
         if (!_chor.tracks[track]) _chor.tracks[track] = [];
         _chor.tracks[track].push(snapshot);
         _chor.tracks[track].sort((a, b) => (a.t || 0) - (b.t || 0));
-        _dirty = true;
+        _setDirty(true);
         _renderTrack(track);
         _refreshLayout();
         if (track === 'audio') _validateAudioOverflow();
@@ -10170,7 +10260,7 @@ const choreoEditor = (() => {
           // Horizontal → time (snapped, clamped to ≥ 0, no overlap with neighbours)
           const rawT  = startT + _sec((e2.clientX - startMouseX) * scaleX);
           const newT  = _domeClampT(i, Math.max(0, _snap(rawT)));
-          kf.t = newT; _dirty = true;
+          kf.t = newT; _setDirty(true);
           // Vertical → power
           const newPower = yToPow(startY + (e2.clientY - startMouseY) * scaleY);
           kf.power = newPower;
@@ -10277,7 +10367,7 @@ const choreoEditor = (() => {
       if (track === 'dome') newT = _domeClampT(idx, newT);
       block.style.left = _px(newT) + 'px';
       _chor.tracks[track][idx].t = newT;
-      _dirty = true;
+      _setDirty(true);
       _updatePropsPanel(track, idx);
       // Edge-driven auto-scroll
       if (scroll) {
@@ -10376,7 +10466,7 @@ const choreoEditor = (() => {
       } else {
         item.duration = newDur;
       }
-      _dirty = true;
+      _setDirty(true);
       _updatePropsPanel(track, idx);
     };
     const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
@@ -10588,7 +10678,7 @@ const choreoEditor = (() => {
         item.arm_duration   = seed;
         item.delay          = 0.5;
         delete item.duration;
-        _dirty = true;
+        _setDirty(true);
       }
 
       const seqHint = isOpen
@@ -11010,18 +11100,36 @@ const choreoEditor = (() => {
         const banner = document.getElementById('chor-conn-banner');
         if (banner) banner.style.display = 'none';
       }
+      // Bug B4 fix 2026-05-15: if the playing choreo on the server
+      // is NOT the one the operator currently has loaded in the
+      // editor, the playhead would sweep across the WRONG timeline
+      // and _syncChorMonitor would read events from the LOADED chor
+      // (not the playing one) → garbage visuals. Detect mismatch,
+      // freeze the playhead at 0, and show a banner instead.
+      const loadedName = (_chor && _chor.meta && _chor.meta.name) || '';
+      const sameChoreo = !status.name || !loadedName || status.name === loadedName;
       const ph = document.getElementById('chor-playhead');
-      if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
       const tc = document.getElementById('chor-timecode');
-      if (tc) tc.textContent = _fmtTime(status.t_now || 0);
-      _syncChorMonitor(status.t_now || 0);
+      if (sameChoreo) {
+        if (ph) ph.style.left = _px(status.t_now || 0) + 'px';
+        if (tc) tc.textContent = _fmtTime(status.t_now || 0);
+        _syncChorMonitor(status.t_now || 0);
+      } else {
+        if (ph) ph.style.left = '0px';
+        if (tc) tc.textContent = `▶ ${status.name}`;
+      }
       _updateTelem(status.telem || null);
       _updateAlarms(status.abort_reason || null);
       if (status.abort_reason) { _stopPolling(); _showAbortModal(status.abort_reason); return; }
       if (!status.playing) _stopPolling();
     }, 200);
   }
-  function _stopPolling() { if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; } }
+  function _stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    // WOW polish L3: clear the PLAY button playing-state on stop/end/abort.
+    const pb = document.getElementById('chor-btn-play');
+    if (pb) { pb.classList.remove('chor-playing'); pb.textContent = '▶ PLAY'; }
+  }
 
   function _showAbortModal(reason) {
     const modal = document.getElementById('modal-chor-abort');
@@ -11126,7 +11234,7 @@ const choreoEditor = (() => {
             if (item) {
               const newT = Math.max(0, _snap((item.t || 0) + dir * step));
               item.t = newT;
-              _dirty = true;
+              _setDirty(true);
               _renderTrack(_selected.track);
               _refreshLayout();
               _selectBlock(_selected.track, _selected.idx);
@@ -11281,7 +11389,7 @@ const choreoEditor = (() => {
         if (!ev.duration || ev.duration <= 0) ev.duration = 1.0;
         if (!ev.easing) ev.easing = 'ease-in-out';
       });
-      _dirty = false; _existsOnDisk = true; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
+      _setDirty(false); _existsOnDisk = true; _selected = null; _zoomFactor = 1.0; _clearInspectorTitle();
       // Ensure servo settings are loaded before migration/validation (race guard)
       if (Object.keys(_servoSettings).length === 0) {
         const r = await api('/servo/settings');
@@ -11298,7 +11406,7 @@ const choreoEditor = (() => {
       // Migrate legacy label-based servo refs → hardware IDs
       const _migrateResult = _migrateLegacyServoRefs();
       if (_migrateResult) {
-        _dirty = true;
+        _setDirty(true);
         if (_migrateResult === 'partial') {
           toast('Some servo refs could not be migrated — check servo config', 'warn');
         } else {
@@ -11343,7 +11451,7 @@ const choreoEditor = (() => {
         toast(`Delete failed: ${e.message || e}`, 'error');
         return;
       }
-      _chor = null; _dirty = false; _selected = null; _clearInspectorTitle();
+      _chor = null; _setDirty(false); _selected = null; _clearInspectorTitle();
       _renderAllTracks();
       const names = await api('/choreo/list');
       const sel = document.getElementById('chor-select');
@@ -11409,7 +11517,7 @@ const choreoEditor = (() => {
           propulsion: [],    markers: [],
         },
       };
-      _dirty = true; _existsOnDisk = false; _renderAllTracks();
+      _setDirty(true); _existsOnDisk = false; _renderAllTracks();
       const sel = document.getElementById('chor-select');
       if (sel) { const opt = document.createElement('option'); opt.value = name; opt.textContent = name; opt.selected = true; sel.appendChild(opt); }
       toast(`New choreography: ${name}`, 'ok');
@@ -11445,6 +11553,11 @@ const choreoEditor = (() => {
           } else {
             toast(`Playing: ${_chor.meta.name}`, 'ok');
           }
+          // WOW polish L3 2026-05-15: PLAY button playing-state visual.
+          // Operator can see at a glance that the editor's loaded choreo
+          // is actively playing on the robot. Cleared by _stopPolling.
+          const pb = el('chor-btn-play');
+          if (pb) { pb.classList.add('chor-playing'); pb.textContent = '▶ PLAYING…'; }
           _startPolling();
         }
       } finally {
@@ -11475,9 +11588,22 @@ const choreoEditor = (() => {
     async save(opts = {}) {
       if (_busy) { toast('Still working — wait a moment', 'warn'); return; }
       _busy = true;
+      // WOW polish E2 2026-05-15: withSaveFeedback on the SAVE button so
+      // operator gets the universal Saving…→Saved ✓ pulse pattern.
+      const btn = document.querySelector('#tab-choreo button[onclick*="choreoEditor.save"]');
       try {
-        await this._save(opts);
-      } finally {
+        if (btn) {
+          await withSaveFeedback(btn, async () => {
+            const r = await this._save(opts);
+            // _save returns nothing on success but also nothing on cancel
+            // (admin guard) — treat absence of toast error as success.
+            return r;
+          });
+        } else {
+          await this._save(opts);
+        }
+      } catch { /* withSaveFeedback already showed Failed */ }
+      finally {
         _busy = false;
       }
     },
@@ -11509,7 +11635,7 @@ const choreoEditor = (() => {
         toast(`Save failed: ${r.error}${hint}`, 'error');
         return;
       }
-      _dirty = false; _existsOnDisk = true;
+      _setDirty(false); _existsOnDisk = true;
       _validateServoRefs(); _validateAudioRefs();
       toast(`Saved: ${_chor.meta.name}`, 'ok');
     },
@@ -11587,7 +11713,7 @@ const choreoEditor = (() => {
       if (!_selected || _selected.track !== 'dome') return;
       const item = (_chor.tracks.dome || [])[_selected.idx];
       if (!item) return;
-      item.easing = name; _dirty = true; _drawEasingPreview(name);
+      item.easing = name; _setDirty(true); _drawEasingPreview(name);
     },
 
     _setProp(track, idx, field, rawVal) {
@@ -11615,7 +11741,7 @@ const choreoEditor = (() => {
         const num = parseFloat(rawVal);
         item[field] = isNaN(num) ? rawVal : num;
       }
-      _dirty = true;
+      _setDirty(true);
       // Dome overlap guard — clamp t and duration to prevent overlapping commands
       if (track === 'dome') {
         if (field === 'duration') item.duration = _domeClampDur(idx, item.duration);
@@ -11662,7 +11788,7 @@ const choreoEditor = (() => {
       } else if (type === 'specific' && (item.file || '').toUpperCase().startsWith('RANDOM:')) {
         item.file = _audioScanned[0] || '';
       }
-      _dirty = true;
+      _setDirty(true);
       _validateAudioRefs();
       _renderTrack(track);
       _updatePropsPanel(track, idx);
