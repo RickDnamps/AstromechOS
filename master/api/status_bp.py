@@ -1039,9 +1039,14 @@ def system_estop_reset():
                 # step=2°, delay=(10-speed)*0.003 — matches Slave's ramp.
                 per_ramp_s = (max_body_travel_deg / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
                 total_s = n_body * per_ramp_s + 0.20   # margin
-                _time.sleep(min(8.0, total_s))   # cap 8s as safety
-                log.info(f"Safe-home: waited {min(8.0, total_s):.2f}s "
-                         f"for {n_body} body servos to finish slave-side ramp")
+                actual_wait = min(12.0, total_s)   # cap 12s as safety
+                _time.sleep(actual_wait)
+                log.info(f"Safe-home: waited {actual_wait:.2f}s "
+                         f"for {n_body} body servos to finish slave-side ramp "
+                         f"(estimated {total_s:.2f}s)")
+                if total_s > 12.0:
+                    log.warning(f"Safe-home: body wait capped at 12s but estimated "
+                                f"{total_s:.2f}s — some servos may still be moving")
 
         # ── Step 4: dome servos in parallel ──
         # NOTE: dome_servo_driver does NOT export a module-level SERVO_MAP —
