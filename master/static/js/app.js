@@ -7703,13 +7703,15 @@ const btCustomMappings = {
     await this._loadScripts();
     await this._loadSounds();
 
-    // Build the device selector. Preserve the current selection if
-    // possible, otherwise default to active MAC, otherwise first
-    // profile, otherwise empty.
-    const sel = el('bt-device-profile-select');
-    if (!sel) return;
+    // Build the device selector — custom card list (replaces native
+    // <select> which truncated long name+MAC). Hidden <select> stays
+    // in sync for backward compat with code that reads .value.
+    const sel  = el('bt-device-profile-select');
+    const list = el('bt-device-profile-list');
+    if (!sel || !list) return;
     const previous = sel.value;
     sel.replaceChildren();
+    list.replaceChildren();
 
     const macs = Object.keys(this._profiles);
     if (macs.length === 0) {
@@ -7717,25 +7719,84 @@ const btCustomMappings = {
       opt.value = '';
       opt.textContent = '— no controller paired yet —';
       sel.appendChild(opt);
+      const empty = document.createElement('div');
+      empty.className   = 'bt-device-empty';
+      empty.textContent = '— no controller paired yet — pair one in CONTROLLER PAIRING above';
+      list.appendChild(empty);
       this._activeMac = null;
     } else {
-      macs.forEach(mac => {
-        const opt  = document.createElement('option');
-        opt.value  = mac;
-        const prof = this._profiles[mac] || {};
-        const name = prof.name || mac;
-        // 2026-05-16: append last 5 chars of MAC ('…XX:XX') so two
-        // identical-named controllers (e.g. two NVIDIA Shields) can
-        // be told apart.
-        const macTail = mac.length >= 5 ? `…${mac.slice(-5)}` : mac;
-        const suffix  = mac === activeMac ? ` ${macTail} (connected)` : ` ${macTail}`;
-        opt.textContent = name === mac ? mac : `${name}${suffix}`;
-        sel.appendChild(opt);
-      });
       let chosen = '';
       if (previous && this._profiles[previous]) chosen = previous;
       else if (activeMac && this._profiles[activeMac]) chosen = activeMac;
       else chosen = macs[0];
+
+      macs.forEach(mac => {
+        const prof = this._profiles[mac] || {};
+        const name = prof.name || mac;
+        const isConnected = mac === activeMac;
+        const isSelected  = mac === chosen;
+        const mappingCount = Array.isArray(prof.custom_button_mappings)
+          ? prof.custom_button_mappings.length : 0;
+
+        // Hidden <select> option (drives compat with onDeviceChange etc.)
+        const opt = document.createElement('option');
+        opt.value = mac;
+        opt.textContent = `${name} (${mac})`;
+        if (isSelected) opt.selected = true;
+        sel.appendChild(opt);
+
+        // Card
+        const card = document.createElement('div');
+        card.className = 'bt-device-card' +
+          (isSelected ? ' selected' : '') +
+          (isConnected ? ' connected' : '');
+        card.dataset.mac = mac;
+
+        const left = document.createElement('div');
+        left.className = 'bt-device-card-left';
+
+        const nameRow = document.createElement('div');
+        nameRow.className   = 'bt-device-card-name';
+        nameRow.textContent = name;
+        left.appendChild(nameRow);
+
+        const metaRow = document.createElement('div');
+        metaRow.className = 'bt-device-card-meta';
+        const macSpan = document.createElement('span');
+        macSpan.className   = 'bt-device-card-mac';
+        macSpan.textContent = mac;
+        metaRow.appendChild(macSpan);
+        const dot = document.createElement('span');
+        dot.className   = 'bt-device-card-sep';
+        dot.textContent = '·';
+        metaRow.appendChild(dot);
+        const mapSpan = document.createElement('span');
+        mapSpan.className   = 'bt-device-card-mappings';
+        mapSpan.textContent = `${mappingCount} mapping${mappingCount === 1 ? '' : 's'}`;
+        metaRow.appendChild(mapSpan);
+        left.appendChild(metaRow);
+
+        card.appendChild(left);
+
+        const right = document.createElement('div');
+        right.className = 'bt-device-card-right';
+        if (isConnected) {
+          const badge = document.createElement('span');
+          badge.className   = 'bt-device-badge connected';
+          badge.textContent = '● CONNECTED';
+          right.appendChild(badge);
+        } else if (prof.last_seen) {
+          const seen = document.createElement('span');
+          seen.className   = 'bt-device-badge dim';
+          seen.textContent = '○ offline';
+          right.appendChild(seen);
+        }
+        card.appendChild(right);
+
+        card.addEventListener('click', () => this.onDeviceChange(mac));
+        list.appendChild(card);
+      });
+
       sel.value = chosen;
       this._activeMac = chosen;
     }
@@ -7769,6 +7830,15 @@ const btCustomMappings = {
 
   onDeviceChange(mac) {
     this._activeMac = mac || null;
+    // Sync the hidden <select> + card highlights
+    const sel = el('bt-device-profile-select');
+    if (sel) sel.value = this._activeMac || '';
+    const list = el('bt-device-profile-list');
+    if (list) {
+      list.querySelectorAll('.bt-device-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.mac === this._activeMac);
+      });
+    }
     const delBtn = el('bt-delete-profile-btn');
     if (delBtn) delBtn.style.display = this._activeMac ? '' : 'none';
     this._render();

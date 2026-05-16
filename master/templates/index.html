@@ -1232,15 +1232,30 @@
             Mappings are per-controller — switching to another paired device loads its own mappings.
           </p>
 
-          <div class="bt-active-device-row">
-            <label class="ctrl-label">DEVICE PROFILE</label>
-            <select id="bt-device-profile-select" class="input-text" onchange="btCustomMappings.onDeviceChange(this.value)">
+          <div class="bt-active-device-card">
+            <div class="bt-active-device-header">
+              <label class="ctrl-label">DEVICE PROFILE
+                <span class="ctrl-hint">— mappings apply to this controller only</span>
+              </label>
+              <div class="bt-active-device-actions">
+                <button class="btn btn-xs" onclick="btCustomMappings.load()" title="Re-fetch device profiles">↻ REFRESH</button>
+                <button class="btn btn-xs btn-danger" id="bt-delete-profile-btn"
+                        onclick="btCustomMappings.deleteProfile()" title="Forget this device's custom mappings"
+                        style="display:none">🗑 DELETE PROFILE</button>
+              </div>
+            </div>
+            <!-- Custom dropdown — built by btCustomMappings._renderDeviceCards.
+                 Replaces a native <select> that truncated long names+MAC. -->
+            <div id="bt-device-profile-list" class="bt-device-profile-list">
+              <div class="bt-device-empty">— no controller paired yet —</div>
+            </div>
+            <!-- Hidden native <select> kept for backward compat with code
+                 that reads the selected value (e.g. handlers using el('bt-device-profile-select').value).
+                 Synced by _renderDeviceCards. -->
+            <select id="bt-device-profile-select" style="display:none"
+                    onchange="btCustomMappings.onDeviceChange(this.value)">
               <option value="">— no controller connected —</option>
             </select>
-            <button class="btn btn-xs" onclick="btCustomMappings.load()" title="Re-fetch device profiles">↻ REFRESH</button>
-            <button class="btn btn-xs btn-danger" id="bt-delete-profile-btn"
-                    onclick="btCustomMappings.deleteProfile()" title="Forget this device's custom mappings"
-                    style="display:none">🗑 DELETE PROFILE</button>
           </div>
 
           <div id="bt-custom-mappings-list" style="margin-top:10px"></div>
