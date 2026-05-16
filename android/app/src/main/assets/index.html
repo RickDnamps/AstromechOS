@@ -1936,17 +1936,20 @@
           <div class="settings-status" id="system-version">Loading...</div>
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title admin-only">HARDWARE</h3>
-          <p class="settings-note admin-only">HAT address changes require a Master reboot to take effect.</p>
+          <p class="settings-note admin-only">
+            <b>Master servo HAT</b> change → requires Master reboot.<br>
+            <b>Slave servo / motor HAT</b> change → Slave service auto-restarts (~5s).
+          </p>
           <div class="settings-row admin-only">
-            <label class="settings-label">Master servo HAT addresses (I2C) <span class="reboot-badge small">REBOOT</span></label>
+            <label class="settings-label">Master servo HAT addresses (I2C)</label>
             <input type="text" id="master-hats-input" class="settings-input" placeholder="0x40, 0x42, ..." maxlength="60">
           </div>
           <div class="settings-row admin-only">
-            <label class="settings-label">Slave servo HAT addresses (I2C) <span class="reboot-badge small">SLAVE RESTART</span></label>
+            <label class="settings-label">Slave servo HAT addresses (I2C)</label>
             <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41, 0x42, ..." maxlength="60">
           </div>
           <div class="settings-row admin-only">
-            <label class="settings-label">Slave Motor HAT address (I2C) <span class="reboot-badge small">SLAVE RESTART</span></label>
+            <label class="settings-label">Slave Motor HAT address (I2C)</label>
             <input type="text" id="slave-motor-hat-input" class="settings-input" placeholder="0x40" maxlength="10">
           </div>
           <p class="settings-note admin-only">⚠️ Never put the Motor HAT address in Slave servo HATs — this protects the motor driver from servo commands.</p>
