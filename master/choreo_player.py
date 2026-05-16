@@ -1270,7 +1270,21 @@ class ChoreoPlayer:
         # between propulsion events (panel/sound/light), telem could go
         # stale for tens of seconds with NO abort. Now: stale L or R
         # while uses_propulsion=True is an immediate abort.
-        if self._status.get('uses_propulsion'):
+        # 2026-05-16 hotfix: skip this check in bench mode. Bench mode is
+        # the developer/testing bypass — VESCs aren't physically wired,
+        # so telem is permanently 'None'. Without this exception, any
+        # propulsion-using choreo aborts instantly on a bench setup
+        # (user feedback: 'press A bound to play_choreo, sound starts,
+        # stops dead within 1s'). Mirrors _vesc_is_drive_safe() which
+        # already bypasses safety in bench mode — same semantics here.
+        if self._status.get('uses_propulsion') and _vesc_is_drive_safe():
+            # is_drive_safe returns True in bench mode (regardless of
+            # telem state) → we trust the operator's bench bypass and
+            # don't abort on missing telem. Real propulsion safety still
+            # enforced by the per-event _vesc_is_drive_safe() gate inside
+            # the drive event branch (~line 1219).
+            pass
+        elif self._status.get('uses_propulsion'):
             for side in ('L', 'R'):
                 if telem.get(side) is None:
                     log.error(
