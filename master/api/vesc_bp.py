@@ -159,6 +159,13 @@ def set_config():
     _save_vesc_cfg(power_scale=f'{scale:.2f}')
     if reg.uart:
         reg.uart.send('VCFG', f'scale:{scale:.2f}')
+    # Edge fix 2026-05-15: also push to the live Master VESC driver so
+    # the in-memory clamp updates without a reboot. Previously
+    # reg.vesc._speed_limit stayed at SPEED_LIMIT=1.0 until next boot,
+    # which is why /status was reading stale 1.0 (see HW1 fix).
+    if reg.vesc and hasattr(reg.vesc, 'set_speed_limit'):
+        try: reg.vesc.set_speed_limit(scale)
+        except Exception: pass
     return jsonify({'status': 'ok', 'power_scale': scale})
 
 

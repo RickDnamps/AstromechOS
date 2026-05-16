@@ -87,7 +87,9 @@
   </div>
 
   <div class="topbar-right">
-    <div class="battery-mini">
+    <!-- WOW M2-W 2026-05-15: clickable to expand the cockpit panel
+         (battery details + voltage history). Cursor:pointer via CSS. -->
+    <div class="battery-mini" onclick="cockpitPanel.toggle()" title="Click for battery + system details">
       <svg id="battery-arc-mini" width="44" height="28" viewBox="0 0 44 28">
         <path d="M4 24 A20 20 0 0 1 40 24" fill="none" stroke="#1a2a3a" stroke-width="4" stroke-linecap="round"/>
         <path id="battery-arc-path" d="M4 24 A20 20 0 0 1 40 24" fill="none" stroke="#00cc66" stroke-width="4" stroke-linecap="round" stroke-dasharray="63" stroke-dashoffset="0"/>

@@ -1508,7 +1508,11 @@ class VirtualJoystick {
     this.ring   = el(ringId);
     this.knob   = el(knobId);
     this._lastSend = 0;   // throttle: ms timestamp of last onMove call
-    this._THROTTLE_MS = 1000 / 60;  // 60 req/s max
+    // Perf 2026-05-15: 30Hz (33ms) instead of 60Hz (16.6ms). UART
+    // can't consume faster than ~15Hz effective on M: commands, and
+    // 60Hz was thermal-throttling older Android tablets after ~10min
+    // of continuous joystick deflection (audit Perf #1).
+    this._THROTTLE_MS = 1000 / 30;  // 30 req/s — matches UART ceiling
     this.onMove = onMove;
     this.onStop = onStop;
     this._valXId = valXId;
@@ -2376,8 +2380,18 @@ function _updateSpeedEffective() {
   }
 }
 
+// Perf 2026-05-15: localStorage write debounced — dragging the
+// slider fires onInput per pixel (~55 writes/drag on tablet,
+// each a sync IPC on Android WebView). 250ms debounce = single
+// write at the end of the drag.
+let _setSpeedLsTimer = null;
+
 function setSpeed(val) {
-  const v = Math.max(10, Math.min(100, parseInt(val, 10) || 60));
+  let v = Math.max(10, Math.min(100, parseInt(val, 10) || 60));
+  // WOW M3-W 2026-05-15: snap to common values (25/50/75/100) within
+  // ±2% — saves operator fine-tuning to land on 50% on tablet.
+  const snaps = [25, 50, 75, 100];
+  for (const s of snaps) { if (Math.abs(v - s) <= 2) { v = s; break; } }
   _speedLimit = v / 100;
   const valEl = el('speed-val');
   if (valEl) valEl.textContent = v + '%';
@@ -2387,7 +2401,10 @@ function setSpeed(val) {
     if (slider.value !== String(v)) slider.value = v;
   }
   _updateSpeedEffective();
-  try { localStorage.setItem(_SPEED_LS_KEY, String(v)); } catch {}
+  clearTimeout(_setSpeedLsTimer);
+  _setSpeedLsTimer = setTimeout(() => {
+    try { localStorage.setItem(_SPEED_LS_KEY, String(v)); } catch {}
+  }, 250);
 }
 
 // Restore the saved slider value on page load — runs after #speed-slider
@@ -2644,10 +2661,19 @@ async function _takeCameraStream() {
       // not running, etc.). Re-use the cam-taken overlay shell but show
       // a different message so the user can distinguish "another client
       // stole it" from "camera service offline".
+      // Bug M1-W fix 2026-05-15: distinct visual for OFFLINE vs TAKEN.
+      // Operator clicking 'TAKE STREAM' on offline state → request
+      // fails again → looks like button is broken. Now: amber border
+      // + 'RETRY' label so the two states read differently.
       const taken = el('cam-taken');
       const txt   = taken ? taken.querySelector('.cam-taken-text') : null;
+      const btn2  = taken ? taken.querySelector('.cam-taken-btn') : null;
       if (txt)   txt.textContent = 'CAMERA OFFLINE — retry?';
-      if (taken) taken.style.display = 'flex';
+      if (btn2)  btn2.textContent = 'RETRY CAMERA';
+      if (taken) {
+        taken.classList.add('cam-offline-state');
+        taken.style.display = 'flex';
+      }
       return;
     }
     _camToken   = r.token;
@@ -2671,7 +2697,10 @@ async function _takeCameraStream() {
 
     if (taken) {
       const txt = taken.querySelector('.cam-taken-text');
+      const btn2 = taken.querySelector('.cam-taken-btn');
       if (txt) txt.textContent = 'STREAM TAKEN';
+      if (btn2) btn2.textContent = 'TAKE STREAM';
+      taken.classList.remove('cam-offline-state');   // clear M1-W offline visual
       taken.style.display = 'none';
     }
 
@@ -6853,6 +6882,12 @@ class StatusPoller {
 
   async poll() {
     if (this._inFlight) return;
+    // Perf 2026-05-15: skip polling when tab is backgrounded. Saves
+    // ~21,000 wasteful POSTs over a 12h event (tablet pocket-locked
+    // hourly) + skips the full _pollOnce DOM update path. Safety
+    // covered by heartbeat worker which keeps running (and also
+    // surfaces estop_active via M2 fix).
+    if (typeof document !== 'undefined' && document.hidden) return;
     this._inFlight = true;
     try {
       await this._pollOnce();
@@ -6937,6 +6972,11 @@ class StatusPoller {
       _powerScaleCached = data.power_scale;
       if (typeof _updateSpeedEffective === 'function') _updateSpeedEffective();
     }
+
+    // WOW L1-W 2026-05-15: ALIVE button countdown deferred — would
+    // need next_idle_in_s + alive_enabled added to /status (currently
+    // only in /behavior/status). The behavior Settings panel already
+    // shows the countdown pill. Tab-cost not justified for this batch.
 
     // WOW HW3 2026-05-15: BT controller status pill on Drive bottom.
     // Shown only when a controller is paired+connected. Edge-trigger
@@ -8303,6 +8343,13 @@ const shortcutsRunner = {
         toast('Shortcut failed', 'error');
         return;
       }
+      // Bug M5 fix 2026-05-15: server may return 200 with {error: ...}
+      // for an unhandled internal error. Previously d.state was
+      // undefined → button stuck without is-on but no toast either.
+      if (d.error) {
+        toast(`Shortcut: ${d.error}`, 'error');
+        return;
+      }
       const state = d.state;
       this._states[id] = state === 'fired' ? 'off' : state;
       btn.classList.toggle('is-on', this._states[id] === 'on');
@@ -9265,6 +9312,9 @@ function startAppHeartbeat() {
     if (_hbWorker) return;
     try {
       // Inline worker — no separate .js file to ship.
+      // Bug M2 fix 2026-05-15: worker now parses the response and posts
+      // back to main thread so we can sync estop_active at 200ms cadence
+      // instead of waiting for /status (2s).
       const workerSrc = `
         let _url = '';
         let _timer = null;
@@ -9274,7 +9324,10 @@ function startAppHeartbeat() {
             _url = d.url;
             if (_timer) clearInterval(_timer);
             _timer = setInterval(() => {
-              fetch(_url, { method: 'POST' }).catch(() => {});
+              fetch(_url, { method: 'POST' })
+                .then(r => r.ok ? r.json() : null)
+                .then(body => { if (body) self.postMessage({ type: 'hb', data: body }); })
+                .catch(() => {});
             }, 200);
           } else if (d.type === 'stop') {
             if (_timer) { clearInterval(_timer); _timer = null; }
@@ -9283,6 +9336,11 @@ function startAppHeartbeat() {
       `;
       const blob = new Blob([workerSrc], { type: 'application/javascript' });
       _hbWorker = new Worker(URL.createObjectURL(blob));
+      _hbWorker.onmessage = (e) => {
+        if (e.data && e.data.type === 'hb' && e.data.data) {
+          _syncFromHeartbeat(e.data.data);
+        }
+      };
       _hbWorker.postMessage({ type: 'start', url: base() + '/heartbeat' });
     } catch (e) {
       // Fallback to main-thread interval if Worker creation fails (very
@@ -9298,8 +9356,19 @@ function startAppHeartbeat() {
         toast('Heartbeat fallback active — heavy renders may trigger false E-STOP', 'warn');
       }
       _hbWorker = { _fallback: setInterval(() => {
-        fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
+        fetch(base() + '/heartbeat', { method: 'POST' })
+          .then(r => r.ok ? r.json() : null)
+          .then(body => { if (body) _syncFromHeartbeat(body); })
+          .catch(() => {});
       }, 200) };
+    }
+  }
+  // Bug M2 fix: sync estop_active from heartbeat response — faster
+  // than the 2s /status poll. Reuses _setEstopUI which handles the
+  // _estopTripped state + UI text + body class.
+  function _syncFromHeartbeat(data) {
+    if (data.estop_active !== undefined && data.estop_active !== _estopTripped) {
+      _setEstopUI(!!data.estop_active);
     }
   }
   function _hbStop() {
@@ -9323,6 +9392,10 @@ function startAppHeartbeat() {
   window.addEventListener('beforeunload', (e) => {
     fetch(base() + '/motion/stop', { method: 'POST', keepalive: true }).catch(() => {});
     fetch(base() + '/motion/dome/stop', { method: 'POST', keepalive: true }).catch(() => {});
+    // Bug M1 fix 2026-05-15: stop the HB worker on page unload. Without
+    // this, bfcache restoration could spawn a second worker → double-
+    // rate heartbeats + memory leak after many back/forward navigations.
+    try { _hbStop(); } catch {}
     // Audit finding Frontend H-3 2026-05-15: warn before leaving if
     // the Choreo editor has unsaved changes. Most browsers ignore the
     // custom string and show their own generic prompt, but the prompt

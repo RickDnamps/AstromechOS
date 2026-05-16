@@ -4532,6 +4532,59 @@ select.chor-dirty {
   50%      { box-shadow: 0 0 22px rgba(0, 204, 102, 0.8); }
 }
 
+/* WOW L3-W 2026-05-15: cam connecting placeholder so operator sees
+ * activity in the 500ms-2s window before first frame instead of
+ * staring at a static green grid wondering if it's broken. */
+.cam-bg[data-state="connecting"]::after {
+  content: 'CONNECTING…';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: var(--blue);
+  font-weight: 700;
+  animation: cam-connect-pulse 1.2s ease-in-out infinite;
+}
+@keyframes cam-connect-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+/* WOW M1-W 2026-05-15: cam-taken visual variants — OFFLINE vs TAKEN
+ * need to look distinct. Operator clicking RETRY on offline state
+ * shouldn't think it's the same "claimed by another tablet" case. */
+.cam-taken.cam-offline-state {
+  border-color: var(--amber, #ffaa44);
+}
+.cam-taken.cam-offline-state .cam-taken-text {
+  color: var(--amber, #ffaa44);
+}
+.cam-taken.cam-offline-state .cam-taken-btn {
+  border-color: var(--amber, #ffaa44);
+  color: var(--amber, #ffaa44);
+}
+
+/* WOW M5-W 2026-05-15: lock-mode border on .drive-wrapper when
+ * camera off (mode pills overlay camera which becomes invisible).
+ * Operator handing tablet to a kid wants unmissable mode signal. */
+body[data-lock-mode="1"] .drive-wrapper {
+  outline: 2px solid var(--amber, #ffaa44);
+  outline-offset: -2px;
+}
+body[data-lock-mode="2"] .drive-wrapper {
+  outline: 2px solid var(--red, #ff2244);
+  outline-offset: -2px;
+}
+
+/* WOW M2-W 2026-05-15: battery-mini clickable affordance */
+.battery-mini {
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.battery-mini:hover { opacity: 0.85; }
+
 /* WOW HW1 2026-05-15: speed effective hint (60% × 50% = 30%) */
 .ctrl-effective {
   display: inline-block;
