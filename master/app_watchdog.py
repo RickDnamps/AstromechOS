@@ -100,10 +100,19 @@ class AppWatchdog:
         """Called on each heartbeat received from the application."""
         with self._lock:
             self._last_hb_time = time.monotonic()
+            was_triggered = self._triggered
             if self._triggered:
                 log.info("AppWatchdog: connection restored — watchdog re-armed")
                 self._triggered = False
             self._connected = True
+        # Bug H4 fix 2026-05-15: on HB return after a triggered freeze,
+        # AUTO-RECOVER. Previously R3 fix set estop_active=True on freeze
+        # which latched permanently — operator had to press Reset E-STOP
+        # for every brief WiFi blip (1.5s+). Now: brief jitter = brief
+        # freeze = auto-unfreeze when HB returns. Real link loss stays
+        # frozen because HB never returns. Best of both worlds.
+        if was_triggered:
+            self._auto_recover()
 
     @property
     def is_connected(self) -> bool:
@@ -136,6 +145,24 @@ class AppWatchdog:
 
             # Outside the lock to avoid deadlock on drivers
             self._emergency_stop()
+
+    def _auto_recover(self) -> None:
+        """Bug H4 fix 2026-05-15: called when HB returns after a freeze.
+        Unfreezes servos + clears estop_active so the operator can resume
+        without manually pressing Reset E-STOP for every WiFi blip.
+        Real link drop never gets here (HB never returns)."""
+        log.warning("AppWatchdog: HB returned — auto-unfreezing + clearing estop")
+        try:
+            import master.registry as reg
+            reg.estop_active = False
+            if reg.dome_servo:
+                try: reg.dome_servo.unfreeze()
+                except Exception: pass
+            if reg.uart:
+                try: reg.uart.send('FREEZE', '0')
+                except Exception: pass
+        except Exception:
+            log.exception("AppWatchdog auto-recover failed")
 
     def _emergency_stop(self) -> None:
         log.warning(

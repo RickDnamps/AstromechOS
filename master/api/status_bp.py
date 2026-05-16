@@ -726,6 +726,14 @@ def app_heartbeat():
 # slow enough to avoid pinch hazards with kids around without dragging on.
 _SAFE_SLEW_SPEED = 3
 
+# Bug C2 fix 2026-05-15: serialize E-STOP transitions so two tablets
+# pressing E-STOP / Reset simultaneously can't race on reg.estop_active
+# and run the freeze chain twice (or flip the flag false→true between
+# the operators' tablet polls). Idempotent: if estop already in the
+# requested state, return the same response without re-running.
+import threading as _threading
+_estop_transition_lock = _threading.Lock()
+
 
 @status_bp.post('/system/estop')
 def system_estop():
@@ -737,6 +745,16 @@ def system_estop():
     servos stay exactly where they are with full torque (no SLEEP, no
     drooping). Cleanup is a separate operation triggered by /system/estop_reset.
     """
+    # Bug C2 fix 2026-05-15: idempotent under concurrent operators.
+    # The check-and-set must be atomic — otherwise two tablets could
+    # both see estop_active=False, both run the freeze chain, and both
+    # set the flag at the end (harmless individually but creates a
+    # transient state mid-chain). Set inside the lock so only ONE
+    # request wins; the loser returns immediately.
+    with _estop_transition_lock:
+        if reg.estop_active:
+            return jsonify({'status': 'estop_already_active'})
+        reg.estop_active = True   # claim the transition under lock
     # Freeze servos FIRST so in-flight ramps stop writing PWM updates.
     # If we let choreo.stop() run before this, the dispatch thread may be
     # blocked inside dome_servo.open_all() waiting for ramp threads to
@@ -800,7 +818,7 @@ def system_estop():
             reg.teeces.off()
         except Exception:
             pass
-    reg.estop_active = True
+    # estop_active already set to True under the C2 lock above.
     return jsonify({'status': 'estop_sent'})
 
 
@@ -818,7 +836,13 @@ def system_estop_reset():
     All driver calls are wrapped in try/except so a single failed servo
     cannot abort the rest of the cleanup.
     """
-    reg.estop_active = False
+    # Bug C2 fix 2026-05-15: idempotent reset — if estop not active,
+    # nothing to reset. Lock prevents two simultaneous resets from
+    # spawning two _safe_home_runner threads.
+    with _estop_transition_lock:
+        if not reg.estop_active:
+            return jsonify({'status': 'estop_already_clear'})
+        reg.estop_active = False
 
     # Unfreeze BEFORE the stow sequence runs — otherwise the close commands
     # would be rejected at the driver's _move_ramp entry check.

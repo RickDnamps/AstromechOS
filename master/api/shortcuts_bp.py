@@ -583,6 +583,23 @@ def trigger_shortcut(sid: str):
     if handler is None:
         return jsonify({'error': f'no handler for action: {a_type}'}), 500
 
+    # Bug H1 fix 2026-05-15: gate on safety state. Previous comment
+    # claimed handlers honored the safety chain "automatically" but
+    # audio + arms_toggle had no freeze gate, and panel toggles set
+    # state='on' even though the frozen driver silently no-op'd.
+    # Result: audio shortcut played sounds during E-STOP, panel state
+    # persisted as 'on' for panels that never moved.
+    #
+    # Closing a panel (current=='on' → off) is still allowed during
+    # E-STOP — it's a stop-firing/recover action. Only OPENING /
+    # firing new motion is blocked.
+    if reg.estop_active and current != 'on' and a_type != 'none':
+        return jsonify({'error': 'E-STOP active — reset to use shortcuts'}), 403
+    if getattr(reg, 'stow_in_progress', False) and a_type in ('arms_toggle', 'body_panel_toggle', 'dome_panel_toggle'):
+        return jsonify({'error': 'stow in progress — wait for servos to settle'}), 503
+    if reg.lock_mode == 2 and a_type in ('arms_toggle', 'body_panel_toggle', 'dome_panel_toggle', 'play_choreo'):
+        return jsonify({'error': 'Child Lock — only sounds/lights/dome rotation allowed'}), 403
+
     try:
         new_state = handler(a_target, current)
     except Exception as e:

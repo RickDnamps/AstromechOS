@@ -687,7 +687,26 @@ async function _postMotion(endpoint, body, timeoutMs = 3000) {
       body: JSON.stringify(body),
       signal: ctrl.signal,
     });
-    if (!res.ok) { console.warn(`API POST ${endpoint}: HTTP ${res.status}`); return null; }
+    if (!res.ok) {
+      console.warn(`API POST ${endpoint}: HTTP ${res.status}`);
+      // Bug H5 fix 2026-05-15: surface 503 reason to operator instead
+      // of silent console.warn. VESC fault / undervoltage / E-STOP
+      // mid-drive used to silently fail with no UI — operator wondered
+      // why joystick stopped responding. Edge-trigger so we don't
+      // spam toasts during a sustained 503 (keep-alive fires 5x/s).
+      if (res.status === 503 || res.status === 403) {
+        try {
+          const body = await res.json();
+          const reason = (body && body.error) || `HTTP ${res.status}`;
+          const now = performance.now();
+          if (!_postMotion._lastToastAt || now - _postMotion._lastToastAt > 3000) {
+            _postMotion._lastToastAt = now;
+            if (typeof toast === 'function') toast(`Drive blocked: ${reason}`, 'error');
+          }
+        } catch {}
+      }
+      return null;
+    }
     return await res.json();
   } catch (e) {
     if (e.name !== 'AbortError') console.error(`API POST ${endpoint}:`, e);
@@ -2897,8 +2916,11 @@ function _setChoreoLockUI(propLocked, domeLocked, choreoName) {
     }
   } catch {}
   const upperName = displayName.toUpperCase();
+  // Bug M4 fix 2026-05-15: use JSON.stringify so backslashes, newlines,
+  // control chars, etc. in operator labels can't break the CSS string
+  // (or worse, escape into a selector). Previous escape only handled ".
   const cssVal = upperName
-    ? `"🎬 ${upperName.replace(/"/g, '\\"')}"`
+    ? JSON.stringify(`🎬 ${upperName}`)
     : '"🎬 CHOREO"';
   document.documentElement.style.setProperty('--choreo-name', cssVal);
   const lbl = el('choreo-lock-label');
@@ -5615,27 +5637,15 @@ class ScriptEngine {
       card.classList.toggle('looping', loop);
       this._startProgress(card, name);
     }
-    // 2026-05-15: optimistic joystick lock — apply visual immediately
-    // on Play click using the uses_propulsion/uses_dome flags from
-    // /choreo/list. Operator was experiencing 0-2s lag between click
-    // and lock visual (waiting for /status poll). The server-side
-    // lock kicks in as soon as the player starts; this aligns the
-    // VISUAL with the actual state. StatusPoller's later sync will
-    // correct any mismatch (e.g. if play was rejected).
+    // 2026-05-15: optimistic joystick lock — call the canonical
+    // _setChoreoLockUI which sets BOTH the CSS classes AND the JS
+    // vars (_choreoPropLocked etc.) that the joystick onMove handlers
+    // gate on. Previous version only added CSS classes → JS vars stayed
+    // false → operator could drive during the 2s status poll window
+    // even though the UI said "locked". Bug C1 fix 2026-05-15.
     const meta = this._scripts.find(s => s.name === name);
-    if (meta) {
-      if (meta.uses_propulsion) {
-        document.body.classList.add('choreo-prop-locked', 'choreo-locked');
-      }
-      if (meta.uses_dome) {
-        document.body.classList.add('choreo-dome-locked', 'choreo-locked');
-      }
-      if (meta.uses_propulsion || meta.uses_dome) {
-        // Use the user-friendly label, fall back to filename if empty.
-        const display = (meta.label || name || '').toUpperCase();
-        document.documentElement.style.setProperty('--choreo-name',
-          `"🎬 ${display.replace(/"/g, '\\"')}"`);
-      }
+    if (meta && (meta.uses_propulsion || meta.uses_dome)) {
+      _setChoreoLockUI(!!meta.uses_propulsion, !!meta.uses_dome, name);
     }
     api('/choreo/play', 'POST', { name, loop }).then(d => {
       if (!d) {
@@ -5646,12 +5656,12 @@ class ScriptEngine {
           const fill = el(`seq-prog-${name}`);
           if (fill) { fill.style.transition = 'none'; fill.style.width = '0%'; }
         }
-        // 2026-05-15: roll back the optimistic lock if play was rejected.
-        // StatusPoller will also fix it within 2s but instant rollback
-        // feels cleaner.
+        // Bug H2 fix 2026-05-15: roll back via _setChoreoLockUI(false,
+        // false, '') so the JS vars are reset too (not just CSS classes).
+        // Otherwise StatusPoller's next wantProp/wantDome comparison
+        // would not trigger re-sync.
         if (meta && (meta.uses_propulsion || meta.uses_dome)) {
-          document.body.classList.remove('choreo-prop-locked', 'choreo-dome-locked', 'choreo-locked');
-          document.documentElement.style.removeProperty('--choreo-name');
+          _setChoreoLockUI(false, false, '');
         }
         toast(`Failed to start ${name.toUpperCase()} — see logs`, 'error');
       } else {
@@ -11652,28 +11662,17 @@ const choreoEditor = (() => {
           await api('/choreo/save', 'POST', { chor: preview });
           playName = '__preview__';
         }
-        // 2026-05-15: optimistic joystick lock — apply visual immediately
-        // before the API roundtrip so operator doesn't experience the
-        // 0-2s poll lag. The editor has the live _chor in memory so we
-        // can read the track lengths directly.
+        // Bug C1 fix 2026-05-15: optimistic lock via canonical
+        // _setChoreoLockUI (sets JS vars + CSS + force-release).
         const usesProp = !!(_chor.tracks?.propulsion?.length);
         const usesDome = !!(_chor.tracks?.dome?.length);
-        if (usesProp) document.body.classList.add('choreo-prop-locked', 'choreo-locked');
-        if (usesDome) document.body.classList.add('choreo-dome-locked', 'choreo-locked');
         if (usesProp || usesDome) {
-          // Use the user-friendly label from the loaded chor's meta,
-          // fall back to filename if empty.
-          const display = (_chor.meta.label || _chor.meta.name || '').toUpperCase();
-          document.documentElement.style.setProperty('--choreo-name',
-            `"🎬 ${display.replace(/"/g, '\\"')}"`);
+          _setChoreoLockUI(usesProp, usesDome, _chor.meta.name);
         }
         const result = await api('/choreo/play', 'POST', { name: playName });
         if (!result) {
-          // Roll back optimistic lock if play rejected.
-          if (usesProp || usesDome) {
-            document.body.classList.remove('choreo-prop-locked', 'choreo-dome-locked', 'choreo-locked');
-            document.documentElement.style.removeProperty('--choreo-name');
-          }
+          // Bug H2 fix: rollback via _setChoreoLockUI(false,false,'').
+          if (usesProp || usesDome) _setChoreoLockUI(false, false, '');
         } else {
           if (playName === '__preview__' && isAdmin) {
             toast(`Preview playing — press Save to keep this choreography`, 'warn');

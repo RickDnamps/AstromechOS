@@ -20,17 +20,17 @@
 
 ## Why this and nothing else?
 
-Most R2-D2 builders end up with a pile of shell scripts, a half-working web interface, and a robot that does one thing at a time. **This isn't that.**
+Most astromech builders end up with a pile of shell scripts, a half-working web interface, and a robot that does one thing at a time. **This isn't that.**
 
-This system was built from the ground up to make R2-D2 feel **alive** — not just remote-controlled. A single button press triggers coordinated sound + dome rotation + panel choreography + light sequence simultaneously. The safety system has three independent watchdog layers so the robot *cannot* run away. Kids Lock limits speed for young pilots. Child Lock blocks all motion when R2 is on display. Everything deploys itself from a single button press on the dome.
+This system was built from the ground up to make your astromech feel **alive** — not just remote-controlled. A single button press triggers coordinated sound + dome rotation + panel choreography + light sequence simultaneously. The safety system has three independent watchdog layers so the robot *cannot* run away. Kids Lock limits speed for young pilots. Child Lock blocks all motion when the robot is on display. Everything deploys itself from a single button press on the dome.
 
-If you're building a full-scale R2-D2 and you want a control system actually worthy of the build — **this is it**.
+If you're building a full-scale astromech (R2-D2, R5-D4, BB-8, custom unit…) and you want a control system actually worthy of the build — **this is it**.
 
 ---
 
 ## What is this?
 
-A **complete, production-grade control system** for a 1:1 scale R2-D2 replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 48 expressive behavioral sequences that give R2-D2 a real personality.
+A **complete, production-grade control system** for a 1:1 scale astromech droid replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 48 expressive behavioral sequences that give your droid a real personality.
 
 - **Master Pi 4B 4GB** (dome, rotates) — Flask REST API, web dashboard, dome servos & panels, LED logics, visual editors, BT gamepad. 4GB headroom for future local AI (face detection, voice recognition — all on-device, no cloud)
 - **Slave Pi 4B 2GB** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 324-sound audio system, RP2040 diagnostic LCD. Kept deliberately lightweight — only real-time I/O, no AI workloads
@@ -71,7 +71,7 @@ Speed capped at configurable % — great for shows with young pilots
 <td align="center" width="50%">
 
 ### 🔴 Child Lock
-All motion blocked — R2 on display safely, lights & sounds still work
+All motion blocked — droid on display safely, lights & sounds still work
 
 ![Child Lock Mode](Screenshots/Drive_Childsmode.png)
 
@@ -166,7 +166,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🎭 **48 behavioral sequences** | One-click coordinated performances — sound · dome · panels · lights · loop mode |
 | 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC · audio · servos · lights · admin-guarded Save/Delete |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo direct to Pi · zero lag · battery % · RSSI · fully remappable |
-| 🔊 **324 authentic R2-D2 sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
+| 🔊 **324 authentic astromech sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included |
 | 🛡️ **Triple safety watchdog** | App 600ms · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
 | 🚨 **VESC safety lock** | Blocks drive when ESC offline or faulted · bench mode bypass for bench testing |
@@ -184,7 +184,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 
 48 `.chor` sequences in the **SEQUENCES tab** — organised in pill categories, each with a custom emoji. One-click launch of coordinated emotional performances. **Loop mode** keeps sequences running continuously. (The `.chor` JSON timeline format superseded the legacy `.scr` script format inherited from r2_control — see Credits.)
 
-| Sequence | What R2 does |
+| Sequence | What the droid does |
 |----------|-------------|
 | `scared` | Panels **tremble** at 35° (speed 8) — nervous micro-movements |
 | `excited` | Panels **snap** open/shut at speed 9, rapid alternating combos |
@@ -226,7 +226,7 @@ All three trigger a **graceful decel ramp** — never an abrupt stop that could 
 **Per-axis choreo motion lockout** — when a choreography is playing, the operator's joysticks are veiled with a "🎬 CHOREO" overlay ONLY on the axes the playback actually drives:
 - Choreo uses `tracks['propulsion']` → propulsion joystick locked (web + Android + Bluetooth gamepad + WASD all gated)
 - Choreo uses `tracks['dome']` → dome rotation locked (right-joystick X clamped to 0; Y stays free for the planned camera tilt in v2)
-- Sound/light/panel-only choreographies → both joysticks stay free → operator can drive R2 around while it animates ("alive" effect — e.g. launch an angry choreo and walk towards the visitor while it scolds)
+- Sound/light/panel-only choreographies → both joysticks stay free → operator can drive the droid around while it animates ("alive" effect — e.g. launch an angry choreo and walk towards the visitor while it scolds)
 
 **Cascade integrity** — renaming or deleting a `.chor` propagates through every Drive-tab shortcut targeting it (cascade_rename / cascade_delete in `shortcuts_bp`). No stale shortcuts pointing at non-existent choreos.
 
