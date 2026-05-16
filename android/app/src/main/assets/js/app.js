@@ -3058,7 +3058,12 @@ function estopReset() {
         if (!s || !s.stow_in_progress) {
           clearInterval(_stowWatch);
           if (txt) txt.textContent = 'EMERGENCY STOP';
-          if (s) toast('R2 ready — drive armed', 'ok');
+          // 2026-05-15: use operator-configured robot name, not hardcoded
+          // 'R2'. Falls back to 'Robot' if name unavailable.
+          if (s) {
+            const name = (s.robot_name && s.robot_name.trim()) || 'Robot';
+            toast(`${name} ready — drive armed`, 'ok');
+          }
         }
       }, 500);
       // Safety: stop polling after 15s no matter what
