@@ -1268,6 +1268,11 @@
       <div class="settings-panel active" id="spanel-behavior">
         <section class="card settings-card">
           <h2 class="card-title">STARTUP SEQUENCE</h2>
+          <!-- W6 fix 2026-05-16: explain what this does -->
+          <div class="settings-card-note">
+            Plays a choreo automatically after Master boot. Useful for a
+            'wake up' demo on power-on.
+          </div>
           <div class="form-group" style="display:flex;align-items:center;gap:12px">
             <label class="toggle-label">
               <input type="checkbox" id="beh-startup-enabled">
@@ -1276,17 +1281,31 @@
             </label>
           </div>
           <div class="form-group">
-            <label class="ctrl-label">DELAY (seconds)</label>
-            <input type="number" id="beh-startup-delay" class="input-text input-sm" min="0" max="60" value="5" style="width:70px">
+            <!-- B6/B20 fix 2026-05-16: max=300 to match backend clamp -->
+            <label class="ctrl-label">DELAY (seconds) <span class="ctrl-hint">— wait this many seconds after boot before firing (0-300)</span></label>
+            <input type="number" id="beh-startup-delay" class="input-text input-sm" min="0" max="300" value="5" style="width:70px">
           </div>
           <div class="form-group">
             <label class="ctrl-label">CHOREO</label>
             <select id="beh-startup-choreo" class="input-text"></select>
+            <span id="beh-startup-locks" class="beh-locks"></span>
           </div>
+          <!-- W2 fix 2026-05-16: preview startup sequence without rebooting -->
+          <button class="btn btn-sm" id="beh-test-startup-btn" onclick="behaviorPanel.testStartup()" style="margin-top:6px">▶ TEST STARTUP NOW</button>
         </section>
 
         <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">IDLE REACTIONS (ALIVE MODE)</h2>
+          <!-- W6 fix 2026-05-16: explain what ALIVE does -->
+          <div class="settings-card-note">
+            When the robot is idle for N minutes, automatically play sounds,
+            lights, or a choreo to keep it feeling alive. Toggle ALIVE from
+            the Drive tab top-right button (or the checkbox below).
+          </div>
+          <!-- B16 fix 2026-05-16: warn when active mode's driver is degraded -->
+          <div id="beh-mode-not-ready" class="settings-card-warn" style="display:none">
+            ⚠ <span id="beh-mode-not-ready-text">—</span>
+          </div>
           <div class="form-group" style="display:flex;align-items:center;gap:12px">
             <label class="toggle-label">
               <input type="checkbox" id="beh-alive-enabled">
@@ -1295,8 +1314,9 @@
             </label>
           </div>
           <div class="form-group">
-            <label class="ctrl-label">TRIGGER AFTER (minutes of inactivity)</label>
-            <input type="number" id="beh-idle-timeout" class="input-text input-sm" min="1" max="120" value="10" style="width:70px">
+            <!-- B6/B20 fix 2026-05-16: max=1440 to match backend clamp -->
+            <label class="ctrl-label">TRIGGER AFTER (minutes of inactivity) <span class="ctrl-hint">— 1 to 1440 (24h)</span></label>
+            <input type="number" id="beh-idle-timeout" class="input-text input-sm" min="1" max="1440" value="10" style="width:70px">
           </div>
           <div class="form-group">
             <label class="ctrl-label">MODE</label>
@@ -1327,8 +1347,10 @@
             </label>
           </div>
         </section>
-        <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
-          <button class="btn btn-active" onclick="behaviorPanel.save()">SAVE</button>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-active" id="beh-save-btn" onclick="behaviorPanel.save()">SAVE</button>
+          <!-- W1 fix 2026-05-16: preview idle reaction without waiting N minutes -->
+          <button class="btn btn-sm" id="beh-test-trigger-btn" onclick="behaviorPanel.testTrigger()">▶ TEST NOW</button>
           <div class="settings-status" id="beh-status"></div>
         </div>
         <!-- WOW polish H4 2026-05-15: live countdown to next idle

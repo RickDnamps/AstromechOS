@@ -207,6 +207,62 @@ def set_alive():
     return jsonify({'ok': True, 'alive_enabled': enabled})
 
 
+@behavior_bp.post('/test_trigger')
+@require_admin
+def test_trigger():
+    """W1 fix 2026-05-16: fire the idle reaction NOW, bypassing the
+    timeout gate but still respecting E-STOP/stow/lock_mode. Operator
+    uses this to preview ALIVE behavior without waiting N minutes.
+    Returns which mode was dispatched."""
+    be = reg.behavior_engine
+    if be is None:
+        return jsonify({'ok': False, 'error': 'BehaviorEngine not initialized'}), 503
+    # Respect safety chain — never bypass these
+    if be._is_safety_locked():
+        return jsonify({'ok': False, 'error': 'safety chain engaged (E-STOP/stow/lock)'}), 503
+    mode = be._cfg.get('behavior', 'idle_mode', fallback='choreo')
+    try:
+        if mode == 'sounds':
+            be._trigger_sounds()
+        elif mode == 'sounds_lights':
+            be._trigger_sounds()
+            be._trigger_lights()
+        elif mode == 'lights':
+            be._trigger_lights()
+        elif mode == 'choreo':
+            be._trigger_choreo()
+        else:
+            return jsonify({'ok': False, 'error': f'unknown idle_mode: {mode}'}), 400
+    except Exception as e:
+        log.exception("test_trigger failed")
+        return jsonify({'ok': False, 'error': str(e)}), 500
+    be._last_idle_trigger = time.monotonic()
+    return jsonify({'ok': True, 'mode_fired': mode})
+
+
+@behavior_bp.post('/test_startup')
+@require_admin
+def test_startup():
+    """W2 fix 2026-05-16: fire the startup choreo NOW (skipping the
+    boot delay) so operator can preview without rebooting Master.
+    Still respects safety chain via safe_play."""
+    be = reg.behavior_engine
+    if be is None:
+        return jsonify({'ok': False, 'error': 'BehaviorEngine not initialized'}), 503
+    choreo_name = be._cfg.get('behavior', 'startup_choreo', fallback='startup')
+    if choreo_name.endswith('.chor'):
+        choreo_name = choreo_name[:-5]
+    choreo_path = os.path.join(be._choreo_dir, choreo_name + '.chor')
+    if not os.path.isfile(choreo_path):
+        return jsonify({'ok': False, 'error': f'startup choreo not found: {choreo_name}'}), 404
+    chor = be._load_choreo(choreo_path)
+    if not chor:
+        return jsonify({'ok': False, 'error': 'failed to load startup choreo'}), 500
+    from master.api.choreo_bp import safe_play
+    ok = safe_play(chor, log_label='behavior:test_startup')
+    return jsonify({'ok': bool(ok), 'choreo': choreo_name})
+
+
 @behavior_bp.get('/status')
 def get_status():
     """Current behavior engine state."""
@@ -224,12 +280,28 @@ def get_status():
     if alive_enabled and last > 0:
         idle_at = last + (idle_timeout_min * 60.0)
         next_idle_s = max(0, round(idle_at - now, 1))
+    # B16 fix 2026-05-16: surface whether the active idle_mode has its
+    # dependency ready (audio/teeces driver actually available). Was:
+    # silent no-op infinite loop if driver degraded.
+    cur_mode = cfg.get('behavior', 'idle_mode', fallback='choreo')
+    idle_mode_ready = True
+    idle_mode_reason = ''
+    if cur_mode in ('sounds', 'sounds_lights') and not reg.uart:
+        idle_mode_ready = False
+        idle_mode_reason = 'UART not available (Slave audio unreachable)'
+    if cur_mode in ('lights', 'sounds_lights'):
+        teeces_ok = bool(reg.teeces and reg.teeces.is_ready())
+        if not teeces_ok:
+            idle_mode_ready = False
+            idle_mode_reason = (idle_mode_reason + '; ' if idle_mode_reason else '') + 'lights driver not ready'
     return jsonify({
         'alive_enabled':       alive_enabled,
         'startup_enabled':     cfg.getboolean('behavior', 'startup_enabled',     fallback=False),
         'startup_delay':       cfg.getfloat  ('behavior', 'startup_delay',       fallback=5.0),
         'startup_choreo':      cfg.get       ('behavior', 'startup_choreo',      fallback='startup.chor'),
-        'idle_mode':           cfg.get       ('behavior', 'idle_mode',           fallback='choreo'),
+        'idle_mode':           cur_mode,
+        'idle_mode_ready':     idle_mode_ready,
+        'idle_mode_reason':    idle_mode_reason,
         'idle_timeout_min':    idle_timeout_min,
         'idle_audio_category': cfg.get       ('behavior', 'idle_audio_category', fallback='happy'),
         'idle_choreo_list':    [c.strip() for c in cfg.get('behavior', 'idle_choreo_list', fallback='').split(',') if c.strip()],

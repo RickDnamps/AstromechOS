@@ -4753,6 +4753,36 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Behavior panel — batch 2 polish (2026-05-16) */
+.settings-card-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 4px 0 8px;
+  line-height: 1.4;
+}
+.settings-card-warn {
+  font-size: 11px;
+  color: var(--amber, #ffaa44);
+  padding: 6px 10px;
+  margin: 4px 0;
+  border: 1px solid var(--amber, #ffaa44);
+  border-radius: 4px;
+  background: rgba(255, 170, 68, 0.08);
+}
+.ctrl-hint {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-weight: normal;
+  letter-spacing: 0;
+  margin-left: 6px;
+}
+.beh-locks, .beh-pill-locks {
+  font-size: 12px;
+  margin-left: 4px;
+  opacity: 0.8;
+}
+
 /* L2 fix 2026-05-16: global .hidden utility. Pre-existing scoped
  * rules (.admin-modal.hidden, .admin-pwd-error.hidden, …) covered
  * specific cases, but seq-admin-hint + seq-operator-hint relied on

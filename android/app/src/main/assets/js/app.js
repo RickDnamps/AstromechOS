@@ -2574,6 +2574,10 @@ const behaviorPanel = (() => {
     }
     if (!_aliveOn || _countdownTargetMs === 0) {
       wrap.style.display = 'none';
+      // B11 fix 2026-05-16: also clear the interval, not just hide.
+      // Was: timer kept ticking every 1s forever when ALIVE got toggled
+      // off via Drive button while Settings panel was still active.
+      if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
       return;
     }
     const remaining = (_countdownTargetMs - performance.now()) / 1000;
@@ -2609,6 +2613,9 @@ const behaviorPanel = (() => {
   // ------------------------------------------------------------------
   // Settings panel
   // ------------------------------------------------------------------
+  // Cache choreo list (with uses_propulsion/uses_dome flags) for W3 lock icons
+  let _choreoMeta = [];
+
   function load() {
     api('/behavior/status').then(d => {
       _aliveOn = d.alive_enabled;
@@ -2624,24 +2631,68 @@ const behaviorPanel = (() => {
       // next_idle_in_s. Re-syncs every panel load.
       _startCountdown(d.next_idle_in_s);
 
-      _choreoList = d.idle_choreo_list || [];
+      // B16 fix 2026-05-16: surface idle_mode dependency warnings
+      const warn = el('beh-mode-not-ready');
+      const warnTxt = el('beh-mode-not-ready-text');
+      if (warn && warnTxt) {
+        if (d.idle_mode_ready === false && d.alive_enabled) {
+          warn.style.display = '';
+          warnTxt.textContent = d.idle_mode_reason || 'driver unavailable';
+        } else {
+          warn.style.display = 'none';
+        }
+      }
+
+      // B12 fix 2026-05-16: dedup the idle_choreo_list in case hand-edit or
+      // pre-cascade leaked duplicates
+      _choreoList = Array.from(new Set(d.idle_choreo_list || []));
 
       Promise.all([
         api('/choreo/list'),
         api('/audio/index')   // P2: was /audio/categories — same data, drop dupe endpoint
       ]).then(([choreoData, audioData]) => {
-        const chorFiles = (Array.isArray(choreoData) ? choreoData : []).map(f => f.name || f);
+        // W3 fix 2026-05-16: cache choreo metadata (uses_propulsion/uses_dome)
+        // so we can decorate selected names with lock icons
+        _choreoMeta = Array.isArray(choreoData) ? choreoData : [];
+        const chorFiles = _choreoMeta.map(f => f.name || f);
         _populateSel('beh-startup-choreo', chorFiles, d.startup_choreo);
         _populateSel('beh-choreo-add-sel', chorFiles, null);
 
-        const cats = Object.keys(audioData?.categories || {});
-        _populateSel('beh-audio-category', cats, d.idle_audio_category);
+        // W5 fix 2026-05-16: append sound count to category dropdown so
+        // operator knows "happy (3)" vs "happy (47)" before saving
+        const catCounts = audioData?.categories || {};
+        const catEntries = Object.entries(catCounts).map(([k, v]) => ({
+          name: k,
+          count: Array.isArray(v) ? v.length : 0,
+        }));
+        _populateSelWithCounts('beh-audio-category', catEntries, d.idle_audio_category);
 
         _setSelVal('beh-idle-mode', d.idle_mode);
         onModeChange();
         _renderChoreoPills();
+        // Lock icon next to startup select after populate
+        _renderStartupLocks();
+        el('beh-startup-choreo')?.addEventListener('change', _renderStartupLocks);
       });
     }).catch(() => {});
+  }
+
+  // W3 helpers — render 🚗/↻ icons for choreos that use propulsion/dome
+  function _locksFor(name) {
+    const meta = _choreoMeta.find(c => c.name === name);
+    if (!meta) return '';
+    const icons = [];
+    if (meta.uses_propulsion) icons.push('🚗');
+    if (meta.uses_dome)       icons.push('↻');
+    return icons.join('');
+  }
+  function _renderStartupLocks() {
+    const wrap = el('beh-startup-locks');
+    if (!wrap) return;
+    const name = _getSelVal('beh-startup-choreo');
+    const ic = _locksFor(name);
+    wrap.textContent = ic;
+    wrap.title = ic ? 'This choreo moves: ' + (ic.includes('🚗') ? 'propulsion ' : '') + (ic.includes('↻') ? 'dome ' : '') : '';
   }
 
   function onModeChange() {
@@ -2672,15 +2723,20 @@ const behaviorPanel = (() => {
     const container = el('beh-choreo-pills');
     if (!container) return;
     // B-200 (remaining tabs audit 2026-05-15): build pills with DOM
-    // primitives instead of innerHTML interpolation. The `name`
-    // (choreo filename) lands in HTML context AND was numerically-
-    // bound idx in the inline onclick — the surrounding name was
-    // un-escaped. A filename containing `"><img onerror=…>` (server
-    // regex allows `[A-Za-z0-9_.\\- ]`) would execute on every render.
+    // primitives instead of innerHTML interpolation (XSS via filename).
     container.replaceChildren();
     _choreoList.forEach((name, idx) => {
       const pill = document.createElement('span');
       pill.className = 'beh-choreo-pill';
+      // W3 fix 2026-05-16: prefix with lock icons if choreo moves bot
+      const locks = _locksFor(name);
+      if (locks) {
+        const lockSpan = document.createElement('span');
+        lockSpan.className = 'beh-pill-locks';
+        lockSpan.textContent = locks + ' ';
+        lockSpan.title = 'This choreo will lock joysticks during play';
+        pill.appendChild(lockSpan);
+      }
       pill.appendChild(document.createTextNode(name + ' '));
       const btn = document.createElement('button');
       btn.className = 'beh-pill-remove';
@@ -2689,6 +2745,11 @@ const behaviorPanel = (() => {
       pill.appendChild(btn);
       container.appendChild(pill);
     });
+    // W10 fix 2026-05-16: surface count in label
+    const lbl = container.previousElementSibling;
+    if (lbl && lbl.classList?.contains('ctrl-label')) {
+      lbl.textContent = 'CHOREO LIST (' + _choreoList.length + ')';
+    }
   }
 
   function _removeChoreo(idx) {
@@ -2697,20 +2758,84 @@ const behaviorPanel = (() => {
   }
 
   function save() {
+    // B9 fix 2026-05-16: empty select → empty string, not bogus 'startup.chor'
     const payload = {
       startup_enabled:     el('beh-startup-enabled')?.checked ?? false,
       startup_delay:       parseInt(el('beh-startup-delay')?.value || '5', 10),
-      startup_choreo:      _getSelVal('beh-startup-choreo') || 'startup.chor',
+      startup_choreo:      _getSelVal('beh-startup-choreo'),
       alive_enabled:       el('beh-alive-enabled')?.checked ?? false,
       idle_timeout_min:    parseInt(el('beh-idle-timeout')?.value || '10', 10),
-      idle_mode:           _getSelVal('beh-idle-mode') || 'choreo',
-      idle_audio_category: _getSelVal('beh-audio-category') || 'happy',
+      idle_mode:           _getSelVal('beh-idle-mode') || 'sounds',
+      idle_audio_category: _getSelVal('beh-audio-category'),
       idle_choreo_list:    _choreoList,
       dome_auto_on_alive:  el('beh-dome-auto')?.checked ?? true,
     };
-    api('/behavior/config', 'POST', payload)
-      .then(() => _setStatus('beh-status', 'Saved', 'ok'))
-      .catch(() => _setStatus('beh-status', 'Error', 'err'));
+    // W4/E10 fix 2026-05-16: withSaveFeedback parité reste de l'app
+    const btn = el('beh-save-btn');
+    const run = async () => {
+      const res = await apiDetail('/behavior/config', 'POST', payload);
+      if (res.ok) {
+        toast('Behavior config saved', 'ok');
+        // Refresh idle_mode_ready warning + countdown after save
+        load();
+        return true;
+      } else {
+        // B19 fix 2026-05-16: surface backend error message verbatim
+        toast(res.error || 'Save failed', 'error');
+        return false;
+      }
+    };
+    if (btn && typeof withSaveFeedback === 'function') withSaveFeedback(btn, run);
+    else run();
+  }
+
+  // W1 fix 2026-05-16: TEST NOW — fire current idle_mode immediately
+  function testTrigger() {
+    const btn = el('beh-test-trigger-btn');
+    const run = async () => {
+      const res = await apiDetail('/behavior/test_trigger', 'POST');
+      if (res.ok) {
+        toast(`▶ Idle ${res.data?.mode_fired || ''} fired`, 'ok');
+        return true;
+      } else {
+        toast(res.error || 'Test trigger failed', 'error');
+        return false;
+      }
+    };
+    if (btn && typeof withSaveFeedback === 'function') withSaveFeedback(btn, run);
+    else run();
+  }
+
+  // W2 fix 2026-05-16: TEST STARTUP — preview startup choreo without reboot
+  function testStartup() {
+    const btn = el('beh-test-startup-btn');
+    const run = async () => {
+      const res = await apiDetail('/behavior/test_startup', 'POST');
+      if (res.ok) {
+        toast(`▶ Startup ${res.data?.choreo || ''} fired`, 'ok');
+        return true;
+      } else {
+        toast(res.error || 'Test startup failed', 'error');
+        return false;
+      }
+    };
+    if (btn && typeof withSaveFeedback === 'function') withSaveFeedback(btn, run);
+    else run();
+  }
+
+  // W5 helper — populate select with counts and disable empty categories
+  function _populateSelWithCounts(id, entries, selected) {
+    const sel = el(id);
+    if (!sel) return;
+    sel.innerHTML = '';
+    entries.forEach(({name, count}) => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = `${name} (${count})`;
+      if (count === 0) opt.disabled = true;
+      if (name === selected) opt.selected = true;
+      sel.appendChild(opt);
+    });
   }
 
   // ------------------------------------------------------------------
@@ -2741,7 +2866,7 @@ const behaviorPanel = (() => {
     });
   }
 
-  return { toggleAlive, load, onModeChange, addChoreo, save, _removeChoreo, _applyAliveBtn };
+  return { toggleAlive, load, onModeChange, addChoreo, save, testTrigger, testStartup, _removeChoreo, _applyAliveBtn };
 })();
 
 // ================================================================

@@ -61,8 +61,23 @@ class BehaviorEngine:
         log.info("BehaviorEngine started")
 
     def stop(self) -> None:
-        """Signal the background thread to stop."""
+        """Signal the background thread to stop.
+
+        B10/E17 fix 2026-05-16: also cancel the pending audio reset
+        Timer thread + the dome auto rotation thread. Previously these
+        kept running after shutdown, causing NoneType errors when they
+        fired after reg.uart was already torn down."""
         self._stop_event.set()
+        prev = getattr(self, '_audio_reset_timer', None)
+        if prev is not None and prev.is_alive():
+            try: prev.cancel()
+            except Exception: pass
+        # Release dome ownership if we had it
+        try:
+            if self._reg.dome:
+                self._reg.dome.set_random(False)
+        except Exception:
+            pass
 
     def set_alive(self, enabled: bool) -> None:
         """Toggle ALIVE mode. Persists to local.cfg and handles dome auto."""
