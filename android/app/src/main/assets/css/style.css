@@ -4753,6 +4753,77 @@ body[data-lock-mode="2"] .drive-wrapper {
   .anim-chip { font-size: 10px; padding: 8px 6px; min-height: 44px; }
 }
 
+/* Camera — batch 2 polish (2026-05-16) */
+
+/* W1 — camera status pill at top of panel */
+.cam-status-pill {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-weight: bold;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.cam-status-online  { background: rgba(0,204,102,0.12); color: var(--ok,#00cc66); border:1px solid var(--ok,#00cc66); }
+.cam-status-found   { background: rgba(255,170,0,0.12); color: var(--warn,#ffaa00); border:1px solid var(--warn,#ffaa00); }
+.cam-status-offline { background: rgba(255,34,68,0.12); color: var(--err,#ff2244); border:1px solid var(--err,#ff2244); }
+.cam-status-unknown { background: rgba(80,80,80,0.2);   color: var(--text-dim,#888);  border:1px solid var(--text-dim,#888); }
+
+/* W3 — RESTART badge on fields that trigger camera service restart */
+.restart-badge {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: bold;
+  background: rgba(255,170,0,0.18);
+  color: var(--warn, #ffaa00);
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border: 1px solid var(--warn, #ffaa00);
+}
+
+/* W5 — richer live preview block */
+.cam-bitrate-hint .cam-preview-now {
+  font-size: 11px;
+  color: var(--blue, #00bfff);
+  margin-bottom: 2px;
+}
+.cam-bitrate-hint .cam-preview-now strong {
+  color: var(--text);
+}
+
+/* W7 — integration card with stream URL copy */
+.cam-integration-card {
+  margin-top: 12px;
+  border: 1px solid var(--border, #1a3a5c);
+  border-radius: 4px;
+  padding: 6px 10px;
+  background: rgba(10,15,26,0.5);
+}
+.cam-integration-card summary {
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--text-dim, #888);
+  padding: 4px 0;
+}
+.cam-integration-card summary:hover { color: var(--blue, #00bfff); }
+.cam-integration-body { padding-top: 8px; }
+.cam-url-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+.cam-url-row .input-text {
+  flex: 1;
+  font-family: var(--font-data, monospace);
+  font-size: 10px;
+}
+
 /* BT Gamepad — batch 3 polish (2026-05-16) */
 
 /* W4/W11 — mode pills row at top of BT card */

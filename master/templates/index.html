@@ -1762,10 +1762,12 @@
       <!-- 📷 Camera -->
       <div class="settings-panel" id="spanel-camera">
         <section class="card settings-card">
-          <h2 class="card-title">CAMERA</h2>
-          <p class="settings-note">USB camera stream quality. Each save restarts the camera service (~2s).</p>
+          <h2 class="card-title">CAMERA — <span class="robot-name">R2-D2</span></h2>
+          <!-- W1 fix 2026-05-16: camera status pill at top -->
+          <div id="cam-status-pill" class="cam-status-pill cam-status-unknown">● CHECKING…</div>
+          <p class="settings-note">Live MJPEG stream from <span class="robot-name">R2-D2</span>'s USB camera. Each APPLY restarts the camera service (~5s blackout).</p>
           <div class="form-group">
-            <label class="ctrl-label">RESOLUTION</label>
+            <label class="ctrl-label">RESOLUTION <span class="restart-badge">RESTART</span></label>
             <select id="cam-resolution" class="input-text" style="width:200px" onchange="updateCameraBitrateHint()">
               <option value="640x480">640×480 — VGA</option>
               <option value="1280x720">1280×720 — HD 720p</option>
@@ -1773,24 +1775,40 @@
             </select>
           </div>
           <div class="form-group">
-            <label class="ctrl-label">FRAMERATE</label>
+            <label class="ctrl-label">FRAMERATE <span class="restart-badge">RESTART</span></label>
             <select id="cam-fps" class="input-text" style="width:120px" onchange="updateCameraBitrateHint()">
-              <option value="15">15 fps</option>
-              <option value="30">30 fps</option>
+              <option value="15">15 fps — battery-saver</option>
+              <option value="30">30 fps — smooth (default)</option>
             </select>
           </div>
           <div class="form-group">
-            <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span></label>
+            <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span> <span class="restart-badge">RESTART</span></label>
             <input type="range" id="cam-quality" min="10" max="100" step="5" value="80"
                    oninput="el('cam-quality-val').textContent=this.value; updateCameraBitrateHint()" class="holo-slider">
           </div>
-          <!-- WOW polish M3 2026-05-15: live bitrate/size hint so operator
-               knows what their quality choice means in bandwidth. -->
           <div id="cam-bitrate-hint" class="cam-bitrate-hint"></div>
-          <button class="btn btn-warn" onclick="cameraConfig.save()">APPLY + RESTART CAMERA</button>
+          <div class="row" style="gap:8px;align-items:center;margin-top:8px">
+            <button id="cam-apply-btn" class="btn btn-warn" onclick="withSaveFeedback(this, () => cameraConfig.save())">APPLY</button>
+            <!-- W6 fix 2026-05-16: snapshot button (proxies single mjpg frame) -->
+            <button class="btn btn-xs" onclick="cameraTakeSnapshot()" title="Download a single frame as JPEG">📸 SNAPSHOT</button>
+          </div>
           <div class="settings-status" id="cam-config-status"></div>
-          <!-- WOW polish M5 2026-05-15: preview thumbnail post-restart -->
           <div id="cam-preview-thumb" class="cam-preview-thumb"></div>
+
+          <!-- W7 fix 2026-05-16: stream URL copy for OBS/VLC integration -->
+          <details class="cam-integration-card">
+            <summary>🔗 INTEGRATION (OBS / VLC / external viewer)</summary>
+            <div class="cam-integration-body">
+              <label class="ctrl-label">Direct MJPEG (LAN-only, bypasses token):</label>
+              <div class="cam-url-row">
+                <input type="text" id="cam-direct-url" readonly class="input-text">
+                <button class="btn btn-xs" onclick="copyCameraUrl('cam-direct-url')">📋 COPY</button>
+              </div>
+              <div class="settings-note" style="font-size:10px;margin-top:6px">
+                For VLC: <code>Media → Open Network Stream → paste URL</code>
+              </div>
+            </div>
+          </details>
         </section>
       </div>
 

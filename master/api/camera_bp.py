@@ -346,6 +346,39 @@ def camera_config_get():
     return jsonify(_read_cam_env())
 
 
+@camera_bp.get('/camera/snapshot')
+def camera_snapshot():
+    """W6 fix 2026-05-16: proxy a single MJPEG frame from mjpg_streamer's
+    ?action=snapshot endpoint. Returns image/jpeg with attachment
+    header. Token-free (LAN-open like /camera/take is) so operator
+    can quick-share without dance. Rate-limited per IP via same
+    bucket as /camera/take."""
+    ip = request.remote_addr or 'unknown'
+    now = time.monotonic()
+    with _TAKE_LIMIT_LOCK:
+        bucket = _TAKE_RATE_LIMIT_PER_IP.get(f'snap:{ip}', (0, now))
+        count, window_start = bucket
+        if now - window_start > _TAKE_WINDOW_SECONDS:
+            count, window_start = 0, now
+        count += 1
+        _TAKE_RATE_LIMIT_PER_IP[f'snap:{ip}'] = (count, window_start)
+    if count > _TAKE_MAX_PER_WINDOW:
+        return jsonify({'error': 'snapshot rate limit', 'retry_after_s': int(_TAKE_WINDOW_SECONDS)}), 429
+    # mjpg_streamer exposes ?action=snapshot — single JPEG
+    snap_url = _mjpg_url().replace('?action=stream', '?action=snapshot')
+    try:
+        r = _requests.get(snap_url, timeout=3)
+        if r.status_code != 200:
+            return jsonify({'error': f'camera returned HTTP {r.status_code}'}), 503
+    except _requests.exceptions.RequestException as e:
+        log.warning("snapshot fetch failed: %s", e)
+        return jsonify({'error': 'Camera not available'}), 503
+    import time as _t2
+    fname = f'r2d2-{_t2.strftime("%Y%m%d-%H%M%S", _t2.localtime())}.jpg'
+    return Response(r.content, mimetype='image/jpeg',
+                    headers={'Content-Disposition': f'attachment; filename="{fname}"'})
+
+
 @camera_bp.post('/camera/config')
 @require_admin
 def camera_config_set():

@@ -8300,6 +8300,11 @@ class StatusPoller {
     if (battPanel && battPanel.classList.contains('active')) {
       try { updateBatteryPreview(); } catch {}
     }
+    // W1 fix 2026-05-16: refresh camera status pill if Camera panel visible
+    const camPanel = el('spanel-camera');
+    if (camPanel && camPanel.classList.contains('active')) {
+      try { updateCameraStatusPill(data); } catch {}
+    }
 
     // Conditional topbar pills — visible only when something is wrong
     const pillSlave = el('pill-slave');
@@ -9160,37 +9165,48 @@ const btSpeaker = {
 
 // ─── Camera config ────────────────────────────────────────────────────────────
 const cameraConfig = {
+  _loaded: null,   // W4 fix 2026-05-16: cache for diff-aware save
   async load() {
     try {
       const d = await api('/camera/config');
       if (!d) return;
+      this._loaded = { resolution: d.resolution, fps: d.fps, quality: d.quality };
       const resEl = el('cam-resolution');
       const fpsEl = el('cam-fps');
       const qEl   = el('cam-quality');
-      // B-245 (remaining tabs audit 2026-05-15): don't overwrite an
-      // input the operator is currently editing. Same focus-guard
-      // pattern that fixed the calibration tab typing bug.
       if (resEl && !resEl.matches(':focus')) resEl.value = d.resolution || '640x480';
       if (fpsEl && !fpsEl.matches(':focus')) fpsEl.value = String(d.fps   || 30);
       if (qEl  && !qEl.matches(':focus')) {
         qEl.value = d.quality || 80;
         syncHoloSlider(qEl);
         const valLbl = el('cam-quality-val');
-        if (valLbl) valLbl.textContent = qEl.value;   // B-224 null-safe
+        if (valLbl) valLbl.textContent = qEl.value;
       }
+      // W7 fix 2026-05-16: populate the direct MJPEG URL field
+      const urlEl = el('cam-direct-url');
+      if (urlEl) urlEl.value = `http://${window.location.hostname}:8080/?action=stream`;
     } catch(e) {}
   },
   async save() {
     const resolution = el('cam-resolution')?.value || '640x480';
     const fps        = parseInt(el('cam-fps')?.value) || 30;
     const quality    = parseInt(el('cam-quality')?.value) || 80;
-    const status     = el('cam-config-status');
+    // W4 fix 2026-05-16: diff-aware skip
+    if (this._loaded
+        && this._loaded.resolution === resolution
+        && this._loaded.fps === fps
+        && this._loaded.quality === quality) {
+      toast('No changes — camera not restarted', 'info');
+      return true;
+    }
+    const status = el('cam-config-status');
     if (status) { status.textContent = 'Restarting camera…'; status.className = 'settings-status'; }
     const data = await api('/camera/config', 'POST', { resolution, fps, quality });
     if (!data || data.status !== 'ok') {
       if (status) { status.textContent = '✗ Error — check logs'; status.className = 'settings-status error'; }
-      return;
+      return false;
     }
+    this._loaded = { resolution, fps, quality };
     if (status) { status.textContent = `✓ ${resolution} @ ${fps}fps q${quality}`; status.className = 'settings-status ok'; }
     toast(`Camera: ${resolution} @ ${fps}fps`, 'ok');
     // E4 fix 2026-05-16: was 2200ms but backend restart is debounced
@@ -9304,11 +9320,55 @@ function updateCameraBitrateHint() {
   if (!hint) return;
   const [w, h] = res.split('x').map(n => parseInt(n) || 0);
   if (!w || !h) { hint.textContent = ''; return; }
-  // MJPEG approx: bytes/frame ≈ (w × h × 3) × (q/100) × 0.08 (JPEG ratio).
   const bytesPerFrame = Math.round(w * h * 3 * (q / 100) * 0.08);
   const kbps = Math.round(bytesPerFrame * fps * 8 / 1000);
   const kbf  = Math.round(bytesPerFrame / 1024);
-  hint.textContent = `~${kbf} KB/frame · ~${kbps} kbps stream`;
+  const mbMin = Math.round(kbps * 60 / 8 / 1024);
+  // W5 fix 2026-05-16: richer live preview — output spec + bandwidth +
+  // per-minute estimate.
+  hint.innerHTML = `<div class="cam-preview-now"><strong>Output:</strong> ${w}×${h} @ ${fps}fps · q${q}</div>` +
+                   `<div>~${kbf} KB/frame · ~${kbps} kbps stream · ~${mbMin} MB/min</div>`;
+}
+
+// W6 fix 2026-05-16: snapshot download — single MJPEG frame as JPEG
+function cameraTakeSnapshot() {
+  const base = (typeof _camBase === 'function' ? _camBase() : '');
+  const a = document.createElement('a');
+  a.href = `${base}/camera/snapshot?_=${Date.now()}`;
+  a.target = '_blank';
+  a.download = `r2d2-snapshot.jpg`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  toast('Snapshot downloaded', 'ok');
+}
+
+// W7 fix 2026-05-16: copy stream URL to clipboard
+function copyCameraUrl(inputId) {
+  const inp = el(inputId);
+  if (!inp) return;
+  inp.select();
+  navigator.clipboard.writeText(inp.value).then(
+    () => toast('URL copied to clipboard', 'ok'),
+    () => { document.execCommand('copy'); toast('URL copied', 'ok'); }
+  );
+}
+
+// W1 fix 2026-05-16: camera status pill — called by StatusPoller
+function updateCameraStatusPill(data) {
+  const pill = el('cam-status-pill');
+  if (!pill) return;
+  pill.classList.remove('cam-status-online', 'cam-status-offline', 'cam-status-found', 'cam-status-unknown');
+  if (data.camera_found && data.camera_active) {
+    pill.textContent = '● ONLINE · streaming';
+    pill.classList.add('cam-status-online');
+  } else if (data.camera_found) {
+    pill.textContent = '● FOUND · stream offline';
+    pill.classList.add('cam-status-found');
+  } else {
+    pill.textContent = '● NOT FOUND · check USB cable';
+    pill.classList.add('cam-status-offline');
+  }
 }
 
 // W9 fix 2026-05-16: reset battery dropdowns to single-pack defaults
