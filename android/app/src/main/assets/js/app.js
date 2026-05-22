@@ -13365,7 +13365,7 @@ const choreoEditor = (() => {
       : '';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(_blockLabel(track, item))}</span>
                        ${issueBadge}
-                       ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true"></div>'}`;
+                       ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true" style="touch-action:none"></div>'}`;
     _attachBlockEvents(block, track, idx);
     if (track === 'audio' && _audioOverflowIdxs.has(idx)) {
       block.style.outline = '1px solid #ff4444';
@@ -13694,8 +13694,10 @@ const choreoEditor = (() => {
       handle.setAttribute('fill', '#cc44ff');
       handle.setAttribute('stroke', '#060910'); handle.setAttribute('stroke-width', '2');
       handle.style.cursor = 'ns-resize';
+      handle.style.touchAction = 'none';   // let a finger drag the keyframe instead of scrolling
 
-      handle.addEventListener('mousedown', e => {
+      handle.addEventListener('pointerdown', e => {
+        if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
         e.stopPropagation(); e.preventDefault();
         const startMouseX = e.clientX, startMouseY = e.clientY;
         const startT      = kf.t;
@@ -13727,14 +13729,14 @@ const choreoEditor = (() => {
             _updatePropsPanel('dome', i);
         };
         const onUp = () => {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
           keyframes.sort((a, b) => a.t - b.t);
           _renderDomeLane(keyframes);
           _refreshLayout();
         };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
         _selectDomeKF(i);
       });
 
@@ -13768,7 +13770,12 @@ const choreoEditor = (() => {
     // is a bigger refactor (needs _startDrag/_startResize to use
     // pointermove/pointerup pairs) — deferred until that's done in
     // one pass, not piecemeal.
-    block.addEventListener('mousedown', e => {
+    // pointerdown (not mousedown) so dragging/resizing a block works with a
+    // finger too. touch-action:none on the block makes the gesture move the
+    // block instead of scrolling the timeline; isPrimary ignores extra touches.
+    block.style.touchAction = 'none';
+    block.addEventListener('pointerdown', e => {
+      if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
       e.target.dataset.resize ? _startResize(e, block, track, idx) : _startDrag(e, block, track, idx);
       _selectBlock(track, idx);
       e.preventDefault();
@@ -13848,8 +13855,8 @@ const choreoEditor = (() => {
     };
     const onUp = e2 => {
       _stopAutoScroll();
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
       if (scroll) {
         const r = scroll.getBoundingClientRect();
         // Soft-delete with UNDO when dragged out of the timeline area.
@@ -13869,7 +13876,7 @@ const choreoEditor = (() => {
       _selectBlock(track, idx);
       _refreshLayout();
     };
-    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
   }
 
   function _startResize(e, block, track, idx) {
@@ -13918,8 +13925,8 @@ const choreoEditor = (() => {
       _setDirty(true);
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
-    document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+    const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
   }
 
   // ── Properties panel ─────────────────────────────────────────────
