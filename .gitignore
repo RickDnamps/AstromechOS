@@ -25,6 +25,7 @@ slave/config/slave.cfg
 master/config/choreo_categories.json
 master/config/bt_config.json
 master/config/shortcuts.json
+master/config/custom_themes.json
 
 # Mémoire locale Claude Code
 .claude/
