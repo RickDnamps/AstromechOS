@@ -10,30 +10,54 @@ import re
 import datetime
 
 # ── Custom themes (B.0) ──────────────────────────────────────────────────────
-ALLOWED_FONTS = {'orbitron', 'share_tech_mono', 'audiowide', 'electrolize',
-                 'exo2', 'rajdhani', 'courier'}
+# Theme object shape (from app.js _buildCustomVars / saveCustomTheme):
+#   {id, label, swatch(#hex), _pickerBg/_pickerTopbar/_pickerCard/_pickerAccent/
+#    _pickerText/_pickerOk/_pickerWarn/_pickerErr(#hex), _pickerFont(key|'system'),
+#    vars{cssVar: value}}
 _THEME_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,40}$')
 _HEX_RE = re.compile(r'^#[0-9A-Fa-f]{3,8}$')
+_FONT_KEY_RE = re.compile(r'^[A-Za-z0-9_]{1,20}$')
+_PICKER_FIELDS = ('_pickerBg', '_pickerTopbar', '_pickerCard', '_pickerAccent',
+                  '_pickerText', '_pickerOk', '_pickerWarn', '_pickerErr')
+# Inline-style values legitimately contain rgba()/quotes/commas, so we allow '('
+# ')' ',' "'" but block the chars/substrings that enable CSS/HTML injection.
+_CSS_FORBIDDEN_CHARS = set(';{}<>')
+_CSS_FORBIDDEN_SUBSTR = ('url(', 'expression', 'image-set', '/*', '*/', 'javascript:')
+
+
+def _safe_css_value(v) -> bool:
+    if not isinstance(v, str) or len(v) > 120:
+        return False
+    if _CSS_FORBIDDEN_CHARS & set(v):
+        return False
+    low = v.lower()
+    return not any(s in low for s in _CSS_FORBIDDEN_SUBSTR)
 
 
 def validate_theme(t) -> bool:
     """True if `t` is a well-formed, safe custom theme. Rejects bad ids
-    (XSS / path), non-hex colors (CSS injection), and unknown fonts."""
+    (path/XSS), non-hex picker colors, unsafe fonts, and CSS-injecting `vars`."""
     if not isinstance(t, dict):
         return False
     if not isinstance(t.get('id'), str) or not _THEME_ID_RE.match(t['id']):
         return False
     if not isinstance(t.get('label'), str) or not (1 <= len(t['label']) <= 40):
         return False
-    colors = t.get('colors')
-    if not isinstance(colors, dict) or not colors or len(colors) > 20:
-        return False
-    for v in colors.values():
+    for fld in _PICKER_FIELDS + ('swatch',):
+        v = t.get(fld)
         if not (isinstance(v, str) and _HEX_RE.match(v)):
             return False
-    font = t.get('font')
-    if font is not None and font not in ALLOWED_FONTS:
+    font = t.get('_pickerFont')
+    if font is not None and not (isinstance(font, str)
+                                 and (font == 'system' or _FONT_KEY_RE.match(font))):
         return False
+    vars_ = t.get('vars')
+    if vars_ is not None:
+        if not isinstance(vars_, dict) or len(vars_) > 60:
+            return False
+        for val in vars_.values():
+            if not _safe_css_value(val):
+                return False
     return True
 
 

@@ -7,25 +7,40 @@ from master.api.backup_core import (
 )
 
 
-# ---- themes (B.0) ----
+# ---- themes (B.0) — real frontend shape ----
+def _good_theme(**over):
+    t = {'id': 'custom_1', 'label': 'My Theme', 'swatch': '#00b4ff',
+         '_pickerBg': '#101820', '_pickerTopbar': '#0a1015', '_pickerCard': '#1a2530',
+         '_pickerAccent': '#00b4ff', '_pickerText': '#e0e0e0', '_pickerOk': '#33cc66',
+         '_pickerWarn': '#ffaa44', '_pickerErr': '#ff4444', '_pickerFont': 'orbitron',
+         'vars': {'--bg': '#101820', '--text-dim': 'rgba(76,80,90,0.5)',
+                  '--font': "'Orbitron', 'Courier New', monospace"}}
+    t.update(over)
+    return t
+
 def test_valid_theme():
-    assert validate_theme({'id': 'my-theme_1', 'label': 'My Theme',
-                           'colors': {'bg': '#101820', 'accent': '#00b4ff'}, 'font': 'orbitron'})
+    assert validate_theme(_good_theme())
 
 def test_theme_bad_id():
-    assert not validate_theme({'id': '../evil', 'label': 'x', 'colors': {'bg': '#fff'}, 'font': 'orbitron'})
+    assert not validate_theme(_good_theme(id='../evil'))
 
-def test_theme_bad_color():
-    assert not validate_theme({'id': 'a', 'label': 'x', 'colors': {'bg': 'red; }body{'}, 'font': 'orbitron'})
-
-def test_theme_bad_font():
-    assert not validate_theme({'id': 'a', 'label': 'x', 'colors': {'bg': '#fff'}, 'font': 'comic-sans'})
+def test_theme_bad_picker_color():
+    assert not validate_theme(_good_theme(_pickerBg='red; }body{'))
 
 def test_theme_label_capped():
-    assert not validate_theme({'id': 'a', 'label': 'x' * 41, 'colors': {'bg': '#fff'}, 'font': 'orbitron'})
+    assert not validate_theme(_good_theme(label='x' * 41))
 
-def test_theme_font_optional():
-    assert validate_theme({'id': 'a', 'label': 'x', 'colors': {'bg': '#fff'}})
+def test_theme_vars_css_injection_blocked():
+    assert not validate_theme(_good_theme(vars={'--bg': '#fff; background:url(http://evil)'}))
+
+def test_theme_vars_rgba_allowed():
+    assert validate_theme(_good_theme(vars={'--x': 'rgba(0,180,255,0.18)'}))
+
+def test_theme_font_system_ok():
+    assert validate_theme(_good_theme(_pickerFont='system'))
+
+def test_theme_font_bad():
+    assert not validate_theme(_good_theme(_pickerFont='evil;font'))
 
 
 # ---- manifest + fileset (B.1) ----
