@@ -490,20 +490,20 @@ body::after {
 
 /* Drive lock button — large, top-left corner of Drive tab */
 .drive-lock-btn {
-  position: absolute;
-  top: 10px;
-  left: 12px;
+  /* Lives in .drive-bottom-right (bottom bar, right of E-STOP) — inline, compact
+     row (icon + label) so it sits beside ALIVE/camera without overlapping the
+     joysticks/shortcuts (was absolute top-left). */
   z-index: 10;
   background: rgba(0, 0, 0, 0.5);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
   display: inline-flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  padding: 6px 11px;
+  gap: 5px;
+  padding: 5px 9px;
   /* smooth all transitions */
   transition: border-color 0.2s, color 0.2s, background 0.2s,
               box-shadow 0.2s, transform 0.15s;

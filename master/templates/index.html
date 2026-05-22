@@ -344,20 +344,7 @@
 ================================================================ -->
 <div class="tab-content active" id="tab-drive">
 
-  <!-- Lock button — top-left of Drive tab -->
-  <button id="drive-lock-btn" class="drive-lock-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
-    <svg class="lock-svg lock-open" width="21" height="24" viewBox="0 0 14 16">
-      <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
-      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-      <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
-    </svg>
-    <svg class="lock-svg lock-closed" width="21" height="24" viewBox="0 0 14 16">
-      <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
-      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-      <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
-    </svg>
-    <span id="drive-lock-label" class="drive-lock-label">LOCK</span>
-  </button>
+  <!-- Lock button moved to the bottom bar (right of E-STOP) — see .drive-bottom-right -->
 
   <div class="drive-wrapper">
 
@@ -388,16 +375,7 @@
           <span>T: <span id="js-left-t">0.00</span></span>
           <span>S: <span id="js-left-s">0.00</span></span>
         </div>
-        <!-- WASD keyboard shortcuts -->
-        <div class="kbd-indicator">
-          <div class="kbd-row"><div class="kbd-key" id="kbd-w">W</div></div>
-          <div class="kbd-row">
-            <div class="kbd-key" id="kbd-a">A</div>
-            <div class="kbd-key" id="kbd-s">S</div>
-            <div class="kbd-key" id="kbd-d">D</div>
-          </div>
-          <div class="kbd-hint-text">KEYBOARD</div>
-        </div>
+        <!-- Keyboard hint removed (clutter) — WASD still drives on desktop -->
       </div>
 
       <!-- Center — Camera feed -->
@@ -478,16 +456,7 @@
           <span>X: <span id="js-right-x">0.00</span></span>
           <span>Y: <span id="js-right-y">0.00</span></span>
         </div>
-        <!-- Arrow key shortcuts — dome rotation / future camera tilt -->
-        <div class="kbd-indicator">
-          <div class="kbd-row"><div class="kbd-key" id="kbd-up">↑</div></div>
-          <div class="kbd-row">
-            <div class="kbd-key" id="kbd-left">←</div>
-            <div class="kbd-key" id="kbd-down">↓</div>
-            <div class="kbd-key" id="kbd-right">→</div>
-          </div>
-          <div class="kbd-hint-text">DOME / CAM</div>
-        </div>
+        <!-- Keyboard hint removed (clutter) — arrows still drive the dome on desktop -->
       </div>
 
     </div><!-- .drive-main -->
@@ -522,8 +491,22 @@
         <span id="estop-toggle-text">EMERGENCY STOP</span>
       </button>
 
-      <!-- Col 3: Dome auto + camera toggle -->
+      <!-- Col 3: Lock mode + BT + dome auto + camera toggle -->
       <div class="drive-bottom-right">
+        <!-- Lock mode (Kids / Child Lock) — bottom bar, right of E-STOP -->
+        <button id="drive-lock-btn" class="drive-lock-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
+          <svg class="lock-svg lock-open" width="18" height="20" viewBox="0 0 14 16">
+            <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+          </svg>
+          <svg class="lock-svg lock-closed" width="18" height="20" viewBox="0 0 14 16">
+            <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+            <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+          </svg>
+          <span id="drive-lock-label" class="drive-lock-label">LOCK</span>
+        </button>
         <!-- WOW HW3 2026-05-15: BT controller status visible on Drive.
              Hidden when BT disabled. Glyph + signal bars updated by
              StatusPoller from data.bt_connected + data.bt_rssi. -->
