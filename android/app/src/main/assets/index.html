@@ -593,6 +593,13 @@
                onchange="audioBoard.uploadFiles(this.files)">
       </div>
       <div id="audio-upload-status" style="display:none;margin-top:6px;font-size:10px;padding:4px 8px;border-radius:3px"></div>
+      <!-- Reconcile sounds (admin only) — toggled by showUploadZone -->
+      <div id="audio-reconcile-row" style="display:none;margin-top:8px;text-align:right">
+        <button class="btn btn-sm" onclick="audioBoard.reconcileSounds(this)"
+                title="Reconciles the index with the files actually present on the robot: removes missing sounds, files new ones under 'others'.">
+          🔄 Verify sounds
+        </button>
+      </div>
     </div>
 
     <!-- Now playing bar -->
@@ -2374,6 +2381,25 @@
                   onclick="confirmAction('Restart Master services? (~5s, faster than full reboot)', '/system/restart_master', true)">
             ↻ RESTART MASTER SERVICES <span style="opacity:.6;font-size:9px">(~5s)</span>
           </button>
+          <div class="settings-divider"></div>
+          <h3 class="settings-sub-title">BACKUP / RESTORE</h3>
+          <div class="settings-note">Full backup (.bck): configs, sounds, choreos, calibration, themes. Keep it safe — it contains the WiFi credentials + admin password.</div>
+          <button id="btn-backup" class="btn" style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Create backup</button>
+          <div id="backup-progress-wrap" style="display:none;margin-top:10px">
+            <div style="height:14px;background:rgba(var(--blue-rgb),0.12);border-radius:7px;overflow:hidden">
+              <div id="backup-progress-fill" style="height:100%;width:0%;background:var(--blue);transition:width .3s"></div>
+            </div>
+            <div id="backup-progress-text" style="font-size:11px;margin-top:4px;color:var(--text-dim)"></div>
+          </div>
+          <input type="file" id="restore-file-input" accept=".bck" style="display:none" onchange="restoreMgr.upload(this)">
+          <button id="btn-restore" class="btn btn-warn" style="width:100%;margin-top:8px" onclick="restoreMgr.pick()">⬆ Restore from backup…</button>
+          <div id="restore-progress-wrap" style="display:none;margin-top:10px">
+            <div style="height:14px;background:rgba(var(--blue-rgb),0.12);border-radius:7px;overflow:hidden">
+              <div id="restore-progress-fill" style="height:100%;width:0%;background:var(--amber,#ffaa44);transition:width .3s"></div>
+            </div>
+            <div id="restore-progress-text" style="font-size:11px;margin-top:4px;color:var(--text-dim)"></div>
+          </div>
+
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
           <div class="settings-row">
