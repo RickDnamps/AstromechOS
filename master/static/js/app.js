@@ -12471,6 +12471,27 @@ function startAppHeartbeat() {
   // block 5s for render, the worker keeps posting. Safety semantics
   // preserved (worker stops on visibilitychange + page close).
   let _hbWorker = null;
+  let _hbUrlSync = null;
+  let _lastHbUrl = '';
+
+  // Compute the heartbeat target. In the Android WebView, R2D2_API_BASE is
+  // injected by native code only AFTER the page loads, so at _hbStart() base()
+  // is still '' and a location-based URL would be the (broken) file:///heartbeat.
+  function _computeHbUrl() {
+    return base() ? base() + '/heartbeat'
+                  : `${location.protocol}//${location.host}/heartbeat`;
+  }
+  // (Re)post the URL to the Worker whenever it changes — picks up the late
+  // R2D2_API_BASE injection (WebView) and host changes (setHost) without a
+  // restart. Never locks in a file:// URL (the WebView has no usable origin
+  // until the base arrives), so there's no failing-fetch spam before connect.
+  function _pushHbUrl() {
+    if (!_hbWorker || _hbWorker._fallback) return;
+    const url = _computeHbUrl();
+    if (url === _lastHbUrl || url.startsWith('file:')) return;
+    _lastHbUrl = url;
+    try { _hbWorker.postMessage({ type: 'start', url }); } catch {}
+  }
 
   function _hbStart() {
     if (_hbWorker) return;
@@ -12499,15 +12520,14 @@ function startAppHeartbeat() {
       `;
       const blob = new Blob([workerSrc], { type: 'application/javascript' });
       _hbWorker = new Worker(URL.createObjectURL(blob));
-      // 2026-05-15 bug: relative URL inside a blob Worker resolves
-      // against blob:... origin, not the document. Pass absolute URL
-      // so the Worker hits the right host. User-reported: APP HB pill
-      // stuck red after deploy even with hard reload — root cause was
-      // worker fetch failing silently due to relative URL resolution.
-      const hbUrl = base()
-        ? base() + '/heartbeat'
-        : `${location.protocol}//${location.host}/heartbeat`;
-      _hbWorker.postMessage({ type: 'start', url: hbUrl });
+      // 2026-05-15 bug: relative URL inside a blob Worker resolves against
+      // blob:... origin, not the document — the URL MUST be absolute. Post it
+      // now + keep it in sync so the WebView's late R2D2_API_BASE injection is
+      // picked up (see _pushHbUrl); without this the Worker froze on
+      // file:///heartbeat and never reached the Master (2026-05-22 device test).
+      _pushHbUrl();
+      if (_hbUrlSync) clearInterval(_hbUrlSync);
+      _hbUrlSync = setInterval(_pushHbUrl, 1000);
     } catch (e) {
       // Fallback to main-thread interval if Worker creation fails (very
       // old browsers / CSP blocking blob: workers). Less robust but
@@ -12522,7 +12542,7 @@ function startAppHeartbeat() {
         toast('Heartbeat fallback active — heavy renders may trigger false E-STOP', 'warn');
       }
       _hbWorker = { _fallback: setInterval(() => {
-        fetch(base() + '/heartbeat', { method: 'POST' }).catch(() => {});
+        const b = base(); if (b) fetch(b + '/heartbeat', { method: 'POST' }).catch(() => {});
       }, 200) };
     }
   }
@@ -12535,6 +12555,8 @@ function startAppHeartbeat() {
       catch {}
     }
     _hbWorker = null;
+    if (_hbUrlSync) { clearInterval(_hbUrlSync); _hbUrlSync = null; }
+    _lastHbUrl = '';
   }
 
   document.addEventListener('visibilitychange', () => {
