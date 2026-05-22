@@ -425,6 +425,18 @@ def get_settings():
     wlan1_state = _nm_field('wlan1', 'GENERAL.STATE')
     wlan1_conn  = _nm_field('wlan1', 'GENERAL.CONNECTION')
     wlan1_ip    = _nm_field('wlan1', 'IP4.ADDRESS[1]')
+    wlan1_connected = '100' in wlan1_state
+    # Live SSID from the ACTIVE connection profile — NOT the stored local.cfg
+    # [home_wifi] (which goes stale if the Pi connected via raspi-config or
+    # another tool, so the UI showed the wrong network, e.g. an old hotspot
+    # name instead of the real home WiFi). Falls back to cfg when not connected.
+    wlan1_ssid = ''
+    if wlan1_connected and wlan1_conn:
+        _rc, _out, _ = _run(['nmcli', '-g', '802-11-wireless.ssid', 'connection', 'show', wlan1_conn], timeout=4)
+        if _rc == 0:
+            wlan1_ssid = _out.strip()
+    if not wlan1_ssid:
+        wlan1_ssid = cfg.get('home_wifi', 'ssid', fallback='')
 
     # wlan0 state (hotspot)
     wlan0_state = _nm_field('wlan0', 'GENERAL.STATE')
@@ -433,8 +445,8 @@ def get_settings():
     _mask_ssid = lambda s: s if is_admin else (('•' * min(len(s), 8)) if s else '')
     return jsonify({
         'wifi': {
-            'ssid':       _mask_ssid(cfg.get('home_wifi', 'ssid', fallback='')),
-            'connected':  '100' in wlan1_state,
+            'ssid':       _mask_ssid(wlan1_ssid),
+            'connected':  wlan1_connected,
             'connection': wlan1_conn if is_admin else '',
             'ip':         (wlan1_ip.split('/')[0] if wlan1_ip else '') if is_admin else '',
         },
