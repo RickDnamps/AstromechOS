@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             override fun shouldOverrideUrlLoading(v: WebView?, r: WebResourceRequest?) = false
         }
         webView.webChromeClient = object : WebChromeClient() {
-            override fun onConsoleMessage(m: ConsoleMessage?) = true
+            override fun onConsoleMessage(m: ConsoleMessage?) = false  // keep logcat output for debugging
             // Without this, <input type=file> (restore .bck + audio mp3 upload)
             // silently does nothing in a WebView.
             override fun onShowFileChooser(
@@ -479,6 +479,10 @@ class MainActivity : AppCompatActivity() {
     }
     override fun onDestroy() {
         pingJob?.cancel()
+        // Resolve a pending <input type=file> so the JS promise doesn't hang +
+        // the callback (referencing this destroyed WebView) isn't leaked.
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         webView.destroy()
         super.onDestroy()
     }
@@ -558,6 +562,15 @@ class NativeBridge(private val activity: MainActivity) {
     // DownloadManager (admin token passed as a header). Saves to Downloads/.
     @JavascriptInterface
     fun downloadBackup(url: String, filename: String, token: String) {
+        // SECURITY: only ever attach the admin token to the configured Pi host.
+        // A malicious / MITM page in the WebView could otherwise call this with
+        // an arbitrary url and exfiltrate the admin password via the header.
+        if (!url.startsWith(getApiBase() + "/")) {
+            activity.runOnUiThread {
+                Toast.makeText(activity, "Download blocked (untrusted host)", Toast.LENGTH_LONG).show()
+            }
+            return
+        }
         activity.runOnUiThread {
             try {
                 val safeName = filename.replace(Regex("[^A-Za-z0-9_.-]"), "_")
