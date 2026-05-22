@@ -792,6 +792,65 @@ async function apiDetail(endpoint, method = 'GET', body = null, timeoutMs = 5000
   }
 }
 
+// ── Backup (B.1): start → poll status (live % bar) → authenticated download ──
+const backupMgr = {
+  _timer: null,
+  async start(btn) {
+    const r = await apiDetail('/backup/start', 'POST', {}, 8000);
+    if (!r.ok || !(r.data && r.data.ok)) {
+      toast((r.data && r.data.error) || 'Impossible de démarrer la sauvegarde', 'error');
+      return;
+    }
+    this._show(true);
+    this._setBar(0, 'Démarrage…');
+    this._poll();
+  },
+  _poll() {
+    clearTimeout(this._timer);
+    this._timer = setTimeout(async () => {
+      const r = await apiDetail('/backup/status', 'GET', null, 5000);
+      if (!r.ok || !r.data) { this._poll(); return; }
+      const d = r.data;
+      this._setBar(d.pct, d.phase);
+      if (!d.done) { this._poll(); return; }
+      if (d.error) { toast('Sauvegarde échouée : ' + d.error, 'error'); this._show(false); return; }
+      await this._download();
+      this._show(false);
+    }, 700);
+  },
+  async _download() {
+    this._setBar(100, 'Téléchargement…');
+    const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken) ? adminGuard.getToken() : '';
+    try {
+      const res = await fetch((window.R2D2_API_BASE || '') + '/backup/download',
+                              { headers: tok ? { 'X-Admin-Pw': tok } : {} });
+      if (!res.ok) { toast('Téléchargement échoué', 'error'); return; }
+      const cd = res.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename=([^;]+)/);
+      const name = m ? m[1].trim().replace(/["']/g, '') : 'AstromechOS_Backup.bck';
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      toast('Sauvegarde téléchargée ✓', 'ok');
+    } catch (e) { toast('Téléchargement échoué', 'error'); }
+  },
+  _show(on) {
+    const w = document.getElementById('backup-progress-wrap');
+    if (w) w.style.display = on ? 'block' : 'none';
+    const b = document.getElementById('btn-backup');
+    if (b) b.disabled = on;
+  },
+  _setBar(pct, phase) {
+    const fill = document.getElementById('backup-progress-fill');
+    if (fill) fill.style.width = (pct || 0) + '%';
+    const txt = document.getElementById('backup-progress-text');
+    if (txt) txt.textContent = (phase || '') + ' — ' + (pct || 0) + '%';
+  },
+};
+
 // F-6: single-in-flight slot for /motion/arcade and /motion/drive POSTs.
 // The joystick onMove fires at 60Hz; on a slow network these can stack up
 // in the browser's HTTP/1.1 queue and arrive out of order on the Pi. Worse,
