@@ -13083,6 +13083,10 @@ const choreoEditor = (() => {
     if (_paletteWired) return;
     _paletteWired = true;
     document.querySelectorAll('.chor-src-btn').forEach(btn => {
+      // touch-action:none so a finger-drag on a chip fires pointermove (drag)
+      // instead of being swallowed as a scroll/pancel. (Mouse/HTML5 drag below
+      // is unaffected — touch-action only governs touch input.)
+      btn.style.touchAction = 'none';
       // Build a colour-matched drag ghost image
       btn.addEventListener('dragstart', e => {
         let tpl;
@@ -13113,11 +13117,66 @@ const choreoEditor = (() => {
         document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
       });
 
-      // Touch fallback (tablet / no mouse): HTML5 drag doesn't fire from a
-      // finger, so a TAP/click on a palette chip ADDS a block to its track
+      // Touch DRAG-to-add (tablet): HTML5 drag doesn't fire from a finger, so
+      // on touch we run a pointer-based drag — a ghost follows the finger and
+      // dropping over the matching lane inserts the block at that time (via the
+      // same _dropBlockAtX as the mouse path). Desktop keeps the HTML5 drag
+      // above; a plain TAP still adds via the click handler below.
+      btn.addEventListener('pointerdown', e => {
+        if (e.pointerType !== 'touch' || !e.isPrimary) return;
+        let tpl;
+        try { tpl = JSON.parse(btn.dataset.tpl); } catch { return; }
+        const track = btn.dataset.track;
+        const startX = e.clientX, startY = e.clientY;
+        let dragging = false, ghost = null;
+        const clearLanes = () =>
+          document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
+        const onMove = ev => {
+          if (!dragging && (Math.abs(ev.clientX - startX) > 8 || Math.abs(ev.clientY - startY) > 8)) {
+            dragging = true;
+            ghost = document.createElement('div');
+            ghost.textContent = btn.textContent.trim();
+            ghost.style.cssText = `position:fixed;pointer-events:none;z-index:9999;`
+              + `font:bold 9px/22px 'Courier New',monospace;padding:0 10px;border-radius:3px;`
+              + `background:rgba(0,0,0,.85);letter-spacing:1.4px;white-space:nowrap;`
+              + `color:${getComputedStyle(btn).color};border:1px solid ${getComputedStyle(btn).borderTopColor};`
+              + `box-shadow:0 0 10px ${getComputedStyle(btn).color};`;
+            document.body.appendChild(ghost);
+          }
+          if (dragging && ghost) {
+            ghost.style.left = (ev.clientX + 12) + 'px';
+            ghost.style.top  = (ev.clientY - 11) + 'px';
+            clearLanes();
+            const under = document.elementFromPoint(ev.clientX, ev.clientY);
+            const lane = under && under.closest && under.closest('.chor-lane');
+            if (lane && lane.dataset.track === track) lane.classList.add('drag-over');
+          }
+        };
+        const onUp = ev => {
+          document.removeEventListener('pointermove', onMove);
+          document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
+          clearLanes();
+          if (ghost) ghost.remove();
+          if (!dragging || ev.type === 'pointercancel') return;
+          // A synthetic click can follow the touch — don't also tap-to-add.
+          btn._suppressClick = true;
+          setTimeout(() => { btn._suppressClick = false; }, 500);
+          const under = document.elementFromPoint(ev.clientX, ev.clientY);
+          const lane = under && under.closest && under.closest('.chor-lane');
+          if (lane && lane.dataset.track === track) _dropBlockAtX(track, tpl, lane, ev.clientX);
+          // dropped off a matching lane → silently cancel (no add)
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
+      });
+
+      // TAP-to-add (tablet tap or desktop click): adds a block to its track
       // (after the last block, or t=0), selects it, and opens the inspector to
-      // set the exact START time. Works on desktop click too.
+      // set the exact START time. (Touch drag-to-add is handled above.)
       btn.addEventListener('click', () => {
+        if (btn._suppressClick) { btn._suppressClick = false; return; }
         let tpl;
         try { tpl = JSON.parse(btn.dataset.tpl); } catch { return; }
         const track = btn.dataset.track;
@@ -13139,6 +13198,35 @@ const choreoEditor = (() => {
         toast(`${track} block added → ${t.toFixed(2)}s (set START in inspector)`, 'ok');
       });
     });
+  }
+
+  // Insert a new block of `track` (from palette `tpl`) onto `lane` at the
+  // drop x-coordinate. Shared by the HTML5 drop (mouse) and the touch
+  // pointer-drag (tablet) so both add-at-position paths stay identical.
+  function _dropBlockAtX(track, tpl, lane, clientX) {
+    if (!_chor) { toast('Load a choreography first', 'error'); return; }
+    const laneTrack = lane.dataset.track;
+    if (laneTrack !== track) { toast(`Drop a ${track} block on the ${track} lane`, 'error'); return; }
+    const scroll = document.getElementById('chor-scroll');
+    const scrollLeft = scroll ? scroll.scrollLeft : 0;
+    const rect = lane.getBoundingClientRect();
+    const rawT = _sec(Math.max(0, clientX - rect.left + scrollLeft));
+    const maxT = Math.max(20, _calcPlaybackDuration() + 10);
+    const t = _snap(Math.min(rawT, maxT));
+    if (rawT > maxT) {
+      toast(`Drop clamped to ${maxT.toFixed(1)}s — edit START in inspector for later events`, 'warn');
+    }
+    const newItem = { ...tpl, t };
+    if (!_chor.tracks[track]) _chor.tracks[track] = [];
+    _chor.tracks[track].push(newItem);
+    _chor.tracks[track].sort((a, b) => a.t - b.t);
+    _setDirty(true);
+    _renderTrack(track);
+    _refreshLayout();
+    if (track === 'audio') _validateAudioOverflow();
+    const idx = _chor.tracks[track].indexOf(newItem);
+    if (track !== 'dome') _selectBlock(track, idx);
+    toast(`${track} block → ${t.toFixed(2)}s`, 'ok');
   }
 
   // Wire HTML5 drop targets on all timeline lanes
@@ -13168,38 +13256,9 @@ const choreoEditor = (() => {
       lane.addEventListener('drop', e => {
         e.preventDefault();
         lane.classList.remove('drag-over');
-        if (!_chor) { toast('Load a choreography first', 'error'); return; }
         let data;
         try { data = JSON.parse(e.dataTransfer.getData('application/json')); } catch { return; }
-        const { track, tpl } = data;
-        const laneTrack = lane.dataset.track;
-        if (laneTrack !== track) { toast(`Drop a ${track} block on the ${track} lane`, 'error'); return; }
-        const scroll = document.getElementById('chor-scroll');
-        const scrollLeft = scroll ? scroll.scrollLeft : 0;
-        const rect = lane.getBoundingClientRect();
-        const rawT = _sec(Math.max(0, e.clientX - rect.left + scrollLeft));
-        // Clamp t to a sane upper bound — without this, a drag that overshoots
-        // past the canvas (browser auto-scroll, oversensitive trackpad) can
-        // land at t=300s on a 10s timeline; _fitToScreen() then shrinks the
-        // px/sec to fit, leaving every existing block as a sliver. Use the
-        // current playback duration plus 10s grace, with a 20s floor for new
-        // sequences. The inspector still lets the user enter any t manually.
-        const maxT = Math.max(20, _calcPlaybackDuration() + 10);
-        let t = _snap(Math.min(rawT, maxT));
-        if (rawT > maxT) {
-          toast(`Drop clamped to ${maxT.toFixed(1)}s — edit START in inspector for later events`, 'warn');
-        }
-        const newItem = { ...tpl, t };
-        if (!_chor.tracks[track]) _chor.tracks[track] = [];
-        _chor.tracks[track].push(newItem);
-        _chor.tracks[track].sort((a, b) => a.t - b.t);
-        _setDirty(true);
-        _renderTrack(track);
-        _refreshLayout();
-        if (track === 'audio') _validateAudioOverflow();
-        const idx = _chor.tracks[track].indexOf(newItem);
-        if (track !== 'dome') _selectBlock(track, idx);
-        toast(`${track} block → ${t.toFixed(2)}s`, 'ok');
+        _dropBlockAtX(data.track, data.tpl, lane, e.clientX);
       });
     });
   }
