@@ -821,8 +821,17 @@ const backupMgr = {
   async _download() {
     this._setBar(100, 'Downloading…');
     const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken) ? adminGuard.getToken() : '';
+    const base = (window.R2D2_API_BASE || '');
+    // Android WebView: blob / <a download> don't save — hand off to the native
+    // DownloadManager (handles the admin header + saves to Downloads).
+    if (window.AndroidBridge && typeof window.AndroidBridge.downloadBackup === 'function') {
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+      window.AndroidBridge.downloadBackup(base + '/backup/download', 'AstromechOS_Backup_' + ts + '.bck', tok);
+      toast('Backup saving to your device…', 'ok');
+      return;
+    }
     try {
-      const res = await fetch((window.R2D2_API_BASE || '') + '/backup/download',
+      const res = await fetch(base + '/backup/download',
                               { headers: tok ? { 'X-Admin-Pw': tok } : {} });
       if (!res.ok) { toast('Download failed', 'error'); return; }
       const cd = res.headers.get('Content-Disposition') || '';

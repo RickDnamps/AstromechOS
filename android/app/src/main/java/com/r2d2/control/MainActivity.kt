@@ -2,7 +2,10 @@ package com.r2d2.control
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.*
 import android.text.InputType
@@ -10,6 +13,7 @@ import android.view.*
 import android.webkit.*
 import android.widget.*
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.r2d2.control.databinding.ActivityMainBinding
@@ -30,6 +34,16 @@ class MainActivity : AppCompatActivity() {
     private var pingFailureCount  = 0
     private var autoDiscovering   = false
     private var pingJob: Job?     = null
+
+    // WebView <input type=file> support (restore .bck + audio mp3 upload).
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private val fileChooserLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            fileChooserCallback?.onReceiveValue(
+                WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+            )
+            fileChooserCallback = null
+        }
 
     companion object {
         const val PREF_FILE    = "r2d2_prefs"
@@ -112,6 +126,25 @@ class MainActivity : AppCompatActivity() {
         }
         webView.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(m: ConsoleMessage?) = true
+            // Without this, <input type=file> (restore .bck + audio mp3 upload)
+            // silently does nothing in a WebView.
+            override fun onShowFileChooser(
+                wv: WebView?, cb: ValueCallback<Array<Uri>>?, params: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = cb
+                return try {
+                    val intent = params?.createIntent()
+                        ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE)
+                        }
+                    fileChooserLauncher.launch(intent)
+                    true
+                } catch (e: Exception) {
+                    fileChooserCallback = null
+                    false
+                }
+            }
         }
     }
 
@@ -519,5 +552,27 @@ class NativeBridge(private val activity: MainActivity) {
         return try {
             activity.packageManager.getPackageInfo(activity.packageName, 0).versionName ?: "1.0.0"
         } catch (_: Exception) { "1.0.0" }
+    }
+
+    // WebView can't save a blob/<a download>; hand the backup off to the native
+    // DownloadManager (admin token passed as a header). Saves to Downloads/.
+    @JavascriptInterface
+    fun downloadBackup(url: String, filename: String, token: String) {
+        activity.runOnUiThread {
+            try {
+                val safeName = filename.replace(Regex("[^A-Za-z0-9_.-]"), "_")
+                val req = DownloadManager.Request(Uri.parse(url))
+                    .addRequestHeader("X-Admin-Pw", token)
+                    .setTitle(safeName)
+                    .setMimeType("application/octet-stream")
+                    .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, safeName)
+                val dm = activity.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                dm.enqueue(req)
+                Toast.makeText(activity, "Saving $safeName to Downloads…", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(activity, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 }
