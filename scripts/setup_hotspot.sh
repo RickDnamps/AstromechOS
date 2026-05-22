@@ -36,7 +36,9 @@
 
 set -e
 
-SSID="AstromechOS"
+# Per-robot SSID (Astromech_Control_XXXX, suffix from the Pi serial) so multiple
+# robots don't collide at expos/conventions. Override: SSID=MyName sudo bash …
+SSID="${SSID:-$(bash "$(dirname "$0")/gen_hotspot_ssid.sh" 2>/dev/null || echo 'Astromech_Control')}"
 PASSPHRASE="r2d2droid"
 HOTSPOT_IP="192.168.4.1"
 DHCP_RANGE_START="192.168.4.2"

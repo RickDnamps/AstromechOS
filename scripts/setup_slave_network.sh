@@ -111,8 +111,11 @@ echo ""
 HOTSPOT_SSID=""
 HOTSPOT_PASS=""
 
-read -r -p "  Master hotspot SSID [AstromechOS]: " INPUT
-HOTSPOT_SSID="${INPUT:-AstromechOS}"
+# Each Master now has a per-robot SSID (Astromech_Control_XXXX). Enter the EXACT
+# SSID shown during the Master network setup (or in master/config/local.cfg
+# [hotspot] ssid). The default is only the base name in case it was overridden.
+read -r -p "  Master hotspot SSID [Astromech_Control]: " INPUT
+HOTSPOT_SSID="${INPUT:-Astromech_Control}"
 
 while true; do
     read -r -s -p "  Hotspot password                  : " HOTSPOT_PASS
