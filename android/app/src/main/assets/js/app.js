@@ -825,7 +825,7 @@ const backupMgr = {
     // Android WebView: blob / <a download> don't save — hand off to the native
     // DownloadManager (handles the admin header + saves to Downloads).
     if (window.AndroidBridge && typeof window.AndroidBridge.downloadBackup === 'function') {
-      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 15);
+      const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);  // YYYYMMDDHHMMSS (15 included the '.' before ms)
       window.AndroidBridge.downloadBackup(base + '/backup/download', 'AstromechOS_Backup_' + ts + '.bck', tok);
       toast('Backup saving to your device…', 'ok');
       return;
@@ -1755,6 +1755,7 @@ function switchTab(tabId) {
   if (tabId !== 'choreo') {
     _choreoUnlocked = false;
     choreoEditor._stopPolling();
+    if (choreoEditor._hideTooltip) choreoEditor._hideTooltip();  // don't let the block tooltip bleed onto other tabs (touch: no mouseleave)
     if (typeof _chorMon !== 'undefined' && _chorMon.pause) _chorMon.pause();
   }
 
@@ -12133,7 +12134,9 @@ function _applyRobotIcon(icon) {
       wrap.replaceChildren();
       const img = document.createElement('img');
       img.className = 'brand-icon-img';
-      img.src = '/icons/' + encodeURIComponent(fname);
+      // Prepend the API base — in the Android WebView (file:// origin) a bare
+      // '/icons/...' resolves to file:///icons/... and fails to load.
+      img.src = (window.R2D2_API_BASE || '') + '/icons/' + encodeURIComponent(fname);
       img.alt = 'icon';
       wrap.appendChild(img);
     } else {
@@ -12187,7 +12190,7 @@ async function loadIconPicker() {
     btn.title = fname;
 
     const img = document.createElement('img');
-    img.src = '/icons/' + encodeURIComponent(fname);
+    img.src = (window.R2D2_API_BASE || '') + '/icons/' + encodeURIComponent(fname);  // base for WebView (file://)
     img.alt = fname;
     img.style.cssText = 'width:30px;height:30px;object-fit:contain;border-radius:4px';
     btn.appendChild(img);
@@ -13371,6 +13374,11 @@ const choreoEditor = (() => {
     block.addEventListener('mouseenter', e => _showTooltip(e, track, item));
     block.addEventListener('mousemove',  e => _positionTooltip(e));
     block.addEventListener('mouseleave', ()  => _hideTooltip());
+    // Touch: mouseleave never fires from a finger, so the body-level fixed
+    // tooltip would stick (and bleed onto other tabs). pointerleave/cancel DO
+    // fire on touch release.
+    block.addEventListener('pointerleave',  () => _hideTooltip());
+    block.addEventListener('pointercancel', () => _hideTooltip());
     return block;
   }
 
@@ -14287,7 +14295,7 @@ const choreoEditor = (() => {
     _probeToken = (_probeToken + 1) | 0;
     _probeAudio._token = _probeToken;
     _probeAudio._ctx = { track, idx };
-    _probeAudio.src = `/audio/file/${encodeURIComponent(value)}`;
+    _probeAudio.src = `${window.R2D2_API_BASE || ''}/audio/file/${encodeURIComponent(value)}`;  // base for WebView (file://)
     _probeAudio.load();
   }
 
@@ -15258,5 +15266,10 @@ const choreoEditor = (() => {
 
     // Stop the status poll — called by onTabSwitch when leaving the choreo tab
     _stopPolling,
+
+    // Hide the floating block tooltip — called by onTabSwitch when leaving the
+    // choreo tab. The tooltip is body-level position:fixed and on touch there's
+    // no mouseleave to hide it, so without this it bleeds onto Drive/other tabs.
+    _hideTooltip,
   };
 })();
