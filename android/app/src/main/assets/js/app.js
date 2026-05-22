@@ -13087,6 +13087,32 @@ const choreoEditor = (() => {
       btn.addEventListener('dragend', () => {
         document.querySelectorAll('.chor-lane.drag-over').forEach(l => l.classList.remove('drag-over'));
       });
+
+      // Touch fallback (tablet / no mouse): HTML5 drag doesn't fire from a
+      // finger, so a TAP/click on a palette chip ADDS a block to its track
+      // (after the last block, or t=0), selects it, and opens the inspector to
+      // set the exact START time. Works on desktop click too.
+      btn.addEventListener('click', () => {
+        let tpl;
+        try { tpl = JSON.parse(btn.dataset.tpl); } catch { return; }
+        const track = btn.dataset.track;
+        if (!_chor) { toast('Load a choreography first', 'error'); return; }
+        if (!_chor.tracks[track]) _chor.tracks[track] = [];
+        const lane = _chor.tracks[track];
+        const last = lane.length ? lane[lane.length - 1] : null;
+        const maxT = Math.max(20, _calcPlaybackDuration() + 10);
+        const t = _snap(Math.min(last ? (last.t || 0) + (last.duration || 1) : 0, maxT));
+        const newItem = { ...tpl, t };
+        lane.push(newItem);
+        lane.sort((a, b) => a.t - b.t);
+        _setDirty(true);
+        _renderTrack(track);
+        _refreshLayout();
+        if (track === 'audio') _validateAudioOverflow();
+        const idx = _chor.tracks[track].indexOf(newItem);
+        if (track !== 'dome') _selectBlock(track, idx);
+        toast(`${track} block added → ${t.toFixed(2)}s (set START in inspector)`, 'ok');
+      });
     });
   }
 
