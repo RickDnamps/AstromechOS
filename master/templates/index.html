@@ -596,8 +596,8 @@
       <!-- Reconcile sounds (admin only) — toggled by showUploadZone -->
       <div id="audio-reconcile-row" style="display:none;margin-top:8px;text-align:right">
         <button class="btn btn-sm" onclick="audioBoard.reconcileSounds(this)"
-                title="Compare l'index aux fichiers réellement présents sur le robot : retire les sons manquants, range les nouveaux dans others.">
-          🔄 Vérifier les sons
+                title="Reconciles the index with the files actually present on the robot: removes missing sounds, files new ones under 'others'.">
+          🔄 Verify sounds
         </button>
       </div>
     </div>
@@ -2383,8 +2383,8 @@
           </button>
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title">BACKUP / RESTORE</h3>
-          <div class="settings-note">Sauvegarde complète (.bck) : configs, sons, choreos, calibrations, thèmes. À garder en lieu sûr — contient les identifiants WiFi + le mot de passe admin.</div>
-          <button id="btn-backup" class="btn" style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Créer une sauvegarde</button>
+          <div class="settings-note">Full backup (.bck): configs, sounds, choreos, calibration, themes. Keep it safe — it contains the WiFi credentials + admin password.</div>
+          <button id="btn-backup" class="btn" style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Create backup</button>
           <div id="backup-progress-wrap" style="display:none;margin-top:10px">
             <div style="height:14px;background:rgba(var(--blue-rgb),0.12);border-radius:7px;overflow:hidden">
               <div id="backup-progress-fill" style="height:100%;width:0%;background:var(--blue);transition:width .3s"></div>

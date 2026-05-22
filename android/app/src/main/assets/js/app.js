@@ -798,11 +798,11 @@ const backupMgr = {
   async start(btn) {
     const r = await apiDetail('/backup/start', 'POST', {}, 8000);
     if (!r.ok || !(r.data && r.data.ok)) {
-      toast((r.data && r.data.error) || 'Impossible de démarrer la sauvegarde', 'error');
+      toast((r.data && r.data.error) || 'Backup failed to start', 'error');
       return;
     }
     this._show(true);
-    this._setBar(0, 'Démarrage…');
+    this._setBar(0, 'Starting…');
     this._poll();
   },
   _poll() {
@@ -813,18 +813,18 @@ const backupMgr = {
       const d = r.data;
       this._setBar(d.pct, d.phase);
       if (!d.done) { this._poll(); return; }
-      if (d.error) { toast('Sauvegarde échouée : ' + d.error, 'error'); this._show(false); return; }
+      if (d.error) { toast('Backup failed: ' + d.error, 'error'); this._show(false); return; }
       await this._download();
       this._show(false);
     }, 700);
   },
   async _download() {
-    this._setBar(100, 'Téléchargement…');
+    this._setBar(100, 'Downloading…');
     const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken) ? adminGuard.getToken() : '';
     try {
       const res = await fetch((window.R2D2_API_BASE || '') + '/backup/download',
                               { headers: tok ? { 'X-Admin-Pw': tok } : {} });
-      if (!res.ok) { toast('Téléchargement échoué', 'error'); return; }
+      if (!res.ok) { toast('Download failed', 'error'); return; }
       const cd = res.headers.get('Content-Disposition') || '';
       const m = cd.match(/filename=([^;]+)/);
       const name = m ? m[1].trim().replace(/["']/g, '') : 'AstromechOS_Backup.bck';
@@ -834,8 +834,8 @@ const backupMgr = {
       a.href = url; a.download = name;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
-      toast('Sauvegarde téléchargée ✓', 'ok');
-    } catch (e) { toast('Téléchargement échoué', 'error'); }
+      toast('Backup downloaded ✓', 'ok');
+    } catch (e) { toast('Download failed', 'error'); }
   },
   _show(on) {
     const w = document.getElementById('backup-progress-wrap');
@@ -5457,18 +5457,18 @@ class AudioBoard {
     const run = async () => {
       const r = await apiDetail('/audio/reconcile', 'POST', {}, 30000);
       if (!r.ok || !r.data || !r.data.ok) {
-        throw new Error((r.data && r.data.error) || r.error || 'Échec de la vérification');
+        throw new Error((r.data && r.data.error) || r.error || 'Verification failed');
       }
       const removed = (r.data.removed || []).length;
       const added = (r.data.added_to_others || []).length;
-      toast(`Sons vérifiés — ${removed} retiré(s), ${added} ajouté(s) dans others`, 'ok');
+      toast(`Sounds verified — ${removed} removed, ${added} added to others`, 'ok');
       await this.loadCategories();
     };
     try {
       if (btn && typeof withSaveFeedback === 'function') await withSaveFeedback(btn, run);
       else await run();
     } catch (e) {
-      toast(e.message || 'Échec de la vérification des sons', 'error');
+      toast(e.message || 'Sound verification failed', 'error');
     }
   }
 
