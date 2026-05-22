@@ -18,7 +18,8 @@ import zipfile
 
 from flask import Blueprint, request, jsonify, send_file, after_this_request
 from master.api._admin_auth import require_admin, get_json_object
-from master.api.backup_core import validate_theme, BACKUP_FILESET, build_manifest
+from master.api.backup_core import (validate_theme, BACKUP_FILESET, build_manifest,
+                                     is_safe_member, validate_manifest, merge_local_cfg)
 from shared.paths import SLAVE_SOUNDS as _SLAVE_SOUNDS
 
 log = logging.getLogger(__name__)
@@ -224,3 +225,191 @@ def backup_download():
         return resp
 
     return send_file(p, as_attachment=True, download_name=os.path.basename(p))
+
+
+# ── Restore (B.2): streaming upload → validate/zip-slip → distribute → reboot ─
+_RESTORE_MAX = 200 * 1024 * 1024  # 200 MB cap for the uploaded .bck
+_RESTORE_TMP = os.path.join(tempfile.gettempdir(), 'astrorestore.bck')
+_restore_lock = threading.Lock()
+_restore_job = {'running': False, 'pct': 0, 'phase': '', 'done': False, 'error': None}
+
+
+def _mkdirs_remote(sftp, path):
+    cur = ''
+    for p in [seg for seg in path.strip('/').split('/') if seg]:
+        cur += '/' + p
+        try:
+            sftp.stat(cur)
+        except IOError:
+            try:
+                sftp.mkdir(cur)
+            except IOError:
+                pass
+
+
+def _run_restore(bck_path):
+    """Validate + anti-zip-slip, then distribute: SLAVE first (network up) →
+    reboot slave over UART → master files (local.cfg MERGED so the live network
+    config is preserved) → reboot master."""
+    import master.registry as reg
+    job = _restore_job
+    stage = tempfile.mkdtemp(prefix='astrore_')
+    try:
+        job.update(phase='Validating', pct=5)
+        with zipfile.ZipFile(bck_path) as z:
+            names = z.namelist()
+            if 'manifest.json' not in names:
+                raise ValueError('no manifest.json — not an AstromechOS backup')
+            if not validate_manifest(json.loads(z.read('manifest.json'))):
+                raise ValueError('unsupported/invalid manifest')
+            # Anti zip-slip: validate EVERY member before extracting anything.
+            for n in names:
+                if n == 'manifest.json' or n.endswith('/'):
+                    continue
+                if not is_safe_member(n, stage):
+                    raise ValueError(f'unsafe path in archive: {n}')
+            z.extractall(stage)
+
+        from master.api.audio_bp import _slave_sftp_creds, _sftp_atomic_put
+
+        # 1) SLAVE first (network still up), then reboot slave over UART.
+        slave_root = os.path.join(stage, 'slave')
+        if os.path.isdir(slave_root):
+            job.update(phase='Restoring slave', pct=30)
+            import paramiko
+            c = paramiko.SSHClient()
+            c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            c.connect(**_slave_sftp_creds())
+            try:
+                sftp = c.open_sftp()
+                try:
+                    for root, _, fs in os.walk(slave_root):
+                        for fn in fs:
+                            full = os.path.join(root, fn)
+                            rel = os.path.relpath(full, slave_root).replace(os.sep, '/')
+                            remote = f'{_SLAVE_REPO}/slave/{rel}'
+                            _mkdirs_remote(sftp, posixpath.dirname(remote))
+                            _sftp_atomic_put(sftp, remote, full)
+                finally:
+                    sftp.close()
+            finally:
+                c.close()
+        try:
+            if reg.uart:
+                reg.uart.send('REBOOT', '1')
+        except Exception:
+            pass
+
+        # 2) Master files. local.cfg is MERGED (live network sections preserved).
+        job.update(phase='Restoring master', pct=65)
+        master_root = os.path.join(stage, 'master')
+        master_real = os.path.realpath(os.path.join(_REPO, 'master'))
+        if os.path.isdir(master_root):
+            for root, _, fs in os.walk(master_root):
+                for fn in fs:
+                    full = os.path.join(root, fn)
+                    rel = os.path.relpath(full, master_root).replace(os.sep, '/')
+                    tgt = os.path.realpath(os.path.join(_REPO, 'master', rel))
+                    if tgt != master_real and not tgt.startswith(master_real + os.sep):
+                        continue   # defense in depth (zip-slip already validated)
+                    os.makedirs(os.path.dirname(tgt), exist_ok=True)
+                    if rel == 'config/local.cfg':
+                        backup_text = open(full, encoding='utf-8').read()
+                        try:
+                            live_text = open(tgt, encoding='utf-8').read()
+                        except OSError:
+                            live_text = ''
+                        data = merge_local_cfg(backup_text, live_text)
+                        tmp = tgt + '.tmp'
+                        with open(tmp, 'w', encoding='utf-8') as f:
+                            f.write(data)
+                            f.flush()
+                            try:
+                                os.fsync(f.fileno())
+                            except OSError:
+                                pass
+                        os.replace(tmp, tgt)
+                    else:
+                        tmp = tgt + '.tmp'
+                        shutil.copy2(full, tmp)
+                        os.replace(tmp, tgt)
+
+        job.update(phase='Rebooting', pct=95, done=True)
+        from master.api.status_bp import _spawn_reboot
+        _spawn_reboot(['sudo', 'systemctl', 'reboot'])
+    except Exception as e:
+        log.exception('restore failed')
+        job.update(error=str(e), done=True)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+        try:
+            os.remove(bck_path)
+        except OSError:
+            pass
+        job['running'] = False
+
+
+@backup_bp.post('/restore/upload')
+@require_admin
+def restore_upload():
+    """Stream the uploaded .bck to a temp file. Reads the raw WSGI input
+    directly so Flask's 16 MB MAX_CONTENT_LENGTH (enforced on request.stream /
+    form parsing) does NOT apply — a ~70 MB backup uploads fine, bounded by
+    our own _RESTORE_MAX."""
+    stream = request.environ.get('wsgi.input')
+    if stream is None:
+        return jsonify({'ok': False, 'error': 'no input stream'}), 400
+    try:
+        clen = int(request.environ.get('CONTENT_LENGTH') or 0)
+    except (TypeError, ValueError):
+        clen = 0
+    if clen > _RESTORE_MAX:
+        return jsonify({'ok': False, 'error': 'file too large (max 200MB)'}), 413
+    remaining = clen if clen > 0 else _RESTORE_MAX
+    total = 0
+    try:
+        with open(_RESTORE_TMP, 'wb') as f:
+            while remaining > 0:
+                chunk = stream.read(min(256 * 1024, remaining))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > _RESTORE_MAX:
+                    f.close()
+                    os.remove(_RESTORE_TMP)
+                    return jsonify({'ok': False, 'error': 'file too large (max 200MB)'}), 413
+                f.write(chunk)
+                remaining -= len(chunk)
+    except OSError as e:
+        return jsonify({'ok': False, 'error': f'upload failed: {e}'}), 500
+    if not zipfile.is_zipfile(_RESTORE_TMP):
+        try:
+            os.remove(_RESTORE_TMP)
+        except OSError:
+            pass
+        return jsonify({'ok': False, 'error': 'not a valid .bck (zip)'}), 400
+    return jsonify({'ok': True, 'token': 'astrorestore.bck', 'bytes': total})
+
+
+@backup_bp.post('/restore/apply')
+@require_admin
+def restore_apply():
+    body = get_json_object()
+    token = body.get('token') if isinstance(body, dict) else None
+    if token != 'astrorestore.bck':
+        return jsonify({'ok': False, 'error': 'bad token'}), 400
+    if not os.path.exists(_RESTORE_TMP):
+        return jsonify({'ok': False, 'error': 'no uploaded backup'}), 404
+    with _restore_lock:
+        if _restore_job['running']:
+            return jsonify({'ok': False, 'error': 'restore already running'}), 409
+        _restore_job.update(running=True, pct=0, phase='Starting', done=False, error=None)
+    threading.Thread(target=_run_restore, args=(_RESTORE_TMP,), daemon=True, name='restore-job').start()
+    return jsonify({'ok': True})
+
+
+@backup_bp.get('/restore/status')
+@require_admin
+def restore_status():
+    j = _restore_job
+    return jsonify({'pct': j['pct'], 'phase': j['phase'], 'done': j['done'], 'error': j['error']})
