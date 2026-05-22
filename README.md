@@ -164,11 +164,11 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | | |
 |---|---|
 | 🎭 **48 behavioral sequences** | One-click coordinated performances — sound · dome · panels · lights · loop mode |
-| 🎼 **Choreography timeline editor** | Multi-track drag-and-drop · VESC · audio · servos · lights · admin-guarded Save/Delete |
+| 🎼 **Choreography timeline editor** | Multi-track · VESC · audio · servos · lights · admin-guarded Save/Delete · **full touch support** (drag from palette to add, drag to move, drag-edge to resize — all work on a tablet, not just mouse) |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo/NVIDIA Shield direct to Pi · zero lag · battery % · RSSI · 2×2 axis grouping (DRIVE / LOOK) · premium header card with status LED + MAC pill |
 | 🎯 **BT Custom Button Actions** | **Per-controller profiles** keyed by MAC — bind ANY button to `play_choreo` / `play_sound` / `play_random_audio` / `arms_toggle` / `body_panel_toggle` / `dome_panel_toggle`. **Press-to-capture** workflow: click 🎯 CAPTURE NEW BUTTON, press the physical button, it's bound. Two NVIDIA Shields plug in → each remembers its own bindings independently. MAC resolution falls back to `bluetoothctl` for controllers that don't expose `evdev.uniq` (NVIDIA Shield, several 8BitDo). Validation by action type at save AND at trigger (defense-in-depth) |
 | 🔊 **324 authentic astromech sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
-| 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included |
+| 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included · **tablet/touch-optimized** (file picker for restore/upload, native backup download, touch drag-and-drop in the editor) |
 | 🛡️ **Triple safety watchdog** | App 600ms · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
 | 🚨 **VESC safety lock** | Blocks drive when ESC offline or faulted · bench mode bypass for bench testing |
 | 📊 **Cockpit Status Panel** | Real-time robot snapshot from any tab — HAT health · VESC · RP2040 screen · Pi temps · IPs · E-STOP overlay |

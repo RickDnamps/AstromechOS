@@ -254,6 +254,12 @@ To create a new category, use the **Create Category** panel below the upload zon
 
 Choreo categories (create / rename / reorder / delete) are managed from the category panel in the CHOREO tab — no file editing required.
 
+**Editing the timeline (mouse *and* touch):**
+- **Add a block** — drag an action from the left palette (AUDIO / LIGHT / DOME / servos / DRIVE) onto its lane and drop it where you want it in time. On a tablet just drag with your finger, or **tap** a palette chip to drop the block at the end (then set its START in the inspector).
+- **Move a block** — drag it left/right along its lane. Dragging it fully off the timeline deletes it (with an UNDO toast).
+- **Resize a block** — drag its right edge. On a tablet the edge handle is always visible and finger-sized; on desktop it appears on hover.
+- **SNAP / ZOOM** live in the bottom bar (next to the elapsed/total time). The time ruler shows finer marks (every second) when zoomed in and coarser ones when zoomed out.
+
 **Choreo editor toolbar — admin mode only:**
 
 The toolbar buttons **RENAME · SAVE · DELETE · EXPORT · IMPORT** are only visible when admin is unlocked. Non-admins can still open, edit, and play choreographies — they just cannot persist changes to disk.
