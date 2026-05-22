@@ -125,15 +125,36 @@ def classify_member(member_name: str):
 NETWORK_PRESERVE_SECTIONS = {'home_wifi', 'hotspot', 'deploy', 'slave', 'github'}
 
 
+def is_allowed_restore_member(side: str, rel: str) -> bool:
+    """True if `rel` (relative to the side root, e.g. 'config/local.cfg') is an
+    allowed restore target per BACKUP_FILESET. This is the defense the zip-slip
+    check CANNOT provide: it stops a crafted .bck from overwriting CODE
+    (e.g. master/main.py, api/*.py) — which, with the post-restore reboot,
+    would be remote code execution. `side` is 'master' or 'slave'."""
+    if side not in BACKUP_FILESET or '..' in rel.split('/'):
+        return False
+    prefix = side + '/'
+    for entry in BACKUP_FILESET[side]:
+        e = entry[len(prefix):] if entry.startswith(prefix) else entry
+        if e.endswith('/'):
+            if rel == e[:-1] or rel.startswith(e):
+                return True
+        elif rel == e:
+            return True
+    return False
+
+
 def merge_local_cfg(backup_text: str, live_text: str) -> str:
     """Return a local.cfg = backup content, but with NETWORK_PRESERVE_SECTIONS
-    taken from the LIVE config. Pure string -> string."""
+    taken from the LIVE config. Pure string -> string. Uses RawConfigParser so a
+    '%' in a WiFi/admin password is preserved verbatim (BasicInterpolation would
+    raise)."""
     import configparser
     import io
-    bak = configparser.ConfigParser()
+    bak = configparser.RawConfigParser()
     bak.optionxform = str
     bak.read_string(backup_text)
-    live = configparser.ConfigParser()
+    live = configparser.RawConfigParser()
     live.optionxform = str
     live.read_string(live_text or '')
     for sec in NETWORK_PRESERVE_SECTIONS:

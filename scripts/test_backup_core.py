@@ -87,3 +87,24 @@ def test_merge_local_cfg_preserves_network():
     assert 'LIVE_AP' in out and 'livepass' in out       # network kept from LIVE
     assert 'OLD_AP' not in out and 'oldpass' not in out  # backup network dropped
     assert 'name = R2-D2' in out                         # content restored from backup
+
+def test_merge_local_cfg_percent_in_password():
+    # A '%' in a WiFi/admin password must not raise (RawConfigParser, no interp).
+    backup = "[robot]\nname = R2-D2\n"
+    live = "[hotspot]\nssid = AP\npassword = pa%ss\n"
+    out = merge_local_cfg(backup, live)
+    assert 'pa%ss' in out
+
+
+# ---- restore allow-list (B.2, anti-RCE) ----
+def test_restore_allowlist():
+    from master.api.backup_core import is_allowed_restore_member as ok
+    assert ok('master', 'config/local.cfg')
+    assert ok('master', 'choreographies/dance.chor')
+    assert ok('slave', 'sounds/A.mp3')
+    assert ok('slave', 'config/servo_angles.json')
+    # CODE must be rejected (RCE vector via a crafted .bck + auto-reboot)
+    assert not ok('master', 'main.py')
+    assert not ok('master', 'api/backup_bp.py')
+    assert not ok('slave', 'main.py')
+    assert not ok('master', 'config/../../etc/x')
