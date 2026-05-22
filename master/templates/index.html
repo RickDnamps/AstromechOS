@@ -849,15 +849,7 @@
       <!-- TRANSPORT: play / stop -->
       <button class="btn btn-active btn-sm" id="chor-btn-play" onclick="choreoEditor.play()">▶ PLAY</button>
       <button class="btn btn-danger btn-sm" id="chor-btn-stop" onclick="choreoEditor.stop()">⏹ STOP</button>
-      <div class="chor-cmd-sep"></div>
-      <span class="chor-cmd-label">SNAP</span>
-      <button class="chor-snap-btn active" id="chor-snap-01" onclick="choreoEditor.setSnap(0.1)">0.1s</button>
-      <button class="chor-snap-btn" id="chor-snap-05" onclick="choreoEditor.setSnap(0.5)">0.5s</button>
-      <button class="chor-snap-btn" id="chor-snap-off" onclick="choreoEditor.setSnap(0)">OFF</button>
-      <div class="chor-cmd-sep"></div>
-      <span class="chor-cmd-label">ZOOM</span>
-      <button class="btn btn-sm" onclick="choreoEditor.zoom(-10)">−</button>
-      <button class="btn btn-sm" onclick="choreoEditor.zoom(10)">+</button>
+      <!-- SNAP + ZOOM moved to the timeline footer (declutters this bar on tablet) -->
       <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
         <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.renameChor()">✏️ RENAME</button>
         <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.save()">💾 SAVE</button>
@@ -1017,12 +1009,24 @@
 
     </div><!-- /chor-body -->
 
-    <!-- ── Footer status bar — timecode + duration ──────────────── -->
+    <!-- ── Footer status bar — timecode + duration (left) · SNAP/ZOOM (centered) ── -->
     <div class="chor-footer">
-      <span class="chor-footer-label">⏱</span>
-      <span class="chor-footer-time" id="chor-timecode">00:00.000</span>
-      <span class="chor-footer-sep">/</span>
-      <span class="chor-footer-dur" id="chor-duration">—</span>
+      <div class="chor-footer-timegroup">
+        <span class="chor-footer-label">⏱</span>
+        <span class="chor-footer-time" id="chor-timecode">00:00.000</span>
+        <span class="chor-footer-sep">/</span>
+        <span class="chor-footer-dur" id="chor-duration">—</span>
+      </div>
+      <div class="chor-footer-controls">
+        <span class="chor-cmd-label">SNAP</span>
+        <button class="chor-snap-btn active" id="chor-snap-01" onclick="choreoEditor.setSnap(0.1)">0.1s</button>
+        <button class="chor-snap-btn" id="chor-snap-05" onclick="choreoEditor.setSnap(0.5)">0.5s</button>
+        <button class="chor-snap-btn" id="chor-snap-off" onclick="choreoEditor.setSnap(0)">OFF</button>
+        <div class="chor-cmd-sep"></div>
+        <span class="chor-cmd-label">ZOOM</span>
+        <button class="chor-snap-btn" onclick="choreoEditor.zoom(-10)">−</button>
+        <button class="chor-snap-btn" onclick="choreoEditor.zoom(10)">+</button>
+      </div>
     </div>
 
   </div><!-- /chor-layout -->

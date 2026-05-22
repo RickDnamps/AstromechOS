@@ -6481,10 +6481,32 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   align-items: center;
   gap: 6px;
   padding: 0 12px;
-  height: 26px;
+  height: 34px;                 /* was 26px — room for the relocated SNAP/ZOOM controls */
   flex-shrink: 0;
   border-top: 1px solid rgba(var(--blue-rgb),.10);
   background: rgba(4,10,22,.97);
+  position: relative;           /* anchor for the absolutely-centered controls */
+}
+.chor-footer-timegroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+/* SNAP + ZOOM, centered in the footer regardless of the timecode width */
+.chor-footer-controls {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+/* Touch: taller footer + bigger tap targets for the SNAP/ZOOM controls */
+@media (hover: none) and (pointer: coarse) {
+  .chor-footer { height: 42px; }
+  .chor-footer-controls .chor-snap-btn { padding: 6px 11px; font-size: 11px; }
+  .chor-footer-controls .chor-cmd-label { font-size: 10px; }
 }
 .chor-footer-label {
   font-size: 11px;
