@@ -13314,16 +13314,27 @@ const choreoEditor = (() => {
     if (!ruler) return;
     const fullW = _liquidWidth(duration);
     const total = Math.ceil(_sec(fullW));
-    const fp = `${_pxPerSec}|${total}`;
-    if (fp === _rulerFp && ruler.children.length === total + 1) {
+    // Adaptive tick interval: pick the smallest "nice" step that keeps labels
+    // at least MIN_LABEL_PX apart, so a short/zoomed-in timeline shows
+    // 0s 1s 2s 3s… while a zoomed-out one falls back to 5s/10s/30s… — never
+    // just "0s" (too sparse) and never an unreadable crowd of labels.
+    const MIN_LABEL_PX = 50, MIN_MINOR_PX = 7;
+    const NICE = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
+    let labelStep = NICE[NICE.length - 1];
+    for (const n of NICE) { if (n * _pxPerSec >= MIN_LABEL_PX) { labelStep = n; break; } }
+    // Unlabeled minor ticks subdivide the label step, dropped if too dense.
+    let minorStep = labelStep >= 5 ? labelStep / 5 : 1;
+    if (minorStep * _pxPerSec < MIN_MINOR_PX) minorStep = labelStep;
+    const fp = `${_pxPerSec}|${total}|${labelStep}|${minorStep}`;
+    if (fp === _rulerFp && ruler.children.length > 0) {
       const canvas = document.getElementById('chor-canvas');
       if (canvas) canvas.style.width = fullW + 'px';
       return;
     }
     _rulerFp = fp;
     ruler.replaceChildren();
-    for (let s = 0; s <= total; s++) {
-      const major = s % 5 === 0;
+    for (let s = 0; s <= total; s += minorStep) {
+      const major = (s % labelStep === 0);
       const tick  = document.createElement('div');
       tick.className = 'chor-tick' + (major ? ' major' : '');
       tick.style.left = _px(s) + 'px';
