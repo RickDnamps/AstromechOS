@@ -851,6 +851,71 @@ const backupMgr = {
   },
 };
 
+// ── Restore (B.2): confirm → upload .bck → apply → poll → reboot wait → reload ─
+const restoreMgr = {
+  _timer: null,
+  pick() { const i = document.getElementById('restore-file-input'); if (i) i.click(); },
+  async upload(input) {
+    const file = input.files && input.files[0];
+    input.value = '';
+    if (!file) return;
+    if (!confirm('RESTORE overwrites ALL current sounds, choreos, configs, calibration and themes with this backup, then reboots the robot. (Your network config is preserved.) Continue?')) return;
+    this._show(true);
+    this._setBar(5, 'Uploading…');
+    const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken) ? adminGuard.getToken() : '';
+    let up;
+    try {
+      const res = await fetch((window.R2D2_API_BASE || '') + '/restore/upload',
+                              { method: 'POST', headers: tok ? { 'X-Admin-Pw': tok } : {}, body: file });
+      up = await res.json();
+      if (!res.ok || !up.ok) { toast('Upload failed: ' + ((up && up.error) || res.status), 'error'); this._show(false); return; }
+    } catch (e) { toast('Upload failed', 'error'); this._show(false); return; }
+    this._setBar(10, 'Applying…');
+    const ap = await apiDetail('/restore/apply', 'POST', { token: up.token }, 8000);
+    if (!ap.ok || !(ap.data && ap.data.ok)) {
+      toast('Restore failed to start: ' + ((ap.data && ap.data.error) || ap.error || ''), 'error');
+      this._show(false); return;
+    }
+    this._poll(0);
+  },
+  _poll(fails) {
+    clearTimeout(this._timer);
+    this._timer = setTimeout(async () => {
+      const r = await apiDetail('/restore/status', 'GET', null, 4000);
+      if (!r.ok || !r.data) {
+        if (fails >= 2) { this._rebootWait(); return; }   // master likely rebooting
+        this._poll(fails + 1); return;
+      }
+      const d = r.data;
+      this._setBar(Math.max(10, d.pct || 0), d.phase);
+      if (d.error) { toast('Restore failed: ' + d.error, 'error'); this._show(false); return; }
+      if (d.phase === 'Rebooting' || d.done) { this._rebootWait(); return; }
+      this._poll(0);
+    }, 800);
+  },
+  _rebootWait() {
+    this._setBar(100, 'Rebooting — robot will be back shortly…');
+    const back = setInterval(async () => {
+      try {
+        const res = await fetch((window.R2D2_API_BASE || '') + '/status', { cache: 'no-store' });
+        if (res.ok) { clearInterval(back); location.reload(); }
+      } catch (e) { /* still down */ }
+    }, 3000);
+  },
+  _show(on) {
+    const w = document.getElementById('restore-progress-wrap');
+    if (w) w.style.display = on ? 'block' : 'none';
+    const b = document.getElementById('btn-restore');
+    if (b) b.disabled = on;
+  },
+  _setBar(pct, phase) {
+    const fill = document.getElementById('restore-progress-fill');
+    if (fill) fill.style.width = (pct || 0) + '%';
+    const txt = document.getElementById('restore-progress-text');
+    if (txt) txt.textContent = (phase || '') + ' — ' + (pct || 0) + '%';
+  },
+};
+
 // F-6: single-in-flight slot for /motion/arcade and /motion/drive POSTs.
 // The joystick onMove fires at 60Hz; on a slow network these can stack up
 // in the browser's HTTP/1.1 queue and arrive out of order on the Pi. Worse,

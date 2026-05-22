@@ -2391,6 +2391,14 @@
             </div>
             <div id="backup-progress-text" style="font-size:11px;margin-top:4px;color:var(--text-dim)"></div>
           </div>
+          <input type="file" id="restore-file-input" accept=".bck" style="display:none" onchange="restoreMgr.upload(this)">
+          <button id="btn-restore" class="btn btn-warn" style="width:100%;margin-top:8px" onclick="restoreMgr.pick()">⬆ Restore from backup…</button>
+          <div id="restore-progress-wrap" style="display:none;margin-top:10px">
+            <div style="height:14px;background:rgba(var(--blue-rgb),0.12);border-radius:7px;overflow:hidden">
+              <div id="restore-progress-fill" style="height:100%;width:0%;background:var(--amber,#ffaa44);transition:width .3s"></div>
+            </div>
+            <div id="restore-progress-text" style="font-size:11px;margin-top:4px;color:var(--text-dim)"></div>
+          </div>
 
           <div class="settings-divider"></div>
           <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
