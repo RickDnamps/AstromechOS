@@ -215,6 +215,32 @@ function _saveCustomThemesStore(list) {
   localStorage.setItem(_CUSTOM_THEMES_KEY, JSON.stringify(list));
 }
 
+// Server persistence (best-effort). Succeeds for admins → custom themes become
+// multi-device + included in the backup. Non-admins keep localStorage only.
+function _persistThemeToServer(entry) {
+  try { if (typeof api === 'function') api('/themes/custom', 'POST', { theme: entry }); } catch (e) {}
+}
+function _deleteThemeOnServer(id) {
+  try { if (typeof api === 'function') api('/themes/custom/' + encodeURIComponent(id), 'DELETE'); } catch (e) {}
+}
+// On load: pull server themes into the local cache (so every device sees the
+// shared themes); first-time migration pushes existing localStorage themes up.
+async function _syncThemesFromServer() {
+  try {
+    if (typeof api !== 'function') return;
+    const data = await api('/themes/custom');
+    const server = (data && Array.isArray(data.themes)) ? data.themes : null;
+    if (server === null) return;                       // unreachable → keep cache
+    const local = _loadCustomThemes();
+    if (server.length === 0 && local.length > 0) {
+      for (const t of local) _persistThemeToServer(t);  // one-shot migrate up
+    } else if (JSON.stringify(server) !== JSON.stringify(local)) {
+      _saveCustomThemesStore(server);                   // server = source of truth
+      if (typeof _renderThemePicker === 'function') _renderThemePicker();
+    }
+  } catch (e) {}
+}
+
 function _hexToRgbStr(hex) {
   return [
     parseInt(hex.slice(1,3),16),
@@ -401,6 +427,7 @@ function saveCustomTheme() {
   }
   list.push(entry);
   _saveCustomThemesStore(list);
+  _persistThemeToServer(entry);
   document.getElementById('theme-editor').style.display = 'none';
   _renderThemePicker();
   applyTheme(entry.id);
@@ -408,6 +435,7 @@ function saveCustomTheme() {
 
 function deleteCustomTheme(id) {
   _saveCustomThemesStore(_loadCustomThemes().filter(c => c.id !== id));
+  _deleteThemeOnServer(id);
   _renderThemePicker();
   if (_activeTheme === id) applyTheme('default');
 }
@@ -546,6 +574,9 @@ function _initThemes() {
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) _restoreActiveTheme();
   });
+  // B.0: pull server-side custom themes into the local cache (multi-device);
+  // first run migrates existing localStorage themes up to the server.
+  _syncThemesFromServer();
 }
 
 // Apply saved theme immediately when script loads — before first paint
