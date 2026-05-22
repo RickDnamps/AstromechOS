@@ -494,7 +494,9 @@ body::after {
      row (icon + label) so it sits beside ALIVE/camera without overlapping the
      joysticks/shortcuts (was absolute top-left). */
   z-index: 10;
-  background: rgba(0, 0, 0, 0.5);
+  height: 38px;                 /* unified with .alive-btn + .cam-toggle-btn */
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.4);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
@@ -502,8 +504,8 @@ body::after {
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 5px 9px;
+  gap: 7px;
+  padding: 0 14px;
   /* smooth all transitions */
   transition: border-color 0.2s, color 0.2s, background 0.2s,
               box-shadow 0.2s, transform 0.15s;
@@ -551,11 +553,12 @@ body[data-lock-mode="2"] .drive-lock-btn:hover { box-shadow: 0 0 12px rgba(220,5
 
 .drive-lock-label {
   font-family: var(--font);
-  font-size: 9px;
-  letter-spacing: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   line-height: 1;
   text-align: center;
-  max-height: 12px;
+  max-height: 24px;
   overflow: hidden;
   transition: max-height 0.2s, opacity 0.2s;
 }
@@ -774,18 +777,22 @@ body[data-lock-mode="2"] #js-left-ring::after {
 
 /* Camera toggle button */
 .cam-toggle-btn {
-  background: none;
-  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius);
   color: var(--text-dim);
   cursor: pointer;
-  padding: 6px 8px;
-  display: flex;
+  height: 38px;                 /* unified with .alive-btn + .drive-lock-btn */
+  box-sizing: border-box;
+  padding: 0 14px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: border-color 0.2s, color 0.2s;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
   flex-shrink: 0;
 }
+.cam-toggle-btn svg { width: 24px; height: 17px; }   /* bigger icon */
+.cam-toggle-btn:active { transform: scale(0.96); }
 
 .cam-toggle-btn.cam-on {
   border-color: var(--blue);
@@ -1565,18 +1572,24 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 /* ALIVE mode toggle button — Drive tab */
 .alive-btn {
   flex-shrink: 0;
-  padding: 6px 14px;
-  font-size: 11px;
+  height: 38px;                 /* unified with .drive-lock-btn + .cam-toggle-btn */
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  font-size: 12px;
   font-family: inherit;
   font-weight: 700;
-  letter-spacing: .1em;
+  letter-spacing: .12em;
   color: var(--text-dim);
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
   cursor: pointer;
-  transition: color .15s, border-color .15s, box-shadow .15s;
+  transition: color .15s, border-color .15s, background .15s, box-shadow .15s, transform .15s;
 }
+.alive-btn:active { transform: scale(0.96); }
 .alive-btn:hover {
   color: var(--text);
   border-color: var(--blue);
