@@ -6860,6 +6860,18 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   cursor: col-resize;
   background: linear-gradient(90deg, transparent, var(--surface-subtle));
 }
+/* Touch devices have no hover to reveal the resize handle (so it stays
+   invisible) and a finger can't hit an 8px strip — show it permanently and
+   widen it into a finger-friendly grip. Desktop (hover) keeps the thin
+   reveal-on-hover handle above. */
+@media (hover: none) and (pointer: coarse) {
+  .chor-block .chor-block-resize {
+    opacity: 1;
+    width: 22px;
+    background: linear-gradient(90deg, transparent 30%, rgba(var(--blue-rgb), 0.5));
+    border-right: 2px solid rgba(var(--blue-rgb), 0.9);
+  }
+}
 
 /* ── Markers ──────────────────────────────────────────────────── */
 .chor-marker { position:absolute; top:0; bottom:0; width:1px; background:var(--amber); opacity:.6; pointer-events:none; z-index:5; }
