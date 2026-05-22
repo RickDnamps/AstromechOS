@@ -1,0 +1,135 @@
+# ============================================================
+# R2-D2 Project — .gitignore
+# ============================================================
+
+# Config locale — NE JAMAIS commiter (contient WiFi + GitHub URL)
+master/config/local.cfg
+
+# Camera settings — propres à chaque installation
+master/config/camera.env
+
+# Calibrations servo — propres à chaque robot, ne jamais écraser au git pull
+# (les fichiers dans git servent de valeurs par défaut à l'installation initiale seulement)
+master/config/dome_angles.json
+slave/config/servo_angles.json
+
+# ------------------------------------------------------------
+# Runtime "working" dirs — robot-local state. The app reads/writes
+# here; defaults ship in the *_default/ seed dirs and *.example
+# templates, copied in on install (copy-new-only, never overwrites).
+# Keeps git pull from ever blocking on operator edits + survives reset.
+# ------------------------------------------------------------
+slave/sounds/
+master/choreographies/
+slave/config/slave.cfg
+master/config/choreo_categories.json
+master/config/bt_config.json
+master/config/shortcuts.json
+
+# Mémoire locale Claude Code
+.claude/
+
+# Outils Claude Code / superpowers (local uniquement)
+.clone/
+.superpowers/
+
+# AI agent context files — used locally by Claude Code / Codex / other
+# assistants for project context. NOT pushed: they leak the development
+# workflow + AI co-authorship into the public repo.
+CLAUDE.md
+AGENTS.md
+
+# Beads issue tracker — local development state, not part of the
+# shippable code. The .beads/ directory contains dolt-backed issue
+# history, hooks, and config that only matter to the dev environment.
+.beads/
+
+# Captures d'écran et images locales
+feedbacks/
+image/
+
+# Gradle local cache (généré automatiquement)
+android/.gradle/
+
+# Code de référence tiers (r2_control by dpoulson)
+others/
+
+
+# Dépendances vendored (générées par vendor_deps.sh)
+slave/vendor/
+
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Logs
+*.log
+
+# Rotation backups (rotate_backup writes .bak1/.bak2/.bak3 next to atomic-
+# written config/state files) — robot-local, never part of the repo.
+*.bak[0-9]
+
+# Dossiers de debug générés automatiquement
+debug/
+
+# Environnements virtuels
+.env
+.envrc
+.venv
+env/
+venv/
+ENV/
+
+# Tests / coverage
+.coverage
+.coverage.*
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# Type checkers
+.mypy_cache/
+.dmypy.json
+.pytype/
+.pyre/
+.ruff_cache/
+
+# Outils divers
+.pypirc
+__pypackages__/
+.pdm-python
+.pdm-build/
+.pixi
+celerybeat-schedule
+celerybeat.pid
+*.sage.py
+
+# IDE
+.idea/
+.vscode/
+.spyderproject
+.ropeproject
+
+# Jupyter
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# Docs
+/site
+docs/_build/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

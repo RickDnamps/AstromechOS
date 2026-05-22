@@ -1,0 +1,21 @@
+[Unit]
+Description=AstromechOS Master Monitor (watchdog systemd)
+After=astromech-master.service
+
+[Service]
+Type=simple
+User=artoo
+# Redémarre astromech-master s'il est inactif depuis plus de 10s
+ExecStart=/bin/bash -c '\
+  while true; do \
+    sleep 10; \
+    if ! systemctl is-active --quiet astromech-master; then \
+      echo "astromech-master inactif — redémarrage" | systemd-cat -t astromech-monitor; \
+      systemctl start astromech-master; \
+    fi; \
+  done'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

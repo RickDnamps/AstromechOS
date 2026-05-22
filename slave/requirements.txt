@@ -1,0 +1,6 @@
+pyserial>=3.5
+adafruit-circuitpython-pca9685>=2.4.0
+smbus2>=0.4.0
+RPi.GPIO>=0.7.1
+# Audio: mpg123 (apt) — no pip package needed
+# VESC: native CRC-16/CCITT implementation in vesc_can.py — pyvesc NOT required

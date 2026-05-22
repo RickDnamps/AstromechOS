@@ -1,0 +1,1373 @@
+# ============================================================
+#   █████╗  ██████╗ ███████╗
+#  ██╔══██╗██╔═══██╗██╔════╝
+#  ███████║██║   ██║███████╗
+#  ██╔══██║██║   ██║╚════██║
+#  ██║  ██║╚██████╔╝███████║
+#  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+#
+#  AstromechOS — Open control platform for astromech builders
+# ============================================================
+#  Copyright (C) 2026 RickDnamps
+#  https://github.com/RickDnamps/AstromechOS
+#
+#  This file is part of AstromechOS.
+#
+#  AstromechOS is free software: you can redistribute it
+#  and/or modify it under the terms of the GNU General
+#  Public License as published by the Free Software
+#  Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  AstromechOS is distributed in the hope that it will be
+#  useful, but WITHOUT ANY WARRANTY; without even the implied
+#  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE. See the GNU General Public License for details.
+#
+#  You should have received a copy of the GNU GPL along with
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
+# ============================================================
+"""
+Blueprint API Status — Phase 4.
+Reports AstromechOS system state in real time.
+
+Endpoints:
+  GET  /status              → full JSON state
+  GET  /status/version      → Master + Slave versions
+  POST /system/reboot       → reboot Master
+  POST /system/reboot_slave → reboot Slave (via UART)
+"""
+
+import configparser
+import datetime
+import glob
+import logging
+import os
+import subprocess
+import threading
+import time as _time
+from flask import Blueprint, request, jsonify
+from master.api._admin_auth import require_admin
+import master.registry as reg
+from master.app_watchdog import app_watchdog
+from master.vesc_safety import is_drive_safe
+from master.safe_stop import is_drive_ramp_active, is_dome_ramp_active
+
+from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, VERSION_FILE, SCRIPTS_DIR
+
+log = logging.getLogger(__name__)
+
+
+# Tiny TTL cache around configparser so the /status endpoint (polled at 1 Hz
+# per client) does not re-parse main.cfg + local.cfg five times per call. The
+# cache is invalidated by stat'ing local.cfg's mtime, so settings_bp writes
+# are visible on the next poll without manual invalidation.
+_CFG_CACHE: dict = {'cfg': None, 'mtime': 0.0, 'expires': 0.0}
+_CFG_TTL_S = 2.0
+
+
+def _cached_cfg() -> configparser.ConfigParser:
+    now = _time.time()
+    try:
+        mtime = max(
+            os.path.getmtime(_MAIN_CFG)  if os.path.exists(_MAIN_CFG)  else 0.0,
+            os.path.getmtime(_LOCAL_CFG) if os.path.exists(_LOCAL_CFG) else 0.0,
+        )
+    except OSError:
+        mtime = 0.0
+    if (_CFG_CACHE['cfg'] is None
+            or _CFG_CACHE['mtime'] != mtime
+            or _CFG_CACHE['expires'] < now):
+        cfg = configparser.ConfigParser()
+        cfg.read([_MAIN_CFG, _LOCAL_CFG])
+        _CFG_CACHE['cfg']     = cfg
+        _CFG_CACHE['mtime']   = mtime
+        _CFG_CACHE['expires'] = now + _CFG_TTL_S
+    return _CFG_CACHE['cfg']
+
+
+def _iface_ip(iface: str) -> str | None:
+    """B-213 (remaining tabs audit 2026-05-15): cached for 5s. IP
+    addresses don't change between two adjacent /status polls in
+    practice, but the ioctl was running per-iface per-client per-poll."""
+    now = _time.monotonic()
+    cached = _IFACE_CACHE.get(iface)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    try:
+        import socket, struct, fcntl
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        raw = fcntl.ioctl(s.fileno(), 0x8915, struct.pack('256s', iface[:15].encode()))
+        v = socket.inet_ntoa(raw[20:24])
+    except OSError:
+        v = None
+    _IFACE_CACHE[iface] = (now + 5.0, v)
+    return v
+
+
+def _slave_host() -> str:
+    return _cached_cfg().get('slave', 'host', fallback='r2-slave.local')
+
+
+def _battery_cells() -> int:
+    # E5 fix 2026-05-16: tolerate empty/garbage 'cells=' without
+    # crashing /status. configparser.getint raises on non-int strings;
+    # cells='' → ValueError → 500 → entire status tab dead until cfg fix.
+    try:
+        v = int(_cached_cfg().get('battery', 'cells', fallback='4').strip() or '4')
+        return v if v > 0 else 4
+    except (ValueError, TypeError):
+        return 4
+
+
+def _battery_chemistry() -> str:
+    """W4 fix 2026-05-16: expose chemistry to /status so BatteryGauge
+    can pick the correct per-cell thresholds (LiFePO4 vs Li-ion).
+    Was: gauge hardcoded LiPo math → LiFePO4 packs read as red-empty
+    even when full."""
+    chem = _cached_cfg().get('battery', 'chemistry', fallback='liion').strip().lower()
+    return chem if chem in ('liion', 'lipo', 'lifepo4') else 'liion'
+
+
+def _robot_name() -> str:
+    return _cached_cfg().get('robot', 'name', fallback='R2-D2')
+
+
+def _robot_icon() -> str:
+    return _cached_cfg().get('robot', 'icon', fallback='')
+
+
+def _robot_location(key: str, fallback: str) -> str:
+    return _cached_cfg().get('robot', key, fallback=fallback)
+
+
+def _mem_info() -> dict | None:
+    try:
+        info = {}
+        with open('/proc/meminfo') as f:
+            for line in f:
+                k, v = line.split(':', 1)
+                info[k.strip()] = int(v.strip().split()[0])
+        total     = info.get('MemTotal', 0)
+        available = info.get('MemAvailable', 0)
+        used      = total - available
+        return {
+            'used_mb':  round(used / 1024),
+            'total_mb': round(total / 1024),
+            'free_mb':  round(available / 1024),
+        }
+    except Exception:
+        return None
+
+
+def _disk_info() -> dict | None:
+    try:
+        st = os.statvfs('/')
+        total = st.f_blocks * st.f_frsize
+        free  = st.f_bavail * st.f_frsize
+        used  = total - free
+        return {
+            'used_gb':  round(used  / 1024**3, 1),
+            'total_gb': round(total / 1024**3, 1),
+            'free_gb':  round(free  / 1024**3, 1),
+        }
+    except Exception:
+        return None
+
+
+_cpu_prev: tuple[int, int] | None = None  # (idle, total) from last call
+
+
+def _cpu_pct() -> float | None:
+    global _cpu_prev
+    try:
+        with open('/proc/stat') as f:
+            parts = f.readline().split()
+        vals  = [int(x) for x in parts[1:]]
+        idle  = vals[3] + (vals[4] if len(vals) > 4 else 0)  # idle + iowait
+        total = sum(vals)
+        if _cpu_prev is None:
+            _cpu_prev = (idle, total)
+            return None
+        d_idle, d_total = idle - _cpu_prev[0], total - _cpu_prev[1]
+        _cpu_prev = (idle, total)
+        if d_total == 0:
+            return 0.0
+        return round((1 - d_idle / d_total) * 100, 1)
+    except Exception:
+        return None
+
+try:
+    from master.api import camera_bp as _cam_bp
+except ImportError:
+    # B-212 (remaining tabs audit 2026-05-15): narrow to ImportError.
+    # Bare `except Exception` masked NameError / AttributeError / any
+    # syntax bug in camera_bp — /status would silently report
+    # `camera_active: false` instead of surfacing the failure. Per
+    # project feedback_silent_import_swallow policy.
+    _cam_bp = None
+
+status_bp = Blueprint('status', __name__)
+
+
+
+# B-213 (remaining tabs audit 2026-05-15): TTL caches for the fs reads
+# that /status hits every 2s × N clients. VERSION + iface IPs change
+# rarely (deploy or network event); 5s TTL is fine and turns ~20+
+# syscalls/sec into ~4. Temp + uptime change continuously but only at
+# ~1Hz granularity; 1s TTL halves the syscall rate without UI lag.
+_VERSION_CACHE: dict = {'value': None, 'expires': 0.0}
+_UPTIME_CACHE:  dict = {'value': None, 'expires': 0.0}
+_TEMP_CACHE:    dict = {'value': None, 'expires': 0.0}
+_IFACE_CACHE:   dict = {}   # {iface: (expires, value)}
+
+
+def _read_version() -> str:
+    now = _time.monotonic()
+    if _VERSION_CACHE['value'] is not None and _VERSION_CACHE['expires'] > now:
+        return _VERSION_CACHE['value']
+    try:
+        with open(VERSION_FILE, encoding='utf-8') as f:
+            v = f.read().strip()
+    except OSError:
+        v = 'unknown'
+    _VERSION_CACHE['value']   = v
+    _VERSION_CACHE['expires'] = now + 5.0
+    return v
+
+
+def _uptime() -> str:
+    now = _time.monotonic()
+    if _UPTIME_CACHE['value'] is not None and _UPTIME_CACHE['expires'] > now:
+        return _UPTIME_CACHE['value']
+    try:
+        with open('/proc/uptime', 'r') as f:
+            seconds = float(f.readline().split()[0])
+        v = str(datetime.timedelta(seconds=int(seconds)))
+    except OSError:
+        v = 'unknown'
+    _UPTIME_CACHE['value']   = v
+    _UPTIME_CACHE['expires'] = now + 1.0
+    return v
+
+
+def _cpu_temp() -> float | None:
+    now = _time.monotonic()
+    if _TEMP_CACHE['expires'] > now:
+        return _TEMP_CACHE['value']
+    try:
+        with open('/sys/class/thermal/thermal_zone0/temp') as f:
+            v = round(int(f.read().strip()) / 1000, 1)
+    except OSError:
+        v = None
+    _TEMP_CACHE['value']   = v
+    _TEMP_CACHE['expires'] = now + 1.0
+    return v
+
+
+def _is_default_admin_password() -> bool:
+    """W2 fix 2026-05-16: True if [admin] password equals 'deetoo'
+    (the documented default). Used by /status to drive the SYSTEM
+    panel banner."""
+    try:
+        from master.api.settings_bp import _get_admin_password
+        return _get_admin_password() == 'deetoo'
+    except Exception:
+        return False
+
+
+def _shortcut_states_snapshot() -> dict:
+    """E7 fix 2026-05-16: snapshot the shortcuts dispatcher's in-memory
+    state dict for /status sync. Returns {} if shortcuts blueprint not
+    initialized (e.g. import-order edge case at boot)."""
+    try:
+        from master.api.shortcuts_bp import _state_dict
+        return dict(_state_dict())
+    except Exception:
+        return {}
+
+
+def _vesc_side_ok(telem, max_age: float = 2.0) -> bool:
+    """True = drive allowed for this VESC side. UI-layer convenience wrapper
+    around vesc_safety._side_ok — the previous standalone implementation
+    diverged from vesc_safety's stricter "None telem always unsafe" rule
+    (B-13: UI status pill and the drive gate disagreed about which side
+    was offline). Now both paths share one source of truth.
+
+    Bench mode still bypasses entirely — the UI keeps green pills so the
+    dev can see the bench mode is doing what they asked for."""
+    if bool(getattr(reg, 'vesc_bench_mode', False)):
+        return True
+    if telem is None:
+        return False
+    if _time.monotonic() - telem.get('ts', 0) > max_age:
+        return False
+    return telem.get('fault', 0) == 0
+
+
+def _fresh_telem(side: str, max_age: float = 2.0) -> dict | None:
+    """Return reg.vesc_telem[side] if fresh, else None.
+
+    Reported by user 2026-05-14: unplugging the Left VESC kept showing
+    battery + temperature values in the top bar and cockpit Status panel
+    even though the side was correctly flagged offline elsewhere. Cause:
+    the per-side stat fields (`battery_voltage`, `vesc_temp`,
+    `vesc_l_temp` etc.) read reg.vesc_telem[...] directly without a
+    timestamp check, so the LAST received frame from before the
+    disconnect was served forever. This helper centralises the
+    staleness guard so every display path sees a consistent "telem
+    expired → None" view, matching the existing _vesc_side_ok gate
+    used for the drive safety check.
+    """
+    telem = reg.vesc_telem.get(side)
+    if telem is None:
+        return None
+    if _time.monotonic() - telem.get('ts', 0) > max_age:
+        return None
+    return telem
+
+
+def _compute_next_idle_s():
+    """WOW L1-W 2026-05-15: compute seconds until next idle reaction,
+    or None if alive disabled / no last_activity. Mirrors the calc in
+    behavior_bp.get_status."""
+    be = reg.behavior_engine
+    if not be:
+        return None
+    try:
+        alive = be._cfg.getboolean('behavior', 'alive_enabled', fallback=False)
+        if not alive:
+            return None
+        idle_timeout_min = be._cfg.getfloat('behavior', 'idle_timeout_min', fallback=10.0)
+        last = reg.last_activity
+        if last <= 0:
+            return None
+        idle_at = last + (idle_timeout_min * 60.0)
+        return max(0, round(idle_at - _time.monotonic(), 1))
+    except Exception:
+        return None
+
+
+@status_bp.get('/status')
+def get_status():
+    """Full AstromechOS system state."""
+    _uart_serial = getattr(reg.uart, '_serial', None)
+    uart_ready   = bool(_uart_serial and _uart_serial.is_open
+                        and getattr(reg.uart, '_running', False))
+    # HB  = application heartbeat App ↔ Master (AppWatchdog)
+    # UART = serial link Master ↔ Slave
+    heartbeat_ok = app_watchdog.is_connected
+    # BT controller status
+    bt_status = reg.bt_ctrl.get_status() if reg.bt_ctrl else {}
+    # B-10 (audit 2026-05-15): snapshot choreo state ONCE — two
+    # is_playing() calls used to race a concurrent stop, producing
+    # {choreo_playing:True, choreo_name:None} which the frontend
+    # treated as 'no cards running' and cleared every highlight for
+    # one tick. Compute the pair atomically here.
+    # One get_status() call so playing/name/uses_* are observed
+    # atomically. A separate is_playing() + get_status() pair could
+    # see (True, name=None) if the choreo stops between the calls;
+    # the result is safe but the indicator briefly disagrees with
+    # the lockout. Read once, derive everything from the snapshot.
+    _choreo_status  = reg.choreo.get_status() if reg.choreo else {}
+    _choreo_playing = bool(_choreo_status.get('playing'))
+    _choreo_name    = _choreo_status.get('name') if _choreo_playing else None
+    _choreo_uses_prop   = bool(_choreo_status.get('uses_propulsion')) if _choreo_playing else False
+    _choreo_uses_dome   = bool(_choreo_status.get('uses_dome'))       if _choreo_playing else False
+    _choreo_uses_lights = bool(_choreo_status.get('uses_lights'))     if _choreo_playing else False
+    # B4/B5/E3 fix 2026-05-16: surface the current Teeces/AstroPixels
+    # mode (canonical string) so the frontend can re-sync chip+button
+    # state on every poll. Without this, the UI lied after page reload
+    # or after any animation/text/raw click (the matching backend
+    # endpoints DID update _mode but it was never exposed).
+    try:
+        from master.api.teeces_bp import current_teeces_mode
+        _teeces_mode = current_teeces_mode()
+    except Exception:
+        _teeces_mode = None
+    return jsonify({
+        'robot_name':        _robot_name(),
+        'robot_icon':        _robot_icon(),
+        'master_location':   _robot_location('master_location', 'Dome'),
+        'slave_location':    _robot_location('slave_location',  'Body'),
+        'version':      _read_version(),
+        'uptime':       _uptime(),
+        'temperature':  _cpu_temp(),
+        'heartbeat_ok': heartbeat_ok,   # App ↔ Master
+        'uart_ready':   uart_ready,     # Master ↔ Slave UART
+        'app_hb_age_ms': app_watchdog.last_hb_age_ms,
+        # Aggregate stats over BOTH sides — but skip stale frames so a
+        # disconnected VESC stops contributing voltage/temp values after
+        # the 2s staleness threshold. Audit finding M-1 2026-05-15:
+        # we used to call _fresh_telem six separate times in this dict
+        # literal, so a UART RX callback updating reg.vesc_telem
+        # between reads could land battery_voltage from frame N and
+        # vesc_temp from frame N+1 on the SAME /status response.
+        # Snapshot once, reuse three times.
+        **(lambda L=_fresh_telem('L'), R=_fresh_telem('R'): {
+            'battery_voltage':
+                next((t['v_in']  for t in (L, R) if t and t.get('v_in')),  None),
+            'vesc_temp':
+                max((t['temp']   for t in (L, R) if t and t.get('temp') is not None), default=None),
+            'vesc_duty':
+                max((abs(t['duty']) for t in (L, R) if t and t.get('duty') is not None), default=None),
+        })(),
+        'teeces_ready':     bool(reg.teeces     and reg.teeces.is_ready()),
+        'vesc_ready':       bool(reg.vesc       and reg.vesc.is_ready()),
+        'dome_ready':       bool(reg.dome       and reg.dome.is_ready()),
+        'servo_ready':      bool(reg.servo      and reg.servo.is_ready()),
+        'dome_servo_ready': bool(reg.dome_servo and reg.dome_servo.is_ready()),
+        'choreo_playing':         _choreo_playing,
+        'choreo_name':            _choreo_name,
+        'choreo_uses_propulsion': _choreo_uses_prop,
+        'choreo_uses_dome':       _choreo_uses_dome,
+        'choreo_uses_lights':     _choreo_uses_lights,
+        'teeces_mode':            _teeces_mode,
+        # Bug B3 fix 2026-05-15: surface choreo abort_reason globally so
+        # the StatusPoller can toast an undervoltage/overheat/uart_loss
+        # event even when operator is on a non-Choreo tab. Previously
+        # only the Choreo-tab abort modal saw this (silent abort if op
+        # is elsewhere = SAFETY visibility gap).
+        'choreo_abort_reason':    _choreo_status.get('abort_reason'),
+        'uart_health':       reg.slave_uart_health,          # None si Slave injoignable
+        'uart_crc_errors':   reg.uart.crc_errors if reg.uart else 0,  # consecutive invalid CRC on Master side
+        # ms since the last heartbeat ACK from the Slave; None until first ACK.
+        # Distinguishes "Slave dead" (rising age) from "Slave alive but TX
+        # corrupted" (CRC errors but ACK age stays low).
+        'slave_hb_age_ms':   reg.uart.hb_ack_age_ms if reg.uart else None,
+        'audio_playing':     reg.audio_playing,
+        'audio_current':     reg.audio_current,
+        'lock_mode':         reg.lock_mode,
+        'kids_speed_limit':  float(getattr(reg, 'kids_speed_limit', 0.5)),
+        'child_dome_speed_limit': float(getattr(reg, 'child_dome_speed_limit', 0.3)),
+        'estop_active':      reg.estop_active,
+        # Audit finding Safety L-5 2026-05-15: surface stow_in_progress
+        # so the frontend can swap the E-STOP button text to
+        # 'STOWING…' during the ~3s safe-home window. Without this, the
+        # button flips back to 'EMERGENCY STOP' immediately on Reset
+        # while servos are still slewing — operator confusion.
+        'stow_in_progress':  bool(getattr(reg, 'stow_in_progress', False)),
+        # Audit reclass R1 2026-05-15: surface anti-tip ramp state
+        # so the joystick UI can show a visual hint during the 400ms
+        # ramp-down (operator release → re-press immediately gets a
+        # silent 503 'safety_ramp' otherwise → "joystick broken?").
+        'drive_ramp_active': bool(is_drive_ramp_active()),
+        'dome_ramp_active':  bool(is_dome_ramp_active()),
+        'lights_backend':    type(reg.teeces).__name__.replace('Driver', '').lower() if reg.teeces else 'none',
+        # E7 fix 2026-05-16: surface shortcut toggle states so two
+        # browser tabs / Web + Android stay in sync. Without this,
+        # tab A presses arms_toggle → tab B indicator stays stale
+        # until full reload. Tiny payload (~50 bytes for 12 entries).
+        'shortcut_states':   _shortcut_states_snapshot(),
+        # W2 fix 2026-05-16: surface default-password state so the
+        # SYSTEM panel can show a red banner. Boolean only — never
+        # leak the actual password.
+        'admin_pwd_is_default': _is_default_admin_password(),
+        'vesc_l_ok':         _vesc_side_ok(reg.vesc_telem.get('L')),
+        'vesc_r_ok':         _vesc_side_ok(reg.vesc_telem.get('R')),
+        'vesc_drive_safe':   is_drive_safe(),
+        'vesc_bench_mode':   bool(reg.vesc_bench_mode),
+        # WOW HW1 2026-05-15: expose power_scale so the Drive speed
+        # slider can show '60% × 50% = 30%' effective output. Operator
+        # at a show wonders 'why is the bot sluggish' — the answer is
+        # the scale. Now visible directly on Drive.
+        # 2026-05-15 fix: read reg.vesc_power_scale (the registry-stored
+        # value), NOT reg.vesc._speed_limit which is a private VescDriver
+        # attribute that stays at the default 1.0 until manually pushed.
+        # /vesc/config exposes power_scale=0.6 but /status was showing
+        # 1.0 — divergence caught live by user testing the HW1 hint.
+        'power_scale':       float(getattr(reg, 'vesc_power_scale', 1.0)),
+        # WOW L1-W 2026-05-15: surface ALIVE state + countdown so the
+        # Drive ALIVE button title shows 'Next reaction in 2:34' without
+        # needing a separate /behavior/status fetch.
+        'alive_enabled':     bool(reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)) if reg.behavior_engine else False,
+        'next_idle_in_s':    _compute_next_idle_s(),
+        'camera_active':     bool(_cam_bp and _cam_bp._active_token > 0),
+        'camera_found':      len(glob.glob('/dev/video*')) > 0,
+        'dome_hat_health':   reg.dome_servo.hat_health() if reg.dome_servo and reg.dome_servo.is_ready() else [],
+        'body_hat_health':   (reg.slave_uart_health or {}).get('body_hat_health', []),
+        'motor_hat_health':  (reg.slave_uart_health or {}).get('motor_hat_health'),
+        'display_ready':     (reg.slave_uart_health or {}).get('display_ready'),
+        'display_port':      (reg.slave_uart_health or {}).get('display_port'),
+        # Per-side stats — also gated by staleness so a disconnected
+        # side returns None (UI shows '--') instead of the last frame.
+        'vesc_l_temp':       (_fresh_telem('L') or {}).get('temp'),
+        'vesc_r_temp':       (_fresh_telem('R') or {}).get('temp'),
+        'vesc_l_curr':       (_fresh_telem('L') or {}).get('current'),
+        'vesc_r_curr':       (_fresh_telem('R') or {}).get('current'),
+        'vesc_l_duty':       (_fresh_telem('L') or {}).get('duty'),
+        'vesc_r_duty':       (_fresh_telem('R') or {}).get('duty'),
+        'vesc_l_rpm':        (_fresh_telem('L') or {}).get('rpm'),
+        'vesc_r_rpm':        (_fresh_telem('R') or {}).get('rpm'),
+        'battery_cells':     _battery_cells(),
+        'battery_chemistry': _battery_chemistry(),
+        'alive_enabled':     bool(reg.behavior_engine and reg.behavior_engine._cfg.getboolean('behavior', 'alive_enabled', fallback=False)),
+        'slave_host':        _slave_host(),
+        'master_wlan0':      _iface_ip('wlan0'),
+        'master_wlan1':      _iface_ip('wlan1'),
+        'master_mem':        _mem_info(),
+        'master_cpu':        _cpu_pct(),
+        'master_disk':       _disk_info(),
+        'slave_temp':        (reg.slave_uart_health or {}).get('cpu_temp'),
+        'slave_cpu':         (reg.slave_uart_health or {}).get('cpu_pct'),
+        'slave_mem':         (reg.slave_uart_health or {}).get('mem'),
+        'slave_disk':        (reg.slave_uart_health or {}).get('disk'),
+        **bt_status,
+    })
+
+
+@status_bp.get('/status/version')
+def get_version():
+    """Master and Slave versions."""
+    return jsonify({'master': _read_version()})
+
+
+_SYSTEM_VERSION_CACHE: dict = {'value': None, 'expires': 0.0}
+
+@status_bp.get('/system/version')
+def system_version():
+    """WOW polish I1 2026-05-15: rich version info for the Deploy panel.
+    Returns current commit SHA + subject + author date so operator
+    knows what's actually deployed BEFORE clicking UPDATE.
+
+    Post-audit fix 2026-05-15 (M-2): TTL cache 30s. LAN-open endpoint
+    — without cache, spam from a LAN attacker would pin a Pi 4B core
+    with 3× git subprocess per hit. Cache key is HEAD SHA → invalidated
+    naturally by next deploy.
+    """
+    import subprocess, time as _t
+    from pathlib import Path
+    now = _t.time()
+    if _SYSTEM_VERSION_CACHE['value'] is not None and _SYSTEM_VERSION_CACHE['expires'] > now:
+        return jsonify(_SYSTEM_VERSION_CACHE['value'])
+    repo = Path(SCRIPTS_DIR).parent if SCRIPTS_DIR else None
+    out = {'version': _read_version()}
+    if repo and repo.exists():
+        try:
+            sha = subprocess.run(
+                ['git', '-C', str(repo), 'rev-parse', 'HEAD'],
+                capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            msg = subprocess.run(
+                ['git', '-C', str(repo), 'log', '-1', '--pretty=%s', 'HEAD'],
+                capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            date = subprocess.run(
+                ['git', '-C', str(repo), 'log', '-1', '--pretty=%cd', '--date=relative', 'HEAD'],
+                capture_output=True, text=True, timeout=2
+            ).stdout.strip()
+            out.update({'commit': sha, 'message': msg, 'date': date})
+        except Exception:
+            pass
+    _SYSTEM_VERSION_CACHE['value']   = out
+    _SYSTEM_VERSION_CACHE['expires'] = now + 30.0
+    return jsonify(out)
+
+
+@status_bp.get('/system/deploy_status')
+@require_admin
+def system_deploy_status():
+    """WOW polish I1 2026-05-15: git fetch + remote SHA comparison so
+    operator sees behind_count BEFORE clicking UPDATE. Cached 60s to
+    avoid hammering GitHub. Returns gracefully if offline."""
+    import subprocess, time as _t
+    from pathlib import Path
+    repo = Path(SCRIPTS_DIR).parent if SCRIPTS_DIR else None
+    if not repo or not repo.exists():
+        return jsonify({'error': 'repo not found'}), 503
+    cache_key = '_deploy_status_cache'
+    cache = getattr(system_deploy_status, cache_key, None)
+    now = _t.time()
+    if cache and cache.get('expires', 0) > now:
+        return jsonify(cache['value'])
+    out = {}
+    try:
+        subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet'],
+                       capture_output=True, timeout=8)
+        local = subprocess.run(
+            ['git', '-C', str(repo), 'rev-parse', 'HEAD'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        remote = subprocess.run(
+            ['git', '-C', str(repo), 'rev-parse', '@{u}'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        remote_msg = subprocess.run(
+            ['git', '-C', str(repo), 'log', '-1', '--pretty=%s', '@{u}'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        behind = subprocess.run(
+            ['git', '-C', str(repo), 'rev-list', '--count', 'HEAD..@{u}'],
+            capture_output=True, text=True, timeout=2
+        ).stdout.strip()
+        out = {
+            'local_sha': local, 'remote_sha': remote,
+            'remote_msg': remote_msg,
+            'behind_count': int(behind) if behind.isdigit() else 0,
+        }
+    except Exception as e:
+        out = {'error': str(e)}
+    setattr(system_deploy_status, cache_key, {'value': out, 'expires': now + 60})
+    return jsonify(out)
+
+
+def _deploy_safety_check() -> tuple[bool, str]:
+    """B6/E2 fix 2026-05-16: shared safety gate for /system/update +
+    /system/rollback. Deploy reboots Slave → instant servo PWM cut →
+    arms/panels fall under gravity, VESCs drop drive state. Refuse
+    if anything risky is in flight."""
+    if reg.estop_active:
+        return False, 'E-STOP active — reset before deploying'
+    if getattr(reg, 'stow_in_progress', False):
+        return False, 'stow in progress — wait for servos to settle'
+    if reg.choreo and reg.choreo.is_playing():
+        return False, 'choreo running — stop it before deploying'
+    if is_drive_ramp_active() or is_dome_ramp_active():
+        return False, 'motion ramping — wait for it to finish'
+    return True, ''
+
+
+@status_bp.post('/system/update')
+@require_admin
+def system_update():
+    """Forces git pull + rsync Slave + reboot Slave + restart Master.
+    B6/E2 fix 2026-05-16: refuse if motion is in flight."""
+    if not reg.deploy:
+        return jsonify({'error': 'DeployController not available'}), 503
+    ok, reason = _deploy_safety_check()
+    if not ok:
+        return jsonify({'error': reason}), 503
+    import threading
+    threading.Thread(target=reg.deploy.update_and_deploy, daemon=True).start()
+    return jsonify({'status': 'ok', 'message': 'Update in progress...'})
+
+
+# E3 fix 2026-05-16: serialize mutation of reg.lock_mode +
+# reg.kids_speed_limit + the cfg write so two concurrent admins (web
+# tab + script + BT button) can't interleave and leave inconsistent
+# state. Module-level threading.Lock — cheap, no contention except
+# during a real mode change.
+import threading as _threading_lock
+_lock_state_lock = _threading_lock.Lock()
+
+
+def _persist_lock_mode(mode: int, kids_limit: float | None, child_dome_limit: float | None = None) -> bool:
+    """Write lock_mode + kids_speed_limit + child_dome_speed_limit to local.cfg [security] under
+    the shared _cfg_write_lock so a Master reboot preserves the state.
+    Audit finding CR-2 (2026-05-15): lock mode lived only in memory.
+    Returns True on successful persist, False on any error (B5 fix
+    2026-05-16: caller must surface persistence failure instead of
+    silently swallowing it)."""
+    try:
+        from master.api.settings_bp import _cfg_write_lock
+        from master.config.config_loader import write_cfg_atomic
+        from shared.paths import LOCAL_CFG
+        import configparser
+        with _cfg_write_lock:
+            cfg = configparser.ConfigParser()
+            cfg.read(LOCAL_CFG)
+            if not cfg.has_section('security'):
+                cfg.add_section('security')
+            cfg.set('security', 'lock_mode', str(mode))
+            if kids_limit is not None:
+                cfg.set('security', 'kids_speed_limit', f'{kids_limit:.3f}')
+            if child_dome_limit is not None:
+                cfg.set('security', 'child_dome_speed_limit', f'{child_dome_limit:.3f}')
+            # write_cfg_atomic signature is (cfg, path) — NOT (path, cfg).
+            write_cfg_atomic(cfg, LOCAL_CFG)
+        return True
+    except Exception:
+        log.exception("Failed to persist lock_mode to local.cfg")
+        return False
+
+
+@status_bp.post('/lock/set')
+def lock_set():
+    """Sets the lock mode: 0=Normal, 1=Kids, 2=ChildLock.
+
+    B3 fix 2026-05-16: keyless ESCALATION ONLY. Going TOWARD a more
+    restrictive mode (0→1, 0→2, 1→2) requires no auth — operator
+    quickly hands the tablet to a kid and locks via the top-right
+    button. Going TOWARD a less restrictive mode (1→0, 2→0, 2→1) is
+    rejected here — operator must use /lock/unlock with password.
+
+    Also allows kids_speed_limit mutation under admin auth (slider in
+    Settings panel). Without admin token: keyless mode change accepted
+    but kids_speed_limit ignored.
+    """
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'expected JSON object'}), 400
+    # E12 fix: bool is subclass of int — reject explicitly
+    raw_mode = body.get('mode', 0)
+    if isinstance(raw_mode, bool):
+        return jsonify({'error': 'mode must be an integer (got bool)'}), 400
+    try:
+        mode = int(raw_mode)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'mode must be an integer'}), 400
+    if mode not in (0, 1, 2):
+        return jsonify({'error': 'invalid mode'}), 400
+    # B3 fix: keyless escalation only. Relaxation requires password.
+    with _lock_state_lock:
+        cur_mode = int(getattr(reg, 'lock_mode', 0) or 0)
+        if mode < cur_mode:
+            return jsonify({
+                'error': 'use /lock/unlock with password to reduce lock level',
+                'current_mode': cur_mode,
+            }), 403
+        # kids_speed_limit requires admin (slider in Settings)
+        kids = None
+        if 'kids_speed_limit' in body:
+            from master.api._admin_auth import _check_admin
+            if not _check_admin(request):
+                return jsonify({'error': 'admin auth required to change kids_speed_limit'}), 401
+            try:
+                raw = body.get('kids_speed_limit', 0.5)
+                if isinstance(raw, bool):
+                    raise ValueError('bool not accepted')
+                kids = float(raw)
+                import math
+                if not math.isfinite(kids):
+                    raise ValueError('not finite')
+                # E15 fix: clamp to a SANE Kids ceiling matching UI range
+                # (5%-60%) instead of 0-100% which made Kids mode equivalent
+                # to Normal at 100%.
+                kids = max(0.05, min(0.60, kids))
+            except (TypeError, ValueError):
+                return jsonify({'error': 'kids_speed_limit must be a finite number (0.05-0.60)'}), 400
+            reg.kids_speed_limit = kids
+        # Batch 3 fix 2026-05-16: child_dome_speed_limit also configurable
+        child_dome = None
+        if 'child_dome_speed_limit' in body:
+            from master.api._admin_auth import _check_admin
+            if not _check_admin(request):
+                return jsonify({'error': 'admin auth required to change child_dome_speed_limit'}), 401
+            try:
+                raw = body.get('child_dome_speed_limit', 0.3)
+                if isinstance(raw, bool):
+                    raise ValueError('bool not accepted')
+                child_dome = float(raw)
+                import math
+                if not math.isfinite(child_dome):
+                    raise ValueError('not finite')
+                # Child speed must stay below Kids (Child is stricter per spec)
+                child_dome = max(0.05, min(0.50, child_dome))
+            except (TypeError, ValueError):
+                return jsonify({'error': 'child_dome_speed_limit must be a finite number (0.05-0.50)'}), 400
+            reg.child_dome_speed_limit = child_dome
+        reg.lock_mode = mode
+        persisted = _persist_lock_mode(mode, kids, child_dome)
+    if not persisted:
+        # B5 fix: surface persistence failure so operator sees the issue
+        return jsonify({
+            'status': 'ok_volatile',
+            'mode': mode,
+            'kids_speed_limit': reg.kids_speed_limit,
+            'persisted': False,
+            'warning': 'mode applied in memory but failed to persist — will revert on reboot',
+        }), 200
+    return jsonify({
+        'status': 'ok',
+        'mode': mode,
+        'kids_speed_limit': reg.kids_speed_limit,
+        'persisted': True,
+    })
+
+
+@status_bp.post('/lock/unlock')
+def lock_unlock():
+    """Operator-facing unlock endpoint — drops out of Kids or Child Lock
+    mode by supplying the admin password.
+
+    B1 fix 2026-05-16: rate-limited per-IP, same window as /settings/
+    admin/verify (10 tries/60s → 5min lockout). Was: unlimited brute
+    force on the SAME admin password that admin_verify protects.
+
+    B2 fix 2026-05-16: only allows mode=0 target. Endpoint name + intent
+    is 'unlock', not 'set any mode with password'. Escalation
+    (Normal→Kids/Lock) goes through /lock/set without auth.
+
+    Server verifies the password (NOT a client-side string compare —
+    audit finding CR-1 2026-05-15: 'deetoo' was hardcoded in app.js).
+    Persists to local.cfg on success."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'expected JSON object'}), 400
+    # B1 fix: rate-limit using same bucket pattern as admin_verify
+    try:
+        from master.api.settings_bp import _verify_rate_check
+        ip = request.remote_addr or 'unknown'
+        allowed, retry = _verify_rate_check(ip)
+        if not allowed:
+            log.warning("lock_unlock rate-limited: %s (retry in %.0fs)", ip, retry)
+            return jsonify({
+                'error': 'too many attempts',
+                'retry_after_s': int(retry),
+            }), 429
+    except Exception:
+        log.exception("lock_unlock rate-limit init failed — failing closed")
+        return jsonify({'error': 'rate-limit unavailable'}), 503
+    # E10 fix: strip whitespace from password — iOS/Android keyboards
+    # autocorrect occasionally inserts trailing spaces which silently
+    # rejected with no operator hint.
+    provided = str(body.get('password') or '').strip()
+    if not provided:
+        # B13 fix: empty password should not consume a rate-limit slot
+        # OR get a generic 'invalid' message — be explicit
+        return jsonify({'error': 'password required'}), 400
+    # B2 fix: only accept mode=0 (true unlock). Escalation must use
+    # /lock/set (keyless).
+    raw_mode = body.get('mode', 0)
+    if isinstance(raw_mode, bool):
+        return jsonify({'error': 'mode must be an integer'}), 400
+    try:
+        target_mode = int(raw_mode)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'mode must be an integer'}), 400
+    if target_mode != 0:
+        return jsonify({
+            'error': '/lock/unlock only accepts mode=0 (use /lock/set for escalation)',
+        }), 400
+    # Reuse the admin password as the lock password — same secret,
+    # same hmac.compare_digest pattern as /settings/admin/verify.
+    try:
+        from master.api.settings_bp import _get_admin_password
+        import hmac
+        expected = _get_admin_password()
+        if not hmac.compare_digest(
+                provided.encode('utf-8'), expected.encode('utf-8')):
+            return jsonify({'error': 'invalid password'}), 401
+    except Exception:
+        log.exception("lock_unlock password check failed")
+        return jsonify({'error': 'auth check failed'}), 500
+    # B1 fix: clear this IP's bucket on success (parity with admin_verify)
+    try:
+        from master.api.settings_bp import _verify_attempts
+        _verify_attempts.pop(request.remote_addr or 'unknown', None)
+    except Exception:
+        pass
+    # E3 fix: serialize the mutation triplet
+    with _lock_state_lock:
+        reg.lock_mode = target_mode
+        persisted = _persist_lock_mode(target_mode, None)
+    log.info("Lock unlock: mode=%d via password from %s",
+             target_mode, request.remote_addr)
+    return jsonify({
+        'status': 'ok',
+        'mode': target_mode,
+        'kids_speed_limit': getattr(reg, 'kids_speed_limit', 0.5),
+        'persisted': persisted,
+    })
+
+
+@status_bp.post('/system/rollback')
+@require_admin
+def system_rollback():
+    """Rolls back to the previous git commit + rsync Slave + reboot Slave.
+    B6/E2 fix 2026-05-16: same safety gate as /system/update."""
+    if not reg.deploy:
+        return jsonify({'error': 'DeployController not available'}), 503
+    ok, reason = _deploy_safety_check()
+    if not ok:
+        return jsonify({'error': reason}), 503
+    import threading
+    threading.Thread(target=reg.deploy.rollback, daemon=True).start()
+    return jsonify({'status': 'ok', 'message': 'Rollback in progress...'})
+
+
+@status_bp.post('/system/resync_slave')
+@require_admin
+def system_resync_slave():
+    """
+    Rsync + service install + restart Slave only.
+    Called automatically by the Slave via HTTP when it detects a version mismatch at boot.
+    """
+    def do_resync():
+        subprocess.run(
+            ['bash', f'{SCRIPTS_DIR}/resync_slave.sh'],
+            check=False
+        )
+    threading.Thread(target=do_resync, daemon=True).start()
+    return jsonify({'status': 'resync_triggered'})
+
+
+# B1/H1/H5 fix 2026-05-16: idempotency lock — was no guard, mass-click
+# REBOOT spawned N sudo reboot threads racing on PAM.
+# H4 fix: shared event for all reboot/shutdown endpoints.
+_system_action_lock = threading.Lock()
+
+
+def _system_action_guard():
+    """Shared gate for all reboot/shutdown endpoints. Refuses if motion
+    in flight (per Deploy audit B6/E2 pattern — reboot kills Slave PWM
+    → arms fall under gravity). Also serializes concurrent actions."""
+    ok, reason = _deploy_safety_check()
+    if not ok:
+        return None, reason
+    if not _system_action_lock.acquire(blocking=False):
+        return None, 'system reboot/shutdown already in progress'
+    return _system_action_lock, None
+
+
+def _spawn_reboot(cmd: list[str]) -> None:
+    """M8 fix 2026-05-16: subprocess.run with explicit 15s timeout."""
+    def _run():
+        try:
+            subprocess.run(cmd, check=False, timeout=15)
+        except subprocess.TimeoutExpired:
+            log.error(f"system command timed out: {cmd}")
+    threading.Thread(target=_run, daemon=True).start()
+
+
+@status_bp.post('/system/reboot')
+@require_admin
+def system_reboot():
+    """Reboots the Master (dome Pi)."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    _spawn_reboot(['sudo', 'reboot'])
+    return jsonify({'status': 'rebooting'})
+
+
+@status_bp.post('/system/reboot_slave')
+@require_admin
+def system_reboot_slave():
+    """Sends a reboot command to the Slave via UART."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    try:
+        if reg.uart:
+            reg.uart.send('REBOOT', '1')
+            return jsonify({'status': 'ok'})
+        return jsonify({'error': 'UART not available'}), 503
+    finally:
+        lock.release()
+
+
+@status_bp.post('/system/reboot_both')
+@require_admin
+def system_reboot_both():
+    """Reboots Slave first (via UART), then Master after a short delay.
+    H3 fix 2026-05-16: send REBOOT 3× spaced 100ms + bumped Master sleep
+    to 2.5s so the UART TX buffer flushes before systemd kills us."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    if reg.uart:
+        # 3x retransmit to defend against TX buffer congestion
+        for _ in range(3):
+            try: reg.uart.send('REBOOT', '1')
+            except Exception: pass
+            _time.sleep(0.1)
+    def _reboot_master():
+        _time.sleep(2.5)
+        subprocess.run(['sudo', 'reboot'], check=False, timeout=15)
+    threading.Thread(target=_reboot_master, daemon=True).start()
+    return jsonify({'status': 'rebooting'})
+
+
+@status_bp.post('/system/shutdown_slave')
+@require_admin
+def system_shutdown_slave():
+    """Sends a shutdown command to the Slave via UART."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    try:
+        if reg.uart:
+            reg.uart.send('SHUTDOWN', '1')
+            return jsonify({'status': 'ok'})
+        return jsonify({'error': 'UART not available'}), 503
+    finally:
+        lock.release()
+
+
+@status_bp.post('/system/shutdown_both')
+@require_admin
+def system_shutdown_both():
+    """Shuts down Slave first (via UART), then Master after a short delay."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    # M6 fix 2026-05-16: stop audio + lights before shutdown so operator
+    # doesn't return to orphaned audio loop after Master is dead.
+    if reg.uart:
+        try: reg.uart.send('S', 'STOP')
+        except Exception: pass
+        for _ in range(3):
+            try: reg.uart.send('SHUTDOWN', '1')
+            except Exception: pass
+            _time.sleep(0.1)
+    def _shutdown_master():
+        _time.sleep(2.5)
+        subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False, timeout=15)
+    threading.Thread(target=_shutdown_master, daemon=True).start()
+    return jsonify({'status': 'shutting down'})
+
+
+@status_bp.post('/system/shutdown')
+@require_admin
+def system_shutdown():
+    """Shuts down the Master."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    _spawn_reboot(['sudo', 'shutdown', '-h', 'now'])
+    return jsonify({'status': 'shutting_down'})
+
+
+@status_bp.post('/system/restart_master')
+@require_admin
+def system_restart_master():
+    """W6 fix 2026-05-16: restart astromech-master.service only (~5s).
+    Faster than full Pi reboot for dev iteration. Slave UART reconnects
+    automatically via heartbeat + BOOT:READY resync."""
+    lock, reason = _system_action_guard()
+    if not lock:
+        return jsonify({'error': reason}), 503
+    _spawn_reboot(['sudo', 'systemctl', 'restart', 'astromech-master.service'])
+    return jsonify({'status': 'restarting'})
+
+
+@status_bp.post('/heartbeat')
+def app_heartbeat():
+    """
+    Application heartbeat — App → Master, every 200ms.
+    If this heartbeat stops for >600ms → emergency stop (AppWatchdog).
+    Ultra-lightweight endpoint: just a timestamp update.
+
+    2026-05-15 (revert): M2 had this returning JSON {estop_active,
+    stow_in_progress} but the user's tablet stopped sending HBs after
+    deploy → false E-STOP fired. Reverting to 204 No Content for now —
+    M2 will be reintroduced via a different channel.
+    """
+    app_watchdog.feed()
+    return '', 204
+
+
+# Slew speed used by the Reset E-STOP safe-home sequence.
+# The body/dome servo drivers accept speed ∈ [1..10] where 10 is fastest
+# (delay = (10-speed)×3ms per 2° step). 3 yields ≈1s for a 90° travel —
+# slow enough to avoid pinch hazards with kids around without dragging on.
+_SAFE_SLEW_SPEED = 3
+
+# Bug C2 fix 2026-05-15: serialize E-STOP transitions so two tablets
+# pressing E-STOP / Reset simultaneously can't race on reg.estop_active
+# and run the freeze chain twice (or flip the flag false→true between
+# the operators' tablet polls). Idempotent: if estop already in the
+# requested state, return the same response without re-running.
+import threading as _threading
+_estop_transition_lock = _threading.Lock()
+
+
+def _do_estop() -> str:
+    """B7 fix 2026-05-16: factor E-STOP logic into a context-free
+    helper so callers without Flask app context (BT gamepad thread,
+    AppWatchdog, etc.) can run the full E-STOP chain.
+
+    Returns the status string ('estop_sent' or 'estop_already_active').
+    Does NOT call jsonify or anything Flask-specific.
+    Idempotent under concurrent callers via _estop_transition_lock.
+    """
+    with _estop_transition_lock:
+        if reg.estop_active:
+            return 'estop_already_active'
+        reg.estop_active = True
+    # B12 fix 2026-05-16: signal any in-progress _safe_home stow to
+    # exit fast. Without this, E-STOP during stow waits up to 12s for
+    # the next wait() to time out before honoring the freeze.
+    stop_evt = getattr(reg, '_safe_home_stop_event', None)
+    if stop_evt is not None:
+        try: stop_evt.set()
+        except Exception: pass
+    # Freeze servos FIRST so in-flight ramps stop writing PWM updates.
+    if reg.dome_servo:
+        try: reg.dome_servo.freeze()
+        except Exception: pass
+    if reg.uart:
+        try: reg.uart.send('FREEZE', '1')
+        except Exception: pass
+    if reg.vesc:
+        try: reg.vesc.stop()
+        except Exception: pass
+    if reg.dome:
+        try: reg.dome.stop()
+        except Exception: pass
+    if reg.choreo:
+        try: reg.choreo.stop()
+        except Exception: pass
+    if reg.uart:
+        try:
+            reg.uart.send('M', '0.0,0.0')
+            reg.uart.send('D', '0.0')
+            reg.uart.send('S', 'STOP')
+        except Exception: pass
+    try:
+        if reg.audio_playing:
+            reg.audio_playing = False
+            reg.audio_current  = ''
+    except Exception: pass
+    if reg.teeces:
+        try: reg.teeces.off()
+        except Exception: pass
+    return 'estop_sent'
+
+
+@status_bp.post('/system/estop')
+def system_estop():
+    """Emergency stop — freeze the robot.
+
+    Cuts propulsion + dome motor + aborts any running choreography. Both
+    servo drivers (Master dome + Slave body) are FROZEN: in-flight ramps
+    abort instantly and the PWM holds at the last commanded angle so
+    servos stay exactly where they are with full torque (no SLEEP, no
+    drooping). Cleanup is a separate operation triggered by /system/estop_reset.
+    """
+    status = _do_estop()
+    return jsonify({'status': status})
+
+
+@status_bp.post('/system/estop_reset')
+@require_admin
+def system_estop_reset():
+    """Clear E-STOP and stow the robot at a safe slew rate.
+
+    B2 fix 2026-05-16: admin-gated. /system/estop stays LAN-open
+    (safety endpoint, anyone must be able to freeze the robot).
+    But /system/estop_reset initiates ~3-5s of physical servo
+    motion — without auth, any LAN device can trigger the stow
+    sequence at will. Now requires admin token.
+
+    Sequence (mirrors the Choreo arm dependency logic but at a slow speed):
+      1. Retract each utility arm (parallel) — speed=_SAFE_SLEW_SPEED
+      2. Wait the per-arm delay, then close its panel — speed=_SAFE_SLEW_SPEED
+      3. Close every remaining body servo (excluding arm-managed ones)
+         in parallel — speed=_SAFE_SLEW_SPEED
+      4. Close every dome servo in parallel — speed=_SAFE_SLEW_SPEED
+
+    All driver calls are wrapped in try/except so a single failed servo
+    cannot abort the rest of the cleanup.
+    """
+    # Bug C2 fix 2026-05-15: idempotent reset — if estop not active,
+    # nothing to reset. Lock prevents two simultaneous resets from
+    # spawning two _safe_home_runner threads.
+    # B5 fix 2026-05-16: set stow_in_progress=True BEFORE clearing
+    # estop_active, so motion endpoints never see a window where BOTH
+    # flags are False (which would let a stale /motion/drive POST
+    # slip through and resume motion before stow starts).
+    with _estop_transition_lock:
+        if not reg.estop_active:
+            return jsonify({'status': 'estop_already_clear'})
+        reg.stow_in_progress = True   # claim the gate FIRST
+        reg.estop_active = False      # then drop estop
+
+    # Unfreeze BEFORE the stow sequence runs — otherwise the close commands
+    # would be rejected at the driver's _move_ramp entry check.
+    if reg.dome_servo:
+        try:
+            reg.dome_servo.unfreeze()
+        except Exception:
+            pass
+    if reg.uart:
+        try:
+            reg.uart.send('FREEZE', '0')
+        except Exception:
+            pass
+
+    def _safe_home():
+        # Lazy import to avoid a circular dependency between the two blueprints.
+        from master.api.servo_bp import (
+            _read_arms_cfg, _read_panels_cfg, _arm_servo_set,
+            _panel_angle, BODY_SERVOS, DOME_SERVOS,
+        )
+
+        panels_cfg = _read_panels_cfg()
+        arms_cfg   = _read_arms_cfg()
+        arm_set    = _arm_servo_set()
+
+        # B12 fix 2026-05-16: shared stop event so a re-pressed E-STOP
+        # can interrupt the stow mid-flight. Set on estop, checked at
+        # every step. _time.sleep replaced with stop_event.wait so the
+        # stow exits within ~50ms of E-STOP instead of waiting up to
+        # 12s for the next sleep to expire.
+        stop_event = reg._safe_home_stop_event = threading.Event()
+
+        # ── Step 1+2: arm-then-panel sequences in parallel ──
+        def _close_arm_then_panel(arm: str, panel: str, delay: float) -> None:
+            if stop_event.is_set(): return
+            if arm and reg.servo:
+                try:
+                    reg.servo.close(arm,
+                                    _panel_angle(arm, 'close', panels_cfg),
+                                    _SAFE_SLEW_SPEED)
+                except Exception:
+                    log.exception("Safe-home: arm close failed: %s", arm)
+            if panel:
+                # B12: interruptible delay
+                if stop_event.wait(max(0.1, min(5.0, float(delay)))):
+                    return  # stop_event was set
+                if reg.servo:
+                    try:
+                        reg.servo.close(panel,
+                                        _panel_angle(panel, 'close', panels_cfg),
+                                        _SAFE_SLEW_SPEED)
+                    except Exception:
+                        log.exception("Safe-home: arm panel close failed: %s", panel)
+
+        arm_threads = []
+        for i in range(arms_cfg['count']):
+            arm   = arms_cfg['servos'][i]
+            panel = arms_cfg['panels'][i]
+            delay = arms_cfg['delays'][i]
+            if not arm:
+                continue
+            t = threading.Thread(
+                target=_close_arm_then_panel,
+                args=(arm, panel, delay),
+                name=f'safehome-arm-{i+1}',
+                daemon=True,
+            )
+            arm_threads.append(t)
+            t.start()
+        # Wait for all arm sequences before continuing — guarantees panels do
+        # not start retracting until the arms they shield are fully home.
+        # 2026-05-16: max travel + per-arm sleep tracked so we can wait
+        # for Slave-side ramps to actually complete (UART is fire-and-
+        # forget; thread returns instantly after send + per-arm delay).
+        max_arm_travel = 0
+        for i in range(arms_cfg['count']):
+            for srv in (arms_cfg['servos'][i], arms_cfg['panels'][i]):
+                if not srv: continue
+                travel = abs(_panel_angle(srv, 'open', panels_cfg)
+                             - _panel_angle(srv, 'close', panels_cfg))
+                if travel > max_arm_travel:
+                    max_arm_travel = travel
+        for t in arm_threads:
+            t.join(timeout=10.0)
+            # Audit finding Safety M-2 2026-05-15: log timeout. If a
+            # servo is stuck, panels will start closing onto an arm
+            # that's still mid-slew. Visible warning gives operator a
+            # chance to intervene; the sequence proceeds (the next
+            # step assumes the previous one completed).
+            if t.is_alive():
+                log.warning("safe_home: arm thread %s did not finish in 10s — proceeding", t.name)
+        # Wait for Slave-side panel ramp to actually finish (the arm
+        # thread returned after sending UART, but Slave is still ramping).
+        # Each arm sends 2 SRV commands (arm + panel) processed
+        # sequentially by Slave's UART dispatch — so wait worst case
+        # 2 × ramp_time per arm.
+        if arm_threads and max_arm_travel > 0:
+            per_ramp_s = (max_arm_travel / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
+            wait_s = min(5.0, 2.0 * per_ramp_s + 0.20)
+            # B12 fix: interruptible — exit fast on re-pressed E-STOP
+            if stop_event.wait(wait_s):
+                log.info("Safe-home: aborted during arm/panel wait")
+                return
+            log.info(f"Safe-home: waited {wait_s:.2f}s for arm/panel Slave ramps")
+
+        # ── Step 3: remaining body servos (skip arm-managed ones) in parallel ──
+        if reg.servo:
+            body_threads = []
+            max_body_travel_deg = 0   # track widest angle delta for sleep below
+            for name in BODY_SERVOS:
+                if name in arm_set:
+                    continue
+                # Estimate expected travel — operator may have opened then
+                # E-STOPped, so worst case is full open→close span.
+                travel = abs(_panel_angle(name, 'open', panels_cfg)
+                             - _panel_angle(name, 'close', panels_cfg))
+                if travel > max_body_travel_deg:
+                    max_body_travel_deg = travel
+                def _close_body(n=name):
+                    try:
+                        reg.servo.close(n,
+                                        _panel_angle(n, 'close', panels_cfg),
+                                        _SAFE_SLEW_SPEED)
+                    except Exception:
+                        log.exception("Safe-home: body close failed: %s", n)
+                bt = threading.Thread(target=_close_body, name=f'safehome-body-{name}',
+                                      daemon=True)
+                body_threads.append(bt)
+                bt.start()
+            for bt in body_threads:
+                bt.join(timeout=5.0)
+            # User-reported 2026-05-16: body servos run on Slave via fire-
+            # and-forget UART — reg.servo.close() returns in ms while the
+            # actual physical ramp runs on Slave for ~1-2s. Worse: the
+            # Slave's UART dispatch thread processes SRV commands
+            # SEQUENTIALLY (per-message _move_ramp blocks). So N body
+            # servos = N × ramp_time on the Slave, not parallel.
+            # Sleep estimated worst-case time so stow_in_progress flag
+            # matches physical reality before UI sees it flip false.
+            n_body = len(body_threads)
+            if n_body > 0 and max_body_travel_deg > 0:
+                # step=2°, delay=(10-speed)*0.003 — matches Slave's ramp.
+                per_ramp_s = (max_body_travel_deg / 2.0) * (10 - _SAFE_SLEW_SPEED) * 0.003
+                total_s = n_body * per_ramp_s + 0.20   # margin
+                actual_wait = min(12.0, total_s)   # cap 12s as safety
+                # B12 fix: interruptible
+                if stop_event.wait(actual_wait):
+                    log.info("Safe-home: aborted during body-servo wait")
+                    return
+                log.info(f"Safe-home: waited {actual_wait:.2f}s "
+                         f"for {n_body} body servos to finish slave-side ramp "
+                         f"(estimated {total_s:.2f}s)")
+                if total_s > 12.0:
+                    log.warning(f"Safe-home: body wait capped at 12s but estimated "
+                                f"{total_s:.2f}s — some servos may still be moving")
+
+        # ── Step 4: dome servos in parallel ──
+        # NOTE: dome_servo_driver does NOT export a module-level SERVO_MAP —
+        # the mapping is an instance attribute (_servo_map) computed from the
+        # configured HAT addresses. Use DOME_SERVOS from servo_bp instead
+        # (same source of truth as the rest of the UI).
+        if reg.dome_servo:
+            dome_threads = []
+            for name in DOME_SERVOS:
+                def _close_dome(n=name):
+                    try:
+                        reg.dome_servo.close(n,
+                                             _panel_angle(n, 'close', panels_cfg),
+                                             _SAFE_SLEW_SPEED)
+                    except Exception:
+                        log.exception("Safe-home: dome close failed: %s", n)
+                dt = threading.Thread(target=_close_dome, name=f'safehome-dome-{name}',
+                                      daemon=True)
+                dome_threads.append(dt)
+                dt.start()
+            for dt in dome_threads:
+                dt.join(timeout=5.0)
+
+    def _safe_home_runner():
+        """Wrapper around _safe_home that ALWAYS clears stow_in_progress on
+        exit — even if _safe_home raises. Without the try/finally, an
+        unexpected exception (e.g. servo driver disconnect during stow)
+        would leave the gate set forever, refusing all subsequent motion.
+
+        2026-05-16: timing logs added per user report that the STOWING
+        button text persisted long after servos visually finished.
+        Helps distinguish backend slowness (real _safe_home delay) from
+        frontend polling delay (StatusPoller missed transitions)."""
+        import time as _t
+        t0 = _t.monotonic()
+        try:
+            _safe_home()
+        finally:
+            reg.stow_in_progress = False
+            elapsed = _t.monotonic() - t0
+            log.info(f"Safe-home complete in {elapsed:.2f}s — motion gate re-opened")
+
+    # C3 fix 2026-05-16: try/except around .start() so a RuntimeError
+    # (OOM, thread cap hit on long Pi sessions) clears stow_in_progress
+    # — was: thread spawn failure left the gate set forever, blocking
+    # all subsequent motion.
+    try:
+        threading.Thread(target=_safe_home_runner, name='safehome', daemon=True).start()
+    except RuntimeError as e:
+        log.exception("Failed to spawn safe-home thread")
+        reg.stow_in_progress = False
+        return jsonify({'error': f'thread spawn failed: {e}'}), 503
+    return jsonify({'status': 'reset'})

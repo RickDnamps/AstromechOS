@@ -1,0 +1,18 @@
+[Unit]
+Description=AstromechOS Master Controller
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=artoo
+WorkingDirectory=/home/artoo/astromechos
+ExecStart=/usr/bin/python3 /home/artoo/astromechos/master/main.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astromech-master
+
+[Install]
+WantedBy=multi-user.target

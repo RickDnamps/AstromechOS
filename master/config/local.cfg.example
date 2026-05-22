@@ -1,0 +1,116 @@
+# local.cfg — Configuration locale spécifique à ton R2-D2
+# Ce fichier N'EST PAS suivi par git — il survit aux git pull.
+# Copier ce fichier : cp local.cfg.example local.cfg
+# Puis éditer les valeurs ci-dessous.
+#
+# Les valeurs ici ont PRIORITÉ sur main.cfg.
+
+[github]
+# URL de ton repo GitHub (ou fork)
+# Exemple original  : https://github.com/TON_USER/AstromechOS.git
+# Exemple fork      : https://github.com/FORK_USER/AstromechOS.git
+# Exemple SSH       : git@github.com:TON_USER/AstromechOS.git
+repo_url = https://github.com/RickDnamps/AstromechOS.git
+
+# Branche à suivre (défaut: main)
+branch = main
+
+# Pull automatique au boot du Master (si wlan1 disponible)
+auto_pull_on_boot = true
+
+[home_wifi]
+# Credentials du WiFi maison (réseau internet)
+# Rempli automatiquement par scripts/setup_master_network.sh
+# Utilisé pour configurer wlan1 (clé USB WiFi externe → git pull)
+ssid = TON_WIFI_MAISON
+password = TON_MOT_DE_PASSE
+
+[hotspot]
+# SSID et mot de passe du point d'accès Wi-Fi du Master (wlan0)
+# Le Slave et ta télécommande se connectent ici
+ssid = R2D2_Control
+password = r2d2droid
+
+[deploy]
+# Physical dome button (GPIO BCM pin) — removed in v2, kept for reference only
+# button_pin = 17
+
+[slave]
+# Hostname du Slave sur le hotspot (username: artoo)
+host = r2-slave.local
+
+[admin]
+# Dashboard admin password (protects SERVO / VESC / CONFIG / CHOREO tabs)
+# Change it from the dashboard: Admin → Config → System → Change Admin Password
+password = deetoo
+
+[robot]
+# Display name shown in the dashboard header
+# name = R2-D2
+
+# Location labels for Master Pi (dome servos) and Slave Pi (body servos).
+# Change these if you use this software on a different type of robot.
+# Affects: Calibration section headers, Choreo track labels, joystick label.
+# master_location = Dome
+# slave_location  = Body
+
+[arms]
+# Number of robot arms (0–6). Configure via dashboard: Settings → Arms.
+# Each arm needs a body servo (the arm itself) and optionally a body panel servo
+# that opens automatically before the arm extends.
+# Sequence: open panel → sleep(delay) → extend arm
+#           retract arm → sleep(delay) → close panel
+count = 0
+# arm_1   = Servo_S12
+# panel_1 = Servo_S5
+# delay_1 = 0.5        # seconds between panel open and arm extension (0.1–5.0)
+# arm_2   =
+# panel_2 =
+# delay_2 = 0.5
+# arm_3   =
+# panel_3 =
+# delay_3 = 0.5
+# arm_4   =
+# panel_4 =
+# delay_4 = 0.5
+# arm_5   =
+# panel_5 =
+# delay_5 = 0.5
+# arm_6   =
+# panel_6 =
+# delay_6 = 0.5
+
+[i2c_servo_hats]
+# ── MASTER (dome servos) ──────────────────────────────────────────
+# PCA9685 servo HAT address(es) on Master Pi — comma-separated if multiple.
+# HAT 1 → Servo_M0–M15, HAT 2 → Servo_M16–M31, etc.
+# Master has no motor HAT conflict — default address is 0x40.
+# Example with two dome servo HATs: master_hats = 0x40, 0x42
+master_hats = 0x40
+
+# ── SLAVE (body servos) ──────────────────────────────────────────
+# Motor HAT I2C address on Slave Pi — informational only, never used for servos.
+# The software warns if this address appears in slave_hats by mistake.
+# Waveshare Motor HAT default: 0x40
+slave_motor_hat = 0x40
+
+# PCA9685 servo HAT address(es) on Slave Pi — comma-separated if multiple.
+# HAT 1 → Servo_S0–S15, HAT 2 → Servo_S16–S31, etc.
+# NOTE: Waveshare Servo HAT ships at 0x40 — you MUST move it to 0x41 (or other)
+#       by soldering the A0 address jumper to avoid conflict with the Motor HAT.
+# Example with two body servo HATs: slave_hats = 0x41, 0x42
+slave_hats = 0x41
+
+[behavior]
+# Startup sequence — plays a choreo after boot
+startup_enabled  = true
+startup_delay    = 5
+startup_choreo   = startup
+
+# ALIVE mode — idle reactions after inactivity
+alive_enabled       = false
+idle_timeout_min    = 10
+idle_mode           = choreo
+idle_audio_category = happy
+idle_choreo_list    = patrol,celebrate
+dome_auto_on_alive  = true

@@ -1,0 +1,245 @@
+# ============================================================
+#   █████╗  ██████╗ ███████╗
+#  ██╔══██╗██╔═══██╗██╔════╝
+#  ███████║██║   ██║███████╗
+#  ██╔══██║██║   ██║╚════██║
+#  ██║  ██║╚██████╔╝███████║
+#  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+#
+#  AstromechOS — Open control platform for astromech builders
+# ============================================================
+#  Copyright (C) 2026 RickDnamps
+#  https://github.com/RickDnamps/AstromechOS
+#
+#  This file is part of AstromechOS.
+#
+#  AstromechOS is free software: you can redistribute it
+#  and/or modify it under the terms of the GNU General
+#  Public License as published by the Free Software
+#  Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  AstromechOS is distributed in the hope that it will be
+#  useful, but WITHOUT ANY WARRANTY; without even the implied
+#  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE. See the GNU General Public License for details.
+#
+#  You should have received a copy of the GNU GPL along with
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
+# ============================================================
+"""
+App Watchdog — Application heartbeat App → Master.
+
+The application (Android / web browser) sends POST /heartbeat every 200ms.
+If no heartbeat is received for TIMEOUT seconds after a connection has been
+established → full emergency stop (propulsion + dome).
+
+Same principle as the UART Master→Slave watchdog, but for the application layer.
+
+Protects against:
+  - Android app crash
+  - Browser tab closed during an action
+  - WiFi loss of the control device
+  - Phone screen turned off (WebView paused)
+
+Start: app_watchdog.start() in master/main.py
+Feed:  app_watchdog.feed() in status_bp.py POST /heartbeat
+"""
+
+import logging
+import threading
+import time
+
+import master.registry as reg
+from master.safe_stop import stop_drive, stop_dome
+
+log = logging.getLogger(__name__)
+
+TIMEOUT_S   = 1.5   # 1.5s — 7+ missed HBs at 200ms = real disconnection
+# 2026-05-15: bumped from 0.6s → 1.5s. The 600ms window was too
+# aggressive — any UI hiccup (heavy choreo render blocking main
+# thread, network jitter, Slave briefly busy) could trip it and
+# the R3 fix would set estop_active. 1.5s still catches a dropped
+# tablet within the 800ms drive watchdog window for actual loss
+# scenarios, while tolerating routine 200-500ms render blocks.
+# Combined with the Web Worker heartbeat sender, this is now
+# resilient to both main-thread blocking AND brief network jitter.
+CHECK_HZ    = 0.1   # check every 100ms
+
+
+class AppWatchdog:
+    """
+    Monitors the control application heartbeat.
+    If the heartbeat stops after being established → emergency stop.
+    """
+
+    def __init__(self):
+        self._lock          = threading.Lock()
+        self._last_hb_time  = 0.0
+        self._connected     = False   # True once the first HB is received
+        self._triggered     = False   # True after a timeout — reset on next HB
+        self._running       = False
+        # B1 fix 2026-05-16: track WHO set estop_active so _auto_recover
+        # doesn't silently cancel an operator-initiated E-STOP that
+        # happened to coincide with a heartbeat blip. Set ONLY in
+        # _emergency_stop, cleared ONLY in _auto_recover.
+        self._estop_set_by_watchdog = False
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        self._running = True
+        threading.Thread(target=self._loop, daemon=True, name="app-wdog").start()
+        log.info("AppWatchdog started (timeout=%.1fs)", TIMEOUT_S)
+
+    def stop(self) -> None:
+        self._running = False
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def feed(self) -> None:
+        """Called on each heartbeat received from the application."""
+        with self._lock:
+            self._last_hb_time = time.monotonic()
+            was_triggered = self._triggered
+            if self._triggered:
+                log.info("AppWatchdog: connection restored — watchdog re-armed")
+                self._triggered = False
+            self._connected = True
+        # Bug H4 fix 2026-05-15: on HB return after a triggered freeze,
+        # AUTO-RECOVER. Previously R3 fix set estop_active=True on freeze
+        # which latched permanently — operator had to press Reset E-STOP
+        # for every brief WiFi blip (1.5s+). Now: brief jitter = brief
+        # freeze = auto-unfreeze when HB returns. Real link loss stays
+        # frozen because HB never returns. Best of both worlds.
+        if was_triggered:
+            self._auto_recover()
+
+    @property
+    def is_connected(self) -> bool:
+        """True si une app envoie activement des heartbeats."""
+        with self._lock:
+            return self._connected and not self._triggered
+
+    @property
+    def last_hb_age_ms(self) -> float:
+        """Age of the last heartbeat in milliseconds."""
+        with self._lock:
+            if not self._connected:
+                return -1.0
+            return (time.monotonic() - self._last_hb_time) * 1000.0
+
+    # ------------------------------------------------------------------
+    # Internal loop
+    # ------------------------------------------------------------------
+
+    def _loop(self) -> None:
+        while self._running:
+            time.sleep(CHECK_HZ)
+            with self._lock:
+                if (not self._connected or
+                        self._triggered or
+                        time.monotonic() - self._last_hb_time <= TIMEOUT_S):
+                    continue
+                self._triggered = True
+                self._connected = False
+
+            # Outside the lock to avoid deadlock on drivers
+            self._emergency_stop()
+
+    def _auto_recover(self) -> None:
+        """Bug H4 fix 2026-05-15: called when HB returns after a freeze.
+        Unfreezes servos + clears estop_active so the operator can resume
+        without manually pressing Reset E-STOP for every WiFi blip.
+
+        B1 fix 2026-05-16: ONLY auto-clear estop_active if it was the
+        watchdog that set it. If the operator pressed /system/estop
+        manually (even at the same time as the watchdog), DON'T cancel
+        their intentional E-STOP — that's a safety violation. Still
+        unfreeze servos (those were ours) but leave estop_active for
+        the operator to clear via /system/estop_reset."""
+        log.warning("AppWatchdog: HB returned — auto-recover sequence")
+        try:
+            from master.api.status_bp import _estop_transition_lock
+            with self._lock:
+                set_by_us = self._estop_set_by_watchdog
+                self._estop_set_by_watchdog = False
+            if set_by_us:
+                # We were the only one who set estop — safe to clear.
+                with _estop_transition_lock:
+                    reg.estop_active = False
+                log.info("AppWatchdog: cleared estop (set by us)")
+                if reg.dome_servo:
+                    try: reg.dome_servo.unfreeze()
+                    except Exception: pass
+                if reg.uart:
+                    try: reg.uart.send('FREEZE', '0')
+                    except Exception: pass
+            else:
+                # Operator pressed /system/estop manually — DO NOT cancel
+                # their intent. Just log the WiFi recovery; let operator
+                # press Reset E-STOP themselves.
+                log.warning("AppWatchdog: HB returned but estop_active was set by operator — leaving it engaged")
+        except Exception:
+            log.exception("AppWatchdog auto-recover failed")
+
+    def _emergency_stop(self) -> None:
+        log.warning(
+            "AppWatchdog: app heartbeat lost (>%.0fms) — gradual stop + freeze",
+            TIMEOUT_S * 1000
+        )
+        stop_drive()   # proportional ramp — no abrupt braking
+        stop_dome()
+        # Audit reclass R3 2026-05-15: also freeze servos on link loss.
+        # E-STOP semantics is "hold position with full torque" — link
+        # loss should do the same.
+        #
+        # Post-audit fix 2026-05-15 (H-1): also set reg.estop_active=True
+        # so the existing /system/estop_reset flow handles re-arm. Without
+        # this, the robot stays frozen silently after HB returns — operator
+        # sees no Reset E-STOP button (gated on estop_active), every servo
+        # command silently no-ops, robot looks "broken". Auto-recovery on
+        # HB return is intentionally NOT done — operator must explicitly
+        # Reset (same safety stance as physical E-STOP).
+        try:
+            import master.registry as reg
+            from master.api.status_bp import _estop_transition_lock
+            with _estop_transition_lock:
+                if not reg.estop_active:
+                    reg.estop_active = True
+                    # B1 fix 2026-05-16: mark that WE set it, so
+                    # _auto_recover knows it can safely clear later.
+                    with self._lock:
+                        self._estop_set_by_watchdog = True
+                else:
+                    # Already set by someone else (operator) — don't claim it
+                    with self._lock:
+                        self._estop_set_by_watchdog = False
+            if reg.dome_servo:
+                try: reg.dome_servo.freeze()
+                except Exception: pass
+            if reg.uart:
+                try: reg.uart.send('FREEZE', '1')
+                except Exception: pass
+            # Also stop audio + lights so a runaway sequence doesn't
+            # keep going while the operator is unreachable. Matches
+            # the E-STOP server-side fix from earlier batch.
+            if reg.uart:
+                try: reg.uart.send('S', 'STOP')
+                except Exception: pass
+            if reg.teeces:
+                try: reg.teeces.off()
+                except Exception: pass
+            if reg.bt_ctrl and hasattr(reg.bt_ctrl, 'clear_drive_state'):
+                try: reg.bt_ctrl.clear_drive_state()
+                except Exception: pass
+        except Exception:
+            log.exception("AppWatchdog freeze hook failed")
+
+
+# Singleton global
+app_watchdog = AppWatchdog()

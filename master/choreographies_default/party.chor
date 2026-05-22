@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "name": "party",
+    "version": "1.0",
+    "duration": 122.1,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "party.scr",
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "🎉",
+    "label": "Party"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "Gangnam",
+        "volume": 85,
+        "duration": 120,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 120.0
+      },
+      {
+        "t": 120.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome": [
+      {
+        "t": 0.0,
+        "power": 50.0,
+        "duration": 800,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 0.8,
+        "power": -50.0,
+        "duration": 800,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 1.6,
+        "power": 50.0,
+        "duration": 900,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 2.5,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.4,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.5,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

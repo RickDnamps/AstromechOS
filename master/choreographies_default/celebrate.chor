@@ -1,0 +1,241 @@
+{
+  "meta": {
+    "name": "celebrate",
+    "version": "1.0",
+    "duration": 11.0,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "celebrate.scr",
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "🎊",
+    "label": "Celebrate"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:happy",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "priority": "normal"
+      },
+      {
+        "t": 5.9,
+        "action": "play",
+        "file": "RANDOM:happy",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 5.9,
+        "mode": "random",
+        "duration": 2.0
+      },
+      {
+        "t": 7.9,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome": [
+      {
+        "t": 1.8,
+        "power": 60.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 2.9,
+        "power": -60.0,
+        "duration": 800,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 3.7,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      },
+      {
+        "t": 4.3,
+        "power": 40.0,
+        "duration": 600,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 4.9,
+        "power": -40.0,
+        "duration": 600,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 5.5,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.4,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 0.7,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 1.0,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 1.3,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 2.6,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 2.6,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 3.4,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 3.4,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 3.9,
+        "servo": "Servo_M4",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 3.9,
+        "servo": "Servo_M5",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 5.5,
+        "servo": "Servo_M4",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 5.5,
+        "servo": "Servo_M5",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      }
+    ],
+    "body_servos": [
+      {
+        "t": 0.4,
+        "servo": "Servo_S0",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 0.7,
+        "servo": "Servo_S1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 3.4,
+        "servo": "Servo_S0",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 3.4,
+        "servo": "Servo_S1",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      },
+      {
+        "t": 3.9,
+        "servo": "Servo_S2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 110,
+        "speed": 4
+      },
+      {
+        "t": 5.5,
+        "servo": "Servo_S2",
+        "action": "close",
+        "duration": 1.0,
+        "angle": 20,
+        "speed": 5
+      }
+    ]
+  }
+}

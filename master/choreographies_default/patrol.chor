@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "name": "patrol",
+    "version": "1.0",
+    "duration": 23.4,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "patrol.scr",
+    "audio_channels_required": 1,
+    "category": "behavior",
+    "emoji": "👀",
+    "label": "Patrol"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "RANDOM:hum",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "priority": "normal"
+      },
+      {
+        "t": 5.5,
+        "action": "play",
+        "file": "RANDOM:happy",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "priority": "normal"
+      },
+      {
+        "t": 10.5,
+        "action": "play",
+        "file": "RANDOM:proc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "priority": "normal"
+      },
+      {
+        "t": 18.3,
+        "action": "play",
+        "file": "RANDOM:sent",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 14.8,
+        "mode": "random",
+        "duration": 4.5
+      }
+    ],
+    "dome": [
+      {
+        "t": 5.5,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      },
+      {
+        "t": 11.8,
+        "power": 40.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 13.3,
+        "power": -40.0,
+        "duration": 1000,
+        "accel": 0.3,
+        "easing": "linear"
+      },
+      {
+        "t": 14.8,
+        "power": 0.0,
+        "duration": 200,
+        "accel": 0.5,
+        "easing": "linear"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 11.5,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 11.8,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      }
+    ],
+    "body_servos": [
+      {
+        "t": 7.0,
+        "servo": "Servo_S0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 7.5,
+        "servo": "Servo_S0",
+        "action": "close",
+        "duration": 1.0
+      }
+    ],
+    "markers": [
+      {
+        "t": 1.0,
+        "label": "dome random on"
+      },
+      {
+        "t": 5.5,
+        "label": "dome random off"
+      }
+    ]
+  }
+}

@@ -1,0 +1,432 @@
+{
+  "meta": {
+    "name": "cantina",
+    "version": "1.0",
+    "duration": 16.2,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "cantina.scr",
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "🎺",
+    "label": "Cantina"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "CANTINA",
+        "volume": 85,
+        "duration": 16,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.4,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.8,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.2,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.6,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.4,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.4,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.4,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.4,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.8,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.8,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.8,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.8,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 3.2,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 3.2,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 3.2,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 3.2,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 3.6,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 3.6,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 3.6,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 3.6,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.0,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.0,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 4.0,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.0,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 4.4,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 4.4,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.4,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 4.4,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.8,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.8,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 4.8,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 4.8,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 5.2,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 5.2,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 5.2,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 5.2,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 5.6,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 5.6,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 5.6,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 5.6,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 6.4,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 6.4,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.4,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 6.4,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.8,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 14.1
+      },
+      {
+        "t": 14.1,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ]
+  }
+}

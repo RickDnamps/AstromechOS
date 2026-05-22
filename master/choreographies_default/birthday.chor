@@ -1,0 +1,126 @@
+{
+  "meta": {
+    "name": "birthday",
+    "version": "1.0",
+    "duration": 42.1,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "birthday.scr",
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "🎂",
+    "label": "Birthday"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "birthday",
+        "volume": 85,
+        "duration": 40,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 20.5
+      },
+      {
+        "t": 20.5,
+        "mode": "psi",
+        "target": "both",
+        "sequence": "normal",
+        "duration": 5.0
+      },
+      {
+        "t": 25.5,
+        "mode": "random",
+        "duration": 14.5
+      },
+      {
+        "t": 40.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.5,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.5,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.5,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.5,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.5,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M4",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M5",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M6",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M7",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 3.0,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 3.5,
+        "servo": "all",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 5.5,
+        "servo": "all",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

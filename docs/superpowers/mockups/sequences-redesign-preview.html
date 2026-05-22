@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Sequences Tab — Mockup Preview</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0f;
+    color: #e0e0e0;
+    font-family: 'Segoe UI', sans-serif;
+    padding: 24px;
+  }
+  h1 { color: #00ffea; font-size: 18px; letter-spacing: 2px; margin-bottom: 6px; }
+  .page-sub { color: #666; font-size: 13px; margin-bottom: 32px; }
+
+  .options-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+  }
+
+  .option-box {
+    border: 1px solid #222;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #111118;
+    transition: border-color .2s;
+    cursor: pointer;
+    position: relative;
+  }
+  .option-box:hover { border-color: #00ffea44; }
+  .option-box.selected { border-color: #00ffea; box-shadow: 0 0 18px #00ffea22; }
+  .option-box .selected-badge {
+    display: none;
+    position: absolute; top: 10px; right: 10px;
+    background: #00ffea; color: #000;
+    font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px;
+    letter-spacing: 1px;
+  }
+  .option-box.selected .selected-badge { display: block; }
+
+  .option-label {
+    padding: 14px 16px 10px;
+    font-size: 12px; font-weight: 700;
+    color: #00ffea; letter-spacing: 1.5px;
+    border-bottom: 1px solid #1a1a2a;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .option-desc {
+    padding: 10px 16px 12px;
+    font-size: 11px; color: #888; line-height: 1.5;
+    border-bottom: 1px solid #1a1a2a;
+  }
+  .option-desc strong { color: #aaa; }
+
+  .mockup { padding: 16px; }
+
+  /* ---- shared UI elements ---- */
+  .pills-row {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;
+  }
+  .pill {
+    background: #1a1a2e; border: 1px solid #2a2a3a;
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 12px; color: #aaa; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    user-select: none; transition: all .15s;
+  }
+  .pill.active {
+    background: #00ffea22; border-color: #00ffea88; color: #00ffea;
+  }
+  .pill.add-pill {
+    border-style: dashed; color: #555;
+  }
+  .pill .pill-emoji { font-size: 14px; }
+
+  .seq-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 7px;
+  }
+  .seq-card {
+    background: #0e0e1a;
+    border: 1px solid #2a2a3a;
+    border-radius: 8px;
+    padding: 8px 6px 7px;
+    text-align: center;
+    font-size: 11px;
+    color: #ccc;
+    position: relative;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .seq-card:hover { border-color: #00ffea44; color: #fff; }
+  .seq-card.running { border-color: #00ffea; background: #00ffea11; }
+  .seq-card .seq-emoji { font-size: 18px; display: block; margin-bottom: 4px; }
+  .seq-card .seq-name { font-size: 10px; line-height: 1.2; }
+
+  /* badge on card (option B) */
+  .cat-badge {
+    position: absolute; top: 4px; right: 4px;
+    font-size: 10px; background: #1a1a2e;
+    border: 1px solid #333; border-radius: 10px;
+    padding: 1px 4px; cursor: pointer;
+  }
+  .cat-badge:hover { background: #00ffea22; border-color: #00ffea88; }
+
+  /* drag handle (option A) */
+  .drag-handle {
+    position: absolute; top: 4px; left: 4px;
+    color: #444; font-size: 10px; cursor: grab;
+  }
+
+  /* sections (vertical, option C) */
+  .cat-section { margin-bottom: 14px; }
+  .cat-section-header {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 700;
+    color: #888; letter-spacing: 1px;
+    margin-bottom: 8px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #1a1a2a;
+  }
+  .cat-section-header .sec-emoji { font-size: 16px; }
+
+  /* emoji edit highlight */
+  .pill-emoji-editable {
+    cursor: text;
+    border-bottom: 1px dashed #00ffea88;
+    padding-bottom: 1px;
+  }
+
+  /* dropdown mockup */
+  .cat-dropdown {
+    position: absolute; top: 22px; right: 4px;
+    background: #1a1a2e; border: 1px solid #333;
+    border-radius: 8px; padding: 4px;
+    z-index: 10; min-width: 120px;
+    box-shadow: 0 4px 16px #00000088;
+  }
+  .cat-dropdown-item {
+    padding: 4px 8px; font-size: 11px; border-radius: 4px;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    color: #ccc;
+  }
+  .cat-dropdown-item:hover { background: #00ffea22; color: #00ffea; }
+  .cat-dropdown-item.active { color: #00ffea; }
+
+  /* admin badge on section header */
+  .trash-icon { margin-left: auto; color: #444; cursor: pointer; font-size: 12px; }
+  .trash-icon:hover { color: #ff4444; }
+
+  /* pill emoji input */
+  .emoji-input {
+    width: 28px; background: #0a0a0f; border: 1px solid #00ffea;
+    border-radius: 4px; color: #fff; font-size: 14px;
+    text-align: center; outline: none; padding: 0 2px;
+  }
+
+  .admin-note {
+    font-size: 10px; color: #00ffea88;
+    margin-top: 10px; font-style: italic;
+  }
+
+  .section-title-pill {
+    font-size: 10px; color: #555; padding: 4px 0 8px;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+
+  /* highlight for drop target */
+  .pill.drop-target {
+    background: #00ffea33; border-color: #00ffea;
+    color: #00ffea; transform: scale(1.08);
+  }
+  .seq-card.dragging {
+    opacity: .5; transform: rotate(-2deg);
+  }
+
+  .verdict {
+    margin-top: 32px;
+    background: #111118;
+    border: 1px solid #00ffea33;
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .verdict h3 { color: #00ffea; font-size: 13px; margin-bottom: 8px; }
+  .verdict p { font-size: 12px; color: #888; line-height: 1.6; }
+  .verdict strong { color: #ccc; }
+</style>
+</head>
+<body>
+
+<h1>SEQUENCES TAB — REDESIGN MOCKUP</h1>
+<p class="page-sub">Cliquez sur une option pour la sélectionner · Mode Admin simulé</p>
+
+<div class="options-row">
+
+  <!-- OPTION A -->
+  <div class="option-box" onclick="select(this,'A')">
+    <div class="selected-badge">SÉLECTIONNÉ</div>
+    <div class="option-label">
+      <span>A</span>
+      <span>DRAG → PILL</span>
+    </div>
+    <div class="option-desc">
+      <strong>Pills en haut comme Audio.</strong> En admin, les cartes ont un handle de drag. Tu glisses une carte vers une pill pour changer sa catégorie.
+      Les pills s'illuminent au survol.
+    </div>
+    <div class="mockup">
+      <div class="section-title-pill">CATÉGORIE</div>
+      <div class="pills-row">
+        <div class="pill active"><span class="pill-emoji">🎭</span> Performance</div>
+        <div class="pill drop-target" id="pill-emotion"><span class="pill-emoji">😤</span> Emotions</div>
+        <div class="pill"><span class="pill-emoji">🚶</span> Behavior</div>
+        <div class="pill"><span class="pill-emoji">🔵</span> Dome</div>
+        <div class="pill add-pill">+ Ajouter</div>
+      </div>
+      <div class="seq-grid">
+        <div class="seq-card dragging">
+          <span class="drag-handle">⠿</span>
+          <span class="seq-emoji">🎵</span>
+          <span class="seq-name">CANTINA</span>
+        </div>
+        <div class="seq-card">
+          <span class="drag-handle">⠿</span>
+          <span class="seq-emoji">📡</span>
+          <span class="seq-name">LEIA</span>
+        </div>
+        <div class="seq-card running">
+          <span class="drag-handle">⠿</span>
+          <span class="seq-emoji">🎖️</span>
+          <span class="seq-name">MARCH</span>
+        </div>
+        <div class="seq-card">
+          <span class="drag-handle">⠿</span>
+          <span class="seq-emoji">🎂</span>
+          <span class="seq-name">BIRTHDAY</span>
+        </div>
+      </div>
+      <p class="admin-note">⠿ drag handle · pill 😤 illuminée = drop target actif</p>
+    </div>
+  </div>
+
+  <!-- OPTION B -->
+  <div class="option-box" onclick="select(this,'B')">
+    <div class="selected-badge">SÉLECTIONNÉ</div>
+    <div class="option-label">
+      <span>B</span>
+      <span>BADGE CLIQUABLE</span>
+    </div>
+    <div class="option-desc">
+      <strong>Pills en haut comme Audio.</strong> Chaque carte a un badge catégorie. En admin, cliquer le badge ouvre un dropdown pour changer. Emoji des pills éditables inline.
+    </div>
+    <div class="mockup">
+      <div class="section-title-pill">CATÉGORIE</div>
+      <div class="pills-row">
+        <div class="pill active">
+          <span class="pill-emoji pill-emoji-editable" title="Clic = éditer emoji">🎭</span> Performance
+        </div>
+        <div class="pill"><span class="pill-emoji pill-emoji-editable">😤</span> Emotions</div>
+        <div class="pill"><span class="pill-emoji pill-emoji-editable">🚶</span> Behavior</div>
+        <div class="pill"><span class="pill-emoji pill-emoji-editable">🔵</span> Dome</div>
+        <div class="pill add-pill">+ Ajouter</div>
+      </div>
+      <div class="seq-grid">
+        <div class="seq-card">
+          <span class="cat-badge" title="Changer catégorie">🎭</span>
+          <span class="seq-emoji">🎵</span>
+          <span class="seq-name">CANTINA</span>
+        </div>
+        <div class="seq-card" style="overflow:visible; z-index:5">
+          <span class="cat-badge" title="Changer catégorie">🎭</span>
+          <span class="seq-emoji">📡</span>
+          <span class="seq-name">LEIA</span>
+          <div class="cat-dropdown">
+            <div class="cat-dropdown-item active">🎭 Performance</div>
+            <div class="cat-dropdown-item">😤 Emotions</div>
+            <div class="cat-dropdown-item">🚶 Behavior</div>
+            <div class="cat-dropdown-item">🔵 Dome</div>
+            <div class="cat-dropdown-item">🔧 Tests</div>
+            <div class="cat-dropdown-item">📦 Others</div>
+          </div>
+        </div>
+        <div class="seq-card running">
+          <span class="cat-badge">🎭</span>
+          <span class="seq-emoji">🎖️</span>
+          <span class="seq-name">MARCH</span>
+        </div>
+        <div class="seq-card">
+          <span class="cat-badge">🎭</span>
+          <span class="seq-emoji">🎂</span>
+          <span class="seq-name">BIRTHDAY</span>
+        </div>
+      </div>
+      <p class="admin-note">🎭 badge = clic pour dropdown · emoji pill = clic pour éditer</p>
+    </div>
+  </div>
+
+  <!-- OPTION C -->
+  <div class="option-box" onclick="select(this,'C')">
+    <div class="selected-badge">SÉLECTIONNÉ</div>
+    <div class="option-label">
+      <span>C</span>
+      <span>SECTIONS + PILLS</span>
+    </div>
+    <div class="option-desc">
+      <strong>Pills pour filtrer.</strong> Vue "ALL" = sections groupées par catégorie avec headers. Drag-and-drop entre sections visible uniquement en ALL. Sélectionne une pill = grid normal.
+    </div>
+    <div class="mockup">
+      <div class="section-title-pill">CATÉGORIE</div>
+      <div class="pills-row">
+        <div class="pill active"><span class="pill-emoji">🌐</span> ALL</div>
+        <div class="pill"><span class="pill-emoji">🎭</span> Performance</div>
+        <div class="pill"><span class="pill-emoji">😤</span> Emotions</div>
+        <div class="pill add-pill">+ Ajouter</div>
+      </div>
+      <div class="cat-section">
+        <div class="cat-section-header">
+          <span class="sec-emoji">🎭</span>
+          <span>PERFORMANCE</span>
+          <span class="trash-icon">🗑</span>
+        </div>
+        <div class="seq-grid">
+          <div class="seq-card">
+            <span class="drag-handle">⠿</span>
+            <span class="seq-emoji">🎵</span>
+            <span class="seq-name">CANTINA</span>
+          </div>
+          <div class="seq-card running">
+            <span class="drag-handle">⠿</span>
+            <span class="seq-emoji">🎖️</span>
+            <span class="seq-name">MARCH</span>
+          </div>
+        </div>
+      </div>
+      <div class="cat-section">
+        <div class="cat-section-header">
+          <span class="sec-emoji">😤</span>
+          <span>EMOTIONS</span>
+          <span class="trash-icon">🗑</span>
+        </div>
+        <div class="seq-grid">
+          <div class="seq-card">
+            <span class="drag-handle">⠿</span>
+            <span class="seq-emoji">😡</span>
+            <span class="seq-name">ANGRY</span>
+          </div>
+          <div class="seq-card">
+            <span class="drag-handle">⠿</span>
+            <span class="seq-emoji">😱</span>
+            <span class="seq-name">SCARED</span>
+          </div>
+        </div>
+      </div>
+      <p class="admin-note">⠿ drag entre sections · 🗑 supprimer catégorie vide</p>
+    </div>
+  </div>
+
+</div><!-- end options row -->
+
+<div class="verdict">
+  <h3>Ma recommandation — B (Badge cliquable)</h3>
+  <p>
+    <strong>A</strong> — Le drag vers les pills est visuellement cool mais le geste est contre-intuitif : tu dois monter la carte du bas vers le haut de l'écran. Pas naturel.<br><br>
+    <strong>B</strong> — Cohérent avec Audio, badge visible sur chaque carte, dropdown clair. L'<strong>édition d'emoji inline sur les pills</strong> est le vrai moment "wow" — tu cliques l'emoji 🎭, tu tapes 🎪, Enter, c'est sauvegardé. Simple et satisfaisant.<br><br>
+    <strong>C</strong> — Drag-and-drop entre sections est le plus intuitif, mais crée une incohérence visuelle entre la vue ALL (sections) et les autres vues (grid flat). Confusant.<br><br>
+    <strong>→ B reste la meilleure balance cohérence/WOW/praticité.</strong>
+    Mais si tu aimes plus C, on peut aussi combiner : pills + vue ALL avec sections + drag.
+  </p>
+</div>
+
+<script>
+function select(el, choice) {
+  document.querySelectorAll('.option-box').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  console.log('Choix:', choice);
+}
+</script>
+</body>
+</html>

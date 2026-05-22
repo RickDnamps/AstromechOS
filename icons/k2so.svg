@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Legs -->
+  <rect x="10" y="24" width="4" height="7" rx="1.5" fill="#2e2e2e" stroke="#777" stroke-width="1"/>
+  <rect x="18" y="24" width="4" height="7" rx="1.5" fill="#2e2e2e" stroke="#777" stroke-width="1"/>
+  <!-- Feet -->
+  <rect x="9" y="29" width="6" height="2" rx="1" fill="#3a3a3a" stroke="#666" stroke-width="0.7"/>
+  <rect x="17" y="29" width="6" height="2" rx="1" fill="#3a3a3a" stroke="#666" stroke-width="0.7"/>
+  <!-- Torso -->
+  <rect x="9" y="12" width="14" height="14" rx="2" fill="#303030" stroke="#777" stroke-width="1.2"/>
+  <!-- Imperial cog on torso -->
+  <circle cx="16" cy="19" r="3.5" fill="none" stroke="#aaa" stroke-width="0.8"/>
+  <circle cx="16" cy="19" r="1.5" fill="#aaa" opacity="0.6"/>
+  <!-- Torso vertical line -->
+  <line x1="16" y1="13" x2="16" y2="25" stroke="#555" stroke-width="0.6"/>
+  <!-- Shoulder pads (wide) -->
+  <rect x="5" y="12" width="5" height="9" rx="2.5" fill="#282828" stroke="#666" stroke-width="1"/>
+  <rect x="22" y="12" width="5" height="9" rx="2.5" fill="#282828" stroke="#666" stroke-width="1"/>
+  <!-- Neck (narrow) -->
+  <rect x="14" y="8" width="4" height="5" rx="1" fill="#2e2e2e" stroke="#777" stroke-width="0.9"/>
+  <!-- Head (distinctive elongated oval) -->
+  <ellipse cx="16" cy="5.5" rx="5.5" ry="5" fill="#363636" stroke="#888" stroke-width="1.2"/>
+  <!-- Eyes (red, wide-set) -->
+  <ellipse cx="13" cy="5" rx="2" ry="1.2" fill="#cc1100" opacity="0.9"/>
+  <ellipse cx="19" cy="5" rx="2" ry="1.2" fill="#cc1100" opacity="0.9"/>
+  <!-- Eye highlight -->
+  <ellipse cx="12.5" cy="4.5" rx="0.5" ry="0.3" fill="white" opacity="0.4"/>
+  <ellipse cx="18.5" cy="4.5" rx="0.5" ry="0.3" fill="white" opacity="0.4"/>
+  <!-- Head detail line -->
+  <line x1="10.5" y1="7" x2="21.5" y2="7" stroke="#555" stroke-width="0.7"/>
+</svg>

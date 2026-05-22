@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "audio_channels_required": 1,
+    "author": "scr_to_chor converter",
+    "bpm": 0,
+    "created": "2026-03-31",
+    "duration": 5.1,
+    "name": "alert",
+    "source": "alert.scr",
+    "version": "1.0",
+    "config_snapshot": {
+      "vesc_invert_L": false,
+      "vesc_invert_R": false,
+      "vesc_power_scale": 0.29
+    },
+    "category": "behavior",
+    "emoji": "🚨",
+    "label": "Alert"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "action": "play",
+        "ch": 0,
+        "duration": 2,
+        "file": "ALARM003",
+        "priority": "normal",
+        "t": 0,
+        "volume": 85
+      }
+    ],
+    "lights": [
+      {
+        "duration": 5,
+        "mode": "t3",
+        "t": 0
+      }
+    ],
+    "dome_servos": [],
+    "body_servos": [],
+    "arm_servos": []
+  }
+}

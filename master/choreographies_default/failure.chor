@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "failure",
+    "version": "1.0",
+    "duration": 22.1,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "failure.scr",
+    "audio_channels_required": 1,
+    "category": "behavior",
+    "emoji": "💥",
+    "label": "Failure"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "SCREA003",
+        "volume": 85,
+        "duration": 10,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 20.0
+      },
+      {
+        "t": 20.0,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ]
+  }
+}

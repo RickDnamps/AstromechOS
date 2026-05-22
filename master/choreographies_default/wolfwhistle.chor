@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "name": "wolfwhistle",
+    "version": "1.0",
+    "duration": 3.25,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "wolfwhistle.scr",
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "😘",
+    "label": "Wolf Whistle"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "WOLFWSTL",
+        "volume": 85,
+        "duration": 2,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 2.5
+      },
+      {
+        "t": 2.5,
+        "mode": "off",
+        "duration": 0.5
+      }
+    ],
+    "dome_servos": [
+      {
+        "t": 0.3,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.35,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.45,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.65,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.85,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.05,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.15,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.45,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 1.65,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 1.85,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 2.05,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 2.15,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "name": "ripple_dome_fast",
+    "version": "1.0",
+    "duration": 1.85,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "ripple_dome_fast.scr",
+    "category": "dome",
+    "emoji": "🌊",
+    "label": "Ripple Dome Fast"
+  },
+  "tracks": {
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.05,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.1,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.15,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.2,
+        "servo": "Servo_M5",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.25,
+        "servo": "Servo_M6",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.3,
+        "servo": "Servo_M7",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.35,
+        "servo": "Servo_M4",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.4,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.45,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.5,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.55,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.6,
+        "servo": "Servo_M5",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.65,
+        "servo": "Servo_M6",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.7,
+        "servo": "Servo_M7",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 0.75,
+        "servo": "Servo_M4",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

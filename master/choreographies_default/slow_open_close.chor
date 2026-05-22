@@ -1,0 +1,114 @@
+{
+  "meta": {
+    "name": "slow_open_close",
+    "version": "1.0",
+    "duration": 7.1,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "slow_open_close.scr",
+    "category": "dome",
+    "emoji": "🚪",
+    "label": "Slow Open Close"
+  },
+  "tracks": {
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "Servo_M4",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M5",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M6",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M7",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M0",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M4",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M5",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M6",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M7",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M0",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M1",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M2",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 6.0,
+        "servo": "Servo_M3",
+        "action": "close",
+        "duration": 1.0
+      }
+    ]
+  }
+}

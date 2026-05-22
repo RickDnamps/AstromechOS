@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "name": "march",
+    "version": "1.0",
+    "duration": 42.6,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "march.scr",
+    "audio_channels_required": 1,
+    "category": "performance",
+    "emoji": "🎵",
+    "label": "March"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "t": 0.0,
+        "action": "play",
+        "file": "Theme002",
+        "volume": 85,
+        "duration": 37,
+        "ch": 0,
+        "priority": "normal"
+      }
+    ],
+    "lights": [
+      {
+        "t": 0.0,
+        "mode": "random",
+        "duration": 40.5
+      },
+      {
+        "t": 40.5,
+        "mode": "off",
+        "duration": 2.0
+      }
+    ]
+  }
+}

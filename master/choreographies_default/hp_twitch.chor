@@ -1,0 +1,37 @@
+{
+  "meta": {
+    "name": "hp_twitch",
+    "version": "1.0",
+    "duration": 41.1,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "hp_twitch.scr",
+    "category": "dome",
+    "emoji": "💡",
+    "label": "HP Twitch"
+  },
+  "tracks": {
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "Servo_M8",
+        "action": "close",
+        "duration": 1.0
+      },
+      {
+        "t": 20.0,
+        "servo": "Servo_M8",
+        "action": "open",
+        "duration": 0.5,
+        "angle": 300
+      },
+      {
+        "t": 40.0,
+        "servo": "Servo_M8",
+        "action": "open",
+        "duration": 1.0
+      }
+    ]
+  }
+}

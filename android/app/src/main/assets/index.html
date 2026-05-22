@@ -1,0 +1,2503 @@
+<!--
+ ============================================================
+   █████╗  ██████╗ ███████╗
+  ██╔══██╗██╔═══██╗██╔════╝
+  ███████║██║   ██║███████╗
+  ██╔══██║██║   ██║╚════██║
+  ██║  ██║╚██████╔╝███████║
+  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+
+  AstromechOS — Open control platform for astromech builders
+ ============================================================
+  Copyright (C) 2026 RickDnamps
+  https://github.com/RickDnamps/AstromechOS
+
+  This file is part of AstromechOS.
+
+  AstromechOS is free software: you can redistribute it
+  and/or modify it under the terms of the GNU General
+  Public License as published by the Free Software
+  Foundation, either version 2 of the License, or
+  (at your option) any later version.
+
+  AstromechOS is distributed in the hope that it will be
+  useful, but WITHOUT ANY WARRANTY; without even the implied
+  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+  PURPOSE. See the GNU General Public License for details.
+
+  You should have received a copy of the GNU GPL along with
+  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
+ ============================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>AstromechOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Audiowide&family=Electrolize&family=Exo+2:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- PWA -->
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+  <meta name="theme-color" content="#00aaff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="AstromechOS">
+  <meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+
+<!-- WOW polish I3 2026-05-15: reboot countdown overlay — shown while
+     Master reboots, auto-clears when /status comes back online. -->
+<div id="reboot-overlay" class="reboot-overlay">
+  <div class="reboot-overlay-title" id="reboot-overlay-title">MASTER REBOOTING</div>
+  <div class="reboot-overlay-sub">The Master Pi is restarting — page will auto-reconnect</div>
+  <div class="reboot-overlay-countdown" id="reboot-overlay-countdown">30</div>
+  <div class="reboot-overlay-status" id="reboot-overlay-status">waiting…</div>
+</div>
+
+<div id="estop-overlay" role="alert" aria-live="assertive" aria-label="Emergency stop overlay"></div>
+
+<!-- ================================================================
+     HEADER — Fixed holographic bar
+================================================================ -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <div id="header-robot-icon" class="brand-icon-wrap" title="Change icon in Settings → System">
+      <svg class="r2-logo" width="32" height="32" viewBox="0 0 32 32">
+        <circle cx="16" cy="10" r="9" fill="none" stroke="#00aaff" stroke-width="1.5"/>
+        <rect x="8" y="17" width="16" height="11" rx="2" fill="none" stroke="#00aaff" stroke-width="1.5"/>
+        <circle cx="11" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
+        <circle cx="21" cy="10" r="2" fill="#00ffea" opacity="0.8"/>
+        <rect x="12" y="7" width="8" height="4" rx="1" fill="#00aaff" opacity="0.3"/>
+      </svg>
+    </div>
+    <div class="brand-text">
+      <span class="brand-r2" id="header-robot-name">R2-D2</span>
+      <span class="brand-sub">ASTROMECH OS</span>
+    </div>
+  </div>
+
+  <div class="topbar-center">
+    <div class="status-pill error" id="pill-offline" style="display:none"><span class="pulse-dot"></span>OFFLINE</div>
+    <div class="status-pill error" id="pill-slave" style="display:none">SLAVE</div>
+    <button id="cockpit-btn" class="cockpit-btn" onclick="cockpitPanel.toggle()" title="System status overview">&#x2B21; STATUS &#x25BC;</button>
+  </div>
+
+  <div class="topbar-right">
+    <!-- WOW M2-W 2026-05-15: clickable to expand the cockpit panel
+         (battery details + voltage history). Cursor:pointer via CSS. -->
+    <div class="battery-mini" onclick="cockpitPanel.toggle()" title="Click for battery + system details">
+      <svg id="battery-arc-mini" width="44" height="28" viewBox="0 0 44 28">
+        <path d="M4 24 A20 20 0 0 1 40 24" fill="none" stroke="#1a2a3a" stroke-width="4" stroke-linecap="round"/>
+        <path id="battery-arc-path" d="M4 24 A20 20 0 0 1 40 24" fill="none" stroke="#00cc66" stroke-width="4" stroke-linecap="round" stroke-dasharray="63" stroke-dashoffset="0"/>
+      </svg>
+      <span id="battery-pct" class="battery-pct">--V</span>
+    </div>
+    <div class="header-stats">
+      <span id="temp-label" class="stat-val">--°C</span>
+      <span class="stat-sep">|</span>
+      <span id="clock-label" class="stat-val">--:--:--</span>
+    </div>
+  </div>
+</header>
+
+<!-- Cockpit Status Panel — fixed overlay below header -->
+<div id="cockpit-panel" class="cockpit-panel">
+  <div class="cockpit-inner">
+
+    <div class="cockpit-pills-row">
+      <!-- WOW L2-W 2026-05-15: pills tap-to-expand the cockpit panel
+           so tablet operators get the same details desktop hovers see. -->
+      <div class="status-pill" id="ck-pill-hb" onclick="cockpitPanel.toggle()" title="Application heartbeat — browser ↔ Master (distinct from UART HB Master ↔ Slave). Click for details."><span class="pulse-dot"></span>APP HB</div>
+      <div class="status-pill" id="ck-pill-uart" onclick="cockpitPanel.toggle()" title="UART Master ↔ Slave. Click for details."><span class="pulse-dot"></span>UART</div>
+      <div class="status-pill" id="ck-pill-bt" onclick="cockpitPanel.toggle()" title="Bluetooth Controller. Click for details."><span id="ck-pill-bt-label">BT</span></div>
+    </div>
+
+    <div>
+      <div class="cockpit-section-title">VITALS</div>
+      <div class="cockpit-vitals">
+        <div class="cockpit-card" id="ck-battery">
+          <div class="cockpit-card-lbl">BATTERY</div>
+          <div class="cockpit-card-val" id="ck-battery-v">--V</div>
+          <div class="cockpit-card-sub" id="ck-battery-pct">--%</div>
+          <div style="margin-top:4px;font-size:8px;color:rgba(255,255,255,0.3);line-height:1.8">
+            <div id="ck-battery-vcell">-- V/cell</div>
+            <div id="ck-battery-power">-- A &nbsp;·&nbsp; -- W</div>
+          </div>
+        </div>
+        <div class="cockpit-card" id="ck-vesc">
+          <div class="cockpit-card-lbl">VESC INFO</div>
+          <div style="display:flex;justify-content:space-around;margin:2px 0;gap:4px">
+            <div style="text-align:center;flex:1">
+              <div style="font-size:7px;color:rgba(255,255,255,0.3);letter-spacing:1px">LEFT</div>
+              <div class="cockpit-card-val" id="ck-vesc-l" style="font-size:14px">--&deg;C</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-vesc-l-curr">-- A</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-vesc-l-duty">--%</div>
+            </div>
+            <div style="width:1px;background:rgba(255,255,255,0.08);margin:2px 0"></div>
+            <div style="text-align:center;flex:1">
+              <div style="font-size:7px;color:rgba(255,255,255,0.3);letter-spacing:1px">RIGHT</div>
+              <div class="cockpit-card-val" id="ck-vesc-r" style="font-size:14px">--&deg;C</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-vesc-r-curr">-- A</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-vesc-r-duty">--%</div>
+            </div>
+          </div>
+        </div>
+        <div class="cockpit-card" id="ck-pi">
+          <div class="cockpit-card-lbl">PI INFO</div>
+          <div style="display:flex;justify-content:space-around;margin:2px 0;gap:4px">
+            <div style="text-align:center;flex:1">
+              <div style="font-size:7px;color:rgba(255,255,255,0.3);letter-spacing:1px">MASTER</div>
+              <div class="cockpit-card-val" id="ck-pi-temp" style="font-size:14px">--&deg;C</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-pi-cpu">CPU --%</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-pi-ram">--/-- GB</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-pi-disk">SD --/-- GB</div>
+            </div>
+            <div style="width:1px;background:rgba(255,255,255,0.08);margin:2px 0"></div>
+            <div style="text-align:center;flex:1">
+              <div style="font-size:7px;color:rgba(255,255,255,0.3);letter-spacing:1px">SLAVE</div>
+              <div class="cockpit-card-val" id="ck-slave-temp" style="font-size:14px">--&deg;C</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-slave-cpu">CPU --%</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-slave-ram">--/-- GB</div>
+              <div style="font-size:9px;color:rgba(255,255,255,0.35)" id="ck-slave-disk">SD --/-- GB</div>
+            </div>
+          </div>
+        </div>
+        <div class="cockpit-card">
+          <div class="cockpit-card-lbl">UPTIME</div>
+          <div class="cockpit-card-val" id="ck-uptime" style="font-size:13px">--</div>
+          <div class="cockpit-card-sub" id="ck-version">v?</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cockpit-cols">
+      <div>
+        <div class="cockpit-section-title">SERVICES</div>
+        <div id="ck-services"></div>
+      </div>
+      <div>
+        <div class="cockpit-section-title">ACTIVITY</div>
+        <div id="ck-activity"></div>
+        <div class="cockpit-section-title" style="margin-top:8px">NETWORK</div>
+        <div id="ck-network"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="cockpit-section-title">ALERTS</div>
+      <div class="cockpit-alerts" id="ck-alerts">
+        <span class="cockpit-alert ok">&#x2713; Waiting for data...</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="lock-mode-bar"></div>
+
+<!-- ================================================================
+     TAB BAR
+================================================================ -->
+<nav class="tabbar">
+  <button class="tab active" data-tab="drive">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>
+    DRIVE
+  </button>
+  <button class="tab" data-tab="audio">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="4" width="4" height="6" rx="1" fill="currentColor"/><path d="M5 4 L10 1 L10 13 L5 10 Z" fill="currentColor"/></svg>
+    AUDIO
+  </button>
+  <button class="tab" data-tab="sequences">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="8" height="2" rx="1" fill="currentColor"/><rect x="1" y="10" width="10" height="2" rx="1" fill="currentColor"/></svg>
+    SEQUENCES
+  </button>
+  <button class="tab" data-tab="lights">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M7 8 L7 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M5.5 11 L8.5 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><line x1="7" y1="1" x2="7" y2="2.5" stroke="currentColor" stroke-width="1.3"/><line x1="3" y1="2" x2="4" y2="3" stroke="currentColor" stroke-width="1.3"/><line x1="11" y1="2" x2="10" y2="3" stroke="currentColor" stroke-width="1.3"/><line x1="1.5" y1="5" x2="3" y2="5" stroke="currentColor" stroke-width="1.3"/><line x1="12.5" y1="5" x2="11" y2="5" stroke="currentColor" stroke-width="1.3"/></svg>
+    LIGHTS
+  </button>
+  <button class="tab" data-tab="choreo">
+    <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon">
+      <rect x="1" y="3" width="12" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <line x1="1" y1="6" x2="13" y2="6" stroke="currentColor" stroke-width=".8"/>
+      <rect x="3" y="7.5" width="3" height="2" rx=".5" fill="currentColor"/>
+      <rect x="7" y="7.5" width="2" height="2" rx=".5" fill="currentColor" opacity=".6"/>
+      <line x1="4" y1="4.5" x2="4" y2="5.5" stroke="currentColor" stroke-width="1.2"/>
+    </svg>
+    CHOREO
+  </button>
+  <div class="tab-spacer"></div>
+  <button id="admin-toggle-btn" class="admin-gear-btn admin-toggle-btn" onclick="adminGuard.toggleFromHeader()" title="Admin mode">
+    <!-- User feedback 2026-05-15: match the gear icon used in the
+         ADMIN ACCESS modal (above the password input). The two SVGs
+         (admin-lock-closed / admin-lock-open) are kept for CSS toggle
+         compatibility but share the same gear shape — locked/unlocked
+         state is signalled by the body.admin-unlocked color change
+         (var(--text-dim) → var(--orange)). -->
+    <svg id="admin-lock-closed" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+      <circle cx="8" cy="8" r="2.5"/>
+      <path d="M8 1.5 L9.2 3.5 L11.5 2.5 L12.5 4.8 L10.5 6 L11.5 8 L9.5 8 L9.5 10 L6.5 10 L6.5 8 L4.5 8 L5.5 6 L3.5 4.8 L4.5 2.5 L6.8 3.5 Z"/>
+    </svg>
+    <svg id="admin-lock-open" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">
+      <circle cx="8" cy="8" r="2.5"/>
+      <path d="M8 1.5 L9.2 3.5 L11.5 2.5 L12.5 4.8 L10.5 6 L11.5 8 L9.5 8 L9.5 10 L6.5 10 L6.5 8 L4.5 8 L5.5 6 L3.5 4.8 L4.5 2.5 L6.8 3.5 Z"/>
+    </svg>
+    <span class="admin-toggle-label">ADMIN</span>
+  </button>
+  <button id="admin-gear-btn" class="admin-gear-btn" onclick="switchTab('settings')" title="Settings">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z"/>
+    </svg>
+  </button>
+</nav>
+
+<!-- ================================================================
+     LOCK MODAL — Déverrouillage Kids / Child Lock
+================================================================ -->
+<div id="lock-modal" class="admin-modal hidden" onclick="lockMgr.onOverlayClick(event)">
+  <div class="admin-modal-card">
+    <!-- W4 fix 2026-05-16: X close affordance — was: only ESC/Cancel/click-outside -->
+    <button class="admin-modal-close" onclick="lockMgr.cancelModal()" aria-label="Close">×</button>
+    <div class="admin-modal-icon" id="lock-modal-icon">
+      <svg width="28" height="32" viewBox="0 0 14 16">
+        <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="admin-modal-title" id="lock-modal-title">UNLOCK</div>
+    <div class="admin-modal-sub" id="lock-modal-sub">Enter password to return to normal mode</div>
+    <input type="password" id="lock-pwd-input" class="admin-pwd-input" placeholder="Password"
+           onkeydown="lockMgr.onKeyDown(event)"
+           onkeyup="lockMgr.onKeyUp(event)">
+    <div id="lock-pwd-caps" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
+    <div id="lock-pwd-error" class="admin-pwd-error hidden">Incorrect password</div>
+    <div class="admin-modal-btns">
+      <button class="btn" onclick="lockMgr.cancelModal()">CANCEL</button>
+      <button class="btn btn-active" onclick="lockMgr.submitModal()">UNLOCK</button>
+    </div>
+    <!-- Séparateur + bouton Child Lock (affiché uniquement depuis Kids mode expiré) -->
+    <div id="lock-childlock-btn" class="lock-childlock-sep" style="display:none">
+      <span class="lock-sep-line">— ou —</span>
+      <button class="btn btn-danger" onclick="lockMgr.escalateToChildLock()">
+        <svg width="12" height="14" viewBox="0 0 14 16" fill="none" stroke="currentColor" stroke-width="1.4" style="margin-right:6px">
+          <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4"/>
+        </svg>
+        ENABLE CHILD LOCK
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     ADMIN MODAL — Accès protégé (SERVO / VESC / CONFIG)
+================================================================ -->
+<div id="admin-modal" class="admin-modal hidden" onclick="adminGuard.onOverlayClick(event)">
+  <div class="admin-modal-card">
+    <div class="admin-modal-icon">
+      <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+        <circle cx="8" cy="8" r="2.5"/>
+        <path d="M8 1.5 L9.2 3.5 L11.5 2.5 L12.5 4.8 L10.5 6 L11.5 8 L9.5 8 L9.5 10 L6.5 10 L6.5 8 L4.5 8 L5.5 6 L3.5 4.8 L4.5 2.5 L6.8 3.5 Z"/>
+      </svg>
+    </div>
+    <div class="admin-modal-title">ADMIN ACCESS</div>
+    <div class="admin-modal-sub">Unlocks: SERVO · VESC · CONFIG · CHOREO tabs + audio uploads</div>
+    <input type="password" id="admin-pwd-input" class="admin-pwd-input" placeholder="Password"
+           onkeydown="adminGuard.onKeyDown(event)"
+           onkeyup="adminGuard.onKeyUp(event)">
+    <div id="admin-pwd-caps" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
+    <div id="admin-pwd-error" class="admin-pwd-error hidden">Incorrect password</div>
+    <div class="admin-modal-btns">
+      <button class="btn" onclick="adminGuard.cancel()">CANCEL</button>
+      <button class="btn btn-active" onclick="adminGuard.submit()">ACCESS</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     CHOREO ABORT MODAL — shown when ChoreoPlayer detects a fault
+================================================================ -->
+<div id="modal-chor-abort" class="admin-modal hidden" onclick="choreoEditor.dismissAbort()">
+  <div class="admin-modal-card" style="border-color:var(--red);max-width:340px" onclick="event.stopPropagation()">
+    <div class="admin-modal-icon" style="color:var(--red)">
+      <svg width="28" height="28" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M8 2 L14 13 L2 13 Z"/>
+        <line x1="8" y1="6" x2="8" y2="9.5"/>
+        <circle cx="8" cy="11.5" r=".7" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="admin-modal-title" style="color:var(--red);text-shadow:0 0 10px var(--red)">⚠ CHOREO ABORT</div>
+    <div id="chor-abort-reason" style="font-size:16px;font-family:monospace;color:var(--text);letter-spacing:2px;margin-bottom:8px;text-align:center">—</div>
+    <div class="admin-modal-sub">Choreography stopped. Check hardware before replaying.</div>
+    <div class="admin-modal-btns">
+      <button class="btn btn-danger" onclick="choreoEditor.dismissAbort()" style="width:100%">DISMISS</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     TAB 1: DRIVE
+================================================================ -->
+<div class="tab-content active" id="tab-drive">
+
+  <!-- Lock button — top-left of Drive tab -->
+  <button id="drive-lock-btn" class="drive-lock-btn" onclick="lockMgr.onBtnClick()" title="Lock mode (Kids / Child Lock)">
+    <svg class="lock-svg lock-open" width="21" height="24" viewBox="0 0 14 16">
+      <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+    </svg>
+    <svg class="lock-svg lock-closed" width="21" height="24" viewBox="0 0 14 16">
+      <rect x="1" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+      <path d="M4 8 L4 4.5 Q4 1.5 7 1.5 Q10 1.5 10 4.5 L10 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <circle cx="7" cy="12.5" r="1.3" fill="currentColor"/>
+    </svg>
+    <span id="drive-lock-label" class="drive-lock-label">LOCK</span>
+  </button>
+
+  <div class="drive-wrapper">
+
+    <!-- VESC safety banner — shown when drive is blocked. INSIDE the
+         wrapper so it consumes part of the flex column instead of
+         being added on top of a fixed-height container (which used to
+         push the bottom bar off-screen — reported 2026-05-14). -->
+    <div id="vesc-safety-banner" class="vesc-safety-banner" style="display:none">
+      <span class="vesc-safety-icon">⚠</span>
+      <span id="vesc-safety-msg">DRIVE BLOCKED — VESC OFFLINE</span>
+    </div>
+
+
+    <div class="drive-main">
+
+      <!-- Left joystick — Propulsion -->
+      <div class="joystick-panel joystick-panel-left">
+        <!-- Shortcuts pad — populated by shortcutsRunner.render() from
+             /shortcuts. Auto-split: first half of configured shortcuts
+             land here, rest on the right pad. -->
+        <div class="shortcut-pad shortcut-pad-left" id="shortcut-pad-left"></div>
+        <div class="joystick-label">PROPULSION</div>
+        <div class="joystick-ring" id="js-left-ring">
+          <div class="joystick-crosshair"></div>
+          <div class="joystick-knob" id="js-left-knob"></div>
+        </div>
+        <div class="joystick-vals">
+          <span>T: <span id="js-left-t">0.00</span></span>
+          <span>S: <span id="js-left-s">0.00</span></span>
+        </div>
+        <!-- WASD keyboard shortcuts -->
+        <div class="kbd-indicator">
+          <div class="kbd-row"><div class="kbd-key" id="kbd-w">W</div></div>
+          <div class="kbd-row">
+            <div class="kbd-key" id="kbd-a">A</div>
+            <div class="kbd-key" id="kbd-s">S</div>
+            <div class="kbd-key" id="kbd-d">D</div>
+          </div>
+          <div class="kbd-hint-text">KEYBOARD</div>
+        </div>
+      </div>
+
+      <!-- Center — Camera feed -->
+      <div class="drive-center">
+        <div class="cam-container">
+          <img id="cam-stream" class="cam-stream" alt="" style="display:none">
+          <div id="cam-bg" class="cam-bg"></div>
+
+          <!-- WOW polish 2026-05-15: mode badges overlay — sits over
+               the camera feed top-center so it doesn't push the
+               layout. Hidden when normal+safe. Hover/long-press a
+               pill for the full explanation via the title tooltip. -->
+          <div id="drive-mode-strip" class="drive-mode-strip" style="display:none">
+            <span id="mode-bench" class="mode-pill mode-bench" style="display:none"
+                  title="VESC safety bypass enabled — drive works without both VESCs reporting healthy. Turn off before show / outdoor use.">
+              <span class="mode-pill-icon">🛡</span> BENCH MODE
+            </span>
+            <span id="mode-kids" class="mode-pill mode-kids" style="display:none"
+                  title="Kids Mode — drive enabled but speed is capped to a safe limit. Dome + sounds + lights still fully available.">
+              <span class="mode-pill-icon">👶</span> KIDS MODE <span id="mode-kids-pct">50</span>%
+            </span>
+            <span id="mode-lock" class="mode-pill mode-lock" style="display:none"
+                  title="Child Lock — propulsion fully blocked. Dome rotation, sounds, lights and panels remain free for the child to play with.">
+              <span class="mode-pill-icon">🔒</span> CHILD LOCK
+            </span>
+            <!-- W6 fix 2026-05-16: quick-exit CTA when locked.
+                 Tap → opens unlock modal directly. -->
+            <button id="mode-unlock-cta" class="mode-pill mode-pill-action" style="display:none"
+                    onclick="lockMgr._showUnlockModal()" title="Unlock now (admin password)">
+              🔑 Tap to unlock
+            </button>
+          </div>
+
+          <!-- HUD overlays -->
+          <!-- Speed arc — top-left -->
+          <!-- Theme-aware HUD: arc track uses rgba(var(--blue-rgb), .12) and
+               the moving arc starts in the theme's --blue accent. JS swaps
+               to var(--amber) / var(--red) as speed crosses thresholds. -->
+          <div class="cam-hud-speed">
+            <svg width="74" height="42" viewBox="0 0 74 42">
+              <path d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="rgba(0,170,255,0.12)" stroke-width="4" stroke-linecap="round"/>
+              <path id="cam-speed-arc" d="M6 40 A32 32 0 0 1 68 40" fill="none" stroke="var(--blue, #00aaff)" stroke-width="4" stroke-linecap="round" stroke-dasharray="101" stroke-dashoffset="101"/>
+            </svg>
+            <span id="cam-speed-val" class="cam-speed-val">0%</span>
+          </div>
+
+          <!-- Direction arrow — center. Uses var(--cyan-rgb) so themes
+               can recolor; falls back to the original rgba if unset. -->
+          <div id="cam-dir-wrap" class="cam-dir-wrap" style="opacity:0">
+            <svg width="36" height="36" viewBox="0 0 36 36">
+              <polygon id="cam-dir-poly" points="18,3 30,28 18,22 6,28" fill="rgba(var(--cyan-rgb, 0 255 200), 0.75)" stroke="none"/>
+            </svg>
+          </div>
+
+          <!-- Stream taken overlay -->
+          <div id="cam-taken" class="cam-taken" style="display:none">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M23 7 L16 12 23 17V7Z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
+              <line x1="1" y1="1" x2="23" y2="23" stroke="var(--red)" stroke-width="2"/>
+            </svg>
+            <div class="cam-taken-text">STREAM TAKEN</div>
+            <button class="btn cam-taken-btn" onclick="_takeCameraStream()">TAKE STREAM</button>
+          </div>
+
+          <div class="cam-label">CAMERA</div>
+        </div>
+      </div>
+
+      <!-- Right joystick — Dome -->
+      <div class="joystick-panel joystick-panel-right">
+        <div class="shortcut-pad shortcut-pad-right" id="shortcut-pad-right"></div>
+        <div class="joystick-label" id="joystick-master-label">DOME</div>
+        <div class="joystick-ring" id="js-right-ring">
+          <div class="joystick-crosshair"></div>
+          <div class="joystick-knob" id="js-right-knob"></div>
+        </div>
+        <div class="joystick-vals">
+          <span>X: <span id="js-right-x">0.00</span></span>
+          <span>Y: <span id="js-right-y">0.00</span></span>
+        </div>
+        <!-- Arrow key shortcuts — dome rotation / future camera tilt -->
+        <div class="kbd-indicator">
+          <div class="kbd-row"><div class="kbd-key" id="kbd-up">↑</div></div>
+          <div class="kbd-row">
+            <div class="kbd-key" id="kbd-left">←</div>
+            <div class="kbd-key" id="kbd-down">↓</div>
+            <div class="kbd-key" id="kbd-right">→</div>
+          </div>
+          <div class="kbd-hint-text">DOME / CAM</div>
+        </div>
+      </div>
+
+    </div><!-- .drive-main -->
+
+    <!-- Bottom bar -->
+    <div class="drive-bottom-bar">
+
+      <!-- Col 1: Speed + VESC stats -->
+      <div class="drive-bottom-left">
+        <div class="speed-wrap">
+          <label class="ctrl-label">
+            SPEED <span id="speed-val" class="ctrl-val">60%</span>
+            <!-- WOW HW1 2026-05-15: shows the effective real-world output
+                 when power_scale < 1.0. Hidden when scale=1.0 to avoid
+                 noise. Operator sees "60% × 50% = 30%" so they know why
+                 the bot is sluggish. -->
+            <span id="speed-effective" class="ctrl-effective" style="display:none"></span>
+          </label>
+          <input type="range" id="speed-slider" min="10" max="100" value="60"
+                 oninput="setSpeed(this.value)" class="holo-slider">
+        </div>
+        <div id="drive-vesc-stats" class="drive-vesc-stats">
+          <span id="drive-stat-v" class="drive-stat">--V</span>
+          <span class="drive-stat-sep">·</span>
+          <span id="drive-stat-t" class="drive-stat">--°C</span>
+        </div>
+      </div>
+
+      <!-- Col 2: E-STOP toggle (centered) -->
+      <button id="estop-toggle-btn" class="estop-toggle-btn estop-armed" onclick="toggleEstop()">
+        <span class="estop-icon">&#9632;</span>
+        <span id="estop-toggle-text">EMERGENCY STOP</span>
+      </button>
+
+      <!-- Col 3: Dome auto + camera toggle -->
+      <div class="drive-bottom-right">
+        <!-- WOW HW3 2026-05-15: BT controller status visible on Drive.
+             Hidden when BT disabled. Glyph + signal bars updated by
+             StatusPoller from data.bt_connected + data.bt_rssi. -->
+        <span id="drive-bt-pill" class="drive-bt-pill" style="display:none" title="Bluetooth controller">
+          <span class="drive-bt-icon">🎮</span>
+          <span id="drive-bt-bars" class="signal-bars"></span>
+        </span>
+        <button id="alive-toggle-btn" class="alive-btn" onclick="behaviorPanel.toggleAlive()" title="ALIVE mode — idle reactions">
+          ALIVE
+        </button>
+        <button id="cam-toggle-btn" class="cam-toggle-btn cam-on" onclick="_toggleCamera()" title="Toggle camera feed">
+          <svg width="18" height="14" viewBox="0 0 24 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 3 L16 9 23 15V3Z"/>
+            <rect x="1" y="1" width="15" height="16" rx="2"/>
+          </svg>
+        </button>
+      </div>
+
+    </div><!-- .drive-bottom-bar -->
+
+  </div><!-- .drive-wrapper -->
+
+</div>
+
+<!-- ================================================================
+     TAB 2: AUDIO
+================================================================ -->
+<div class="tab-content" id="tab-audio">
+  <div class="audio-layout">
+
+    <!-- Category pills -->
+    <div class="audio-categories-wrap">
+      <h3 class="section-title">SOUND CATEGORIES</h3>
+      <div class="audio-categories" id="audio-categories">
+        <!-- generated by JS -->
+      </div>
+      <!-- WOW L5-W 2026-05-15: Esc cancels + live dup-check inline,
+           + visible Cancel button so operator doesn't feel trapped. -->
+      <div id="audio-new-cat-row" style="display:none;margin-top:8px;gap:6px;align-items:center">
+        <input id="audio-new-cat-input" type="text" placeholder="new category name…"
+               class="input-text input-sm" style="flex:1;text-transform:lowercase"
+               maxlength="24"
+               onkeydown="if(event.key==='Enter') audioBoard.createCategory(); if(event.key==='Escape') audioBoard.cancelCreateCategory();"
+               oninput="audioBoard.checkDupCategory(this.value)">
+        <button class="btn btn-sm btn-active" onclick="audioBoard.createCategory()">+ CREATE</button>
+        <button class="btn btn-sm" onclick="audioBoard.cancelCreateCategory()" title="Cancel (Esc)">✕</button>
+        <span id="audio-new-cat-dup" style="font-size:10px;color:var(--amber,#ffaa44);display:none">⚠ already exists</span>
+      </div>
+    </div>
+
+    <!-- Sound grid -->
+    <div class="audio-sounds-wrap">
+      <h3 class="section-title">SOUNDS — <span id="audio-cat-name">select a category</span></h3>
+      <div class="audio-sounds-grid" id="audio-sounds-grid">
+        <div class="audio-empty">Select a category above to browse sounds</div>
+      </div>
+
+      <!-- Upload drop zone (admin only) -->
+      <div id="audio-upload-zone"
+           style="display:none;margin-top:10px;border:2px dashed #333;border-radius:6px;padding:14px 10px;text-align:center;font-size:11px;color:#666;letter-spacing:.05em;transition:border-color .2s,color .2s;cursor:pointer"
+           ondragover="audioBoard.uploadDragOver(event)"
+           ondragleave="audioBoard.uploadDragLeave(event)"
+           ondrop="audioBoard.uploadDrop(event)"
+           onclick="document.getElementById('audio-upload-input').click()">
+        ⬆ DROP MP3 HERE — adds to <b id="audio-upload-cat-name">selected category</b>
+        <input type="file" id="audio-upload-input" accept=".mp3" multiple style="display:none"
+               onchange="audioBoard.uploadFiles(this.files)">
+      </div>
+      <div id="audio-upload-status" style="display:none;margin-top:6px;font-size:10px;padding:4px 8px;border-radius:3px"></div>
+    </div>
+
+    <!-- Now playing bar -->
+    <div class="now-playing-bar" id="now-playing-bar">
+      <div class="waveform" id="waveform">
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+        <div class="waveform-bar"></div>
+      </div>
+      <div class="now-playing-info">
+        <div class="now-playing-top">
+          <span id="now-playing-text" class="now-playing-text">IDLE</span>
+          <span id="now-playing-time" class="now-playing-time"></span>
+          <div class="now-playing-controls">
+            <button class="now-playing-ctrl-btn" id="now-playing-repeat" onclick="audioBoard.toggleRepeat()" title="Repeat">🔁</button>
+            <button class="now-playing-ctrl-btn" id="now-playing-auto"   onclick="audioBoard.toggleAutoRandom()" title="Auto-random">🔀</button>
+            <button class="now-playing-ctrl-btn" onclick="audioBoard.playNext()" title="Next">⏭</button>
+            <button class="now-playing-ctrl-btn now-playing-stop" onclick="audioBoard.stopPlayback()" title="Stop">⏹</button>
+          </div>
+        </div>
+        <div class="now-playing-progress" id="now-playing-progress">
+          <div class="now-playing-progress-fill" id="now-playing-progress-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Volume control -->
+    <div class="volume-bar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" opacity="0.7">
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+      </svg>
+      <input type="range" id="volume-slider" min="0" max="100" value="80" class="volume-slider">
+      <span id="volume-label" class="volume-label">80%</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================================================================
+     TAB 3: SEQUENCES
+================================================================ -->
+<div class="tab-content" id="tab-sequences">
+  <div class="sequences-layout">
+
+    <!-- Category pills (like Audio tab) -->
+    <div class="seq-pills-wrap">
+      <div class="seq-pills" id="seq-pills">
+        <!-- generated by JS -->
+      </div>
+      <!-- S7 + S10 fix 2026-05-16: French → English (CLAUDE.md mandate) +
+           operator-mode hint shown when admin is LOCKED so builders
+           know what they can/cannot do. -->
+      <div class="seq-admin-hint hidden" id="seq-admin-hint">
+        ⠿ Drag pills to reorder · Drag a card onto a pill to recategorize · Double-click pill label to rename · Tap to play, hold for loop
+      </div>
+      <div class="seq-operator-hint hidden" id="seq-operator-hint">
+        🔒 Unlock admin to edit · Tap any sequence to play · Hold for loop
+      </div>
+    </div>
+
+    <!-- Sequence cards grid -->
+    <div class="seq-grid" id="seq-grid">
+      <!-- generated by JS -->
+    </div>
+
+    <!-- Running status bar -->
+    <!-- S1 + S6 fix 2026-05-16: visible STOP button when something is
+         playing (was: long-press a card OR click same card = obscure).
+         Friendly label from _scripts.label, not raw filename. -->
+    <div class="running-list-wrap" id="running-list-wrap">
+      <strong class="section-title-sm">ACTIVE:</strong>
+      <span id="running-scripts" class="running-list">—</span>
+      <button id="seq-stop-btn" class="btn btn-warn btn-sm" style="display:none;margin-left:8px"
+              onclick="scriptEngine.stopAll()">■ STOP</button>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ================================================================
+     TAB 4: LIGHTS — Logic Display + Light Sequences
+================================================================ -->
+<div class="tab-content" id="tab-lights">
+  <!-- W7 fix 2026-05-16: removed inline 'grid-template-columns: 1fr 1fr'
+       which was overriding the @media (max-width:768px) rule that
+       collapses to 1 column on phone. Now uses .systems-grid responsive
+       defaults (repeat(auto-fit,minmax(320px,1fr)) below 768px → 1fr). -->
+  <div class="systems-grid" id="lights-grid">
+
+    <!-- Lights Control (Teeces / AstroPixels+) -->
+    <section class="card systems-card">
+      <!-- W12 fix 2026-05-16: backend pill next to title (was: backend
+           only shown in card title text — easy to miss at a glance). -->
+      <h2 class="card-title" id="lights-card-title">
+        LIGHTS CONTROL
+        <span class="backend-pill" id="lights-backend-pill" title="Active lights driver">—</span>
+      </h2>
+
+      <!-- Dome simulation -->
+      <div class="dome-views" id="dome-sim">
+        <div class="dome-side">
+          <div class="dome-side-label">▼ FRONT VIEW</div>
+          <div class="dome-shape">
+            <div class="front-inner">
+              <div class="fld-stack">
+                <div>
+                  <div class="panel-label" style="color:#00ffea">FLD TOP</div>
+                  <div class="logic-display" id="fld-top"></div>
+                </div>
+                <div>
+                  <div class="panel-label" style="color:#00aaff">FLD BOT</div>
+                  <div class="logic-display" id="fld-bot"></div>
+                </div>
+              </div>
+              <div class="psi-wrap">
+                <div class="panel-label">PSI</div>
+                <div class="psi-circle" id="psi-front"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="dome-side">
+          <div class="dome-side-label">▼ REAR VIEW</div>
+          <div class="dome-shape" style="padding:18px 20px 14px">
+            <div class="rear-inner">
+              <div>
+                <div class="panel-label" style="color:#ff8800">RLD</div>
+                <div class="logic-display" id="rld"></div>
+              </div>
+              <div class="psi-wrap">
+                <div class="panel-label">PSI</div>
+                <div class="psi-circle" id="psi-rear" style="animation-delay:.6s"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode status badge -->
+      <div class="badge-wrap">
+        <div class="mode-badge c-blue" id="mode-status-badge">✨ RANDOM</div>
+      </div>
+
+      <!-- Mode buttons -->
+      <div class="btn-group">
+        <button class="btn btn-active" id="teeces-btn-random" onclick="teecesMode('random')">RANDOM</button>
+        <button class="btn btn-dark" id="teeces-btn-off" onclick="teecesMode('off')">OFF</button>
+      </div>
+
+      <!-- Text input with display target -->
+      <div class="row mt">
+        <input type="text" id="teeces-text" placeholder="Scrolling text (max 20)…"
+               maxlength="20" class="input-text"
+               oninput="updateTextCounter()" onkeydown="if(event.key==='Enter')sendTeecesText()">
+        <select id="teeces-display" class="input-select-sm" title="Display target">
+          <option value="fld_top">FLD TOP</option>
+          <option value="fld_bottom">FLD BOT</option>
+          <option value="fld_both">FLD BOTH</option>
+          <option value="rld">RLD</option>
+          <option value="all">ALL</option>
+        </select>
+        <button class="btn" id="teeces-send-btn" onclick="sendTeecesText()">SEND</button>
+      </div>
+      <!-- W6 fix 2026-05-16: live char counter — was: silent truncation
+           at maxlength=20, no warning if operator pasted longer text. -->
+      <div class="text-counter-row">
+        <span class="text-counter" id="teeces-text-counter">0/20</span>
+      </div>
+
+      <!-- PSI controls -->
+      <!-- W13 fix 2026-05-16: dropdowns trigger live preview in dome
+           sim (no UART write) so operator can audition colors before
+           committing via SET PSI. -->
+      <div class="psi-swatches-label mt">PSI SETTINGS</div>
+      <div class="psi-ctrl">
+        <div class="psi-ctrl-row">
+          <span class="psi-ctrl-label">TARGET</span>
+          <select id="psi-target" class="input-select-sm" style="flex:1" onchange="previewPSI()">
+            <option value="both">BOTH</option>
+            <option value="fpsi">FPSI (FRONT)</option>
+            <option value="rpsi">RPSI (REAR)</option>
+          </select>
+        </div>
+        <div class="psi-ctrl-row" style="margin-top:6px">
+          <span class="psi-ctrl-label">SEQUENCE</span>
+          <select id="psi-sequence" class="input-select-sm" style="flex:1" onchange="previewPSI()">
+            <option value="normal">NORMAL</option>
+            <option value="flash">FLASH</option>
+            <option value="alarm">ALARM</option>
+            <option value="failure">FAILURE</option>
+            <option value="redalert">RED ALERT</option>
+            <option value="leia">LEIA</option>
+            <option value="march">MARCH</option>
+          </select>
+        </div>
+        <button class="btn" id="psi-apply-btn" style="margin-top:8px;width:100%" onclick="applyPSI()">SET PSI</button>
+        <button class="btn btn-dark" style="margin-top:4px;font-size:9px;width:100%"
+                onclick="resetPSI()"
+                title="Sync PSI back to the active animation's color (PSI normally stays blue regardless of T-code mode)">↺ RESET TO ANIMATION</button>
+      </div>
+    </section>
+
+    <!-- T-code Animations -->
+    <section class="card systems-card lights-anims-card">
+      <!-- W15/W8/B15 fix 2026-05-16: STOP ALL moved to a sticky bar
+           in the card header so it's always 1 tap away (was: at bottom
+           of card, off-screen on mobile after 22 chips). Wired to
+           teecesMode('off') so _currentMode + buttons stay sync'd
+           (was: inline onclick that bypassed the controller). -->
+      <div class="lights-anims-header">
+        <h2 class="card-title" style="margin:0">ANIMATIONS</h2>
+        <button class="btn btn-danger btn-sm anim-stop-btn"
+                id="anim-stop-btn"
+                onclick="teecesMode('off')"
+                title="Stop all lights">■ STOP ALL</button>
+      </div>
+      <div class="anim-grid" id="anim-grid">
+        <!-- generated by JS -->
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ================================================================
+     TAB CHOREO: Choreography Timeline Editor — ULTRATIME EDITION
+================================================================ -->
+<div class="tab-content" id="tab-choreo">
+  <div id="chor-audio-banner" style="display:none;background:rgba(255,180,0,.15);border:1px solid rgba(255,180,0,.4);border-radius:4px;padding:6px 10px;margin-bottom:8px;font-size:10px;color:#ffb400;letter-spacing:.05em"></div>
+  <div class="chor-layout">
+
+    <!-- ── Single Command Bar ─────────────────────────────────────── -->
+    <div class="chor-command-bar">
+      <!-- LEFT GROUP: file selector + new/delete -->
+      <select id="chor-select" class="input-select-sm" style="width:150px">
+        <option value="">— select —</option>
+      </select>
+      <button class="btn btn-sm" onclick="choreoEditor.newChor()">+ NEW</button>
+      <button class="btn btn-danger btn-sm chor-admin-btn" onclick="choreoEditor.deleteChor()">🗑 DELETE</button>
+      <div class="chor-cmd-gap"></div>
+      <!-- TRANSPORT: play / stop -->
+      <button class="btn btn-active btn-sm" id="chor-btn-play" onclick="choreoEditor.play()">▶ PLAY</button>
+      <button class="btn btn-danger btn-sm" id="chor-btn-stop" onclick="choreoEditor.stop()">⏹ STOP</button>
+      <div class="chor-cmd-sep"></div>
+      <span class="chor-cmd-label">SNAP</span>
+      <button class="chor-snap-btn active" id="chor-snap-01" onclick="choreoEditor.setSnap(0.1)">0.1s</button>
+      <button class="chor-snap-btn" id="chor-snap-05" onclick="choreoEditor.setSnap(0.5)">0.5s</button>
+      <button class="chor-snap-btn" id="chor-snap-off" onclick="choreoEditor.setSnap(0)">OFF</button>
+      <div class="chor-cmd-sep"></div>
+      <span class="chor-cmd-label">ZOOM</span>
+      <button class="btn btn-sm" onclick="choreoEditor.zoom(-10)">−</button>
+      <button class="btn btn-sm" onclick="choreoEditor.zoom(10)">+</button>
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.renameChor()">✏️ RENAME</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.save()">💾 SAVE</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.exportChor()" title="Download .chor file">📤 EXPORT</button>
+        <button class="btn btn-sm chor-admin-btn" onclick="choreoEditor.importChor()" title="Upload .chor file">📥 IMPORT</button>
+      </div>
+    </div>
+
+    <!-- ── Body ──────────────────────────────────────────────────── -->
+    <div class="chor-body">
+
+      <!-- LEFT PANEL: photorealistic Digital Twin — mirrors the active lights track -->
+      <div class="chor-left-panel" id="chor-monitor">
+        <div class="chor-monitors">
+          <div class="chor-monitor-title">LIVE MONITOR</div>
+
+          <!-- FRONT VIEW — FLD TOP / FLD BOT + PSI -->
+          <div class="dome-side">
+            <div class="dome-side-label">▼ FRONT VIEW</div>
+            <div class="dome-shape" style="padding:10px 12px 8px">
+              <div class="front-inner">
+                <div class="fld-stack">
+                  <div>
+                    <div class="panel-label" style="color:#00ffea">FLD TOP</div>
+                    <div class="logic-display" id="chor-fld-top"></div>
+                  </div>
+                  <div>
+                    <div class="panel-label" style="color:#00aaff">FLD BOT</div>
+                    <div class="logic-display" id="chor-fld-bot"></div>
+                  </div>
+                </div>
+                <div class="psi-wrap">
+                  <div class="panel-label">PSI</div>
+                  <div class="psi-circle" id="chor-psi-front"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- REAR VIEW — RLD + PSI -->
+          <div class="dome-side">
+            <div class="dome-side-label">▼ REAR VIEW</div>
+            <div class="dome-shape" style="padding:10px 12px 8px">
+              <div class="rear-inner">
+                <div>
+                  <div class="panel-label" style="color:#ff8800">RLD</div>
+                  <div class="logic-display" id="chor-rld"></div>
+                </div>
+                <div class="psi-wrap">
+                  <div class="panel-label">PSI</div>
+                  <div class="psi-circle" id="chor-psi-rear" style="animation-delay:.6s"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /chor-monitors -->
+      </div><!-- /chor-left-panel -->
+
+      <!-- Tracks body: labels + timeline scroll in a shared vertical-scroll wrapper -->
+      <div class="chor-tracks-body" id="chor-tracks-body">
+
+      <!-- Track label column -->
+      <!-- Track labels + one generic source button per track (Ultratime style) -->
+      <div class="chor-labels" id="chor-labels">
+        <div class="chor-label-spacer"></div>
+
+        <div class="chor-track-row" data-track="audio">
+          <div class="chor-src-btn" data-track="audio"
+               data-tpl='{"action":"play","file":"","volume":85,"duration":5,"ch":0}'
+               draggable="true">+ AUDIO</div>
+        </div>
+
+        <div class="chor-track-row" data-track="lights">
+          <div class="chor-src-btn" data-track="lights"
+               data-tpl='{"mode":"random","duration":4}'
+               draggable="true">+ LIGHT</div>
+        </div>
+
+        <div class="chor-track-row chor-track-row-dome" data-track="dome">
+          <div class="chor-src-btn" data-track="dome"
+               data-tpl='{"angle":0,"easing":"linear"}'
+               draggable="true" id="chor-btn-dome">+ DOME</div>
+        </div>
+
+        <div class="chor-track-row" data-track="dome_servos">
+          <div class="chor-src-btn" data-track="dome_servos"
+               data-tpl='{"servo":"","action":"open","duration":1,"group":"dome"}'
+               draggable="true" id="chor-btn-dome-srv">+ DOME SRV</div>
+        </div>
+
+        <div class="chor-track-row" data-track="body_servos">
+          <div class="chor-src-btn" data-track="body_servos"
+               data-tpl='{"servo":"","action":"open","duration":1,"group":"body"}'
+               draggable="true" id="chor-btn-body-srv">+ BODY SRV</div>
+        </div>
+
+        <div class="chor-track-row" data-track="arm_servos">
+          <div class="chor-src-btn" data-track="arm_servos"
+               data-tpl='{"arm":1,"action":"open","duration":1,"group":"arms"}'
+               draggable="true">+ ARM SRV</div>
+        </div>
+
+        <div class="chor-track-row" data-track="propulsion">
+          <div class="chor-src-btn" data-track="propulsion"
+               data-tpl='{"left":0.5,"right":0.5,"duration":3}'
+               draggable="true">+ DRIVE</div>
+        </div>
+
+      </div><!-- /chor-labels -->
+
+      <!-- Scrollable timeline -->
+      <div class="chor-scroll-wrap" id="chor-scroll">
+        <div class="chor-canvas" id="chor-canvas">
+          <div class="chor-ruler" id="chor-ruler"></div>
+          <div class="chor-lane chor-lane-audio" id="chor-lane-audio" data-track="audio">
+            <canvas class="chor-waveform-canvas" id="chor-waveform-canvas"></canvas>
+          </div>
+          <div class="chor-lane" id="chor-lane-lights"     data-track="lights"></div>
+          <div class="chor-lane chor-lane-dome" id="chor-lane-dome" data-track="dome"></div>
+          <div class="chor-lane" id="chor-lane-dome_servos" data-track="dome_servos"></div>
+          <div class="chor-lane" id="chor-lane-body_servos" data-track="body_servos"></div>
+          <div class="chor-lane" id="chor-lane-arm_servos"  data-track="arm_servos"></div>
+          <div class="chor-lane" id="chor-lane-propulsion" data-track="propulsion"></div>
+          <div class="chor-playhead" id="chor-playhead">
+            <div class="chor-playhead-head"></div>
+          </div>
+        </div>
+      </div><!-- /chor-scroll-wrap -->
+
+      </div><!-- /chor-tracks-body -->
+
+      <!-- Right: Block Inspector -->
+      <div class="chor-props" id="chor-props">
+
+        <div class="chor-inspector-title" id="chor-inspector-title">NO BLOCK SELECTED</div>
+        <div id="chor-props-content" style="color:var(--text-dim);font-size:10px;padding:10px 8px">
+          Select a block to inspect.
+        </div>
+
+        <div id="chor-easing-wrap" style="display:none;padding:0 8px 8px">
+          <div class="chor-props-title" style="border:none;margin-bottom:4px">EASING</div>
+          <canvas id="chor-easing-canvas" width="184" height="70"
+            style="width:100%;border:1px solid var(--border);border-radius:3px;background:var(--bg3)"></canvas>
+          <!-- Easing buttons use data-easing instead of inline onclick — the
+               wiring lives in choreoEditor.init()'s globals-bind block so it
+               survives tab switches without leaking listeners (CSP-friendly). -->
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">
+            <button type="button" class="chor-ease-btn" data-easing="linear">LINEAR</button>
+            <button type="button" class="chor-ease-btn" data-easing="ease-in">EASE IN</button>
+            <button type="button" class="chor-ease-btn" data-easing="ease-out">EASE OUT</button>
+            <button type="button" class="chor-ease-btn" data-easing="ease-in-out">IN-OUT</button>
+          </div>
+        </div>
+
+      </div><!-- /chor-props -->
+
+    </div><!-- /chor-body -->
+
+    <!-- ── Footer status bar — timecode + duration ──────────────── -->
+    <div class="chor-footer">
+      <span class="chor-footer-label">⏱</span>
+      <span class="chor-footer-time" id="chor-timecode">00:00.000</span>
+      <span class="chor-footer-sep">/</span>
+      <span class="chor-footer-dur" id="chor-duration">—</span>
+    </div>
+
+  </div><!-- /chor-layout -->
+  <div id="chor-banner-slot"></div>
+</div>
+
+<!-- ================================================================
+     TAB: SETTINGS — iPad-style sidebar navigation
+================================================================ -->
+<div class="tab-content" id="tab-settings">
+  <div class="settings-layout">
+
+    <!-- Sidebar -->
+    <!-- WOW polish X1 2026-05-15: grouped into semantic sections so 16
+         items don't read as alphabet-soup. Operator finds what they
+         want by category instead of scanning all 16. -->
+    <nav class="settings-sidebar">
+      <span class="settings-nav-section-label">OPERATOR</span>
+      <button class="settings-nav-item" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">🎛️ Shortcuts</button>
+      <button class="settings-nav-item active" data-panel="behavior" onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
+      <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
+
+      <span class="settings-nav-section-label">HARDWARE</span>
+      <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
+      <button class="settings-nav-item" data-panel="hats"      onclick="switchSettingsPanel('hats')">🎩 HATs</button>
+      <button class="settings-nav-item" data-panel="arms"      onclick="switchSettingsPanel('arms')">🦾 Arms</button>
+      <button class="settings-nav-item" data-panel="servos"    onclick="switchSettingsPanel('servos')">🔧 Calibration</button>
+      <button class="settings-nav-item" data-panel="lights"    onclick="switchSettingsPanel('lights')">💡 Lights</button>
+      <button class="settings-nav-item" data-panel="battery"   onclick="switchSettingsPanel('battery')">🔋 Battery</button>
+
+      <span class="settings-nav-section-label">CONNECTIVITY</span>
+      <button class="settings-nav-item" data-panel="bluetooth" onclick="switchSettingsPanel('bluetooth')">🎮 BT Gamepad</button>
+      <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
+      <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
+      <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
+
+      <span class="settings-nav-section-label">APPEARANCE</span>
+      <button class="settings-nav-item" data-panel="interface" onclick="switchSettingsPanel('interface')">🎨 Interface</button>
+
+      <span class="settings-nav-section-label">SYSTEM</span>
+      <button class="settings-nav-item" data-panel="deploy"      onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
+      <button class="settings-nav-item" data-panel="system"      onclick="switchSettingsPanel('system')">🖥️ System</button>
+      <button class="settings-nav-item" data-panel="diagnostics" onclick="switchSettingsPanel('diagnostics')">🔍 Diagnostics</button>
+    </nav>
+
+    <!-- Content panels -->
+    <div class="settings-content">
+
+      <!-- 🎮 Bluetooth -->
+      <div class="settings-panel" id="spanel-bluetooth">
+        <section class="card settings-card">
+          <h2 class="card-title">BT GAMEPAD — <span class="robot-name">R2-D2</span></h2>
+          <!-- W4/W11 fix 2026-05-16: lock/bench mode pills visible in BT panel -->
+          <div id="bt-mode-pills" class="bt-mode-pills" style="display:none"></div>
+          <!-- 2026-05-16 redesign: premium SVG icon with status LED,
+               2-line info block (status + name + MAC pill), vitals
+               grouped right (BAT bar + SIG dBm stacked). Old layout
+               was flat and the MAC was invisible on controllers that
+               don't expose evdev.uniq. -->
+          <div class="bt-status-row">
+            <svg class="gamepad-icon" width="56" height="40" viewBox="0 0 56 40" fill="none" aria-hidden="true">
+              <defs>
+                <linearGradient id="gp-body" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stop-color="currentColor" stop-opacity="0.18"/>
+                  <stop offset="1" stop-color="currentColor" stop-opacity="0.06"/>
+                </linearGradient>
+              </defs>
+              <!-- Controller body: stylised gamepad silhouette with grips -->
+              <path d="M 14 10
+                       Q 4 10 4 22
+                       Q 4 33 13 34
+                       Q 16 34 17 30
+                       L 19 26
+                       Q 22 24 28 24
+                       Q 34 24 37 26
+                       L 39 30
+                       Q 40 34 43 34
+                       Q 52 33 52 22
+                       Q 52 10 42 10
+                       Z"
+                    fill="url(#gp-body)"
+                    stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+              <!-- Status LED (top center) - animates via CSS when connected -->
+              <circle class="gamepad-led" cx="28" cy="7" r="1.7" fill="currentColor" opacity="0.4"/>
+              <!-- D-pad cross (left) -->
+              <rect x="10" y="19" width="9" height="3.2" rx="1" fill="currentColor" opacity="0.9"/>
+              <rect x="12.9" y="16.1" width="3.2" height="9" rx="1" fill="currentColor" opacity="0.9"/>
+              <!-- Action buttons diamond (right) -->
+              <circle cx="40" cy="15.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <circle cx="44" cy="20.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <circle cx="40" cy="25.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <circle cx="36" cy="20.5" r="1.6" fill="currentColor" opacity="0.85"/>
+              <!-- Shoulder hint (subtle top edges of grips) -->
+              <path d="M 9 12 Q 7 11 5 13" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" stroke-linecap="round"/>
+              <path d="M 47 12 Q 49 11 51 13" stroke="currentColor" stroke-width="1" opacity="0.45" fill="none" stroke-linecap="round"/>
+            </svg>
+            <div class="bt-info">
+              <div id="bt-status-text" class="bt-status-text">NOT CONNECTED</div>
+              <div id="bt-device-name" class="bt-device-name">—</div>
+              <div id="bt-device-mac" class="bt-device-mac" title="Controller MAC address" style="display:none">—</div>
+            </div>
+            <label class="toggle-label bt-toggle" title="Enable/disable BT controller">
+              <input type="checkbox" id="bt-enable-toggle" checked onchange="btController.setEnabled(this.checked)">
+              <span class="toggle-switch"></span>
+              ON
+            </label>
+            <div class="bt-vitals">
+              <div class="bt-vital-row" title="Controller battery">
+                <span class="bt-vital-label">BAT</span>
+                <div id="bt-battery-bar" class="bt-battery-bar">
+                  <div id="bt-battery-fill" style="width:0%"></div>
+                </div>
+                <span id="bt-battery-pct" class="bt-battery-pct">--%</span>
+              </div>
+              <div class="bt-vital-row" title="Bluetooth signal strength (dBm)">
+                <span class="bt-vital-label">SIG</span>
+                <span id="bt-rssi-val" class="bt-rssi-val">--</span>
+              </div>
+            </div>
+          </div>
+          <!-- 2026-05-16 redesign: dense 2-col grid for all configurable
+               fields. Labels + controls on same baseline. No more weird
+               margin-top hacks. SPEED MODE buttons removed (they belong
+               to the Drive tab, not BT config). -->
+          <div class="bt-config-compact">
+            <!-- Row 1: CONTROLLER TYPE | EMERGENCY STOP -->
+            <div class="bt-field">
+              <label class="ctrl-label">CONTROLLER TYPE</label>
+              <select id="bt-gamepad-type" class="input-text" onchange="btController.onTypeChange(this.value)">
+                <option value="ps">PlayStation (PS4 / PS5)</option>
+                <option value="xbox">Xbox (One / Series)</option>
+                <option value="nintendo">Nintendo Switch Pro</option>
+                <option value="generic">Generic / Other</option>
+              </select>
+            </div>
+            <div class="bt-field">
+              <label class="ctrl-label">🛡 EMERGENCY STOP BUTTON</label>
+              <select id="bt-map-estop" class="input-text">
+                <option value="BTN_MODE">PS / Xbox / Home</option>
+                <option value="BTN_SELECT">Share / View / −</option>
+                <option value="BTN_START">Options / Menu / +</option>
+              </select>
+            </div>
+
+            <!-- Row 2: AXES — 2×2 grouped grid.
+                 LEFT col = DRIVE (throttle + steering — usually L stick)
+                 RIGHT col = LOOK (dome rotation + camera tilt — usually R stick) -->
+            <div class="bt-field bt-field-full">
+              <label class="ctrl-label">AXIS MAPPINGS
+                <span class="ctrl-hint">— stick axes per role</span>
+              </label>
+              <div class="bt-axes-grid">
+                <div class="bt-axes-group">
+                  <div class="bt-axes-group-title">🚗 DRIVE</div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Throttle</span>
+                    <select id="bt-map-throttle" class="input-text input-sm" title="Throttle axis">
+                      <option value="ABS_Y">L Stick Y</option>
+                      <option value="ABS_RY">R Stick Y</option>
+                    </select>
+                  </div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Steering</span>
+                    <select id="bt-map-steer" class="input-text input-sm" title="Steering axis">
+                      <option value="ABS_X">L Stick X</option>
+                      <option value="ABS_RX">R Stick X</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="bt-axes-group">
+                  <div class="bt-axes-group-title">👁 LOOK</div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Dome</span>
+                    <select id="bt-map-dome" class="input-text input-sm" title="Dome rotation axis">
+                      <option value="ABS_RX">R Stick X</option>
+                      <option value="ABS_X">L Stick X</option>
+                    </select>
+                  </div>
+                  <div class="bt-axes-group-row">
+                    <span class="bt-axes-role">Camera <span class="bt-axes-pending">🔮</span></span>
+                    <select id="bt-map-camera" class="input-text input-sm"
+                            title="Camera tilt — feature pending hardware install">
+                      <option value="ABS_RY">R Stick Y</option>
+                      <option value="ABS_Y">L Stick Y</option>
+                      <option value="">(none)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.6">
+                🔮 Camera tilt = future feature (pending camera-on-servos hardware install). Mapping is saved for later.
+              </p>
+            </div>
+
+            <!-- Row 3: DEADZONE | INACTIVITY — slider + value-on-right.
+                 Both rows use .bt-slider-row so the slider track sits on
+                 the exact same baseline regardless of the right-side
+                 widget (read-only pill vs editable number input). -->
+            <div class="bt-field">
+              <label class="ctrl-label">DEADZONE
+                <span class="ctrl-hint">— ignores tiny stick wobble</span>
+              </label>
+              <div class="bt-slider-row">
+                <input type="range" id="bt-deadzone" min="0" max="30" value="10"
+                       oninput="el('bt-deadzone-val').textContent=this.value+'%'" class="holo-slider">
+                <span id="bt-deadzone-val" class="bt-value-pill">10%</span>
+              </div>
+            </div>
+            <div class="bt-field">
+              <label class="ctrl-label">INACTIVITY TIMEOUT
+                <span class="ctrl-hint">— auto-disable after idle</span>
+              </label>
+              <div class="bt-slider-row">
+                <input type="range" id="bt-inactivity-timeout" min="0" max="600" step="5" value="30"
+                       oninput="el('bt-timeout-num').value=this.value;el('bt-timeout-val').textContent=this.value==0?'OFF':'s';updateBtTimeoutPreview(this.value)" class="holo-slider">
+                <input type="number" id="bt-timeout-num" min="0" max="3600" value="30" step="5"
+                       oninput="var v=Math.max(0,parseInt(this.value)||0);el('bt-inactivity-timeout').value=Math.min(600,v);el('bt-timeout-val').textContent=v==0?'OFF':'s';updateBtTimeoutPreview(v)"
+                       class="bt-value-input" title="Type a value up to 3600s">
+                <span id="bt-timeout-val" class="bt-value-unit">s</span>
+              </div>
+            </div>
+
+            <!-- Row 4: notes (full width) -->
+            <div class="bt-field bt-field-full">
+              <div id="bt-timeout-preview" class="bt-timeout-preview"></div>
+              <p class="settings-note" style="font-size:10px;margin-top:6px;opacity:.7">
+                💡 Per-button actions (sounds, panels, choreos…) are configured in the
+                <strong>CUSTOM BUTTON ACTIONS</strong> card below — they auto-save on change.
+              </p>
+            </div>
+
+            <!-- Row 5: SAVE button (full width, right-aligned) -->
+            <div class="bt-field bt-field-full" style="text-align:right">
+              <button id="bt-save-cfg-btn" class="btn btn-active"
+                      onclick="withSaveFeedback(this, () => btController.saveFullConfig())">
+                SAVE CONFIG
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card settings-card" style="margin-top:10px">
+          <h2 class="card-title">CUSTOM BUTTON ACTIONS</h2>
+          <p class="settings-note">
+            Bind any controller button to a Shortcuts-style action.
+            Mappings are per-controller — switching to another paired device loads its own mappings.
+          </p>
+
+          <div class="bt-active-device-card">
+            <div class="bt-active-device-header">
+              <label class="ctrl-label">DEVICE PROFILE
+                <span class="ctrl-hint">— mappings apply to this controller only</span>
+              </label>
+              <div class="bt-active-device-actions">
+                <button class="btn btn-xs" onclick="btCustomMappings.load()" title="Re-fetch device profiles">↻ REFRESH</button>
+                <button class="btn btn-xs btn-danger" id="bt-delete-profile-btn"
+                        onclick="btCustomMappings.deleteProfile()" title="Forget this device's custom mappings"
+                        style="display:none">🗑 DELETE PROFILE</button>
+              </div>
+            </div>
+            <!-- Custom dropdown — built by btCustomMappings._renderDeviceCards.
+                 Replaces a native <select> that truncated long names+MAC. -->
+            <div id="bt-device-profile-list" class="bt-device-profile-list">
+              <div class="bt-device-empty">— no controller paired yet —</div>
+            </div>
+            <!-- Hidden native <select> kept for backward compat with code
+                 that reads the selected value (e.g. handlers using el('bt-device-profile-select').value).
+                 Synced by _renderDeviceCards. -->
+            <select id="bt-device-profile-select" style="display:none"
+                    onchange="btCustomMappings.onDeviceChange(this.value)">
+              <option value="">— no controller connected —</option>
+            </select>
+          </div>
+
+          <div id="bt-custom-mappings-list" style="margin-top:10px"></div>
+
+          <div class="row mt" style="gap:8px;align-items:center">
+            <button class="btn btn-active" id="bt-capture-btn" onclick="btCustomMappings.startCapture()">
+              🎯 CAPTURE NEW BUTTON
+            </button>
+            <span id="bt-capture-status" style="font-size:11px;color:var(--text-dim)"></span>
+          </div>
+
+          <p class="settings-note" style="font-size:10px;opacity:.7;margin-top:8px">
+            💡 Press a button on your controller, then assign an action. Custom mappings override the default actions above for that button.
+          </p>
+        </section>
+
+        <!-- BT capture modal (full-page overlay) -->
+        <div id="bt-capture-modal" class="bt-capture-modal" style="display:none">
+          <div class="bt-capture-card">
+            <div class="bt-capture-title">🎯 PRESS A BUTTON ON YOUR CONTROLLER</div>
+            <div class="bt-capture-sub">Waiting for input…</div>
+            <div class="bt-capture-countdown"><span id="bt-capture-remaining">10</span>s</div>
+            <button class="btn btn-warn" onclick="btCustomMappings.cancelCapture()">CANCEL</button>
+          </div>
+        </div>
+
+        <section class="card settings-card" style="margin-top:10px">
+          <details class="bt-pairing-details">
+            <summary class="bt-pairing-summary">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M5 3l6 5-6 5V3z"/><path d="M5 8h6"/></svg>
+              CONTROLLER PAIRING
+              <span class="bt-pairing-hint">— scan + pair new BT devices</span>
+            </summary>
+            <div class="bt-pairing-body">
+              <p style="color:var(--txt-dim);font-size:11px;margin:4px 0 12px">
+                Put your controller in discovery mode (hold BT button), then click SCAN.
+              </p>
+              <div class="btn-group">
+                <button class="btn btn-active" id="bt-scan-btn" onclick="btPairing.startScan()">
+                  <span id="bt-scan-label">&#x1F50D; SCAN (15s)</span>
+                </button>
+                <button class="btn" onclick="btPairing.refresh()">&#x21BB; REFRESH</button>
+              </div>
+              <div id="bt-scan-status" style="font-size:11px;color:var(--txt-dim);margin:6px 0;min-height:16px"></div>
+              <div class="section-label" style="margin-top:12px;font-size:10px">DISCOVERED DEVICES</div>
+              <div id="bt-discovered-list" style="min-height:40px;margin-top:4px">
+                <div style="color:var(--txt-dim);font-size:11px">— Run a scan —</div>
+              </div>
+              <div class="section-label" style="margin-top:14px;font-size:10px">PAIRED DEVICES</div>
+              <div id="bt-paired-list" style="min-height:40px;margin-top:4px">
+                <div style="color:var(--txt-dim);font-size:11px">— None —</div>
+              </div>
+            </div>
+          </details>
+        </section>
+      </div>
+
+      <!-- 🔒 Lock Mode -->
+      <div class="settings-panel" id="spanel-lock">
+        <section class="card settings-card">
+          <h2 class="card-title">LOCK MODE</h2>
+          <!-- WOW polish X3 2026-05-15: explicit mode buttons IN the
+               panel. Operator was forced to use the topbar cycle icon
+               and could only step forward. Now: direct switch + visual
+               current-state. Lock→Normal still requires admin password
+               (handled by lockMgr._applyMode). -->
+          <div class="lock-mode-switcher" id="lock-mode-switcher">
+            <button class="lock-mode-btn lock-mode-normal" data-mode="0"
+                    onclick="lockMgr._applyMode(0)" title="Full drive at user speed slider">
+              <span class="lock-mode-icon">🟢</span>
+              NORMAL
+              <span class="lock-mode-sub">full drive</span>
+            </button>
+            <button class="lock-mode-btn lock-mode-kids" data-mode="1"
+                    onclick="lockMgr._applyMode(1)" title="Drive enabled but capped at Kids speed limit. Dome+sounds free.">
+              <span class="lock-mode-icon">👶</span>
+              KIDS MODE
+              <span class="lock-mode-sub">capped speed</span>
+            </button>
+            <button class="lock-mode-btn lock-mode-lock" data-mode="2"
+                    onclick="lockMgr._applyMode(2)" title="Drive fully blocked. Dome capped at Child speed (slider below). Sounds + lights remain free.">
+              <span class="lock-mode-icon">🔒</span>
+              CHILD LOCK
+              <span class="lock-mode-sub">drive blocked · dome slow</span>
+            </button>
+          </div>
+          <div class="speed-wrap" style="margin-top:12px">
+            <label class="ctrl-label">👶 KIDS SPEED LIMIT <span id="kids-speed-val" class="ctrl-val">20%</span></label>
+            <input type="range" id="kids-speed-slider" min="5" max="60" value="20" class="holo-slider"
+                   oninput="lockMgr.setKidsSpeed(+this.value)" list="kids-speed-marks-list">
+            <datalist id="kids-speed-marks-list">
+              <option value="10"></option>
+              <option value="25"></option>
+              <option value="40"></option>
+              <option value="55"></option>
+            </datalist>
+            <div class="kids-speed-marks">
+              <span>SLOW</span><span>MEDIUM</span><span>FAST</span>
+            </div>
+            <div id="kids-speed-preview" class="kids-speed-preview"></div>
+            <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.7">
+              Applied to BOTH drive AND dome rotation in Kids mode.
+            </p>
+          </div>
+          <!-- Batch 3 fix 2026-05-16: Child dome speed slider (separate
+               from Kids — Child is stricter, dome at slower speed). -->
+          <div class="speed-wrap" style="margin-top:12px">
+            <label class="ctrl-label">🔒 CHILD LOCK DOME SPEED <span id="child-dome-val" class="ctrl-val">30%</span></label>
+            <input type="range" id="child-dome-slider" min="5" max="50" value="30" class="holo-slider"
+                   oninput="lockMgr.setChildDomeSpeed(+this.value)">
+            <div class="kids-speed-marks">
+              <span>VERY SLOW</span><span>SLOW</span><span>MODERATE</span>
+            </div>
+            <div id="child-dome-preview" class="kids-speed-preview"></div>
+            <p class="settings-note" style="font-size:10px;margin-top:4px;opacity:.7">
+              Dome rotation speed when Child Lock is active. Drive is fully blocked in Child mode.
+              Recommended: keep below the Kids slider above (Child is stricter).
+            </p>
+          </div>
+          <p class="settings-note" style="margin-top:10px">Returning from Child Lock requires the admin password.</p>
+          <!-- W23 fix 2026-05-16: reassure persistence -->
+          <p class="settings-note settings-note-ok" style="margin-top:4px">✓ Mode persists across Master reboots.</p>
+          <!-- W13 fix 2026-05-16: collapsible mode explainer -->
+          <details class="settings-help" style="margin-top:8px">
+            <summary>What does each mode do?</summary>
+            <ul class="settings-help-list">
+              <li><strong>NORMAL</strong> — full drive at your speed slider. Dome, sounds, lights all free.</li>
+              <li><strong>KIDS</strong> — drive AND dome capped at the Kids speed limit. Sounds+lights free. Designed for a kid behind the wheel.</li>
+              <li><strong>CHILD LOCK</strong> — drive fully blocked. Dome rotates at the (slower) Child Dome speed. Sounds+lights free. Designed for handing the tablet to a small child who can play with the dome + sounds without risking propulsion.</li>
+            </ul>
+          </details>
+        </section>
+      </div>
+
+      <!-- 🦾 Arms -->
+      <div class="settings-panel" id="spanel-arms">
+        <section class="card settings-card">
+          <h2 class="card-title">ARMS — <span class="robot-name">R2-D2</span></h2>
+          <p class="settings-note">Arm servos run a panel→delay→arm sequence — excluded from OPEN ALL / CLOSE ALL.</p>
+          <div class="form-group">
+            <label>Arms</label>
+            <select id="arms-count" class="input-text" style="width:68px" onchange="armsConfig.onCountChange()">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </div>
+          <div id="arms-selectors"></div>
+          <!-- W2 fix 2026-05-16: live conflict warning (duplicate servo) -->
+          <div id="arms-conflict-warn" class="arms-conflict-warn" style="display:none"></div>
+          <!-- W1 fix 2026-05-16: withSaveFeedback wrap -->
+          <button id="arms-save-btn" class="btn" onclick="withSaveFeedback(this, () => armsConfig.save())">SAVE ARMS</button>
+          <div class="settings-status" id="arms-status"></div>
+        </section>
+      </div>
+
+      <!-- 🤖 Behavior -->
+      <div class="settings-panel active" id="spanel-behavior">
+        <section class="card settings-card">
+          <h2 class="card-title">STARTUP SEQUENCE</h2>
+          <!-- W6 fix 2026-05-16: explain what this does -->
+          <div class="settings-card-note">
+            Plays a choreo automatically after Master boot. Useful for a
+            'wake up' demo on power-on.
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-label">
+              <input type="checkbox" id="beh-startup-enabled">
+              <span class="toggle-switch"></span>
+              Enabled
+            </label>
+          </div>
+          <div class="form-group">
+            <!-- B6/B20 fix 2026-05-16: max=300 to match backend clamp -->
+            <label class="ctrl-label">DELAY (seconds) <span class="ctrl-hint">— wait this many seconds after boot before firing (0-300)</span></label>
+            <input type="number" id="beh-startup-delay" class="input-text input-sm" min="0" max="300" value="5" style="width:70px">
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">CHOREO</label>
+            <select id="beh-startup-choreo" class="input-text"></select>
+            <span id="beh-startup-locks" class="beh-locks"></span>
+          </div>
+          <!-- W2 fix 2026-05-16: preview startup sequence without rebooting -->
+          <button class="btn btn-sm" id="beh-test-startup-btn" onclick="behaviorPanel.testStartup()" style="margin-top:6px">▶ TEST STARTUP NOW</button>
+        </section>
+
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">IDLE REACTIONS (ALIVE MODE)</h2>
+          <!-- W6 fix 2026-05-16: explain what ALIVE does -->
+          <div class="settings-card-note">
+            When the robot is idle for N minutes, automatically play sounds,
+            lights, or a choreo to keep it feeling alive. Toggle ALIVE from
+            the Drive tab top-right button (or the checkbox below).
+          </div>
+          <!-- B16 fix 2026-05-16: warn when active mode's driver is degraded -->
+          <div id="beh-mode-not-ready" class="settings-card-warn" style="display:none">
+            ⚠ <span id="beh-mode-not-ready-text">—</span>
+          </div>
+          <!-- W17 fix 2026-05-16: presets fill the form fields (no auto-save) -->
+          <div class="beh-presets" style="display:flex;gap:6px;margin:6px 0">
+            <button class="btn btn-sm" onclick="behaviorPanel.preset('conservative')"
+                    title="30min timeout · sounds only · dome off">🪶 Conservative</button>
+            <button class="btn btn-sm" onclick="behaviorPanel.preset('playful')"
+                    title="8min · sounds+lights · dome on">🎉 Playful</button>
+            <button class="btn btn-sm" onclick="behaviorPanel.preset('demo')"
+                    title="4min · choreos · dome off">🎬 Demo</button>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-label">
+              <input type="checkbox" id="beh-alive-enabled">
+              <span class="toggle-switch"></span>
+              Enabled
+            </label>
+          </div>
+          <div class="form-group">
+            <!-- B6/B20 fix 2026-05-16: max=1440 to match backend clamp -->
+            <label class="ctrl-label">TRIGGER AFTER (minutes of inactivity) <span class="ctrl-hint">— 1 to 1440 (24h)</span></label>
+            <input type="number" id="beh-idle-timeout" class="input-text input-sm" min="1" max="1440" value="10" style="width:70px"
+                   oninput="behaviorPanel._updateTimeoutPreview()">
+            <span id="beh-timeout-preview" class="ctrl-hint" style="margin-left:8px"></span>
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">MODE</label>
+            <select id="beh-idle-mode" class="input-text" onchange="behaviorPanel.onModeChange()">
+              <option value="sounds">Sounds only</option>
+              <option value="sounds_lights">Sounds + Lights</option>
+              <option value="lights">Lights only</option>
+              <option value="choreo">Choreo</option>
+            </select>
+            <!-- W9 fix 2026-05-16: contextual safety note per mode -->
+            <div id="beh-mode-note" class="settings-card-note" style="margin-top:4px"></div>
+          </div>
+          <div id="beh-audio-cat-row" class="form-group">
+            <label class="ctrl-label">AUDIO CATEGORY</label>
+            <select id="beh-audio-category" class="input-text"></select>
+          </div>
+          <div id="beh-choreo-row" class="form-group" style="display:none">
+            <label class="ctrl-label">CHOREO LIST</label>
+            <div id="beh-choreo-pills" class="beh-choreo-pills"></div>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <select id="beh-choreo-add-sel" class="input-text input-sm" style="flex:1"></select>
+              <button class="btn btn-sm" onclick="behaviorPanel.addChoreo()">+ ADD</button>
+            </div>
+          </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:12px">
+            <label class="toggle-label">
+              <input type="checkbox" id="beh-dome-auto">
+              <span class="toggle-switch"></span>
+              Dome auto-rotation when ALIVE is ON
+            </label>
+          </div>
+        </section>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-active" id="beh-save-btn" onclick="behaviorPanel.save()">SAVE</button>
+          <!-- W1 fix 2026-05-16: preview idle reaction without waiting N minutes -->
+          <button class="btn btn-sm" id="beh-test-trigger-btn" onclick="behaviorPanel.testTrigger()">▶ TEST NOW</button>
+          <div class="settings-status" id="beh-status"></div>
+        </div>
+        <!-- WOW polish H4 2026-05-15: live countdown to next idle
+             reaction. Only visible when alive_enabled. Updated by
+             behaviorPanel._countdownTick every second. -->
+        <div id="beh-next-trigger" class="beh-next-trigger" style="display:none">
+          <span class="beh-next-trigger-icon">⏱</span>
+          <span class="beh-next-trigger-label">Next idle reaction in</span>
+          <span id="beh-next-trigger-time" class="beh-next-trigger-time">—</span>
+        </div>
+      </div>
+
+      <!-- 🔧 Servos -->
+      <div class="settings-panel" id="spanel-servos">
+        <div class="spanel-2col">
+          <!-- Dome servo HAT blocks — generated by renderCalibration() in app.js -->
+          <div id="dome-servo-hats"></div>
+          <!-- Body servo HAT blocks — generated by renderCalibration() in app.js -->
+          <div id="body-servo-hats"></div>
+        </div>
+      </div>
+
+      <!-- ⚡ VESC -->
+      <div class="settings-panel" id="spanel-vesc">
+        <div class="vesc-layout">
+          <div class="vesc-status-bar">
+            <div class="vesc-status-pill" id="vesc-conn-pill">
+              <span class="pulse-dot"></span><span id="vesc-conn-label">OFFLINE</span>
+            </div>
+            <div class="vesc-battery-display">
+              <span class="vesc-battery-label">BATTERY</span>
+              <span class="vesc-battery-value" id="vesc-voltage">--.-</span>
+              <span class="vesc-battery-unit">V</span>
+              <div class="vesc-battery-bar" id="vesc-battery-bar">
+                <div class="vesc-battery-fill" id="vesc-battery-fill"></div>
+              </div>
+            </div>
+            <div class="vesc-scale-info">POWER <span id="vesc-scale-pct">100</span>%</div>
+            <div class="vesc-last-update" id="vesc-last-update">—</div>
+          </div>
+          <div class="vesc-cards">
+            <div class="vesc-card" id="vesc-card-L">
+              <div class="vesc-card-title">LEFT MOTOR</div>
+              <div class="vesc-bar-metrics">
+                <div class="vesc-brow"><span class="vesc-brow-lbl">FET TEMP</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vl-temp-bar"></div></div><span class="vesc-brow-val"><span id="vl-temp">--</span><span class="vesc-brow-unit">°C</span></span></div>
+                <div class="vesc-brow"><span class="vesc-brow-lbl">CURRENT</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vl-curr-bar"></div></div><span class="vesc-brow-val"><span id="vl-curr">--</span><span class="vesc-brow-unit">A</span></span></div>
+                <div class="vesc-brow"><span class="vesc-brow-lbl">DUTY</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vl-duty-bar"></div></div><span class="vesc-brow-val"><span id="vl-duty">--</span><span class="vesc-brow-unit">%</span></span></div>
+              </div>
+              <div class="vesc-card-footer">
+                <span class="vesc-footer-item">RPM <span id="vl-rpm" class="vesc-footer-val">----</span></span>
+                <span class="vesc-footer-sep">|</span>
+                <span class="vesc-footer-item">POWER <span id="vl-power" class="vesc-footer-val">--</span> W</span>
+              </div>
+              <div class="vesc-fault" id="vl-fault">OFFLINE</div>
+            </div>
+            <div class="vesc-card" id="vesc-card-R">
+              <div class="vesc-card-title">RIGHT MOTOR</div>
+              <div class="vesc-bar-metrics">
+                <div class="vesc-brow"><span class="vesc-brow-lbl">FET TEMP</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vr-temp-bar"></div></div><span class="vesc-brow-val"><span id="vr-temp">--</span><span class="vesc-brow-unit">°C</span></span></div>
+                <div class="vesc-brow"><span class="vesc-brow-lbl">CURRENT</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vr-curr-bar"></div></div><span class="vesc-brow-val"><span id="vr-curr">--</span><span class="vesc-brow-unit">A</span></span></div>
+                <div class="vesc-brow"><span class="vesc-brow-lbl">DUTY</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vr-duty-bar"></div></div><span class="vesc-brow-val"><span id="vr-duty">--</span><span class="vesc-brow-unit">%</span></span></div>
+              </div>
+              <div class="vesc-card-footer">
+                <span class="vesc-footer-item">RPM <span id="vr-rpm" class="vesc-footer-val">----</span></span>
+                <span class="vesc-footer-sep">|</span>
+                <span class="vesc-footer-item">POWER <span id="vr-power" class="vesc-footer-val">--</span> W</span>
+              </div>
+              <div class="vesc-fault" id="vr-fault">OFFLINE</div>
+            </div>
+          </div>
+          <div class="vesc-symmetry" id="vesc-symmetry">
+            <div class="vesc-sym-item"><span class="vesc-sym-lbl">RPM Δ</span><span class="vesc-sym-val" id="sym-rpm">—</span></div>
+            <div class="vesc-sym-item"><span class="vesc-sym-lbl">CURRENT Δ</span><span class="vesc-sym-val" id="sym-curr">—</span></div>
+            <div class="vesc-sym-item"><span class="vesc-sym-lbl">STATUS</span><span class="vesc-sym-status" id="sym-status">—</span></div>
+          </div>
+          <div class="vesc-config-card" id="vesc-cfg-card">
+            <div class="vesc-config-row">
+              <label class="vesc-config-label">POWER SCALE <span class="vesc-config-hint">max motor power</span></label>
+              <div class="vesc-slider-wrap">
+                <input type="range" id="vesc-scale-slider" min="10" max="100" value="100" class="volume-slider">
+                <span id="vesc-scale-label" class="volume-label">100%</span>
+              </div>
+              <!-- W1 fix 2026-05-16: live tier hint reacting to slider position -->
+              <div id="vesc-scale-tier" class="vesc-scale-tier">—</div>
+            </div>
+            <div class="vesc-config-row vesc-dir-row">
+              <label class="vesc-config-label">DIRECTION <span class="vesc-config-hint">invert motor spin</span></label>
+              <div class="row">
+                <button id="vesc-inv-L" class="btn btn-sm vesc-inv-btn" onclick="vescToggleInvert('L')">⟲ LEFT: NORMAL</button>
+                <button id="vesc-inv-R" class="btn btn-sm vesc-inv-btn" onclick="vescToggleInvert('R')">RIGHT: NORMAL ⟳</button>
+              </div>
+            </div>
+            <div class="vesc-config-row">
+              <label class="vesc-config-label">BENCH MODE <span class="vesc-config-hint">bypass safety lock — no VESC required</span></label>
+              <button id="vesc-bench-btn" class="btn btn-sm vesc-bench-btn" onclick="vescToggleBenchMode()">OFF</button>
+            </div>
+            <!-- W2 fix 2026-05-16: Reset VESC defaults button -->
+            <div class="vesc-config-row" style="justify-content:flex-end">
+              <button class="btn btn-xs vesc-reset-defaults" onclick="vescResetDefaults()">↺ RESET DEFAULTS</button>
+            </div>
+          </div>
+          <div class="vesc-diag-row">
+            <div class="vesc-config-card vesc-session-card">
+              <div class="vesc-diag-title">SESSION PEAKS</div>
+              <div class="vesc-session-grid">
+                <div class="vesc-session-item"><span class="vesc-session-lbl">TEMP L</span><span id="peak-temp-l" class="vesc-session-val">—</span><span class="vesc-session-unit">°C</span></div>
+                <div class="vesc-session-item"><span class="vesc-session-lbl">TEMP R</span><span id="peak-temp-r" class="vesc-session-val">—</span><span class="vesc-session-unit">°C</span></div>
+                <div class="vesc-session-item"><span class="vesc-session-lbl">CURR L</span><span id="peak-curr-l" class="vesc-session-val">—</span><span class="vesc-session-unit">A</span></div>
+                <div class="vesc-session-item"><span class="vesc-session-lbl">CURR R</span><span id="peak-curr-r" class="vesc-session-val">—</span><span class="vesc-session-unit">A</span></div>
+                <div class="vesc-session-item"><span class="vesc-session-lbl">DUTY</span><span id="peak-duty" class="vesc-session-val">—</span><span class="vesc-session-unit">%</span></div>
+                <div class="vesc-session-item"><span class="vesc-session-lbl">FAULTS</span><span id="peak-faults" class="vesc-session-val">0</span></div>
+              </div>
+              <button class="btn btn-xs vesc-reset-peaks" onclick="vescResetPeaks()">RESET</button>
+            </div>
+            <div class="vesc-config-card vesc-faultlog-card">
+              <div class="vesc-diag-title">FAULT LOG <button class="btn btn-xs vesc-clear-log" onclick="vescClearLog()">CLEAR</button></div>
+              <div class="vesc-faultlog" id="vesc-fault-log">
+                <div class="vesc-faultlog-empty">No faults this session.</div>
+              </div>
+            </div>
+          </div>
+          <div class="vesc-config-card vesc-test-card" id="vesc-test-card">
+            <div class="vesc-diag-title">
+              DRIVE TEST MODE
+              <button id="vesc-test-toggle" class="btn btn-sm vesc-test-toggle-btn" onclick="vescTestToggle()">ENABLE</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:6px 10px 0;font-size:10px;letter-spacing:1px;color:var(--text-dim)">
+              DRIVE MODE
+              <button id="vesc-mode-btn" class="btn btn-xs" onclick="vescToggleDriveMode()" style="font-size:9px;letter-spacing:1.5px">RPM</button>
+              <span id="vesc-mode-hint" style="opacity:.6">Closed-loop speed — switch to DUTY for bench testing without motor</span>
+            </div>
+            <div class="vesc-test-body" id="vesc-test-body" style="display:none">
+              <div class="vesc-test-hint">WASD = propulsion (arcade mix) &nbsp;·&nbsp; BT controller works when no key held &nbsp;·&nbsp; ESC = stop</div>
+              <div class="vesc-test-panels">
+                <div class="vesc-test-cmd">
+                  <div class="vesc-test-cmd-title">COMMANDED</div>
+                  <div class="vesc-brow"><span class="vesc-brow-lbl">LEFT</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vt-left-bar"></div></div><span class="vesc-brow-val"><span id="vt-left-val">0</span><span class="vesc-brow-unit">%</span></span></div>
+                  <div class="vesc-brow"><span class="vesc-brow-lbl">RIGHT</span><div class="vesc-brow-bar"><div class="vesc-brow-fill" id="vt-right-bar"></div></div><span class="vesc-brow-val"><span id="vt-right-val">0</span><span class="vesc-brow-unit">%</span></span></div>
+                </div>
+                <div class="vesc-test-keys">
+                  <div class="kbd-row"><div class="kbd-key" id="vt-kbd-w">W</div></div>
+                  <div class="kbd-row"><div class="kbd-key" id="vt-kbd-a">A</div><div class="kbd-key" id="vt-kbd-s">S</div><div class="kbd-key" id="vt-kbd-d">D</div></div>
+                </div>
+                <div class="vesc-test-resp">
+                  <div class="vesc-test-cmd-title">RESPONSE</div>
+                  <div class="vesc-test-resp-row"><span class="vesc-sym-lbl">RPM L</span><span class="vesc-footer-val" id="vt-rpm-l">—</span></div>
+                  <div class="vesc-test-resp-row"><span class="vesc-sym-lbl">RPM R</span><span class="vesc-footer-val" id="vt-rpm-r">—</span></div>
+                  <div class="vesc-test-resp-row"><span class="vesc-sym-lbl">CURR L</span><span class="vesc-footer-val" id="vt-curr-l">—</span></div>
+                  <div class="vesc-test-resp-row"><span class="vesc-sym-lbl">CURR R</span><span class="vesc-footer-val" id="vt-curr-r">—</span></div>
+                  <div class="vesc-test-resp-row"><span class="vesc-sym-lbl">STATUS</span><span id="vt-status" class="vesc-sym-status">IDLE</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <details class="vesc-can-details">
+            <summary class="vesc-can-summary">
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1" y="4" width="3" height="6" rx="1"/><rect x="10" y="4" width="3" height="6" rx="1"/><line x1="4" y1="7" x2="10" y2="7"/><circle cx="7" cy="7" r="1.2" fill="currentColor" stroke="none"/></svg>
+              CAN BUS SETUP
+            </summary>
+            <div class="vesc-config-card vesc-can-wizard" style="margin-top:8px;border-top:none">
+              <div class="vesc-can-step">
+                <p class="vesc-can-desc">VESC 1 is connected via USB and acts as CAN gateway. Scan to discover VESC 2 on the CAN bus without a second USB cable.</p>
+                <button class="btn btn-sm btn-primary" id="can-scan-btn" onclick="canWizard.scan()">SCAN CAN BUS</button>
+              </div>
+              <div id="can-scan-result" class="vesc-can-result"></div>
+              <div class="vesc-can-warning">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2 L13 12 H1 Z" stroke="currentColor" stroke-width="1.2" fill="none"/><line x1="7" y1="6" x2="7" y2="9" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="10.5" r="0.7" fill="currentColor"/></svg>
+                <span><strong>CRITICAL:</strong> "Multiple ESC over CAN" must be <strong>OFF</strong> on both VESCs. If enabled, both motors receive identical commands — <span class="robot-name">R2-D2</span> cannot turn! Verify in VESC Tool → App Settings → General → Multiple ESC over CAN = OFF.</span>
+              </div>
+            </div>
+            <div class="vesc-info-box" style="margin-top:8px">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" stroke-width="1.2"/><line x1="7" y1="6" x2="7" y2="10" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="4" r="0.8" fill="currentColor"/></svg>
+              Telemetry at 5Hz via UART. Power = V × I per motor. Thresholds: Temp warn 60°C / alarm 80°C · Current warn 20A / alarm 25A · Duty warn 75% / alarm 90%.
+              Full motor config (FOC detection, motor tuning) requires <strong>VESC Tool</strong>.
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- 💡 Lights -->
+      <div class="settings-panel" id="spanel-lights">
+        <section class="card settings-card">
+          <h2 class="card-title">LIGHTS BACKEND</h2>
+          <div class="settings-status" id="lights-status"></div>
+          <div class="form-group">
+            <label>Driver</label>
+            <select id="lights-backend" class="input-text">
+              <option value="teeces">Teeces32 (JawaLite)</option>
+              <option value="astropixels">AstroPixels+</option>
+            </select>
+          </div>
+          <button class="btn" onclick="saveLightsBackend()">APPLY (hot-reload)</button>
+        </section>
+      </div>
+
+      <!-- 🔋 Battery -->
+      <div class="settings-panel" id="spanel-battery">
+        <section class="card settings-card">
+          <h2 class="card-title">BATTERY</h2>
+          <p class="settings-note">Cells set the voltage gauges; chemistry sets the undervoltage abort threshold for choreographies.</p>
+          <div class="form-group">
+            <label>Cell count</label>
+            <select id="battery-cells" class="input-text" style="width:120px" onchange="updateBatteryPreview()">
+              <option value="4">4S — 14.0 – 16.8 V</option>
+              <option value="6">6S — 21.0 – 25.2 V</option>
+              <option value="7">7S — 24.5 – 29.4 V</option>
+              <option value="8">8S — 28.0 – 33.6 V</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Chemistry</label>
+            <select id="battery-chemistry" class="input-text" style="width:200px" onchange="updateBatteryPreview()">
+              <option value="liion">Li-ion (3.5 V/cell abort)</option>
+              <!-- B3 fix 2026-05-16: backend accepts 'lipo' as separate
+                   chemistry — add the option so dropdown round-trips. -->
+              <option value="lipo">LiPo (3.5 V/cell abort)</option>
+              <option value="lifepo4">LiFePO4 (3.0 V/cell abort)</option>
+            </select>
+          </div>
+          <!-- W3 fix 2026-05-16: chemistry educational hint -->
+          <div id="battery-chem-hint" class="battery-chem-hint"></div>
+          <!-- WOW polish M1 2026-05-15: live voltage threshold preview.
+               2026-05-16 batch 2: adds live NOW voltage + pct. -->
+          <div id="battery-preview" class="battery-preview"></div>
+          <!-- W2 fix 2026-05-16: per-cell honesty footnote -->
+          <div id="battery-footnote" class="battery-footnote"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
+            <button class="btn" onclick="saveBatteryCells()">APPLY (hot-applied)</button>
+            <!-- W9 fix 2026-05-16: reset to defaults (4S Li-ion) -->
+            <button class="btn btn-sm" onclick="resetBatteryDefaults()" title="Reset to 4S Li-ion defaults (no save)">↺ Reset</button>
+          </div>
+          <div class="settings-status" id="battery-cells-status"></div>
+        </section>
+      </div>
+
+      <!-- 🎛️ Shortcuts -->
+      <div class="settings-panel" id="spanel-shortcuts">
+        <section class="card settings-card">
+          <h2 class="card-title">SHORTCUTS</h2>
+          <p class="settings-note">
+            Macro buttons that appear on the <b>Drive</b> tab — one tap fires an action (toggle arm, play sound, play choreo…).
+            Auto-balanced: half on the left (above propulsion joystick), half on the right (above dome joystick).
+          </p>
+
+          <div class="form-group" style="display:flex;align-items:center;gap:14px">
+            <label style="min-width:130px">How many buttons?</label>
+            <input type="range" id="shortcuts-count" min="0" max="12" value="0"
+                   class="holo-slider"
+                   style="flex:1;max-width:280px"
+                   oninput="shortcutsEditor.onCountChange(this.value)">
+            <span id="shortcuts-count-val" style="font-family:var(--font-data);min-width:30px">0</span>
+          </div>
+
+          <div id="shortcuts-list" style="margin-top:10px"></div>
+
+          <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+            <button id="sc-save-btn" class="btn btn-active" onclick="withSaveFeedback(this, () => shortcutsEditor.save())">SAVE SHORTCUTS</button>
+            <div class="settings-status" id="shortcuts-status"></div>
+          </div>
+
+          <hr style="border:0;border-top:1px solid var(--border);margin:18px 0">
+
+          <h3 style="font-size:12px;letter-spacing:.1em;color:var(--text-dim);margin:0 0 8px 0">PREVIEW · Drive tab layout</h3>
+          <p class="settings-note" style="margin-top:0">
+            Aperçu de l'emplacement des boutons sur l'onglet Drive.
+          </p>
+          <!-- WOW polish M2 v2 2026-05-15: layout mirrors the actual
+               Drive tab — left pad + propulsion joystick, center camera,
+               right pad + dome joystick. WYSIWYG. -->
+          <div id="shortcuts-preview" class="shortcuts-preview">
+            <div class="shortcuts-preview-side">
+              <div class="shortcuts-preview-pad left" id="sc-preview-left"></div>
+              <div class="shortcuts-preview-joy"></div>
+              <div class="shortcuts-preview-joy-label">PROPULSION</div>
+            </div>
+            <div class="shortcuts-preview-center">📷 CAMERA</div>
+            <div class="shortcuts-preview-side">
+              <div class="shortcuts-preview-pad right" id="sc-preview-right"></div>
+              <div class="shortcuts-preview-joy"></div>
+              <div class="shortcuts-preview-joy-label">DOME</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 🎵 Audio -->
+      <div class="settings-panel" id="spanel-audio">
+        <section class="card settings-card">
+          <h2 class="card-title">AUDIO CHANNELS</h2>
+          <p class="settings-note">Number of simultaneous sounds <span class="robot-name">R2-D2</span> can play (default: 6, max: 12).<br>Applies to CHOREO timeline. Requires service restart.</p>
+          <div class="form-group">
+            <label>Channels</label>
+            <input type="number" id="audio-channels" class="input-text" min="1" max="12" value="6" style="width:80px"
+                   oninput="updateChannelsHint(this.value)">
+          </div>
+          <!-- WOW M2-W 2026-05-15: live impact preview (parity Camera bitrate hint) -->
+          <div id="audio-channels-hint" class="cam-bitrate-hint"></div>
+          <button class="btn btn-warn" onclick="saveAudioChannels()">APPLY + RESTART SERVICES</button>
+          <div class="settings-status" id="audio-channels-status"></div>
+        </section>
+
+        <!-- Volume Profiles -->
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">VOLUME PROFILES</h2>
+          <p class="settings-note">Save a volume level per environment. APPLY switches the volume instantly.</p>
+          <div class="profile-row">
+            <span class="profile-name">🏛 CONVENTION</span>
+            <input type="range" id="profile-convention-vol" min="0" max="100" value="70"
+                   class="volume-slider profile-vol-slider"
+                   oninput="syncHoloSlider(this);el('profile-convention-val').textContent=this.value+'%'">
+            <span id="profile-convention-val" class="volume-label">70%</span>
+            <button class="btn btn-sm" onclick="soundProfiles.save('convention')">SAVE</button>
+            <button class="btn btn-sm" onclick="soundProfiles.apply('convention')">▶ APPLY</button>
+          </div>
+          <div class="profile-row">
+            <span class="profile-name">🏠 MAISON</span>
+            <input type="range" id="profile-maison-vol" min="0" max="100" value="85"
+                   class="volume-slider profile-vol-slider"
+                   oninput="syncHoloSlider(this);el('profile-maison-val').textContent=this.value+'%'">
+            <span id="profile-maison-val" class="volume-label">85%</span>
+            <button class="btn btn-sm" onclick="soundProfiles.save('maison')">SAVE</button>
+            <button class="btn btn-sm" onclick="soundProfiles.apply('maison')">▶ APPLY</button>
+          </div>
+          <div class="profile-row">
+            <span class="profile-name">🌳 EXTÉRIEUR</span>
+            <input type="range" id="profile-exterieur-vol" min="0" max="100" value="95"
+                   class="volume-slider profile-vol-slider"
+                   oninput="syncHoloSlider(this);el('profile-exterieur-val').textContent=this.value+'%'">
+            <span id="profile-exterieur-val" class="volume-label">95%</span>
+            <button class="btn btn-sm" onclick="soundProfiles.save('exterieur')">SAVE</button>
+            <button class="btn btn-sm" onclick="soundProfiles.apply('exterieur')">▶ APPLY</button>
+          </div>
+          <div class="settings-status" id="audio-profiles-status"></div>
+        </section>
+
+        <!-- 🔊 Bluetooth Speaker -->
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">BLUETOOTH SPEAKER</h2>
+          <p class="settings-note" style="color:#f0a040">⚠ For bench testing only — audio quality is limited. The Slave uses miniuart-bt which shares the 2.4 GHz band with WiFi, causing dropouts. For the final build, connect a wired amplifier to the 3.5mm jack.</p>
+          <div class="bt-spk-header">
+            <span id="btspk-icon" style="font-size:20px">🔇</span>
+            <div id="btspk-status-text" style="flex:1;margin-left:8px;font-size:11px;color:var(--txt-dim)">NOT CONNECTED</div>
+            <button class="btn btn-sm" id="btspk-scan-btn" onclick="btSpeaker.scan()">🔍 SCAN (8s)</button>
+            <button class="btn btn-sm" style="margin-left:4px" onclick="btSpeaker.refresh()" title="Refresh">↺</button>
+          </div>
+          <div id="btspk-scanning" class="settings-note" style="display:none;color:#f0c040;margin-top:4px">🔵 Scanning for nearby devices…</div>
+          <div id="btspk-device-list" style="margin-top:8px"></div>
+          <!-- Volume — visible only when connected -->
+          <div id="btspk-vol-row" style="display:none;margin-top:10px;align-items:center;gap:10px" class="bt-spk-header">
+            <span style="font-size:10px;color:var(--txt-dim);letter-spacing:.05em;white-space:nowrap">🔊 VOL</span>
+            <input type="range" id="btspk-vol-slider" min="0" max="100" value="80" class="holo-slider"
+                   style="flex:1" oninput="el('btspk-vol-val').textContent=this.value+'%'"
+                   onchange="btSpeaker.setVolume(this.value)">
+            <span id="btspk-vol-val" style="font-size:11px;color:var(--blue);min-width:32px">80%</span>
+          </div>
+          <div class="settings-status" id="btspk-status"></div>
+        </section>
+
+      </div>
+
+      <!-- 📷 Camera -->
+      <div class="settings-panel" id="spanel-camera">
+        <section class="card settings-card">
+          <h2 class="card-title">CAMERA — <span class="robot-name">R2-D2</span></h2>
+          <!-- W1 fix 2026-05-16: camera status pill at top -->
+          <div id="cam-status-pill" class="cam-status-pill cam-status-unknown">● CHECKING…</div>
+          <p class="settings-note">Live MJPEG stream from <span class="robot-name">R2-D2</span>'s USB camera. Each APPLY restarts the camera service (~5s blackout).</p>
+          <div class="form-group">
+            <label class="ctrl-label">RESOLUTION</label>
+            <select id="cam-resolution" class="input-text" style="width:200px" onchange="updateCameraBitrateHint()">
+              <option value="640x480">640×480 — VGA</option>
+              <option value="1280x720">1280×720 — HD 720p</option>
+              <option value="1920x1080">1920×1080 — Full HD 1080p</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">FRAMERATE</label>
+            <select id="cam-fps" class="input-text" style="width:120px" onchange="updateCameraBitrateHint()">
+              <option value="15">15 fps — battery-saver</option>
+              <option value="30">30 fps — smooth (default)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="ctrl-label">QUALITY <span id="cam-quality-val" class="ctrl-val">80</span></label>
+            <input type="range" id="cam-quality" min="10" max="100" step="5" value="80"
+                   oninput="el('cam-quality-val').textContent=this.value; updateCameraBitrateHint()" class="holo-slider">
+          </div>
+          <div id="cam-bitrate-hint" class="cam-bitrate-hint"></div>
+          <div class="row" style="gap:8px;align-items:center;margin-top:8px">
+            <button id="cam-apply-btn" class="btn btn-warn" onclick="withSaveFeedback(this, () => cameraConfig.save())">APPLY</button>
+            <!-- W6 fix 2026-05-16: snapshot button (proxies single mjpg frame) -->
+            <button class="btn btn-xs" onclick="cameraTakeSnapshot()" title="Download a single frame as JPEG">📸 SNAPSHOT</button>
+          </div>
+          <div class="settings-status" id="cam-config-status"></div>
+          <div id="cam-preview-thumb" class="cam-preview-thumb"></div>
+
+          <!-- W7 fix 2026-05-16: stream URL copy for OBS/VLC integration -->
+          <details class="cam-integration-card">
+            <summary>🔗 INTEGRATION (OBS / VLC / external viewer)</summary>
+            <div class="cam-integration-body">
+              <label class="ctrl-label">Direct MJPEG (LAN-only, bypasses token):</label>
+              <div class="cam-url-row">
+                <input type="text" id="cam-direct-url" readonly class="input-text">
+                <button class="btn btn-xs" onclick="copyCameraUrl('cam-direct-url')">📋 COPY</button>
+              </div>
+              <div class="settings-note" style="font-size:10px;margin-top:6px">
+                For VLC: <code>Media → Open Network Stream → paste URL</code>
+              </div>
+            </div>
+          </details>
+        </section>
+      </div>
+
+      <!-- 📡 Network -->
+      <div class="settings-panel" id="spanel-network">
+        <div class="spanel-2col">
+          <section class="card settings-card">
+            <h2 class="card-title">WiFi INTERNET (wlan1)</h2>
+            <div class="settings-status" id="wifi-status">Loading...</div>
+            <div class="form-group">
+              <label>Available networks</label>
+              <div class="row">
+                <!-- Hidden select for form state (kept for compat) -->
+                <select id="wifi-scan-list" class="input-text" onchange="onScanSelect(this.value)" style="display:none">
+                  <option value="">— Click Scan —</option>
+                </select>
+                <button class="btn" id="btn-scan" onclick="scanWifi()" style="flex:0 0 auto">SCAN</button>
+              </div>
+              <!-- WOW polish I5 2026-05-15: custom scan results list with
+                   SVG signal bars + lock icons. Populated by scanWifi(). -->
+              <div id="wifi-scan-card-list" class="wifi-scan-card-list"></div>
+            </div>
+            <div class="form-group">
+              <label>SSID</label>
+              <input type="text" id="wifi-ssid" class="input-text" placeholder="Network name">
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <!-- W4 fix 2026-05-16: show/hide eye toggle on WPA-PSK input -->
+              <div class="pwd-input-wrap">
+                <input type="password" id="wifi-password" class="input-text" placeholder="Leave blank to keep current"
+                       autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('wifi-password', this)" aria-label="Show password">👁</button>
+              </div>
+            </div>
+            <button class="btn btn-active" onclick="applyWifi()">CONNECT wlan1</button>
+          </section>
+          <section class="card settings-card">
+            <h2 class="card-title">HOTSPOT (wlan0)</h2>
+            <div class="settings-status" id="hotspot-status">Loading...</div>
+            <div class="form-group">
+              <label>Hotspot SSID</label>
+              <input type="text" id="hotspot-ssid" class="input-text">
+            </div>
+            <div class="form-group">
+              <label>Password (min 8 chars)</label>
+              <div class="pwd-input-wrap">
+                <input type="password" id="hotspot-password" class="input-text" placeholder="Leave blank to keep current"
+                       autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false"
+                       oninput="updateHotspotPwdStrength(this.value)">
+                <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('hotspot-password', this)" aria-label="Show password">👁</button>
+              </div>
+              <!-- W5 fix 2026-05-16: WPA-PSK strength meter reusing signal-bars -->
+              <div class="pwd-strength-row" id="hotspot-pwd-strength" style="display:none">
+                <span class="signal-bars pwd-strength-bars">
+                  <span class="signal-bar signal-bar-1"></span>
+                  <span class="signal-bar signal-bar-2"></span>
+                  <span class="signal-bar signal-bar-3"></span>
+                  <span class="signal-bar signal-bar-4"></span>
+                </span>
+                <span class="pwd-strength-label" id="hotspot-pwd-strength-label">—</span>
+              </div>
+            </div>
+            <div class="settings-note">Fixed IP: 192.168.4.1 — clients must reconnect after applying</div>
+            <button class="btn btn-warn" onclick="applyHotspot()">APPLY + RESTART HOTSPOT</button>
+          </section>
+        </div>
+      </div>
+
+      <!-- 🚀 Deploy -->
+      <div class="settings-panel" id="spanel-deploy">
+        <section class="card settings-card">
+          <h2 class="card-title">GITHUB / DEPLOY</h2>
+          <div class="form-group">
+            <label>GitHub repo URL</label>
+            <input type="text" id="repo-url" class="input-text" placeholder="https://github.com/user/repo.git">
+          </div>
+          <div class="form-group">
+            <label>Git branch</label>
+            <input type="text" id="git-branch" class="input-text">
+          </div>
+          <div class="form-group">
+            <label>Slave hostname</label>
+            <input type="text" id="slave-host" class="input-text">
+          </div>
+          <div class="form-group">
+            <label class="toggle-label">
+              Auto-pull on boot
+              <input type="checkbox" id="auto-pull">
+              <span class="toggle-switch"></span>
+            </label>
+          </div>
+          <button class="btn" onclick="saveConfig()">SAVE CONFIG</button>
+        </section>
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">DEPLOY</h2>
+          <p class="settings-note">Git pull on Master + rsync Slave + restart services.</p>
+          <!-- WOW polish I1 2026-05-15: current commit card so operator
+               knows what's deployed BEFORE clicking update. -->
+          <div id="deploy-commit-card" class="deploy-commit-card">
+            <div class="deploy-commit-row">
+              <span class="deploy-commit-label">DEPLOYED</span>
+              <span id="deploy-commit-current">loading…</span>
+            </div>
+            <div class="deploy-commit-row">
+              <span class="deploy-commit-label">REMOTE</span>
+              <span id="deploy-commit-remote">loading…</span>
+            </div>
+            <div class="deploy-commit-row" id="deploy-behind-row" style="display:none">
+              <span class="deploy-commit-label">BEHIND</span>
+              <span id="deploy-behind-count" class="deploy-behind">0 commits</span>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="systemUpdate()">⬆ UPDATE — git pull + sync Slave</button>
+          <button class="btn btn-warn admin-only" onclick="systemRollback()" style="margin-top:8px">↩ ROLLBACK — revert to previous commit</button>
+        </section>
+      </div>
+
+      <!-- 🎨 Interface -->
+      <div class="settings-panel" id="spanel-interface">
+        <section class="card settings-card">
+          <h2 class="card-title">IDENTITY</h2>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Robot name</label>
+            <input type="text" id="robot-name-input" class="settings-input" maxlength="32" placeholder="R2-D2">
+          </div>
+          <button id="save-robot-name-btn" class="btn btn-primary admin-only" onclick="withSaveFeedback(this, () => saveRobotName())">SAVE NAME</button>
+          <div class="settings-status" id="robot-name-status"></div>
+          <div class="settings-divider admin-only"></div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Master Pi — location name</label>
+            <input type="text" id="master-location-input" class="settings-input" maxlength="20" placeholder="Dome">
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave Pi — location name</label>
+            <input type="text" id="slave-location-input" class="settings-input" maxlength="20" placeholder="Body">
+          </div>
+          <button id="save-robot-loc-btn" class="btn btn-primary admin-only" onclick="withSaveFeedback(this, () => saveRobotLocations())">SAVE LOCATIONS</button>
+          <div class="settings-status" id="robot-locations-status"></div>
+          <div class="settings-divider admin-only"></div>
+          <div class="settings-row admin-only" style="flex-direction:column;align-items:flex-start;gap:10px">
+            <label class="settings-label">Robot icon</label>
+            <div class="icon-picker-grid" id="icon-picker-grid">
+              <!-- Populated by JS from /settings/icons -->
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+              <label class="btn btn-secondary" style="cursor:pointer;font-size:10px;padding:4px 12px">
+                + UPLOAD IMAGE
+                <input type="file" id="icon-upload-input" accept="image/*" style="display:none" onchange="uploadIcon(this)">
+              </label>
+              <span id="icon-upload-status" style="font-size:10px;color:var(--text-dim)"></span>
+            </div>
+          </div>
+        </section>
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">THEMES</h2>
+          <div class="theme-grid" id="theme-grid"><!-- Populated by JS --></div>
+          <!-- Custom theme editor -->
+          <div id="theme-editor" class="theme-editor" style="display:none">
+            <div class="theme-editor-header">
+              <span id="theme-editor-title">NEW THEME</span>
+              <button class="btn btn-xs" onclick="closeThemeEditor()">✕</button>
+            </div>
+            <div class="theme-editor-body">
+              <div class="theme-editor-main">
+                <div class="theme-editor-controls">
+                  <div class="theme-editor-row">
+                    <label>Name</label>
+                    <input type="text" id="theme-editor-name" class="input-text input-sm" placeholder="My Theme" maxlength="24">
+                  </div>
+                  <div class="theme-editor-section">INTERFACE</div>
+                  <div class="theme-editor-row">
+                    <label>BG</label>
+                    <input type="color" id="theme-editor-bg" value="#080c14" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-bg">#080c14</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Topbar</label>
+                    <input type="color" id="theme-editor-topbar" value="#050810" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-topbar">#050810</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Card</label>
+                    <input type="color" id="theme-editor-card" value="#0d1525" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-card">#0d1525</span>
+                  </div>
+                  <div class="theme-editor-section">ACCENT & TEXT</div>
+                  <div class="theme-editor-row">
+                    <label>Accent</label>
+                    <input type="color" id="theme-editor-accent" value="#00aaff" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-accent">#00aaff</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Text</label>
+                    <input type="color" id="theme-editor-text" value="#c8d8ea" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-text">#c8d8ea</span>
+                  </div>
+                  <!-- W5 fix 2026-05-16: WCAG contrast safety net -->
+                  <div id="theme-contrast-indicators" class="theme-contrast-indicators"></div>
+                  <div class="theme-editor-section">STATUS</div>
+                  <div class="theme-editor-row">
+                    <label>OK</label>
+                    <input type="color" id="theme-editor-ok" value="#00ff88" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-ok">#00ff88</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Warn</label>
+                    <input type="color" id="theme-editor-warn" value="#ffcc00" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-warn">#ffcc00</span>
+                  </div>
+                  <div class="theme-editor-row">
+                    <label>Error</label>
+                    <input type="color" id="theme-editor-err" value="#ff4455" oninput="previewCustomTheme()">
+                    <span class="theme-color-label" id="lbl-err">#ff4455</span>
+                  </div>
+                  <div class="theme-editor-section">FONT</div>
+                  <div class="font-picker">
+                    <label class="font-opt"><input type="radio" name="theme-font" value="system" checked onchange="previewCustomTheme()"><span class="font-sample-system">Courier New</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="orbitron" onchange="previewCustomTheme()"><span class="font-sample-orbitron">Orbitron</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="sharetech" onchange="previewCustomTheme()"><span class="font-sample-sharetech">Share Tech Mono</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="audiowide" onchange="previewCustomTheme()"><span class="font-sample-audiowide">Audiowide</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="electrolize" onchange="previewCustomTheme()"><span class="font-sample-electrolize">Electrolize</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="exo2" onchange="previewCustomTheme()"><span class="font-sample-exo2">Exo 2</span></label>
+                    <label class="font-opt"><input type="radio" name="theme-font" value="rajdhani" onchange="previewCustomTheme()"><span class="font-sample-rajdhani">Rajdhani</span></label>
+                  </div>
+                </div>
+                <!-- Live mini preview — inherits CSS vars from document.documentElement -->
+                <div class="theme-preview-clip">
+                  <div class="theme-preview-mini">
+                    <div class="theme-preview-topbar">⚙ AstromechOS<span><span class="robot-name">R2-D2</span> ●</span></div>
+                    <div class="theme-preview-tabs">
+                      <div class="theme-preview-tab active">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>
+                        DRIVE
+                      </div>
+                      <div class="theme-preview-tab">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="4" width="4" height="6" rx="1" fill="currentColor"/><path d="M5 4 L10 1 L10 13 L5 10 Z" fill="currentColor"/></svg>
+                        AUDIO
+                      </div>
+                      <div class="theme-preview-tab">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><rect x="1" y="2" width="12" height="2" rx="1" fill="currentColor"/><rect x="1" y="6" width="8" height="2" rx="1" fill="currentColor"/><rect x="1" y="10" width="10" height="2" rx="1" fill="currentColor"/></svg>
+                        SEQUENCES
+                      </div>
+                      <div class="theme-preview-tab">
+                        <svg width="14" height="14" viewBox="0 0 14 14" class="tab-icon"><path d="M7 1 L8.5 5 L13 5.5 L9.5 8.5 L10.5 13 L7 10.5 L3.5 13 L4.5 8.5 L1 5.5 L5.5 5 Z" fill="currentColor"/></svg>
+                        SETTINGS
+                      </div>
+                    </div>
+                    <div class="theme-preview-body">
+                      <div class="theme-preview-card">
+                        <div class="theme-preview-card-title">STATUS</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+                          <div class="theme-preview-pill ok">VESC ●</div>
+                          <div class="theme-preview-pill ok">UART ●</div>
+                          <div class="theme-preview-pill warn">TEMP ●</div>
+                          <div class="theme-preview-pill err">FAULT ●</div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">AUDIO</div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div class="theme-preview-btn-accent">▶ PLAY</div>
+                          <div class="theme-preview-btn">■ STOP</div>
+                          <div class="theme-preview-btn">⟳ RANDOM</div>
+                        </div>
+                        <div class="theme-preview-bar" style="margin-top:10px">
+                          <div class="theme-preview-bar-fill" style="width:65%"></div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">VESC TELEMETRY</div>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                          <div class="theme-preview-pill ok">23.8V</div>
+                          <div class="theme-preview-pill">1240 RPM</div>
+                          <div class="theme-preview-pill warn">42°C</div>
+                          <div class="theme-preview-pill">8.2A</div>
+                        </div>
+                        <div class="theme-preview-bar" style="margin-top:10px">
+                          <div class="theme-preview-bar-fill" style="width:35%;background:var(--status-ok)"></div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">DRIVE</div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div class="theme-preview-btn">◀ LEFT</div>
+                          <div class="theme-preview-btn-accent">▲ FWD</div>
+                          <div class="theme-preview-btn">▶ RIGHT</div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:8px">
+                          <div class="theme-preview-btn">▼ BACK</div>
+                          <div class="theme-preview-btn err-btn">⬡ E-STOP</div>
+                        </div>
+                      </div>
+                      <div class="theme-preview-card" style="margin-top:10px">
+                        <div class="theme-preview-card-title">SEQUENCES</div>
+                        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                          <div class="theme-preview-pill ok">😄 Happy</div>
+                          <div class="theme-preview-pill">😮 Scared</div>
+                          <div class="theme-preview-pill warn">🎵 Cantina</div>
+                          <div class="theme-preview-pill">🔍 Scan</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="theme-editor-actions">
+                <button id="save-custom-theme-btn" class="btn btn-sm" onclick="withSaveFeedback(this, () => saveCustomTheme())">SAVE</button>
+                <button class="btn btn-sm" onclick="closeThemeEditor()">CANCEL</button>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-sm" style="margin-top:10px;width:100%" onclick="openThemeEditor(null)">+ NEW THEME</button>
+        </section>
+      </div>
+
+      <!-- 🎩 HATs (extracted from System panel 2026-05-15) -->
+      <div class="settings-panel" id="spanel-hats">
+        <section class="card settings-card">
+          <h2 class="card-title">I2C HATs</h2>
+          <p class="settings-note admin-only">
+            <b>Master servo HAT</b> change → requires Master reboot.<br>
+            <b>Slave servo / motor HAT</b> change → Slave service auto-restarts (~5s).
+          </p>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Master servo HAT addresses (I2C)</label>
+            <input type="text" id="master-hats-input" class="settings-input" placeholder="0x40, 0x42, ..." maxlength="60"
+                   oninput="validateHatField('master-hats-input')">
+            <!-- W1+W2 fix 2026-05-16: HAT-health live status + servo count preview -->
+            <div class="hat-row-meta" id="master-hats-meta"></div>
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave servo HAT addresses (I2C)</label>
+            <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41, 0x42, ..." maxlength="60"
+                   oninput="validateHatField('slave-hats-input')">
+            <div class="hat-row-meta" id="slave-hats-meta"></div>
+          </div>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Slave Motor HAT address (I2C)</label>
+            <input type="text" id="slave-motor-hat-input" class="settings-input" placeholder="0x40" maxlength="10"
+                   oninput="validateHatField('slave-motor-hat-input', true)">
+            <div class="hat-row-meta" id="slave-motor-hat-meta"></div>
+          </div>
+          <p class="settings-note admin-only">⚠️ Never put the Motor HAT address in Slave servo HATs — this protects the motor driver from servo commands.</p>
+          <!-- W9 fix 2026-05-16: defaults always visible + Reset button -->
+          <p class="settings-note settings-note-dim admin-only">
+            Defaults: Master <code>0x40</code> · Slave HATs <code>0x41</code> · Slave Motor <code>0x40</code>
+            <button class="btn btn-sm" style="margin-left:8px" onclick="resetHatDefaults()">↺ Reset</button>
+          </p>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">
+            <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
+            <!-- W14 fix 2026-05-16: i2cdetect scan button -->
+            <button class="btn btn-sm admin-only" onclick="scanI2cBus()" title="Detect physically-present HATs on Master I2C">🔍 SCAN I2C</button>
+          </div>
+          <div class="settings-status" id="hardware-config-status"></div>
+          <div id="i2c-scan-result" class="settings-status" style="margin-top:6px"></div>
+          <!-- B15 fix 2026-05-16: persistent 'reboot required' banner after Master HAT save -->
+          <div id="hat-reboot-banner" class="hat-reboot-banner" style="display:none">
+            ⚠ Master HAT config changed — reboot Master to apply.
+            <button class="btn btn-sm btn-warn" style="margin-left:8px" onclick="confirmAction('Reboot Master now?', '/system/reboot')">REBOOT NOW</button>
+          </div>
+        </section>
+
+        <section class="card settings-card" style="margin-top:12px">
+          <h2 class="card-title">UART LATENCY</h2>
+          <div class="settings-row admin-only">
+            <label class="settings-label">Body servo UART latency (ms)</label>
+            <input type="number" id="body-uart-lat-input" class="settings-input" min="0" max="200" step="1" placeholder="25">
+            <span id="body-uart-lat-saved" class="hat-saved-pulse">✓ saved</span>
+          </div>
+          <!-- W11 fix 2026-05-16: explain compensation latency in 1 line -->
+          <p class="settings-note admin-only">Master pre-schedules body servo commands by this many ms to compensate for UART round-trip to Slave — keeps dome+body in sync during choreos. Use MEASURE below to auto-tune.</p>
+
+          <!-- UART RTT calibration tool — measures heartbeat round-trip and
+               proposes a tuned body_servo_uart_lat based on the median latency.
+               APPLY & SAVE persists immediately and hot-swaps the live value. -->
+          <div class="settings-row admin-only" style="flex-direction:column;align-items:stretch;gap:6px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="settings-label" style="margin:0">UART RTT calibration</span>
+              <span id="uart-rtt-fit" style="font-family:var(--font-data);font-size:0.85em;color:var(--text-dim)">— idle —</span>
+            </div>
+            <div id="uart-rtt-stats" style="font-family:var(--font-data);font-size:0.78em;color:var(--text-dim);line-height:1.5">
+              Click MEASURE to sample the last 40 seconds of heartbeat round-trips.
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <button class="btn" onclick="measureUartRtt()">MEASURE</button>
+              <button class="btn btn-primary" id="uart-rtt-apply-btn" onclick="applyUartRttRecommendation()" disabled>APPLY &amp; SAVE</button>
+            </div>
+          </div>
+          <p class="settings-note admin-only">Run with no choreography active for a clean reading. Edits to the latency above auto-save on blur. Hot-swap takes effect at the next choreo play().</p>
+        </section>
+      </div>
+
+      <!-- 🖥️ System -->
+      <div class="settings-panel" id="spanel-system">
+        <section class="card settings-card">
+          <h2 class="card-title">SYSTEM</h2>
+          <!-- W2 fix 2026-05-16: default password warning banner -->
+          <div id="admin-pwd-default-warn" class="default-pwd-warn hidden">
+            ⚠ <strong>The default admin password is still in use</strong> — change it below to lock out unauthorized access.
+          </div>
+          <div class="settings-status" id="system-version">Loading...</div>
+          <div class="settings-divider"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot Master?',            '/system/reboot')">REBOOT MASTER</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Master?',           '/system/shutdown')">SHUTDOWN MASTER</button>
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot Slave?',              '/system/reboot_slave')">REBOOT SLAVE</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN Slave?',            '/system/shutdown_slave')">SHUTDOWN SLAVE</button>
+            <button class="btn btn-warn"   onclick="confirmAction('Reboot both Master + Slave?',   '/system/reboot_both')">REBOOT BOTH</button>
+            <button class="btn btn-danger" onclick="confirmAction('SHUTDOWN both Master + Slave?', '/system/shutdown_both')">SHUTDOWN BOTH</button>
+          </div>
+          <!-- W6 fix 2026-05-16: restart services only (faster than full reboot) -->
+          <button class="btn btn-sm" style="margin-top:6px;width:100%"
+                  onclick="confirmAction('Restart Master services? (~5s, faster than full reboot)', '/system/restart_master', true)">
+            ↻ RESTART MASTER SERVICES <span style="opacity:.6;font-size:9px">(~5s)</span>
+          </button>
+          <div class="settings-divider"></div>
+          <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
+          <div class="settings-row">
+            <label class="settings-label">Current password</label>
+            <!-- W1 fix 2026-05-16: show/hide eye toggle (reuse Network pattern) -->
+            <div class="pwd-input-wrap">
+              <input type="password" id="admin-pwd-current" class="settings-input" placeholder="Current password" maxlength="128"
+                     autocomplete="current-password">
+              <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-current', this)" aria-label="Show password">👁</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">New password</label>
+            <div class="pwd-input-wrap">
+              <input type="password" id="admin-pwd-new" class="settings-input"
+                     placeholder="New password (min 4 chars)" maxlength="128"
+                     autocomplete="new-password"
+                     oninput="updatePwdStrength()"
+                     onkeydown="checkCapsLock(event, 'admin-pwd-caps-new')">
+              <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-new', this)" aria-label="Show password">👁</button>
+            </div>
+            <div class="pwd-strength-meter" id="admin-pwd-strength">
+              <div class="pwd-strength-bar" id="admin-pwd-strength-bar"></div>
+              <span class="pwd-strength-label" id="admin-pwd-strength-label">enter a password</span>
+            </div>
+            <div id="admin-pwd-caps-new" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Confirm</label>
+            <div class="pwd-input-wrap">
+              <input type="password" id="admin-pwd-confirm" class="settings-input"
+                     placeholder="Confirm new password" maxlength="128"
+                     autocomplete="new-password"
+                     oninput="updatePwdMatch()"
+                     onkeydown="checkCapsLock(event, 'admin-pwd-caps-confirm')">
+              <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-confirm', this)" aria-label="Show password">👁</button>
+            </div>
+            <div id="admin-pwd-match" class="pwd-match-indicator"></div>
+            <div id="admin-pwd-caps-confirm" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
+          </div>
+          <!-- W4 fix 2026-05-16: withSaveFeedback on CHANGE PASSWORD -->
+          <button id="admin-pwd-change-btn" class="btn btn-primary" onclick="withSaveFeedback(this, () => adminChangePassword())">CHANGE PASSWORD</button>
+          <div class="settings-status" id="admin-pwd-status"></div>
+          <details class="forgot-password-help" style="margin-top:12px;font-size:11px;opacity:.7">
+            <summary style="cursor:pointer">🔑 Forgot password?</summary>
+            <div style="padding:6px 0">
+              SSH into Master (<code>ssh artoo@&lt;master-ip&gt;</code>), edit
+              <code>/home/artoo/astromechos/master/config/local.cfg</code>,
+              find the <code>[admin]</code> section, set <code>password = newpwd</code>,
+              save + restart: <code>sudo systemctl restart astromech-master.service</code>.
+            </div>
+          </details>
+        </section>
+      </div>
+
+      <div class="settings-panel" id="spanel-diagnostics">
+        <section class="card settings-card">
+          <h2 class="card-title">DIAGNOSTICS</h2>
+
+          <h3 class="settings-sub-title">MASTER LOG</h3>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
+            <button class="btn btn-sm diag-filter-btn active" data-filter="ALL"     onclick="diagPanel.setFilter('ALL')">ALL</button>
+            <button class="btn btn-sm diag-filter-btn"        data-filter="WARNING" onclick="diagPanel.setFilter('WARNING')">WARNING+</button>
+            <button class="btn btn-sm diag-filter-btn"        data-filter="ERROR"   onclick="diagPanel.setFilter('ERROR')">ERROR</button>
+            <!-- WOW polish I8 2026-05-15: tail mode toggle. When ON,
+                 logs auto-refresh every 2s and scroll-lock to bottom. -->
+            <button class="btn btn-sm" id="diag-tail-btn" onclick="diagPanel.toggleTail()" style="margin-left:auto">▶ TAIL</button>
+            <button class="btn btn-sm" onclick="diagPanel.loadLogs()">↻ REFRESH</button>
+          </div>
+          <div id="diag-log-status" class="settings-status" style="margin:2px 0 4px"></div>
+          <div id="diag-log-output" class="diag-log-box">—</div>
+
+          <div class="settings-divider"></div>
+
+          <h3 class="settings-sub-title">UART STATS</h3>
+          <div id="diag-stats-output" class="diag-stats-box">—</div>
+          <button class="btn btn-sm" style="margin-top:6px" onclick="diagPanel.loadStats()">↻ REFRESH STATS</button>
+
+          <div class="settings-divider"></div>
+
+          <h3 class="settings-sub-title">CONNECTIVITY</h3>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="btn btn-secondary" onclick="diagPanel.ping()">PING SLAVE</button>
+            <span id="diag-ping-result" style="font-family:var(--font-data);font-size:13px"></span>
+          </div>
+        </section>
+      </div>
+
+    </div><!-- /settings-content -->
+  </div><!-- /settings-layout -->
+</div><!-- /tab-settings -->
+
+
+<!-- Emoji picker shared modal -->
+<div id="emoji-picker-overlay" class="emoji-picker-overlay hidden" onclick="emojiPicker.onOverlayClick(event)">
+  <div class="emoji-picker-popup" id="emoji-picker-popup">
+    <div class="emoji-picker-header">
+      <input class="emoji-picker-search" id="emoji-picker-search"
+             placeholder="🔍  Search..." oninput="emojiPicker.filter(this.value)">
+    </div>
+    <div class="emoji-picker-scroll" id="emoji-picker-scroll">
+      <!-- sections generated by JS -->
+    </div>
+    <div class="emoji-picker-footer">
+      <span class="emoji-picker-preview" id="emoji-picker-preview">?</span>
+      <div class="emoji-picker-actions">
+        <button class="btn btn-sm" onclick="emojiPicker.cancel()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="emojiPicker.confirm()">✓ Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notifications -->
+<div id="toast" class="toast"></div>
+
+<script src="vendor/sortable.min.js"></script>
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js')
+      .then(r => console.log('SW registered'))
+      .catch(e => console.log('SW error:', e));
+  }
+</script>
+</body>
+</html>

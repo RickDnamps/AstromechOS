@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background -->
+    <path
+        android:fillColor="#080c14"
+        android:pathData="M0,0 H108 V108 H0 Z"/>
+
+    <!-- Dome (semicircle, base at y=54) -->
+    <path
+        android:fillColor="#1a3a5c"
+        android:strokeColor="#00aaff"
+        android:strokeWidth="4"
+        android:pathData="M18,54 A36,36 0 0 1 90,54 Z"/>
+
+    <!-- Dome side sensors -->
+    <path
+        android:fillColor="#00aaff"
+        android:alpha="0.75"
+        android:pathData="M26,50 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
+    <path
+        android:fillColor="#00aaff"
+        android:alpha="0.75"
+        android:pathData="M82,50 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
+
+    <!-- Central eye — outer ring -->
+    <path
+        android:fillColor="#080c14"
+        android:strokeColor="#00aaff"
+        android:strokeWidth="4.5"
+        android:pathData="M54,38 m-12,0 a12,12 0 1,0 24,0 a12,12 0 1,0 -24,0"/>
+
+    <!-- Central eye — inner glow dot -->
+    <path
+        android:fillColor="#00ffea"
+        android:pathData="M54,38 m-6,0 a6,6 0 1,0 12,0 a6,6 0 1,0 -12,0"/>
+
+    <!-- Body -->
+    <path
+        android:fillColor="#1a3a5c"
+        android:strokeColor="#00aaff"
+        android:strokeWidth="4"
+        android:pathData="M18,54 L18,90 Q18,94 22,94 L86,94 Q90,94 90,90 L90,54 Z"/>
+
+    <!-- Body center panel accent -->
+    <path
+        android:fillColor="#00aaff"
+        android:alpha="0.28"
+        android:pathData="M34,60 L74,60 L74,88 L34,88 Z"/>
+
+    <!-- Indicator lights (cyan + blue) -->
+    <path
+        android:fillColor="#00ffea"
+        android:pathData="M40,82 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0"/>
+    <path
+        android:fillColor="#00aaff"
+        android:pathData="M52,82 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0"/>
+
+    <!-- Left leg -->
+    <path
+        android:fillColor="#1a3a5c"
+        android:strokeColor="#00aaff"
+        android:strokeWidth="3.5"
+        android:pathData="M18,90 L18,108 L40,108 L40,90 Z"/>
+
+    <!-- Right leg -->
+    <path
+        android:fillColor="#1a3a5c"
+        android:strokeColor="#00aaff"
+        android:strokeWidth="3.5"
+        android:pathData="M68,90 L68,108 L90,108 L90,90 Z"/>
+
+</vector>

@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "name": "my_show234234",
+    "version": "1.0",
+    "duration": 6.0,
+    "created": "2026-04-11",
+    "author": "R2-D2 Control",
+    "audio_channels_required": 1,
+    "config_snapshot": {
+      "vesc_invert_L": false,
+      "vesc_invert_R": false,
+      "vesc_power_scale": 0.29
+    },
+    "label": "oufff",
+    "emoji": "🫳",
+    "category": "test"
+  },
+  "tracks": {
+    "audio": [
+      {
+        "action": "play",
+        "file": "RANDOM:misc",
+        "volume": 85,
+        "duration": 5,
+        "ch": 0,
+        "t": 0.9
+      }
+    ],
+    "lights": [
+      {
+        "mode": "random",
+        "duration": 4,
+        "t": 0.4
+      }
+    ],
+    "dome": [],
+    "servos": [],
+    "propulsion": [],
+    "markers": []
+  }
+}

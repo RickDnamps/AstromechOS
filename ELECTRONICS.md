@@ -1,0 +1,532 @@
+# AstromechOS — Electronics & Wiring Reference
+
+Complete wiring diagrams, power distribution, and communication architecture for the R2-D2 Master/Slave control system.
+
+---
+
+## Table of Contents
+
+- [Hardware Inventory](#0-hardware-inventory)
+- [System Architecture](#1-system-architecture)
+- [Power Distribution](#2-power-distribution)
+- [Slip Ring Wiring](#3-slip-ring-wiring)
+- [Network Topology](#4-network-topology)
+- [3-Layer Safety System](#5-3-layer-safety-system)
+- [I2C & GPIO Reference](#6-i2c--gpio-reference)
+- [UART Protocol](#7-uart-protocol-reference)
+- [Component Notes](#8-component-notes)
+
+---
+
+## 0. Hardware Inventory
+
+### Master — Raspberry Pi 4B 4GB (Dome — rotates with slip ring)
+
+| Component | Interface | Details |
+|-----------|-----------|---------|
+| Waveshare Servo Driver HAT | I2C 0x40 | PCA9685 16ch — 11 dome panel servos (MG90S 180°) |
+| Teeces32 (FLD/RLD/PSI LED logics) | USB `/dev/ttyUSB0` | JawaLite protocol 9600 baud |
+| Camera | USB | Vision / person tracking — Phase 5 |
+| UART to Slave Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V — `dtoverlay=miniuart-bt` frees PL011 UART (BT moves to mini-UART) |
+
+### Slave — Raspberry Pi 4B 2GB (Body — fixed)
+
+| Component | Interface | Details |
+|-----------|-----------|---------|
+| Waveshare Motor Driver HAT | I2C 0x40 | TB6612 — dome DC rotation motor |
+| PCA9685 Breakout | I2C 0x41 | 16ch PWM — 11 body panel servos (MG90S 180°) |
+| FSESC Mini 6.7 PRO × 2 | USB `/dev/ttyACM0` `/dev/ttyACM1` | PyVESC — 250W hub motors 24V |
+| RP2040-Waveshare 1.28" LCD | USB `/dev/ttyACM2` | Round 240×240 diagnostic display (GC9A01) |
+| 3.5mm audio jack (native Pi) | Native Pi 4B | mpg123 → PulseAudio → 3.5mm jack → Amplifier → Speakers (or BT speaker for bench testing) |
+| UART to Master Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V — `dtoverlay=miniuart-bt` (same as Master, BT chip active for BT speaker bench testing) |
+
+### Servos — MG90S 180° (metal gears)
+
+- 11 dome panels + 11 body panels = 22 total
+- Supply: 5V via HAT V+ (same buck as Pi)
+- Control: direct angle — `pulse_us = 500 + (angle/180.0) * 2000`
+- Per-panel calibration: O° open / C° close / S speed (1–10) saved in JSON (gitignored)
+
+> ⚠️ SG90 360° (continuous rotation) are visually identical but have no position feedback.
+> Verify type: try rotating the shaft past 180° by hand — resistance = standard 180° ✅, spins freely = continuous ❌
+
+### Battery — 6S LiPo 10 000mAh XT90-S
+
+| Spec | Value |
+|------|-------|
+| Nominal voltage | 22.2V (6S × 3.7V) |
+| Full charge | 25.2V (6S × 4.2V) |
+| Capacity | 10 000mAh |
+| Connector | **XT90-S** (anti-spark built-in) |
+| VESC compatibility | ✅ FSESC Mini 6.7 PRO supports 4–13S |
+
+Estimated runtime: ~1h30 at casual use (~100–150W average draw).
+
+### Buck Converters (Tobsun)
+
+| Buck | Model | Input | Output | Location | Powers |
+|------|-------|-------|--------|----------|--------|
+| Body 5V | EA50-5V | 10–30V | 5V / 10A | Body | Pi Slave (GPIO) + Body Servo HAT + RP2040 |
+| Body 12V | EA120-12V | 18–32V | 12V / 10A | Body | Motor HAT (dome motor) + Audio Amplifier |
+| Dome 5V | EA50-5V | 10–30V | 5V / 10A | Dome | Pi Master (GPIO) + Dome Servo HAT + Teeces32 |
+
+### Safety Components
+
+| Component | Rating | Location | Role |
+|-----------|--------|----------|------|
+| Fuse + holder | **80A** | As close as possible to battery + | Main short-circuit protection |
+| Main switch | **30A+** | After 80A fuse | Kill everything |
+| XT90-S | — | Battery connector (built-in) | Anti-spark for VESC capacitors |
+| Fuse + holder | **15A** | Electronics branch | Pi/servo protection |
+| Electronics switch | **10A** | Electronics branch | Power on/off independently |
+
+### Pending Components
+
+| Component | Qty | Spec | Use |
+|-----------|-----|------|-----|
+| Electrolytic capacitor | 2 | 1000µF 10V (or 16V) | Filter 5V rail — Servo HAT V+ input |
+| Ceramic capacitor | 2 | 100nF | HF filter in parallel with 1000µF |
+
+---
+
+## 1. System Architecture
+
+All hardware connections — software components, communication buses, and peripherals.
+
+```mermaid
+flowchart TB
+    subgraph CTRL["📱 Control Interface"]
+        direction LR
+        BROWSER["Web Browser\nor Android App"]
+    end
+
+    subgraph MASTER["🎩 R2-MASTER — Raspberry Pi 4B 4GB  (Dome — rotates with slip ring)"]
+        direction TB
+        FLASK["🌐 Flask REST API\nport 5000"]
+        ENGINE["🎬 Script Engine\n40 behavioral sequences"]
+        UART_M["📡 UART Controller\nHeartbeat every 200ms"]
+        DEPLOY["🚀 Deploy Controller\ngit pull + rsync Slave — web UI"]
+
+        subgraph MASTER_HW["Master Hardware"]
+            direction LR
+            DOME_SRV["Dome Servo Driver\n11 panels\nPCA9685 @ I2C 0x40"]
+            TEECES["Teeces32 LEDs\nFLD / RLD / PSI\n/dev/ttyUSB0"]
+            CAM["Camera\nUSB — Phase 5"]
+        end
+
+        FLASK --> ENGINE
+        FLASK --> UART_M
+        FLASK --> DOME_SRV
+        FLASK --> TEECES
+    end
+
+    subgraph SLIPRING["〰️  Slip Ring  (12 wires — dome rotates freely)"]
+        SR_24V["24V Power\n3 wires ∥"]
+        SR_GND["GND\n3 wires ∥"]
+        SR_UART["UART TX/RX\n2 wires"]
+        SR_SPARE["Spare\n4 wires"]
+    end
+
+    subgraph SLAVE["🤖 R2-SLAVE — Raspberry Pi 4B 2GB  (Body — fixed)"]
+        direction TB
+        UART_S["📡 UART Listener\n+ Watchdog 500ms"]
+        WDG["🛑 Hardware Watchdog\nCuts VESCs if no heartbeat"]
+
+        subgraph SLAVE_HW["Slave Hardware"]
+            direction LR
+            AUDIO["🔊 Audio Driver\naplay — 317 sounds\n3.5mm jack"]
+            BODY_SRV["Body Servo Driver\n11 panels\nPCA9685 @ I2C 0x41"]
+            DOME_MOT["Dome Motor Driver\nTB6612 @ I2C 0x40"]
+            VESC["⚙️ VESC Driver\nPyVESC × 2\n/dev/ttyACM0+1"]
+            RP2040["🖥️ RP2040 Display\n240×240 round LCD\n/dev/ttyACM2"]
+        end
+
+        UART_S --> WDG
+        UART_S --> AUDIO
+        UART_S --> BODY_SRV
+        UART_S --> DOME_MOT
+        UART_S --> VESC
+        UART_S --> RP2040
+    end
+
+    BROWSER <-->|"Wi-Fi  REST/JSON"| FLASK
+    UART_M <-->|"UART 115200 baud"| SR_UART
+    SR_UART <-->|"UART 115200 baud"| UART_S
+```
+
+---
+
+## 2. Power Distribution
+
+Battery → fuses → switches → bucks → every powered component.
+
+```mermaid
+flowchart TD
+    BAT["🔋 Battery\n6S LiPo 10 000mAh\n22–25V  XT90-S anti-spark"]
+
+    FUSE80["⚡ Fuse 80A\n← closest possible to battery +"]
+    SW_MAIN["🔴 Main Switch 30A+\nkills everything"]
+
+    BAT --> FUSE80 --> SW_MAIN
+
+    SW_MAIN --> XT90S
+    SW_MAIN --> FUSE15
+
+    subgraph PROP["⚙️ Propulsion  — 24V direct (high current)"]
+        XT90S["XT90-S Connector\nanti-spark"]
+        VESC1["FSESC Mini 6.7 PRO #1\n→ Left Hub Motor 250W"]
+        VESC2["FSESC Mini 6.7 PRO #2\n→ Right Hub Motor 250W"]
+        XT90S --> VESC1
+        XT90S --> VESC2
+    end
+
+    subgraph ELEC["🔵 Electronics Branch"]
+        FUSE15["⚡ Fuse 15A"]
+        SW_ELEC["🔵 Electronics Switch 10A\npower on/off independently"]
+        FUSE15 --> SW_ELEC
+
+        subgraph BODY["📦 Body  (Slave Pi)"]
+            BUCK_5V_BODY["Tobsun EA50-5V\n10–30V → 5V / 10A"]
+            BUCK_12V_BODY["Tobsun EA120-12V\n18–32V → 12V / 10A"]
+
+            PI_SLAVE["Raspberry Pi 4B Slave\n← 5V via GPIO pins 2 & 4"]
+            SERVO_HAT_B["Body Servo HAT V+\nPCA9685 @ 0x41\n← 5V direct\n+ 1000µF + 100nF caps"]
+            RP2040_B["RP2040 LCD\n← 5V via USB from Pi Slave"]
+
+            MOTOR_HAT["Motor Driver HAT TB6612\n← 12V  (dome DC motor)"]
+            AMPLIFIER["Audio Amplifier\n← 12V\n→ Speakers"]
+
+            BUCK_5V_BODY --> PI_SLAVE
+            BUCK_5V_BODY --> SERVO_HAT_B
+            BUCK_5V_BODY --> RP2040_B
+            BUCK_12V_BODY --> MOTOR_HAT
+            BUCK_12V_BODY --> AMPLIFIER
+        end
+
+        subgraph SLIPRING_PWR["〰️ Slip Ring  (24V travels to dome)"]
+            SR_PWR["24V  3 wires in parallel\n→ ~4–6A capacity"]
+        end
+
+        subgraph DOME["🎩 Dome  (Master Pi)"]
+            BUCK_5V_DOME["Tobsun EA50-5V\n10–30V → 5V / 10A"]
+
+            PI_MASTER["Raspberry Pi 4B Master\n← 5V via GPIO pins 2 & 4"]
+            SERVO_HAT_D["Dome Servo HAT V+\nPCA9685 @ 0x40\n← 5V direct\n+ 1000µF + 100nF caps"]
+            TEECES_LED["Teeces32 LEDs\nFLD / RLD / PSI\n← 5V direct"]
+            TEECES_ESP["Teeces32 ESP32 logic\n← 5V via USB from Pi Master"]
+
+            BUCK_5V_DOME --> PI_MASTER
+            BUCK_5V_DOME --> SERVO_HAT_D
+            BUCK_5V_DOME --> TEECES_LED
+            BUCK_5V_DOME --> TEECES_ESP
+        end
+
+        SW_ELEC --> BUCK_5V_BODY
+        SW_ELEC --> BUCK_12V_BODY
+        SW_ELEC --> SR_PWR
+        SR_PWR --> BUCK_5V_DOME
+    end
+```
+
+> **Power-on sequence:**
+> 1. Connect battery → plug XT90-S last (anti-spark for VESCs)
+> 2. Flip main switch → Pi boots (~30s)
+> 3. Plug XT90-S → VESCs power up safely
+
+---
+
+## 3. Slip Ring Wiring
+
+The dome rotates freely. All signals and power pass through a 12-wire slip ring.
+
+| Wire | Signal | Notes |
+|------|--------|-------|
+| 1, 2, 3 | **24V +** | 3 wires in parallel → ~4–6A total capacity |
+| 4, 5, 6 | **GND** | 3 wires in parallel |
+| 7 | **UART TX** | Slave (body) → Master (dome) |
+| 8 | **UART RX** | Master (dome) → Slave (body) |
+| 9–12 | **Spare** | Reserved for future use (camera USB, etc.) |
+
+> **UART wiring rule — always cross TX↔RX:**
+> ```
+> Master BCM14 (TX) ──→  BCM15 (RX) Slave
+> Master BCM15 (RX) ←──  BCM14 (TX) Slave
+> Master GND        ───  GND         Slave
+> ```
+
+---
+
+## 4. Network Topology
+
+```mermaid
+flowchart LR
+    subgraph INTERNET["🌍 Internet"]
+        GITHUB["GitHub\ngit pull / push"]
+    end
+
+    subgraph MASTER_NET["R2-Master Pi 4B (Dome)"]
+        WLAN0["wlan0\n📡 Wi-Fi Hotspot AP\n192.168.4.1  (fixed)\nSSID: AstromechOS"]
+        WLAN1["wlan1\n🌐 Home Wi-Fi client\nDHCP — internet access"]
+    end
+
+    subgraph SLAVE_NET["R2-Slave Pi 4B (Body)"]
+        WLAN0_S["wlan0\n📶 Client of Master hotspot\n192.168.4.x  (DHCP)"]
+    end
+
+    subgraph DEVICES["📱 Control Devices"]
+        PHONE["Phone / Tablet\nAndroid App"]
+        PC["PC / Laptop\nWeb Browser"]
+    end
+
+    PHONE <-->|"Wi-Fi  192.168.4.1:5000"| WLAN0
+    PC    <-->|"Wi-Fi  192.168.4.1:5000"| WLAN0
+    WLAN0_S <-->|"hotspot"| WLAN0
+    WLAN1 <-->|"home Wi-Fi"| INTERNET
+    WLAN1 -.->|"git pull on boot\nor web UI deploy"| GITHUB
+```
+
+---
+
+## 5. Safety Architecture
+
+Three independent timing watchdogs (below) plus a software safety lock and a paired-side liveness check ensure motors cannot run uncontrolled.
+
+**Software safety helper** — `master/vesc_safety.py` is the single source of truth used by every drive path (web joystick, REST `/motion/drive`, Bluetooth gamepad, choreography player). It returns `False` (block) unless both VESC sides have fresh, fault-free telemetry, or `bench_mode` is on for benchtop development.
+
+**Paired-side CAN liveness** — the Slave's VESC driver sets a `_can_lost` flag when the right VESC (reached over CAN forwarding) misses several consecutive reads while the left VESC is still responding. The driver refuses drive commands locally and emits a synthetic fault code (`99 = CAN_LOST`) so the Master's safety gate trips on the next telemetry frame instead of waiting for the 2 s staleness threshold.
+
+**Slave boot banner** — on (re)start, the Slave UART listener emits `BOOT:READY:CRC` once. The Master receives it and re-pushes the persisted VESC scale + inversion config so the Slave never operates on stale defaults after a mid-session reboot.
+
+**E-STOP / Reset E-STOP** are strictly separated:
+- *E-STOP* freezes the robot (cuts propulsion + dome + choreo, **no servo movement**). Both servo drivers expose a `_frozen` flag set by `dome_servo.freeze()` (Master) and the UART `FREEZE:1` message (Slave). Every `_move_ramp` checks the flag at the entry AND on every step — in-flight ramps abort, new SRV commands are rejected. PWM stays at the last commanded angle so panels hold with full torque (no PCA9685 SLEEP, no drooping). Critical: the JS `emergencyStop()` must never send `/servo/*/close_all` — those would race the freeze and let panels close instead of holding.
+- *Reset E-STOP* runs an automated kid-safe stow sequence at slew speed `3` (~1 s per 90°), using the same arm-then-panel dependency logic as choreographies. Reuses `BODY_SERVOS` / `DOME_SERVOS` / `_panel_angle` from `servo_bp.py` as the single source of truth — never imports `SERVO_MAP` from a driver (the mapping is an instance attribute, not a module-level constant).
+
+### Three independent timing watchdogs
+
+```mermaid
+flowchart TD
+    subgraph WD1["🟡 Layer 1 — App Watchdog  (Master)"]
+        APP_HB["App sends POST /heartbeat\nevery 200ms"]
+        APP_WD["AppWatchdog\n600ms timeout"]
+        APP_STOP["safe_stop()\nspeed ramp → 0"]
+        APP_HB -->|"feeds"| APP_WD
+        APP_WD -->|"timeout → triggers"| APP_STOP
+    end
+
+    subgraph WD2["🟠 Layer 2 — Motion Watchdog  (Master)"]
+        DRIVE_CMD["App sends /motion/drive\ncommand"]
+        MOTION_WD["MotionWatchdog\n800ms timeout"]
+        MOTION_STOP["safe_stop()\nspeed ramp → 0"]
+        DRIVE_CMD -->|"feeds"| MOTION_WD
+        MOTION_WD -->|"no new cmd → triggers"| MOTION_STOP
+    end
+
+    subgraph WD3["🔴 Layer 3 — UART Watchdog  (Slave — hardware level)"]
+        HB_UART["Master sends H:1 heartbeat\nevery 200ms via UART"]
+        SLAVE_WD["Slave Watchdog\n500ms timeout"]
+        VESC_KILL["Cut both VESCs\nimmediate hard stop"]
+        HB_UART -->|"feeds"| SLAVE_WD
+        SLAVE_WD -->|"no heartbeat → triggers"| VESC_KILL
+    end
+
+    MASTER_CRASH["Master crashes\nor Wi-Fi drops"]
+    UART_CUT["UART cut\nor slip ring fault"]
+
+    MASTER_CRASH --> APP_WD
+    MASTER_CRASH --> MOTION_WD
+    UART_CUT --> SLAVE_WD
+
+    note1["⚠️ Layer 3 is the last resort\nIt operates on the Slave independently\nMaster crash cannot prevent it"]
+```
+
+---
+
+## 6. I2C & GPIO Reference
+
+### I2C Addresses
+
+| Pi | Bus | Address | Component | Purpose |
+|----|-----|---------|-----------|---------|
+| Master (Dome) | I2C-1 | **0x40** | Waveshare Servo Driver HAT | dome panel servos — HAT 1 (Servo_M0..M15) |
+| Slave (Body) | I2C-1 | **0x40** | Waveshare Motor Driver HAT (TB6612) | Dome rotation DC motor |
+| Slave (Body) | I2C-1 | **0x41** | PCA9685 Breakout | body panel servos — HAT 1 (Servo_S0..S15) |
+
+### Multiple Servo HATs — Expanding Servo Count
+
+Each PCA9685 board supports up to 6 address bits (A0–A5) via solder jumpers or pads, giving 64 possible I2C addresses (0x40–0x7F). Adding more HATs extends servo capacity by 16 channels per board.
+
+**PCA9685 address map (A0–A5 pins) :**
+
+| Address | A5 | A4 | A3 | A2 | A1 | A0 | Notes |
+|---------|----|----|----|----|----|----|-------|
+| 0x40 | 0 | 0 | 0 | 0 | 0 | 0 | All pins low — default |
+| 0x41 | 0 | 0 | 0 | 0 | 0 | 1 | A0 bridged |
+| 0x42 | 0 | 0 | 0 | 0 | 1 | 0 | A1 bridged |
+| 0x43 | 0 | 0 | 0 | 0 | 1 | 1 | A0+A1 bridged |
+| 0x44 | 0 | 0 | 0 | 1 | 0 | 0 | A2 bridged |
+
+**Servo ID mapping :**
+```
+HAT 1 (first address)  → Servo_M0..M15   /  Servo_S0..S15
+HAT 2 (second address) → Servo_M16..M31  /  Servo_S16..S31
+HAT 3 (third address)  → Servo_M32..M47  /  Servo_S32..S47
+```
+
+**Configuration — add addresses comma-separated in config files :**
+
+Master dome servos → `local.cfg`:
+```ini
+[i2c_servo_hats]
+master_hats = 0x40, 0x42     # HAT 1 = 0x40, HAT 2 = 0x42
+```
+
+Slave body servos → `slave/config/slave.cfg`:
+```ini
+[i2c_servo_hats]
+slave_hats      = 0x41, 0x42   # HAT 1 = 0x41, HAT 2 = 0x42
+slave_motor_hat = 0x40          # ⚠️ Motor HAT guard — never add 0x40 to slave_hats
+```
+
+> ⚠️ **Slave Motor HAT conflict** — the Waveshare Motor Driver HAT (TB6612) sits at 0x40 on the Slave.
+> Never put 0x40 in `slave_hats`. The firmware logs an ERROR at boot if it detects the conflict, but will NOT stop — it will silently write PWM to the motor driver and damage it.
+
+> ⚠️ Reboot both Master and Slave after changing HAT addresses — `BODY_SERVOS` and `DOME_SERVOS` lists are computed once at module import time.
+
+### GPIO Pins — both Pi 4B
+
+| BCM | Function | Notes |
+|-----|----------|-------|
+| **2** | I2C SDA | I2C bus |
+| **3** | I2C SCL | I2C bus |
+| **14** | UART TX | → slip ring → other Pi RX |
+| **15** | UART RX | ← slip ring ← other Pi TX |
+| **2, 4** | 5V power in | GPIO header pins — Pi powered from buck (bypass USB-C) |
+| — | Dome button | Removed in v2 — deploy/rollback via web UI (Settings → Deploy) |
+
+### USB Ports — Slave Pi
+
+| Port | Device | Driver |
+|------|--------|--------|
+| `/dev/ttyACM0` | FSESC Mini 6.7 PRO #1 | PyVESC |
+| `/dev/ttyACM1` | FSESC Mini 6.7 PRO #2 | PyVESC |
+| `/dev/ttyACM2` | RP2040 Touch LCD 1.28" | Serial → MicroPython |
+
+### USB Ports — Master Pi
+
+| Port | Device | Driver |
+|------|--------|--------|
+| `/dev/ttyUSB0` | Teeces32 ESP32 | JawaLite 9600 baud |
+
+### Servo PWM Values — SG90 360° (current, temporary)
+
+| Pulse | Effect |
+|-------|--------|
+| **1700µs** | STOP (actual neutral — non-standard) |
+| **2000µs** | Open direction — slow (~300µs above stop) |
+| **1000µs** | Close direction — fast (~700µs below stop, 2.3× faster) |
+
+> ⚠️ SG90 360° asymmetry: close is 2.3× faster than open. Compensate via **Settings → Servo Calibration** — set `close_angle` ≈ `open_angle / 2.3`.
+> This goes away when MG90S 180° standard servos are installed — they use direct angle control.
+
+---
+
+## 7. UART Protocol Reference
+
+All messages follow this format over `/dev/ttyAMA0` at **115200 baud**:
+
+```
+TYPE:VALUE:CRC\n
+```
+
+CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 hex chars (e.g. `B3`).
+> ⚠️ This is **sum mod 256**, NOT XOR — two identical bytes cancel with XOR but not with sum.
+
+### Message Types
+
+| Type | Direction | Format | Description |
+|------|-----------|--------|-------------|
+| `H` | M→S | `H:1:CRC` | Heartbeat (every 200ms) |
+| `H` | S→M | `H:OK:CRC` | Heartbeat ACK |
+| `M` | M→S | `M:0.5,0.5:CRC` | Drive — left/right float [-1.0…1.0] |
+| `D` | M→S | `D:0.3:CRC` | Dome motor speed float [-1.0…1.0] |
+| `SRV` | M→S | `SRV:Servo_S0,110.0,8:CRC` | Body servo — name, angle_deg (10–170°), speed (1–10, optional) |
+| `SRV` | M→S | `SRV:RELOAD:CRC` | Reload servo_angles.json on Slave (after calibration push) |
+| `S` | M→S | `S:Happy001:CRC` | Play specific sound |
+| `S` | M→S | `S:RANDOM:happy:CRC` | Play random sound by category |
+| `S` | M→S | `S:STOP:CRC` | Stop audio |
+| `V` | S→M | `V:?:CRC` | Version request |
+| `V` | M→S | `V:abc123:CRC` | Version reply (git hash) |
+| `TL`/`TR` | S→M | `TL:v_in:temp:current:rpm:duty:fault:CRC` | Per-VESC telemetry, 5 Hz. `fault=99` = synthetic CAN_LOST emitted by paired-side liveness when the right VESC stops responding. |
+| `BOOT` | S→M | `BOOT:READY:CRC` | Slave-side boot banner — emitted once after `uart.start()` settles. Master responds by re-pushing `VCFG:scale` and `VINV:L/R` so config is never lost on Slave reboot. |
+| `FREEZE` | M→S | `FREEZE:1:CRC` / `FREEZE:0:CRC` | Toggles the Slave's `BodyServoDriver._frozen` flag. Set by E-STOP, cleared by Reset E-STOP. While set, in-flight body-servo ramps abort and new SRV commands are rejected so panels hold with full PWM torque. |
+| `VCFG` | M→S | `VCFG:scale:0.85:CRC` · `VCFG:erpm:50000:CRC` | Live VESC tuning |
+| `VINV` | M→S | `VINV:L:1:CRC` · `VINV:R:0:CRC` | Per-side direction (0 = normal, 1 = inverted) |
+| `DISP` | M→S | `DISP:OK:abc123:CRC` | RP2040 display command |
+| `REBOOT` | M→S | `REBOOT:1:CRC` | Reboot Slave |
+| `SHUTDOWN` | M→S | `SHUTDOWN:1:CRC` | Halt Slave Pi (3 s grace) |
+
+---
+
+### Lights Serial Protocols
+
+#### JawaLite (Teeces32 — `/dev/ttyUSB0` @ 9600 baud, `\r` terminator)
+
+| Command | Effect |
+|---------|--------|
+| `0T1\r` | Random animation |
+| `0T20\r` | Lights off |
+| `0T6\r` | Leia message animation |
+| `1MTEXT\r` | Display text on FLD |
+| `4S1\r` | PSI random sequence |
+
+#### AstroPixels+ (`@`-prefix, `\r` terminator)
+
+| Command | Effect |
+|---------|--------|
+| `@0T{n}\r` | FLD+RLD animation — valid T-codes: `T1,T2,T3,T4,T5,T6,T11,T20` only |
+| `@{1\|2\|3}M{text}\r` | Text on FLD top / FLD bottom / RLD |
+| `@{0\|1\|2}P{n}\r` | PSI sequence (0=both 1=front 2=rear) |
+| `@HP{target}{fx}\r` | Holo projectors |
+
+> T-codes affect FLD+RLD only. PSI is separate.  
+> Text targets: `fld_top` · `fld_bottom` · `fld_both` · `rld` · `all`  
+> PSI sequences: `normal` · `flash` · `alarm` · `failure` · `redalert` · `leia` · `march`
+
+---
+
+## 8. Component Notes
+
+### Tobsun EA50-5V (5V / 10A Buck)
+- Input: **10–30V** (covers 6S LiPo 22–25V)
+- Output: 5V / 10A = 50W
+- Used: one in body (Pi Slave + Servo HAT body), one in dome (Pi Master + Servo HAT dome)
+
+### Tobsun EA120-12V (12V / 10A Buck)
+- Input: **18–32V** (covers 6S LiPo 22–25V)
+- Output: 12V / 10A = 120W
+- Used: one in body (Motor HAT + Audio Amplifier)
+
+### Capacitors on Servo HAT V+ input
+- **1000µF 10V** (or 16V) electrolytic — absorbs current spikes at servo start/reverse
+- **100nF** ceramic in parallel — filters high-frequency PWM noise
+- Install as close as possible to the HAT V+ and GND terminals
+- Only needed on servo HAT rails (shared with Pi 5V) — Motor HAT on 12V is isolated
+
+### Pi 4B GPIO Power
+The Pi 4B **is not powered by the HAT** — the HAT takes its logic power from the Pi.
+Both Pi 4B units receive 5V directly from their respective buck converters via **GPIO pins 2 & 4** (bypassing USB-C).
+
+### FSESC Mini 6.7 PRO
+- Supports 4–13S LiPo — 6S 24V is well within spec
+- Connect via XT90-S last (after main switch) to avoid spark on capacitor inrush
+- Controlled via PyVESC over USB serial (`SetDutyCycle` commands)
+
+### Hub Motors 250W / 24V
+- Rated 250W peak — typical casual use ~20–30W each
+- Double shaft — fits standard R2-D2 leg wheel mounts
+- Requires soft speed ramps — hard stops risk tipping the robot
+
+---
+
+*For installation instructions, see [HOWTO.md](HOWTO.md).*
+*For project overview and screenshots, see [README.md](README.md).*

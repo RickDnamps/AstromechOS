@@ -1,0 +1,405 @@
+# ============================================================
+#   █████╗  ██████╗ ███████╗
+#  ██╔══██╗██╔═══██╗██╔════╝
+#  ███████║██║   ██║███████╗
+#  ██╔══██║██║   ██║╚════██║
+#  ██║  ██║╚██████╔╝███████║
+#  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝
+#
+#  AstromechOS — Open control platform for astromech builders
+# ============================================================
+#  Copyright (C) 2026 RickDnamps
+#  https://github.com/RickDnamps/AstromechOS
+#
+#  This file is part of AstromechOS.
+#
+#  AstromechOS is free software: you can redistribute it
+#  and/or modify it under the terms of the GNU General
+#  Public License as published by the Free Software
+#  Foundation, either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  AstromechOS is distributed in the hope that it will be
+#  useful, but WITHOUT ANY WARRANTY; without even the implied
+#  warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+#  PURPOSE. See the GNU General Public License for details.
+#
+#  You should have received a copy of the GNU GPL along with
+#  AstromechOS. If not, see <https://www.gnu.org/licenses/>.
+# ============================================================
+"""
+AstromechOS Slave — Entry point.
+Runs on Raspberry Pi 4B 2GB (body).
+
+Boot sequence:
+1. Init display RP2040 — starts diagnostic sequence (BOOT:START)
+2. Init UART listener  → DISP:BOOT:OK:UART  or FAIL
+3. Init Watchdog (priority — safety)
+4. Init Audio          → DISP:BOOT:OK:AUDIO or FAIL
+5. Phase 2: Init VESC L/R, Dome, Servos → DISP:BOOT:OK/FAIL for each
+6. Version check with Master
+7. If all OK → DISP:READY (green screen 3s then READY)
+"""
+
+import configparser
+import logging
+import signal
+import subprocess
+import sys
+import os
+import threading
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from slave.uart_listener import UARTListener
+from slave.uart_health_server import start_health_server
+from slave.wifi_watchdog import WiFiWatchdog
+from slave.watchdog import WatchdogController
+from slave.version_check import VersionChecker
+from slave.drivers.display_driver import DisplayDriver
+from slave.drivers.audio_driver   import AudioDriver
+
+from slave.drivers.vesc_driver        import VescDriver
+from slave.drivers.body_servo_driver  import BodyServoDriver
+# from slave.drivers.dome_motor_driver  import DomeMotorDriver  # to create Phase 2
+
+from shared.paths import SLAVE_CFG as _SLAVE_CFG, VERSION_FILE
+
+def _read_audio_channels() -> int:
+    """Reads audio_channels from slave.cfg. Defaults to 6 if absent."""
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(_SLAVE_CFG)
+    except OSError as exc:
+        logging.getLogger(__name__).warning("Cannot read slave.cfg: %s — using defaults", exc)
+    return cfg.getint('audio', 'audio_channels', fallback=6)
+
+UART_PORT = "/dev/ttyAMA0"
+UART_BAUD = 115200
+LOG_LEVEL = "INFO"
+
+
+def setup_logging(level_str: str) -> None:
+    level = getattr(logging, level_str.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+
+def emergency_stop_vesc() -> None:
+    """Emergency VESC cutoff — called by the watchdog."""
+    log = logging.getLogger("watchdog.stop")
+    log.error("VESC CUTOFF — watchdog timeout")
+    # Phase 2: vesc_g.stop() + vesc_d.stop()
+
+
+def resume_vesc() -> None:
+    """VESC re-enable after heartbeat resumes."""
+    log = logging.getLogger("watchdog.resume")
+    log.info("VESC re-enabled — heartbeat resumed")
+    # Phase 2: vesc_g.resume() + vesc_d.resume()
+
+
+# Batch 2 fix 2026-05-16: module-level driver refs populated by main()
+# so handle_reboot/shutdown can pre-stop motors before sudo reboot
+# (was: blind subprocess.run → motors kept last commanded ERPM during
+# the 3s sudo-reboot grace + systemd-stop window → robot lurched forward
+# until kernel-level USB tty close finally cut VESC comm-loss timeout).
+_vesc_ref = None
+_audio_ref = None
+_servo_ref = None
+
+
+def _safe_pre_shutdown():
+    """Stop motors + audio + freeze servos BEFORE sudo reboot/shutdown."""
+    log = logging.getLogger(__name__)
+    if _vesc_ref is not None:
+        try: _vesc_ref.stop()
+        except Exception as e: log.warning("pre-shutdown vesc.stop failed: %s", e)
+    if _audio_ref is not None:
+        try: _audio_ref.stop()
+        except Exception as e: log.warning("pre-shutdown audio.stop failed: %s", e)
+    if _servo_ref is not None:
+        try: _servo_ref.set_frozen(True)
+        except Exception as e: log.warning("pre-shutdown servo.freeze failed: %s", e)
+
+
+def handle_reboot(value: str) -> None:
+    """REBOOT command received from Master — run in a thread to avoid blocking UART."""
+    logging.getLogger(__name__).info("REBOOT command received — pre-stop + reboot in 3s")
+    def _do_reboot():
+        _safe_pre_shutdown()
+        time.sleep(3)
+        subprocess.run(['sudo', 'reboot'], check=False)
+    threading.Thread(target=_do_reboot, daemon=True).start()
+
+
+def handle_shutdown(value: str) -> None:
+    """SHUTDOWN command received from Master — run in a thread to avoid blocking UART."""
+    logging.getLogger(__name__).info("SHUTDOWN command received — pre-stop + shutdown in 3s")
+    def _do_shutdown():
+        _safe_pre_shutdown()
+        time.sleep(3)
+        subprocess.run(['sudo', 'shutdown', '-h', 'now'], check=False)
+    threading.Thread(target=_do_shutdown, daemon=True).start()
+
+
+def main() -> None:
+    setup_logging(LOG_LEVEL)
+    log = logging.getLogger(__name__)
+    log.info("=== AstromechOS Slave starting ===")
+
+    # ------------------------------------------------------------------
+    # RP2040 diagnostic screen — starts the boot sequence
+    # ------------------------------------------------------------------
+    display = DisplayDriver()
+    if not display.setup():
+        log.warning("DisplayDriver unavailable — degraded display mode")
+
+    display.boot_start()   # RP2040: reset all items → orange
+
+    vesc = None   # forward declaration — assigned below after port detection
+
+    # Redefine with closures on display
+    def emergency_stop_vesc() -> None:
+        log.error("VESC CUTOFF — watchdog timeout")
+        display.system_locked()
+        if vesc is not None and vesc.is_ready():
+            vesc.stop()
+
+    def resume_vesc() -> None:
+        log.info("VESC re-enabled — heartbeat resumed")
+        try:
+            with open(VERSION_FILE) as f:
+                v = f.read().strip()
+        except Exception:
+            v = ""
+        display.ok(v)
+
+    # ------------------------------------------------------------------
+    # UART Listener — connection to Master via slipring
+    # ------------------------------------------------------------------
+    display.boot_item('UART')
+    uart = UARTListener(UART_PORT, UART_BAUD)
+    if not uart.setup():
+        log.error("UART init failed — shutting down")
+        display.boot_fail('UART')
+        display.error("UART_ERROR")
+        sys.exit(1)
+    display.boot_ok('UART')
+
+    # ------------------------------------------------------------------
+    # Watchdog — CRITICAL, start immediately after UART
+    # ------------------------------------------------------------------
+    watchdog = WatchdogController()
+    watchdog.register_stop_callback(emergency_stop_vesc)
+    watchdog.register_resume_callback(resume_vesc)
+    watchdog.start()
+
+    uart.register_callback('H',      lambda v: watchdog.feed())
+    uart.register_callback('REBOOT',   handle_reboot)
+    uart.register_callback('SHUTDOWN', handle_shutdown)
+    uart.register_callback('DISP',   lambda v: display.send_raw(f"DISP:{v}"))
+
+    # ------------------------------------------------------------------
+    # Audio — native 3.5mm jack Pi 4B
+    # ------------------------------------------------------------------
+    display.boot_item('AUDIO')
+    _audio_channels = _read_audio_channels()
+    audio = AudioDriver(channels=_audio_channels)
+    if audio.setup():
+        for _i in range(_audio_channels):
+            _msg_type = 'S' if _i == 0 else f'S{_i + 1}'
+            uart.register_callback(_msg_type, audio.make_channel_handler(_i))
+        uart.register_callback('VOL', audio.handle_volume)
+        # E3 fix 2026-05-15: hot-reload sounds_index.json on Master
+        # SFTP sync of a new upload. Without this, the slave's
+        # in-memory _index stays at the boot snapshot and rejects
+        # 'sound not found' for anything uploaded since boot.
+        uart.register_callback('SIDX', lambda payload: audio.reload_index())
+        last = 'S' if _audio_channels == 1 else f'S{_audio_channels}'
+        log.info("Audio: %d channels registered (%s)", _audio_channels,
+                 'S:' if _audio_channels == 1 else f'S: … {last}:')
+        display.boot_ok('AUDIO')
+    else:
+        log.warning("AudioDriver unavailable — audio disabled")
+        display.boot_fail('AUDIO')
+
+    # ------------------------------------------------------------------
+    # Phase 2 — VESC propulsion (Flipsky Mini V6.7, fw v6.05)
+    # VESC ID 1 via USB, VESC ID 2 via CAN forwarding through VESC 1.
+    # Ports tried in order, skipping the ACM port used by the RP2040.
+    # ------------------------------------------------------------------
+    _rp2040_port = display.used_port
+    _vesc_ports  = [p for p in ["/dev/ttyACM0", "/dev/ttyACM1", "/dev/ttyACM2"]
+                    if p != _rp2040_port]
+    vesc = None
+    servo = None
+    vesc = VescDriver(ports=_vesc_ports)
+    # setup() now returns True even when no VESC was reachable at boot —
+    # the driver's telem thread keeps retrying every 2s. Register UART
+    # callbacks unconditionally so commands can flow as soon as the VESC
+    # appears (drive() gates on _ready internally so nothing leaks to
+    # hardware during the degraded window). Display indicator reflects
+    # the CURRENT connection state, not the post-recovery state.
+    if vesc.setup(uart=uart):
+        uart.register_callback('M',       vesc.handle_uart)
+        uart.register_callback('VCFG',    vesc.handle_config_uart)
+        uart.register_callback('VINV',    vesc.handle_invert_uart)
+        uart.register_callback('CANSCAN', vesc.handle_can_scan_uart)
+        if vesc.is_ready():
+            display.boot_ok('VESC_L')
+            display.boot_ok('VESC_R')
+        else:
+            log.warning(
+                "VescDriver setup OK but no VESC connected — reconnect "
+                "loop running, will pick up the VESC as soon as it appears"
+            )
+            display.boot_fail('VESC_L')
+            display.boot_fail('VESC_R')
+    else:
+        log.error("VescDriver setup HARD-FAILED — propulsion permanently disabled")
+        display.boot_fail('VESC_L')
+        display.boot_fail('VESC_R')
+
+    display.boot_fail('DOME')     # not connected Phase 1
+    display.boot_fail('BT_CTRL')  # optional Phase 4
+
+    # ------------------------------------------------------------------
+    # Phase 2 — Body servos (PCA9685 I2C 0x41)
+    # ------------------------------------------------------------------
+    display.boot_item('SERVOS')
+    servo = BodyServoDriver()
+    if servo.setup():
+        uart.register_callback('SRV', servo.handle_uart)
+        # FREEZE:1 / FREEZE:0 — Master triggers this on E-STOP / Reset E-STOP
+        # so in-flight body-servo ramps abort and the servos hold at their
+        # last commanded position instead of completing the choreographed move.
+        uart.register_callback('FREEZE', lambda v: servo.set_frozen(v.strip() == '1'))
+        display.boot_ok('SERVOS')
+    else:
+        log.warning("BodyServoDriver unavailable")
+        display.boot_fail('SERVOS')
+
+    # Batch 2 fix 2026-05-16: expose driver refs for handle_reboot/shutdown
+    # so motors stop BEFORE the 3s sudo grace window.
+    global _vesc_ref, _audio_ref, _servo_ref
+    _vesc_ref  = vesc
+    _audio_ref = audio
+    _servo_ref = servo
+
+    # ------------------------------------------------------------------
+    # Health Monitor — HTTP port 5001, exposes UART stats to Master
+    # ------------------------------------------------------------------
+    start_health_server(uart, body_servo=servo, display=display)
+
+    # ------------------------------------------------------------------
+    # Start UART listener (thread)
+    # ------------------------------------------------------------------
+    uart.start()
+
+    # ------------------------------------------------------------------
+    # Boot banner — tells Master we just (re)started so it can re-push
+    # VESC config (scale, invert) instead of leaving the Slave at defaults.
+    # ------------------------------------------------------------------
+    def _send_boot_banner() -> None:
+        """Send BOOT:READY 3× spaced 200ms — slipring noise could corrupt
+        any single frame. Master's on_slave_boot handler is idempotent
+        (re-pushes same VCFG/VINV/bench config each time).
+        Batch 2 fix 2026-05-16: was single send → CRC corruption =
+        Master never re-pushed config → Slave ran with defaults forever."""
+        time.sleep(0.5)
+        for i in range(3):
+            try:
+                uart.send('BOOT', 'READY')
+                log.info(f"BOOT:READY sent to Master ({i+1}/3)")
+            except Exception as exc:
+                log.warning("Failed to send BOOT banner (%d/3): %s", i+1, exc)
+            if i < 2:
+                time.sleep(0.2)
+    threading.Thread(target=_send_boot_banner, name='boot-banner', daemon=True).start()
+
+    # ------------------------------------------------------------------
+    # WiFi Watchdog — automatic wlan0 reconnection
+    # ------------------------------------------------------------------
+    wifi_watchdog = WiFiWatchdog(display)
+    wifi_watchdog.start()
+
+    # ------------------------------------------------------------------
+    # Bus Health push — sends UART health % + OK state to RP2040 every 10s
+    # Re-sends DISP:OK periodically so the RP2040 can re-sync
+    # even if it missed the initial DISP:READY (USB reconnect, late start).
+    # ------------------------------------------------------------------
+    _display_version     = ['']   # list to allow modification inside the closure
+    _display_operational = [False]
+
+    def _bus_health_push():
+        while True:
+            time.sleep(10)
+            # Automatic reconnection if RP2040 was unplugged/replugged
+            if not display.is_ready():
+                log.info("RP2040 disconnected — attempting reconnection")
+                if display.reconnect():
+                    log.info("RP2040 reconnected")
+            stats = uart.get_health_stats()
+            display.bus_health(stats['health_pct'])
+            if _display_operational[0]:
+                display.ok(_display_version[0])
+
+    threading.Thread(
+        target=_bus_health_push,
+        name='bus-health-push',
+        daemon=True,
+    ).start()
+
+    # ------------------------------------------------------------------
+    # Version check with Master (displays syncing on RP2040)
+    # ------------------------------------------------------------------
+    checker = VersionChecker(uart, display)
+    degraded = not checker.run()
+    if degraded:
+        log.warning("Degraded mode — application started with local version")
+        # In degraded mode, read the local version for periodic refreshes
+        try:
+            with open(VERSION_FILE) as f:
+                _display_version[0] = f.read().strip()
+        except Exception:
+            pass
+        _display_operational[0] = True
+        display.ok(_display_version[0])   # show OK even in degraded mode
+    else:
+        log.info("Version validated — normal startup")
+        try:
+            with open(VERSION_FILE) as f:
+                _display_version[0] = f.read().strip()
+        except Exception:
+            pass
+        _display_operational[0] = True
+
+    log.info("Slave operational")
+
+    # ------------------------------------------------------------------
+    # Clean shutdown handling
+    # ------------------------------------------------------------------
+    def shutdown(sig, frame):
+        log.info("Shutdown signal received")
+        wifi_watchdog.stop()
+        watchdog.stop()
+        uart.stop()
+        audio.shutdown()
+        if vesc  and vesc.is_ready():  vesc.shutdown()
+        if servo and servo.is_ready(): servo.shutdown()
+        display.shutdown()
+        log.info("Slave stopped cleanly")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
+    signal.pause()
+
+
+if __name__ == "__main__":
+    main()

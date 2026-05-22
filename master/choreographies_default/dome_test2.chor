@@ -1,0 +1,60 @@
+{
+  "meta": {
+    "name": "dome_test2",
+    "version": "1.0",
+    "duration": 2.1,
+    "bpm": 0,
+    "created": "2026-03-31",
+    "author": "scr_to_chor converter",
+    "source": "dome_test2.scr",
+    "category": "test",
+    "emoji": "🔧",
+    "label": "Dome Test 2"
+  },
+  "tracks": {
+    "dome_servos": [
+      {
+        "t": 0.0,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 500
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 500
+      },
+      {
+        "t": 0.0,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 1.0,
+        "angle": 500
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M1",
+        "action": "open",
+        "duration": 0.0,
+        "angle": 500
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M2",
+        "action": "open",
+        "duration": 0.0,
+        "angle": 500
+      },
+      {
+        "t": 2.0,
+        "servo": "Servo_M3",
+        "action": "open",
+        "duration": 0.0,
+        "angle": 500
+      }
+    ]
+  }
+}
