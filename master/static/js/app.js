@@ -13731,12 +13731,14 @@ const choreoEditor = (() => {
         const onUp = () => {
           document.removeEventListener('pointermove', onMove);
           document.removeEventListener('pointerup', onUp);
+          document.removeEventListener('pointercancel', onUp);
           keyframes.sort((a, b) => a.t - b.t);
           _renderDomeLane(keyframes);
           _refreshLayout();
         };
         document.addEventListener('pointermove', onMove);
         document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onUp);
         _selectDomeKF(i);
       });
 
@@ -13857,7 +13859,9 @@ const choreoEditor = (() => {
       _stopAutoScroll();
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
-      if (scroll) {
+      document.removeEventListener('pointercancel', onUp);
+      // Skip the drag-out delete on a cancelled pointer (OS/gesture takeover).
+      if (e2 && e2.type !== 'pointercancel' && scroll) {
         const r = scroll.getBoundingClientRect();
         // Soft-delete with UNDO when dragged out of the timeline area.
         // Audit reclass C4 2026-05-15: 24px grace margin so an
@@ -13876,7 +13880,7 @@ const choreoEditor = (() => {
       _selectBlock(track, idx);
       _refreshLayout();
     };
-    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp); document.addEventListener('pointercancel', onUp);
   }
 
   function _startResize(e, block, track, idx) {
@@ -13925,8 +13929,8 @@ const choreoEditor = (() => {
       _setDirty(true);
       _updatePropsPanel(track, idx);
     };
-    const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
-    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp);
+    const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); document.removeEventListener('pointercancel', onUp); _renderTrack(track); _selectBlock(track, idx); _refreshLayout(); };
+    document.addEventListener('pointermove', onMove); document.addEventListener('pointerup', onUp); document.addEventListener('pointercancel', onUp);
   }
 
   // ── Properties panel ─────────────────────────────────────────────
