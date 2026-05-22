@@ -13325,10 +13325,15 @@ const choreoEditor = (() => {
     // Unlabeled minor ticks subdivide the label step, dropped if too dense.
     let minorStep = labelStep >= 5 ? labelStep / 5 : 1;
     if (minorStep * _pxPerSec < MIN_MINOR_PX) minorStep = labelStep;
+    // Time-aligned vertical gridlines on the canvas, one per labelled tick
+    // (replaces the misaligned global 40px grid showing through). Subtle so
+    // the horizontal track separators stay readable.
+    const gridPx = Math.max(1, labelStep * _pxPerSec);
+    const gridBg = `repeating-linear-gradient(90deg, rgba(var(--blue-rgb),.09) 0 1px, transparent 1px ${gridPx}px)`;
     const fp = `${_pxPerSec}|${total}|${labelStep}|${minorStep}`;
     if (fp === _rulerFp && ruler.children.length > 0) {
       const canvas = document.getElementById('chor-canvas');
-      if (canvas) canvas.style.width = fullW + 'px';
+      if (canvas) { canvas.style.width = fullW + 'px'; canvas.style.backgroundImage = gridBg; }
       return;
     }
     _rulerFp = fp;
@@ -13342,7 +13347,7 @@ const choreoEditor = (() => {
       ruler.appendChild(tick);
     }
     const canvas = document.getElementById('chor-canvas');
-    if (canvas) canvas.style.width = fullW + 'px';
+    if (canvas) { canvas.style.width = fullW + 'px'; canvas.style.backgroundImage = gridBg; }
   }
 
   // ── Track rendering ───────────────────────────────────────────────

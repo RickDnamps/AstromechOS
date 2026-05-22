@@ -6781,6 +6781,10 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   position: relative;
   min-width: 100%;
   height: auto;
+  /* Own background hides the misaligned global 40px grid in the timeline zone.
+     The time-aligned vertical gridlines are set as background-image in JS
+     (_renderRuler), so they sit on top of this colour. */
+  background-color: rgba(8, 12, 20, 0.72);
 }
 
 /* ── Ruler ────────────────────────────────────────────────────── */
@@ -6810,7 +6814,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .chor-lane {
   height: 44px;
   position: relative;
-  border-bottom: 1px solid rgba(var(--blue-rgb),.07);
+  border-bottom: 1px solid rgba(var(--blue-rgb),.16);  /* clearer track separator (was .07, lost against the old grid) */
   overflow: hidden;
 }
 .chor-lane-audio { height: 44px; }
