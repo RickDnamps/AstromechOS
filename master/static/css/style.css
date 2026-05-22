@@ -6477,7 +6477,11 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 
 /* ── Footer — timecode + duration status bar ─────────────────── */
 .chor-footer {
-  display: flex;
+  /* 3-col grid: [time | centered controls | spacer]. Grid tracks can't overlap,
+     so the controls never collide with the timecode on a narrow footer (the
+     earlier absolute-centering could). */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 6px;
   padding: 0 12px;
@@ -6485,18 +6489,18 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   flex-shrink: 0;
   border-top: 1px solid rgba(var(--blue-rgb),.10);
   background: rgba(4,10,22,.97);
-  position: relative;           /* anchor for the absolutely-centered controls */
 }
 .chor-footer-timegroup {
   display: flex;
   align-items: center;
   gap: 6px;
+  justify-self: start;          /* col 1, left */
+  min-width: 0;                 /* allow it to shrink instead of pushing controls off-center */
 }
-/* SNAP + ZOOM, centered in the footer regardless of the timecode width */
+/* SNAP + ZOOM, centered in the footer (grid col 2) — never overlaps the time */
 .chor-footer-controls {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  grid-column: 2;
+  justify-self: center;
   display: flex;
   align-items: center;
   gap: 6px;

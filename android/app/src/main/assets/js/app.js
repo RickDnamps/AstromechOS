@@ -13944,7 +13944,7 @@ const choreoEditor = (() => {
         // block doesn't trigger an accidental delete. UNDO toast
         // mitigates but operator still gets startled. Wider zone
         // = clearer "I meant to throw it away" intent.
-        const GRACE = 24;
+        const GRACE = (e2.pointerType === 'touch') ? 48 : 24;  // bigger margin on touch — a finger drifts more, avoid accidental delete
         if (e2.clientY < r.top - GRACE || e2.clientY > r.bottom + GRACE) {
           _softDeleteWithUndo(track, idx);
           return;
