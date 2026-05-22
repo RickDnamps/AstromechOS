@@ -37,6 +37,7 @@ All POST endpoints accept and return `application/json`.
 | DELETE | `/audio/sound/<name>` | admin · removes from sounds_index.json + local + remote (SFTP) · cascades `play_sound` shortcuts to action='none' · NOT cascaded into choreo audio tracks (intentional: re-upload same name restores) |
 | GET | `/audio/index` | `{categories: {cat_name: [sound1, sound2, …]}}` — single source for both category names and per-category sound counts |
 | GET | `/audio/categories` | DEPRECATED — derive counts from `/audio/index` instead (saves 1 round-trip per refresh) |
+| POST | `/audio/reconcile` | admin · reconciles `sounds_index.json` with the files actually present on the Slave (drops ghosts, files unknown ones under `others`) · returns `{ok, total, removed, added_to_others}` · also runs once on boot (`audio_reconcile.py` thread) so a failed upload never leaves a phantom in the index |
 | POST | `/settings/audio/profile/apply` | admin · `{"profile":"convention\|maison\|exterieur"}` — applies the cubic-curve transform `_sliderToAlsa` so saved profile matches master slider physical volume (2026-05-15 fix: was raw, profiles sounded different from slider position they were saved at) |
 
 ---
@@ -225,3 +226,32 @@ Served by `slave/uart_health_server.py` — queried by Master every poll cycle.
 | POST | `/audio/bt/connect` | `{"mac":"..."}` — connect + set PA default sink |
 | POST | `/audio/bt/disconnect` | `{"mac":"..."}` |
 | POST | `/audio/bt/remove` | `{"mac":"..."}` |
+
+---
+
+## Custom Themes
+
+Server-side persistence so a custom theme survives reboots / device changes and is included in backups. Stored in `master/config/custom_themes.json` (gitignored, atomic write). `localStorage` mirrors them as a cache.
+
+| Method | Path | Body / Notes |
+|--------|------|------|
+| GET | `/themes/custom` | LAN-open · `{themes: [ {id, label, swatch, _picker*, _pickerFont, vars}, … ]}` |
+| POST | `/themes/custom` | admin · `{theme: {…}}` — validated by `validate_theme` (id regex, hex pickers, CSS-injection guard on `vars`: allows `rgba()`, blocks `;{}<>`/`url(`/`expression`/`javascript:`) · upsert by `id` |
+| DELETE | `/themes/custom/<id>` | admin · `id` validated `[A-Za-z0-9_-]{1,40}` |
+
+---
+
+## Backup / Restore
+
+Full robot-state backup → a `.bck` (a ZIP, renamed, `chmod 0600` — it contains WiFi + admin secrets). Restore = **total replacement + automatic reboot**. Network sections are preserved from the live machine so master↔slave never lose each other.
+
+| Method | Path | Body / Notes |
+|--------|------|------|
+| POST | `/backup/start` | admin · starts the async backup job (collects master files locally + slave via SFTP, builds manifest, zips) |
+| GET | `/backup/status` | admin · `{running, pct, phase, done, error, path?}` — drives the real progress bar |
+| GET | `/backup/download` | admin · streams the `.bck` (then deletes the server-side temp) · `Content-Disposition` filename `AstromechOS_Backup_<date>.bck` |
+| POST | `/restore/upload` | admin · raw `.bck` as the request body (read straight from `wsgi.input` to bypass the 16 MB `MAX_CONTENT_LENGTH`; 200 MB cap) · returns `{ok, token, bytes}` |
+| POST | `/restore/apply` | admin · `{token}` — validates the token, then runs the restore job: **validate-everything-before-any-write** (manifest + anti zip-slip + allow-list anti-RCE + 2 GB zip-bomb cap), master files first then slave SFTP, `local.cfg` merged (network preserved), then reboots slave (UART) + master |
+| GET | `/restore/status` | admin · `{running, pct, phase, done, error}` |
+
+> **Security:** the restore allow-list (`is_allowed_restore_member`) rejects any archive member outside `BACKUP_FILESET` — a crafted `.bck` cannot overwrite code (which, with the post-restore reboot, would be RCE). Verified live: a `.bck` containing `master/main.py` + `../../tmp/evil` is rejected during validation with nothing written.

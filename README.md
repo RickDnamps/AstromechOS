@@ -176,8 +176,10 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🔌 **Hot-swap light drivers** | Teeces32 ↔ AstroPixels+ without reboot |
 | 🚀 **One-button OTA deploy** | Dome button → git pull + rsync + reboot — no SSH needed |
 | 📷 **USB camera autodetect** | MJPEG stream · hardware-compressed · auto-reconnect after restart |
-| 🎨 **Theme system** | 8 built-in themes · 16-slot custom themes · live preview · 7 sci-fi fonts · persisted across sessions |
+| 🎨 **Theme system** | 8 built-in themes · 16-slot custom themes · live preview · 7 sci-fi fonts · **persisted server-side** (survives reboots & device changes, included in backups) |
 | 🎛️ **Drive-tab Shortcuts** | Up to 12 operator-configurable macro buttons split over both joysticks · toggle arms/panels · play choreo/sound/random · green pulse while playing · re-press kills · auto-fills icon+label from choreo emoji · per-axis motion lockout (drive choreo locks left, dome choreo locks dome rotation, sound-only stays free) |
+| 💾 **Backup & Restore** | One-click full backup of all robot state (configs · sounds · choreos · calibrations · custom themes) to a downloadable `.bck` · Restore = total replacement + auto-reboot, recovers a dead SD card "like before" · network config preserved so master↔slave never lose each other · hardened (anti zip-slip + anti-RCE allow-list) |
+| 🔄 **Self-healing audio index** | The sound index reconciles against the files actually on the robot (drops ghosts, files unknown ones under *others*) on boot + on demand — a failed upload never leaves a phantom |
 
 ---
 

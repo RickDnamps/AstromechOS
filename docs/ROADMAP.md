@@ -27,8 +27,12 @@
 | E-STOP + RESET sans restart | PCA9685 SLEEP instantané |
 | Cockpit Status Panel complet | Topbar propre · pills HB/UART/BT · pill SLAVE · E-STOP overlay · STATUS toujours à jour |
 | HAT diagnostic cockpit | Dome/Body Servo HATs · Motor HAT I2C probe · RP2040 Screen health · labels config-driven |
-| CSS theme system | 8 built-in themes · theme customizer avec live preview · 7 polices sci-fi |
+| CSS theme system | 8 built-in themes · theme customizer avec live preview · 7 polices sci-fi · **persistés server-side** (custom_themes.json) |
 | Behavior engine ALIVE | idle behaviors configurables |
+| **Backup / Restore complet** | `.bck` de tout l'état (configs/sons/choreos/calibrations/thèmes) · restore = remplacement total + reboot auto · réseau préservé · durci anti zip-slip + anti-RCE |
+| **Config-not-in-git (seed/working)** | état robot-local hors git · seeds `*_default`/`.example` copiés à l'install · `git pull` ne bloque jamais |
+| **Index audio auto-réconcilié** | retire les fantômes · classe les inconnus sous `others` · au boot + à la demande |
+| **App Android tablette-ready** | WebView file-picker (restore/upload) + DownloadManager (backup) + tap-to-add choreo (touch) |
 
 ---
 

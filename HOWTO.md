@@ -364,6 +364,28 @@ ssh artoo@r2-slave.local
 > Do not use `.local` hostnames from Windows — mDNS is unreliable.
 > Use the fixed IPs above instead.
 
+### Backup & Restore
+
+Protect your robot against a dead SD card. **Admin → Config → System → Backup / Restore.**
+
+**To back up:**
+1. Click **Create backup**. A progress bar runs while the Master collects every config, all sounds (pulled from the Slave), choreographies, light sequences, servo/dome calibrations, and your custom themes.
+2. When it finishes, a file `AstromechOS_Backup_<date>.bck` downloads. **Keep it somewhere safe — it contains your Wi-Fi password and admin password.** Store it off the robot (PC, USB key, cloud).
+
+> The download works in any web browser and in the Android app (tablet). On a phone the Settings screen isn't shown — back up from a tablet or a PC browser.
+
+**To restore (e.g. after re-flashing a dead SD card):**
+1. Re-install AstromechOS normally (the two install scripts), so the Pi boots and the dashboard is reachable.
+2. **Admin → Config → System → Restore from backup…**, pick your `.bck`.
+3. Confirm. The robot validates the archive, replaces all state, then **reboots automatically**. The page waits and reloads when it comes back — everything is "like before."
+
+> **Network is preserved:** the restore keeps the *current* Wi-Fi / hotspot / SSH settings of the machine you restore onto, never the backup's — so the Master and Slave never lose each other, even if the backup came from a different network.
+> **Safe by design:** the `.bck` is validated (it can only ever restore data files, never code) and rejected if tampered with.
+
+### Custom themes
+
+Build a theme in **Config → Appearance → Theme** (8 colour pickers + font). Your custom themes are saved **on the robot** (not just in the browser), so they survive reboots, appear on every device that connects, and are included in backups.
+
 ### Update R2-D2
 
 **From the dashboard:** click the **Admin** button (top right) → enter password **`deetoo`** → the Config tab and other protected menus become visible → Config → System → Update button (git pull + rsync + restart, all automatic).

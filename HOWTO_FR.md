@@ -247,6 +247,28 @@ ssh artoo@r2-slave.local
 > Ne pas utiliser les hostnames `.local` depuis Windows — mDNS peu fiable.
 > Utiliser les IPs fixes ci-dessus.
 
+### Sauvegarde & Restauration
+
+Protégez le robot contre une carte SD morte. **Admin → Config → Système → Backup / Restore.**
+
+**Pour sauvegarder :**
+1. Cliquez **Create backup**. Une barre de progression tourne pendant que le Master rassemble toutes les configs, tous les sons (récupérés du Slave), les chorégraphies, les séquences de lumières, les calibrations servo/dôme et vos thèmes perso.
+2. À la fin, un fichier `AstromechOS_Backup_<date>.bck` se télécharge. **Gardez-le en lieu sûr — il contient votre mot de passe Wi-Fi et le mot de passe admin.** Stockez-le hors du robot (PC, clé USB, cloud).
+
+> Le téléchargement marche dans n'importe quel navigateur et dans l'app Android (tablette). Sur un téléphone l'écran Settings n'apparaît pas — sauvegardez depuis une tablette ou un navigateur PC.
+
+**Pour restaurer (ex. après avoir reflashé une carte SD morte) :**
+1. Réinstallez AstromechOS normalement (les deux scripts d'install), pour que le Pi démarre et que le dashboard soit joignable.
+2. **Admin → Config → Système → Restore from backup…**, choisissez votre `.bck`.
+3. Confirmez. Le robot valide l'archive, remplace tout l'état, puis **redémarre automatiquement**. La page attend et se recharge au retour — tout est « comme avant ».
+
+> **Le réseau est préservé :** la restauration garde les réglages Wi-Fi / hotspot / SSH *actuels* de la machine, jamais ceux du backup — donc le Master et le Slave ne se perdent jamais, même si le backup vient d'un autre réseau.
+> **Sûr par conception :** le `.bck` est validé (il ne peut restaurer que des fichiers de données, jamais du code) et rejeté s'il est altéré.
+
+### Thèmes personnalisés
+
+Créez un thème dans **Config → Apparence → Thème** (8 sélecteurs de couleur + police). Vos thèmes perso sont enregistrés **sur le robot** (pas seulement dans le navigateur) : ils survivent aux reboots, apparaissent sur chaque appareil qui se connecte, et entrent dans les sauvegardes.
+
 ### Mettre à jour R2-D2
 
 **Depuis le dashboard :** cliquer sur le bouton **Admin** (en haut à droite) → entrer le mot de passe **`deetoo`** → les menus protégés deviennent visibles → Settings → Deploy → bouton **UPDATE** (git pull + rsync Slave + restart, tout automatique).
