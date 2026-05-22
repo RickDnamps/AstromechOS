@@ -6868,8 +6868,11 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   .chor-block .chor-block-resize {
     opacity: 1;
     width: 22px;
-    background: linear-gradient(90deg, transparent 30%, rgba(var(--blue-rgb), 0.5));
-    border-right: 2px solid rgba(var(--blue-rgb), 0.9);
+    /* currentColor = the block's per-track color (inherited from .chor-block's
+       `color`), so the grip matches the block — green servo block -> green
+       handle, cyan audio -> cyan handle, etc. (was hardcoded blue). */
+    background: linear-gradient(90deg, transparent 35%, currentColor);
+    border-right: 2px solid currentColor;
   }
 }
 
