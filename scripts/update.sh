@@ -66,19 +66,6 @@ echo -e "         UPDATE SYSTEM${NC}"
 echo "  ────────────────────────────────────"
 
 # ──────────────────────────────────────────────
-# 0. Backup custom sequences avant git pull
-# ──────────────────────────────────────────────
-SEQUENCES_DIR="$REPO/master/sequences"
-SEQUENCES_BACKUP="/home/artoo/sequences_backup"
-step "0/7" "Backup custom sequences"
-mkdir -p "$SEQUENCES_BACKUP"
-if rsync -a "$SEQUENCES_DIR/" "$SEQUENCES_BACKUP/" 2>/dev/null; then
-    ok "Sequences backed up → $SEQUENCES_BACKUP"
-else
-    warn "Sequence backup failed — directory missing?"
-fi
-
-# ──────────────────────────────────────────────
 # 0b. Backup user-customised servo angles
 # ──────────────────────────────────────────────
 # These two files contain per-robot calibration — open/close angles,
@@ -124,23 +111,6 @@ if ip addr show wlan1 2>/dev/null | grep -q "inet "; then
     fi
 else
     warn "wlan1 not available — git pull skipped, using local version"
-fi
-
-# ──────────────────────────────────────────────
-# 1b. Restore custom sequences after git pull
-# ──────────────────────────────────────────────
-step "1b/7" "Restore custom sequences"
-if [ -d "$SEQUENCES_BACKUP" ]; then
-    # --ignore-existing: skip files that already exist in dest (git-updated built-ins stay)
-    # git pull --ff-only never deletes untracked files, so custom sequences are always safe
-    # This restore is a safety net in case git ever adds a file that shadows a custom one
-    if rsync -a --ignore-existing "$SEQUENCES_BACKUP/" "$SEQUENCES_DIR/" 2>/dev/null; then
-        ok "Custom sequences restored"
-    else
-        warn "Sequence restore failed"
-    fi
-else
-    ok "No backup to restore"
 fi
 
 # Restore angle calibrations only if the live files are MISSING (git was

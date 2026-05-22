@@ -55,6 +55,10 @@ android/.gradle/
 # Code de référence tiers (r2_control by dpoulson)
 others/
 
+# Legacy r2_control-style .scr scripts (master/sequences/) — superseded by
+# the .chor choreographies. Decommissioned 2026-05-22; never part of git.
+master/sequences/
+
 
 # Dépendances vendored (générées par vendor_deps.sh)
 slave/vendor/

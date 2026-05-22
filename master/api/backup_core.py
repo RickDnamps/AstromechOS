@@ -72,7 +72,7 @@ BACKUP_FILESET = {
         'master/config/shortcuts.json', 'master/config/bt_config.json',
         'master/config/dome_angles.json', 'master/config/camera.env',
         'master/config/custom_themes.json',
-        'master/choreographies/', 'master/light_sequences/', 'master/sequences/',
+        'master/choreographies/', 'master/light_sequences/',
     ],
     'slave': [
         'slave/config/slave.cfg', 'slave/config/servo_angles.json', 'slave/sounds/',
