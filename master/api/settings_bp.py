@@ -43,6 +43,7 @@ import hmac
 import logging
 import os
 import re
+import shlex
 import subprocess
 import threading
 import time
@@ -88,6 +89,9 @@ _ALLOWED_UPLOAD_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 _ALLOWED_EXT = _ALLOWED_UPLOAD_EXT
 INTERNET_CON = 'r2d2-internet'
 HOTSPOT_CON  = 'r2d2-hotspot'
+# The Slave joins the Master hotspot via this nmcli profile (setup_slave_network.sh).
+# Changing the hotspot must update this on the Slave FIRST, or the Slave can't rejoin.
+_SLAVE_HOTSPOT_CON = 'r2d2-master-hotspot'
 
 
 # =============================================================================
@@ -689,6 +693,35 @@ def _set_wifi_impl():
                     'message': 'Connected ✓' if connected else 'Config saved — will connect on next boot'})
 
 
+def _push_slave_hotspot_creds(ssid: str, password: str) -> tuple[bool, str]:
+    """Update the Slave's nmcli hotspot profile (_SLAVE_HOTSPOT_CON) to these
+    creds, via key-based SSH. `nmcli modify` rewrites the stored profile WITHOUT
+    dropping the Slave's live connection, so the Slave keeps the old AP until the
+    Master actually switches, then auto-rejoins with the new creds. Returns
+    (ok, detail). Used slave-first (before the Master switch) and to revert the
+    Slave on a Master rollback. SSID/password are shell-quoted for the remote."""
+    slave_host = _resolve_slave_ssh_target()
+    if not re.match(r'^[A-Za-z0-9_]+(?:@[A-Za-z0-9.\-]+)?$', slave_host):
+        return False, f'slave host has an unexpected format ({slave_host!r})'
+    # sudo -n: nmcli modify over SSH has no interactive polkit session, so it
+    # fails with 'Insufficient privileges' as a normal user. The Slave grants
+    # artoo passwordless sudo (same as the slave-restart path), so sudo -n works
+    # and fails fast (non-interactive) if it ever isn't set up.
+    remote_cmd = f"sudo -n nmcli connection modify {_SLAVE_HOTSPOT_CON} 802-11-wireless.ssid {shlex.quote(ssid)}"
+    if password:
+        remote_cmd += f" wifi-sec.psk {shlex.quote(password)}"
+    try:
+        sp = subprocess.run(
+            ['ssh', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'BatchMode=yes',
+             '-o', 'ConnectTimeout=6', slave_host, remote_cmd],
+            timeout=12, check=False, capture_output=True, text=True)
+    except Exception as e:
+        return False, str(e)
+    if sp.returncode != 0:
+        return False, (sp.stderr or sp.stdout or '').strip() or 'ssh/nmcli error'
+    return True, ''
+
+
 @settings_bp.post('/settings/hotspot')
 @require_admin
 def set_hotspot():
@@ -732,6 +765,17 @@ def _set_hotspot_impl():
     if password and len(password) > 63:
         return jsonify({'error': 'Hotspot password: maximum 63 characters (WPA2 limit)'}), 400
 
+    # ── SLAVE-FIRST (abort if the Slave can't be pre-updated) ────────────────
+    # The Slave joins this hotspot. Update its nmcli profile WHILE IT IS STILL
+    # REACHABLE; if that fails, ABORT and leave the Master untouched so the Slave
+    # is never left inaccessible (only UART would survive otherwise).
+    ok_slave, slave_detail = _push_slave_hotspot_creds(ssid, password)
+    if not ok_slave:
+        return jsonify({'error': f'Could not pre-update the Slave ({slave_detail}). Hotspot change ABORTED '
+                                 'so the Slave is not left inaccessible — make sure it is powered on and '
+                                 'connected, then retry.'}), 503
+    log.info("Slave hotspot profile pre-updated (ssid=%s) — proceeding with Master switch", ssid)
+
     # B3 fix 2026-05-16: snapshot previous creds for rollback on nmcli fail
     # (parity with set_wifi B-73). Was: cfg persisted before nmcli ran →
     # rc!=0 left cfg pointing at bad creds → reboot used the bad config
@@ -751,10 +795,11 @@ def _set_hotspot_impl():
         modify_cmd += ['wifi-sec.psk', password]
     rc_mod, _, err_mod = _run(modify_cmd)
     if rc_mod != 0:
-        log.error(f"nmcli modify hotspot failed: {err_mod} — rolling back local.cfg")
+        log.error(f"nmcli modify hotspot failed: {err_mod} — rolling back local.cfg + Slave")
         _write_key('hotspot', 'ssid', prev_ssid)
         if prev_pwd:
             _write_key('hotspot', 'password', prev_pwd)
+        _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the (unchanged) Master AP
         return jsonify({'error': f'nmcli error: {err_mod}', 'rolled_back': True}), 500
 
     # Restart the hotspot (clients disconnect then reconnect)
@@ -773,12 +818,15 @@ def _set_hotspot_impl():
             restore_cmd += ['wifi-sec.psk', prev_pwd]
         _run(restore_cmd)
         _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
+        _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the restored old Master AP
         return jsonify({'error': f'nmcli up failed: {err}', 'rolled_back': True}), 500
 
-    log.info(f"Hotspot updated: ssid={ssid}")
+    log.info(f"Hotspot updated: ssid={ssid} (Slave pre-updated)")
     return jsonify({
         'status': 'ok',
-        'warning': 'WiFi clients must reconnect with the new credentials',
+        'warning': 'Hotspot updated. The Slave was pre-updated and auto-rejoins in a few seconds '
+                   '(UART keeps drive/safety alive meanwhile); your tablet and any other clients '
+                   'must reconnect with the new credentials.',
     })
 
 
