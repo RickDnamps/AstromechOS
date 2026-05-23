@@ -4373,9 +4373,11 @@ select.input-text option { background: var(--input-option); }
 }
 
 .settings-sub-title {
-  /* Was 9px dim-grey → barely visible, sub-sections (BACKUP/RESTORE, CHANGE
-     ADMIN PASSWORD, …) blended in. Now a clear cyan section header with a
-     divider + top spacing: a readable sub-level under the blue .card-title. */
+  /* Sub-section header inside a settings card (now only the Diagnostics
+     panel: MASTER LOG / UART STATS / CONNECTIVITY — the System ones were
+     promoted to their own .card-title cards). Was 9px dim-grey → invisible;
+     now a clear cyan header with its own underline + top spacing, so it needs
+     no separate .settings-divider above it. */
   font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 1.8px;
