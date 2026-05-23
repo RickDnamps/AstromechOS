@@ -4373,10 +4373,18 @@ select.input-text option { background: var(--input-option); }
 }
 
 .settings-sub-title {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: var(--text-dim);
-  margin: 0 0 12px;
+  /* Was 9px dim-grey → barely visible, sub-sections (BACKUP/RESTORE, CHANGE
+     ADMIN PASSWORD, …) blended in. Now a clear cyan section header with a
+     divider + top spacing: a readable sub-level under the blue .card-title. */
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  margin: 22px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(var(--blue-rgb), 0.18);
+  text-shadow: 0 0 6px rgba(var(--cyan-rgb), 0.3);
 }
 
 .settings-row {
@@ -5555,8 +5563,12 @@ body[data-lock-mode="2"] .drive-wrapper {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1;   /* fill the .settings-row so password fields align with the other inputs */
 }
-.pwd-input-wrap .input-text { padding-right: 36px; flex: 1; }
+/* room for the eye toggle — was .input-text only, so .settings-input (admin
+   password fields) had the eye overlapping the placeholder text. */
+.pwd-input-wrap .input-text,
+.pwd-input-wrap .settings-input { padding-right: 38px; flex: 1; }
 .pwd-toggle {
   position: absolute;
   right: 4px;
