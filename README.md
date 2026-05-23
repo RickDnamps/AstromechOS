@@ -8,11 +8,11 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://python.org)
 [![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi%204B-C51A4A?logo=raspberry-pi&logoColor=white)](https://www.raspberrypi.com/)
 [![Android](https://img.shields.io/badge/Android-App%20included-3DDC84?logo=android&logoColor=white)](android/compiled/)
-[![Sounds](https://img.shields.io/badge/Sounds-324%20R2--D2%20audio%20files-blueviolet)](slave/sounds/)
-[![Sequences](https://img.shields.io/badge/Sequences-48%20behavioral-blue)](master/choreographies/)
-[![API](https://img.shields.io/badge/API-60%2B%20endpoints-orange)](master/api/)
+[![Sounds](https://img.shields.io/badge/Sounds-317%20astromech%20sounds-blueviolet)](slave/sounds_default/)
+[![Sequences](https://img.shields.io/badge/Sequences-48%20behavioral-blue)](master/choreographies_default/)
+[![API](https://img.shields.io/badge/API-160%2B%20endpoints-orange)](master/api/)
 
-*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 324 authentic sounds · 48 expressive sequences · Choreography timeline editor*
+*Two Raspberry Pi 4B · UART through slip ring · Full web dashboard · Android app · Bluetooth gamepad · 317 authentic sounds · 48 expressive sequences · Choreography timeline editor*
 
 </div>
 
@@ -33,7 +33,7 @@ If you're building a full-scale astromech (R2-D2, R5-D4, BB-8, custom unit…) a
 A **complete, production-grade control system** for a 1:1 scale astromech droid replica. Two Raspberry Pi 4B communicate over a **physical UART through the dome slip ring**, with layered safety watchdogs, a REST API, an Android app, Bluetooth gamepad support, and 48 expressive behavioral sequences that give your droid a real personality.
 
 - **Master Pi 4B 4GB** (dome, rotates) — Flask REST API, web dashboard, dome servos & panels, LED logics, visual editors, BT gamepad. 4GB headroom for future local AI (face detection, voice recognition — all on-device, no cloud)
-- **Slave Pi 4B 2GB** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 324-sound audio system, RP2040 diagnostic LCD. Kept deliberately lightweight — only real-time I/O, no AI workloads
+- **Slave Pi 4B 2GB** (body, fixed) — Drive motors (dual VESC), body servo panels, dome rotation motor, 317-sound audio system, RP2040 diagnostic LCD. Kept deliberately lightweight — only real-time I/O, no AI workloads
 - If the UART link drops for more than 500ms, drive motors **cut immediately** — no runaway robot, ever
 
 ---
@@ -53,7 +53,7 @@ Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction
 <td align="center" width="50%">
 
 ### 🔊 Audio
-324 sounds · 14 mood categories · Animated waveform · Perceptual volume curve · Drag-and-drop upload (admin)
+317 sounds · 14 mood categories · Animated waveform · Perceptual volume curve · Drag-and-drop upload (admin)
 
 ![Audio Interface](Screenshots/Audio.png)
 
@@ -151,7 +151,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 <td align="center" width="50%">
 
 ### 🎨 Theme System
-8 built-in themes · Custom color picker · 7 sci-fi fonts · Live mini preview · Unlimited saved themes
+7 built-in themes · Custom color picker · 7 sci-fi fonts · Live mini preview · Up to 16 saved custom themes
 
 </td>
 </tr>
@@ -167,7 +167,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🎼 **Choreography timeline editor** | Multi-track · VESC · audio · servos · lights · admin-guarded Save/Delete · **full touch support** (drag from palette to add, drag to move, drag-edge to resize — all work on a tablet, not just mouse) |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo/NVIDIA Shield direct to Pi · zero lag · battery % · RSSI · 2×2 axis grouping (DRIVE / LOOK) · premium header card with status LED + MAC pill |
 | 🎯 **BT Custom Button Actions** | **Per-controller profiles** keyed by MAC — bind ANY button to `play_choreo` / `play_sound` / `play_random_audio` / `arms_toggle` / `body_panel_toggle` / `dome_panel_toggle`. **Press-to-capture** workflow: click 🎯 CAPTURE NEW BUTTON, press the physical button, it's bound. Two NVIDIA Shields plug in → each remembers its own bindings independently. MAC resolution falls back to `bluetoothctl` for controllers that don't expose `evdev.uniq` (NVIDIA Shield, several 8BitDo). Validation by action type at save AND at trigger (defense-in-depth) |
-| 🔊 **324 authentic astromech sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
+| 🔊 **317 authentic astromech sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included · **tablet/touch-optimized** (file picker for restore/upload, native backup download, touch drag-and-drop in the editor) |
 | 🛡️ **Triple safety watchdog** | App 1.5s · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
 | 🚨 **VESC safety lock** | Blocks drive when ESC offline or faulted · bench mode bypass for bench testing |
@@ -176,7 +176,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🔌 **Hot-swap light drivers** | Teeces32 ↔ AstroPixels+ without reboot |
 | 🚀 **One-button OTA deploy** | Dome button → git pull + rsync + reboot — no SSH needed |
 | 📷 **USB camera autodetect** | MJPEG stream · hardware-compressed · auto-reconnect after restart |
-| 🎨 **Theme system** | 8 built-in themes · 16-slot custom themes · live preview · 7 sci-fi fonts · **persisted server-side** (survives reboots & device changes, included in backups) |
+| 🎨 **Theme system** | 7 built-in themes · up to 16 custom themes · live preview · 7 sci-fi fonts · **persisted server-side** (survives reboots & device changes, included in backups) |
 | 🎛️ **Drive-tab Shortcuts** | Up to 12 operator-configurable macro buttons split over both joysticks · toggle arms/panels · play choreo/sound/random · green pulse while playing · re-press kills · auto-fills icon+label from choreo emoji · per-axis motion lockout (drive choreo locks left, dome choreo locks dome rotation, sound-only stays free) |
 | 💾 **Backup & Restore** | One-click full backup of all robot state (configs · sounds · choreos · calibrations · custom themes) to a downloadable `.bck` · Restore = total replacement + auto-reboot, recovers a dead SD card "like before" · network config preserved so master↔slave never lose each other · hardened (anti zip-slip + anti-RCE allow-list) |
 | 🔄 **Self-healing audio index** | The sound index reconciles against the files actually on the robot (drops ghosts, files unknown ones under *others*) on boot + on demand — a failed upload never leaves a phantom |
@@ -250,11 +250,11 @@ All three trigger a **graceful decel ramp** — never an abrupt stop that could 
 │  │  Pi 4B — 4GB             │   │  Pi 4B — 2GB                  │  │
 │  │                          │   │                               │  │
 │  │  Flask REST API :5000    │   │  UART listener + CRC          │  │
-│  │  Script engine           │   │  Watchdog 500ms → VESCs       │  │
+│  │  Web dashboard           │   │  Watchdog 500ms → VESCs       │  │
 │  │  Choreography player     │   │  Body servos PCA9685 @0x41    │  │
 │  │  Dome servos @0x40       │   │  Dome motor TB6612 @0x40      │  │
 │  │  Lights plugin           │   │  Drive VESCs (USB+CAN, ERPM)  │  │
-│  │  BT Controller (evdev)   │   │  Audio mpg123 (324 sounds)    │  │
+│  │  BT Controller (evdev)   │   │  Audio mpg123 (317 sounds)    │  │
 │  │  Deploy controller       │   │  RP2040 GC9A01 LCD (USB)      │  │
 │  └──────────────────────────┘   └───────────────────────────────┘  │
 │              │                               │                      │
@@ -281,7 +281,7 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 | **Motors** | — | 2× 250W hub motors via 2× FSESC Mini 6.7 PRO |
 | **Dome motor** | — | DC motor via TB6612 HAT @ I2C 0x40 |
 | **LEDs** | Teeces32 or AstroPixels+ via USB | — |
-| **Audio** | — | 324 MP3 sounds · 3.5mm jack · mpg123 |
+| **Audio** | — | 317 MP3 sounds · 3.5mm jack · mpg123 |
 | **Display** | — | RP2040 Waveshare 1.28" 240×240 round LCD |
 | **Power** | 5V/10A Tobsun buck → GPIO 2&4 | 5V/10A + 12V/10A Tobsun bucks |
 | **Battery** | ← 24V via slip ring (3 wires parallel) | 6S LiPo 22.2V — XT90-S anti-spark |
@@ -306,7 +306,7 @@ curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts
 curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
 
 # Step 3 — First deploy (from Master, once:)
-ssh-copy-id artoo@192.168.4.171
+ssh-copy-id artoo@astromech-slave.local
 bash /home/artoo/astromechos/scripts/deploy.sh --first-install
 ```
 

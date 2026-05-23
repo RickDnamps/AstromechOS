@@ -177,7 +177,7 @@ This script handles everything automatically:
 
 **At the end it asks to reboot — answer Y.**
 
-The Slave is now connected to the Master hotspot at `192.168.4.171`.
+The Slave now joins the Master hotspot and gets a DHCP address in the `192.168.4.x` range. The Master always reaches it by hostname (`astromech-slave.local`), so you never need to know the exact IP. The examples below use `192.168.4.171` as a typical lease — substitute the address your Slave actually received if it differs (check the Cockpit STATUS panel, which shows the live Slave IP).
 
 ---
 
@@ -261,7 +261,7 @@ To create a new category, use the **Create Category** panel below the upload zon
 - Click the **emoji** to open the emoji picker
 - Use the **category dropdown** on the card to reassign it to a different category
 
-Choreo categories (create / rename / reorder / delete) are managed from the category panel in the CHOREO tab — no file editing required.
+Categories (create / rename / reorder / delete) are managed from the category pills at the top of the **Sequences tab** — no file editing required. The **CHOREO tab** is the timeline editor itself.
 
 **Editing the timeline (mouse *and* touch):**
 - **Add a block** — drag an action from the left palette (AUDIO / LIGHT / DOME / servos / DRIVE) onto its lane and drop it where you want it in time. On a tablet just drag with your finger, or **tap** a palette chip to drop the block at the end (then set its START in the inspector).
@@ -302,13 +302,15 @@ When a VESC is offline, telemetry is stale (>2 s), or any fault code is active, 
 
 If the right VESC (CAN ID 2) goes silent while the left side keeps responding, the Slave detects the asymmetry and emits a synthetic `CAN_LOST` fault so the Master's safety gate trips immediately, instead of waiting for the 2 s staleness threshold. Prevents one-wheel runaways.
 
+Three independent watchdogs back this up: the **app heartbeat** (browser/app → Master, cuts motion if no heartbeat for 1.5 s), the **drive watchdog** (anti-tip ramp-down if no drive command for 800 ms while moving), and the **Slave UART watchdog** (cuts the VESCs if the Master heartbeat is lost for 500 ms).
+
 To test software without motors physically connected, enable **Bench mode** in **Config → VESC**. The setting is persisted in `local.cfg` and survives reboots. Disable it before field use.
 
 ### UART latency calibration
 
 The body servos travel via UART to the Slave Pi before reaching their I2C HAT — this adds a one-way hop of about 5–25 ms depending on hardware, slip ring quality and load. The choreography player compensates by firing body servo events that many milliseconds *early* so they move in sync with the dome servos (which are direct I2C).
 
-**Self-tuning** — open **Settings → System → Hardware**, click **MEASURE** (samples the heartbeat round-trip over 40 s), then **APPLY & SAVE**. The value is persisted to `local.cfg` *and* hot-swapped into the running ChoreoPlayer in one click — no reboot, no Slave restart. Re-measure and re-apply iteratively until body and dome panels open in perfect sync.
+**Self-tuning** — open **Config → HATs** (under the HARDWARE section), find **UART RTT calibration**, click **MEASURE** (samples the heartbeat round-trip over 40 s), then **APPLY & SAVE**. The value is persisted to `local.cfg` *and* hot-swapped into the running ChoreoPlayer in one click — no reboot, no Slave restart. Re-measure and re-apply iteratively until body and dome panels open in perfect sync.
 
 A coloured fit indicator (green / orange / red) tells you at a glance whether the configured value matches the current bus latency. Manual edits to the latency field auto-save on blur with a brief `✓ saved` indicator.
 
@@ -316,20 +318,21 @@ A coloured fit indicator (green / orange / red) tells you at a glance whether th
 
 The gamepad connects **directly to the Master Pi via Bluetooth** (Linux evdev — no phone relay, no extra hardware, zero lag). Compatible with Xbox Series, PS4/PS5, Nintendo Switch Pro, 8BitDo, and any standard HID gamepad.
 
-**Default button mapping:**
+**Default mapping (fixed):**
 
 | Input | Action |
 |-------|--------|
 | Left stick Y | Forward / reverse propulsion |
 | Left stick X | Left / right steering |
 | Right stick X | Dome rotation |
-| Hold Y (□) | Open dome panels → release to close |
-| Hold X (△) | Open body panels → release to close |
-| B (○) | Random astromech sound |
-| Home / Options | Emergency stop |
-| R1 (turbo) | Speed boost multiplier |
+| Home / Guide / PS button | Emergency stop |
+| R1 / R-shoulder | Turbo (speed boost multiplier) |
 
-**Configuration** — remap any button, adjust deadzone, and set inactivity timeout (slider up to 600s, manual entry up to 3600s) from **Config → BT Gamepad** — no SSH needed.
+Drive, dome, E-STOP and turbo are the only hardcoded bindings. Everything else (open panels, play a sound, fire a choreography…) is assigned by you via **Custom Button Actions** — see below.
+
+**Custom Button Actions** — bind any free button to an action (`open/close arms`, `body panel`, `dome panel`, `play choreography`, `play sound`, `play random audio`). In **Config → BT Gamepad**, use **🎯 Capture New Button**: press the controller button you want, then pick the action. Mappings are stored **per controller** (by MAC), so each gamepad can have its own layout, and they persist across reboots.
+
+**Configuration** — remap the drive axes, adjust deadzone, and set inactivity timeout (slider up to 600s, manual entry up to 3600s) from **Config → BT Gamepad** — no SSH needed.
 
 **Battery & signal** — the Config panel shows battery percentage and Bluetooth RSSI with live color coding (green/orange/red), updated every 30 seconds. Supported by PS4, PS5, and Xbox controllers. The NVIDIA Shield controller uses a proprietary protocol and does not expose battery level — it will show 0%.
 
@@ -369,15 +372,15 @@ Download [`android/compiled/AstroMech_Control.apk`](android/compiled/AstroMech_C
 
 ```bash
 # From any device on the robot hotspot (`Astromech_Control_XXXX`):
-ssh artoo@192.168.4.1    # Master (dome)
-ssh artoo@192.168.4.171  # Slave (body)
+ssh artoo@192.168.4.1    # Master (dome) — fixed IP
+ssh artoo@192.168.4.171  # Slave (body) — typical DHCP lease, check the STATUS panel if it differs
 
 # From the Master, reach the Slave:
 ssh artoo@astromech-slave.local
 ```
 
 > Do not use `.local` hostnames from Windows — mDNS is unreliable.
-> Use the fixed IPs above instead.
+> The Master IP `192.168.4.1` is fixed; the Slave gets a DHCP address in `192.168.4.x` (the Cockpit STATUS panel shows the live value).
 
 ### Changing the hotspot or home WiFi (Admin → Config → Network)
 
@@ -408,9 +411,9 @@ Build a theme in **Config → Appearance → Theme** (8 colour pickers + font). 
 
 ### Update the software
 
-**From the dashboard:** click the **Admin** button (top right) → enter password **`deetoo`** → the Config tab and other protected menus become visible → Config → System → Update button (git pull + rsync + restart, all automatic).
+**From the dashboard:** click the **Admin** button (top right) → enter the admin password (default **`deetoo`**) → the Config tab and other protected menus become visible → **Config → Deploy → UPDATE** (git pull + rsync to Slave + restart, all automatic). If an update misbehaves, the **ROLLBACK** button in the same panel reverts to the previous commit.
 
-> Admin session expires after 5 minutes of inactivity. The password can be changed in the Config tab once logged in.
+> Admin session expires after 5 minutes of inactivity. The password can be changed in **Config → System** once logged in.
 
 **Or from SSH on the Master:**
 
@@ -557,8 +560,10 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) pactl set-default-sink bluez_sink.XX_XX_XX_XX
 
 | Host | IP | Access from |
 |------|----|-------------|
-| Master | `192.168.4.1` | any device on hotspot |
-| Slave | `192.168.4.171` | any device on hotspot |
+| Master | `192.168.4.1` (fixed) | any device on hotspot |
+| Slave | `192.168.4.171` (typical DHCP lease) | any device on hotspot |
 | Dashboard | `http://192.168.4.1:5000` | browser on hotspot |
-| SSH Master | `ssh artoo@192.168.4.1` | password: `deetoo` |
-| SSH Slave | `ssh artoo@192.168.4.171` | password: `deetoo` |
+| SSH Master | `ssh artoo@192.168.4.1` | password: `deetoo` (change it!) |
+| SSH Slave | `ssh artoo@192.168.4.171` | password: `deetoo` (change it!) |
+
+> The default password `deetoo` is shipped for first boot — change both the Linux/SSH password (`passwd`) and the dashboard admin password (Config → System) before any public use.

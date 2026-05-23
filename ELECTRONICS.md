@@ -1,6 +1,6 @@
 # AstromechOS — Electronics & Wiring Reference
 
-Complete wiring diagrams, power distribution, and communication architecture for the R2-D2 Master/Slave control system.
+Complete wiring diagrams, power distribution, and communication architecture for the AstromechOS Master/Slave control system. The reference build is an R2-D2 droid, but the platform is hardware-generic.
 
 ---
 
@@ -11,7 +11,7 @@ Complete wiring diagrams, power distribution, and communication architecture for
 - [Power Distribution](#2-power-distribution)
 - [Slip Ring Wiring](#3-slip-ring-wiring)
 - [Network Topology](#4-network-topology)
-- [3-Layer Safety System](#5-3-layer-safety-system)
+- [Safety Architecture](#5-safety-architecture)
 - [I2C & GPIO Reference](#6-i2c--gpio-reference)
 - [UART Protocol](#7-uart-protocol-reference)
 - [Component Notes](#8-component-notes)
@@ -25,8 +25,8 @@ Complete wiring diagrams, power distribution, and communication architecture for
 | Component | Interface | Details |
 |-----------|-----------|---------|
 | Waveshare Servo Driver HAT | I2C 0x40 | PCA9685 16ch — 11 dome panel servos (MG90S 180°) |
-| Teeces32 (FLD/RLD/PSI LED logics) | USB `/dev/ttyUSB0` | JawaLite protocol 9600 baud |
-| Camera | USB | Vision / person tracking — Phase 5 |
+| Teeces32 / AstroPixels logic board (FLD/RLD/PSI) | USB `/dev/ttyUSB0` | 9600 baud — JawaLite or AstroPixels+ (active backend set in `main.cfg [lights]`, default `astropixels`) |
+| Camera (UVC) | USB | MJPEG stream (live FPV) implemented; vision / person tracking is future work |
 | UART to Slave Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V — `dtoverlay=miniuart-bt` frees PL011 UART (BT moves to mini-UART) |
 
 ### Slave — Raspberry Pi 4B 2GB (Body — fixed)
@@ -35,9 +35,9 @@ Complete wiring diagrams, power distribution, and communication architecture for
 |-----------|-----------|---------|
 | Waveshare Motor Driver HAT | I2C 0x40 | TB6612 — dome DC rotation motor |
 | PCA9685 Breakout | I2C 0x41 | 16ch PWM — 11 body panel servos (MG90S 180°) |
-| FSESC Mini 6.7 PRO × 2 | USB `/dev/ttyACM0` `/dev/ttyACM1` | PyVESC — 250W hub motors 24V |
-| RP2040-Waveshare 1.28" LCD | USB `/dev/ttyACM2` | Round 240×240 diagnostic display (GC9A01) |
-| 3.5mm audio jack (native Pi) | Native Pi 4B | mpg123 → PulseAudio → 3.5mm jack → Amplifier → Speakers (or BT speaker for bench testing) |
+| Flipsky Mini V6.7 × 2 (fw v6.05, HW60) | 1× USB + CAN | VESC ID 1 over USB, VESC ID 2 over CAN forwarding — 250W hub motors. Native CRC-16/CCITT (no pyvesc). |
+| RP2040-Waveshare 1.28" LCD | USB (auto-detect by USB vendor ID) | Round 240×240 diagnostic display (GC9A01) |
+| 3.5mm audio jack (native Pi) | Native Pi 4B | mpg123 → ALSA → 3.5mm jack → Amplifier → Speakers (or BT speaker for bench testing) |
 | UART to Master Pi | BCM 14/15 `/dev/ttyAMA0` | Via slip ring 3.3V — `dtoverlay=miniuart-bt` (same as Master, BT chip active for BT speaker bench testing) |
 
 ### Servos — MG90S 180° (metal gears)
@@ -47,7 +47,7 @@ Complete wiring diagrams, power distribution, and communication architecture for
 - Control: direct angle — `pulse_us = 500 + (angle/180.0) * 2000`
 - Per-panel calibration: O° open / C° close / S speed (1–10) saved in JSON (gitignored)
 
-> ⚠️ SG90 360° (continuous rotation) are visually identical but have no position feedback.
+> ⚠️ The firmware uses **180° positional servos** (direct angle control). 360° continuous-rotation servos look identical but have no position feedback and will NOT work.
 > Verify type: try rotating the shaft past 180° by hand — resistance = standard 180° ✅, spins freely = continuous ❌
 
 ### Battery — 6S LiPo 10 000mAh XT90-S
@@ -58,7 +58,7 @@ Complete wiring diagrams, power distribution, and communication architecture for
 | Full charge | 25.2V (6S × 4.2V) |
 | Capacity | 10 000mAh |
 | Connector | **XT90-S** (anti-spark built-in) |
-| VESC compatibility | ✅ FSESC Mini 6.7 PRO supports 4–13S |
+| VESC compatibility | ✅ Flipsky Mini V6.7 (HW60) — 6S 24V well within spec |
 
 Estimated runtime: ~1h30 at casual use (~100–150W average draw).
 
@@ -103,7 +103,7 @@ flowchart TB
     subgraph MASTER["🎩 MASTER — Raspberry Pi 4B 4GB  (Dome — rotates with slip ring)"]
         direction TB
         FLASK["🌐 Flask REST API\nport 5000"]
-        ENGINE["🎬 Script Engine\n40 behavioral sequences"]
+        ENGINE["🎬 Choreography Player\nbehavioral sequences (.chor)"]
         UART_M["📡 UART Controller\nHeartbeat every 200ms"]
         DEPLOY["🚀 Deploy Controller\ngit pull + rsync Slave — web UI"]
 
@@ -111,7 +111,7 @@ flowchart TB
             direction LR
             DOME_SRV["Dome Servo Driver\n11 panels\nPCA9685 @ I2C 0x40"]
             TEECES["Teeces32 LEDs\nFLD / RLD / PSI\n/dev/ttyUSB0"]
-            CAM["Camera\nUSB — Phase 5"]
+            CAM["Camera (UVC)\nUSB — MJPEG stream"]
         end
 
         FLASK --> ENGINE
@@ -134,11 +134,11 @@ flowchart TB
 
         subgraph SLAVE_HW["Slave Hardware"]
             direction LR
-            AUDIO["🔊 Audio Driver\naplay — 317 sounds\n3.5mm jack"]
+            AUDIO["🔊 Audio Driver\nmpg123 — MP3 library\n3.5mm jack"]
             BODY_SRV["Body Servo Driver\n11 panels\nPCA9685 @ I2C 0x41"]
-            DOME_MOT["Dome Motor Driver\nTB6612 @ I2C 0x40"]
-            VESC["⚙️ VESC Driver\nPyVESC × 2\n/dev/ttyACM0+1"]
-            RP2040["🖥️ RP2040 Display\n240×240 round LCD\n/dev/ttyACM2"]
+            DOME_MOT["Dome Motor Driver\nTB6612 HAT @ I2C 0x40"]
+            VESC["⚙️ VESC Driver\n1× USB + CAN forwarding\nnative CRC (no pyvesc)"]
+            RP2040["🖥️ RP2040 Display\n240×240 round LCD\nUSB (vendor-ID auto-detect)"]
         end
 
         UART_S --> WDG
@@ -174,8 +174,8 @@ flowchart TD
 
     subgraph PROP["⚙️ Propulsion  — 24V direct (high current)"]
         XT90S["XT90-S Connector\nanti-spark"]
-        VESC1["FSESC Mini 6.7 PRO #1\n→ Left Hub Motor 250W"]
-        VESC2["FSESC Mini 6.7 PRO #2\n→ Right Hub Motor 250W"]
+        VESC1["Flipsky Mini V6.7 — VESC ID 1\n→ Left Hub Motor 250W"]
+        VESC2["Flipsky Mini V6.7 — VESC ID 2\n→ Right Hub Motor 250W"]
         XT90S --> VESC1
         XT90S --> VESC2
     end
@@ -189,7 +189,7 @@ flowchart TD
             BUCK_5V_BODY["Tobsun EA50-5V\n10–30V → 5V / 10A"]
             BUCK_12V_BODY["Tobsun EA120-12V\n18–32V → 12V / 10A"]
 
-            PI_SLAVE["Raspberry Pi 4B Slave\n← 5V via GPIO pins 2 & 4"]
+            PI_SLAVE["Raspberry Pi 4B Slave\n← 5V via header pins 2 & 4"]
             SERVO_HAT_B["Body Servo HAT V+\nPCA9685 @ 0x41\n← 5V direct\n+ 1000µF + 100nF caps"]
             RP2040_B["RP2040 LCD\n← 5V via USB from Pi Slave"]
 
@@ -210,7 +210,7 @@ flowchart TD
         subgraph DOME["🎩 Dome  (Master Pi)"]
             BUCK_5V_DOME["Tobsun EA50-5V\n10–30V → 5V / 10A"]
 
-            PI_MASTER["Raspberry Pi 4B Master\n← 5V via GPIO pins 2 & 4"]
+            PI_MASTER["Raspberry Pi 4B Master\n← 5V via header pins 2 & 4"]
             SERVO_HAT_D["Dome Servo HAT V+\nPCA9685 @ 0x40\n← 5V direct\n+ 1000µF + 100nF caps"]
             TEECES_LED["Teeces32 LEDs\nFLD / RLD / PSI\n← 5V direct"]
             TEECES_ESP["Teeces32 ESP32 logic\n← 5V via USB from Pi Master"]
@@ -264,12 +264,12 @@ flowchart LR
         GITHUB["GitHub\ngit pull / push"]
     end
 
-    subgraph MASTER_NET["R2-Master Pi 4B (Dome)"]
-        WLAN0["wlan0\n📡 Wi-Fi Hotspot AP\n192.168.4.1  (fixed)\nSSID: AstromechOS"]
+    subgraph MASTER_NET["MASTER Pi 4B (Dome)"]
+        WLAN0["wlan0\n📡 Wi-Fi Hotspot AP\n192.168.4.1  (fixed)\nSSID: Astromech_Control_XXXX"]
         WLAN1["wlan1\n🌐 Home Wi-Fi client\nDHCP — internet access"]
     end
 
-    subgraph SLAVE_NET["R2-Slave Pi 4B (Body)"]
+    subgraph SLAVE_NET["SLAVE Pi 4B (Body)"]
         WLAN0_S["wlan0\n📶 Client of Master hotspot\n192.168.4.x  (DHCP)"]
     end
 
@@ -394,39 +394,53 @@ slave_motor_hat = 0x40          # ⚠️ Motor HAT guard — never add 0x40 to s
 
 ### GPIO Pins — both Pi 4B
 
-| BCM | Function | Notes |
-|-----|----------|-------|
-| **2** | I2C SDA | I2C bus |
-| **3** | I2C SCL | I2C bus |
-| **14** | UART TX | → slip ring → other Pi RX |
-| **15** | UART RX | ← slip ring ← other Pi TX |
-| **2, 4** | 5V power in | GPIO header pins — Pi powered from buck (bypass USB-C) |
-| — | Dome button | Removed in v2 — deploy/rollback via web UI (Settings → Deploy) |
+Signal lines are listed by **BCM (logical) number**; power injection is listed by **physical (board) pin number** — note these two numbering schemes differ.
+
+| BCM | Physical pin | Function | Notes |
+|-----|--------------|----------|-------|
+| **2** | 3 | I2C SDA | I2C bus (servo / motor HATs) |
+| **3** | 5 | I2C SCL | I2C bus |
+| **14** | 8 | UART TX | → slip ring → other Pi RX |
+| **15** | 10 | UART RX | ← slip ring ← other Pi TX |
+| — | 6 (or 9, 14, 20…) | GND | UART/I2C common ground |
+| — | 2 & 4 | 5V power in | Pi powered from buck via the 5V header pins (bypass USB-C) |
+| — | — | Dome button | Removed in v2 — deploy/rollback via web UI (Settings → Deploy) |
 
 ### USB Ports — Slave Pi
 
-| Port | Device | Driver |
-|------|--------|--------|
-| `/dev/ttyACM0` | FSESC Mini 6.7 PRO #1 | PyVESC |
-| `/dev/ttyACM1` | FSESC Mini 6.7 PRO #2 | PyVESC |
-| `/dev/ttyACM2` | RP2040 Touch LCD 1.28" | Serial → MicroPython |
+Ports are **auto-detected**, not statically pinned — `/dev/ttyACM*` enumeration order is not guaranteed across reboots. The display driver finds the RP2040 by USB vendor ID (`2e8a`); the VESC driver claims the first free `/dev/ttyACM*` that the display did not take.
+
+| Device | Connection | Driver |
+|--------|------------|--------|
+| VESC ID 1 (left motor) | USB → `/dev/ttyACM*` | Native CRC-16/CCITT (`vesc_can.py`) — **no pyvesc** |
+| VESC ID 2 (right motor) | CAN bus, forwarded through VESC ID 1 (`COMM_FORWARD_CAN`) | Same driver — no second USB cable |
+| RP2040 LCD 1.28" | USB → `/dev/ttyACM*` | Serial → MicroPython |
+
+> ⚠️ Only **one** USB cable goes to the VESC pair. VESC ID 2 is commanded over the CAN bus via VESC ID 1, so "Multiple ESC over CAN" must be **DISABLED** on both VESCs (otherwise both motors get the same command — no differential steering).
 
 ### USB Ports — Master Pi
 
 | Port | Device | Driver |
 |------|--------|--------|
-| `/dev/ttyUSB0` | Teeces32 ESP32 | JawaLite 9600 baud |
+| `/dev/ttyUSB0` | Teeces32 / AstroPixels logic board | JawaLite / AstroPixels+ 9600 baud |
 
-### Servo PWM Values — SG90 360° (current, temporary)
+### Servo PWM Values — MG90S 180° (direct angle control)
 
-| Pulse | Effect |
-|-------|--------|
-| **1700µs** | STOP (actual neutral — non-standard) |
-| **2000µs** | Open direction — slow (~300µs above stop) |
-| **1000µs** | Close direction — fast (~700µs below stop, 2.3× faster) |
+Both Master (dome) and Slave (body) servos use the same standard 180° angle→pulse mapping. The legacy SG90 continuous-rotation (360°) path has been removed from the firmware.
 
-> ⚠️ SG90 360° asymmetry: close is 2.3× faster than open. Compensate via **Settings → Servo Calibration** — set `close_angle` ≈ `open_angle / 2.3`.
-> This goes away when MG90S 180° standard servos are installed — they use direct angle control.
+```
+pulse_us = 500 + (angle_deg / 180.0) * 2000        # 500µs @ 0°  …  2500µs @ 180°
+tick     = int(pulse_us / 20000.0 * 4096)           # PCA9685 12-bit @ 50 Hz
+```
+
+| Angle | Pulse |
+|-------|-------|
+| **0°** | 500µs |
+| **90°** | 1500µs |
+| **180°** | 2500µs |
+
+> Per-panel open/close angles are clamped to **10–170°** and stored (with speed 1–10) in the calibration JSON. Configure via **Settings → Servo Calibration**.
+> Implemented in `master/drivers/dome_servo_driver.py` and `slave/drivers/body_servo_driver.py`.
 
 ---
 
@@ -438,8 +452,9 @@ All messages follow this format over `/dev/ttyAMA0` at **115200 baud**:
 TYPE:VALUE:CRC\n
 ```
 
-CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 hex chars (e.g. `B3`).
-> ⚠️ This is **sum mod 256**, NOT XOR — two identical bytes cancel with XOR but not with sum.
+CRC = `(sum of all bytes in TYPE:VALUE + byte length) mod 256`, formatted as 2 uppercase hex chars (e.g. `H:1` → `B6`).
+> ⚠️ This is an **additive checksum**, NOT XOR — two identical bytes cancel with XOR but not with a sum.
+> The `+ length` term means an injected null byte (`0x00`, e.g. a slip-ring UART BREAK) still changes the checksum, since a plain sum is blind to inserted zeros. Implemented in `shared/uart_protocol.py::calc_crc`.
 
 ### Message Types
 
@@ -514,16 +529,18 @@ CRC = arithmetic sum of all bytes in `TYPE:VALUE`, modulo 256, formatted as 2 he
 
 ### Pi 4B GPIO Power
 The Pi 4B **is not powered by the HAT** — the HAT takes its logic power from the Pi.
-Both Pi 4B units receive 5V directly from their respective buck converters via **GPIO pins 2 & 4** (bypassing USB-C).
+Both Pi 4B units receive 5V directly from their respective buck converters via the **5V header pins (physical pins 2 & 4)** (bypassing USB-C).
 
-### FSESC Mini 6.7 PRO
-- Supports 4–13S LiPo — 6S 24V is well within spec
+### Flipsky Mini V6.7 (fw v6.05, HW60)
+- 6S 24V is well within the HW60 voltage spec
 - Connect via XT90-S last (after main switch) to avoid spark on capacitor inrush
-- Controlled via PyVESC over USB serial (`SetDutyCycle` commands)
+- Driven by a **native CRC-16/CCITT serial implementation** in `slave/drivers/vesc_can.py` — **not pyvesc** (which conflicts with the PyCRC/pycrc packages on Python 3.13)
+- VESC ID 1 commanded directly over USB; VESC ID 2 over CAN forwarding (`COMM_FORWARD_CAN`) through VESC ID 1
+- Default control is closed-loop ERPM (`set_rpm_*`); a duty-cycle mode (`set_duty_*`) exists for bench testing
 
 ### Hub Motors 250W / 24V
 - Rated 250W peak — typical casual use ~20–30W each
-- Double shaft — fits standard R2-D2 leg wheel mounts
+- Double shaft — fits standard astromech leg wheel mounts
 - Requires soft speed ramps — hard stops risk tipping the robot
 
 ---
