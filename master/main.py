@@ -469,18 +469,29 @@ def main() -> None:
 
     log.info("Master operational")
 
-    # Clean shutdown handler
+    # Clean shutdown handler. Each step is guarded so one failing or missing
+    # component never aborts the rest — previously `deploy.stop()` raised
+    # AttributeError (DeployController has no stop()), which skipped ALL the
+    # real cleanup (UART/servos/BT) and made the process exit 1 → systemd
+    # logged "Failed with result 'exit-code'" on every restart. (DeployController
+    # has nothing to stop: its only thread is an on-demand daemon.)
     def shutdown(sig, frame):
         log.info("Shutdown signal received")
-        deploy.stop()
-        uart.stop()
-        teeces.shutdown()
-        # Phase 2: if reg.vesc:  reg.vesc.shutdown()
-        # Phase 2: if reg.dome:  reg.dome.shutdown()
-        if reg.servo:      reg.servo.shutdown()
-        if reg.dome_servo: reg.dome_servo.shutdown()
-        if reg.bt_ctrl: reg.bt_ctrl.stop()
-        if reg.behavior_engine: reg.behavior_engine.stop()
+
+        def _safe(label, fn):
+            try:
+                if fn:
+                    fn()
+            except Exception as e:
+                log.warning("shutdown: %s cleanup failed: %s", label, e)
+
+        _safe("uart", uart.stop)
+        _safe("teeces", teeces.shutdown)
+        # Phase 2: reg.vesc.shutdown() / reg.dome.shutdown()
+        _safe("servo", reg.servo.shutdown if reg.servo else None)
+        _safe("dome_servo", reg.dome_servo.shutdown if reg.dome_servo else None)
+        _safe("bt_ctrl", reg.bt_ctrl.stop if reg.bt_ctrl else None)
+        _safe("behavior", reg.behavior_engine.stop if reg.behavior_engine else None)
         log.info("Master shut down cleanly")
         sys.exit(0)
 
