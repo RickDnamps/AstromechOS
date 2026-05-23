@@ -1,172 +1,174 @@
 # AstromechOS — Roadmap & Feature Ideas
 
-> Brainstorm session 2026-03-22 — priorités et idées pour les prochaines phases de développement.
+> Initial brainstorm 2026-03-22 — priorities and ideas for the upcoming phases.
+> Phases 1–4 shipped (UART/audio/lights/display/deploy · VESC/servos · choreography engine · dashboard+API+Android+BT+safety+themes+backup). Phase 5 (vision / AI) in progress.
 
 ---
 
-## ✅ Déjà en production
+## ✅ Already in production
 
-| Fonctionnalité | Notes |
+### Phase 1 — Plumbing & I/O
+| Feature | Notes |
 |---|---|
-| UART Master↔Slave + CRC + watchdog | 3 couches de sécurité indépendantes |
-| Audio — 317 sons, 14 catégories | mpg123, volume cubique, random par catégorie |
-| Teeces32 FLD/RLD/PSI | JawaLite, preview live dans UI |
-| RP2040 LCD GC9A01 | 6 écrans (BOOT/OP/LOCKED/NET/TELEM/BUS) |
-| 40 séquences comportementales .scr | scared, excited, patrol, cantina, leia… |
-| REST API Flask + dashboard web 6 onglets | dark blue R2-D2 theme, mobile-first |
-| App Android | offline banner, auto-discovery IP |
-| Manette BT evdev (Pi-native) | Shield/Xbox/PS, mapping configurable |
-| Jumelage BT depuis l'UI | scan / pair / unpair sans SSH |
-| BT battery % + RSSI | affiché en live dans Config tab (sysfs + hcitool, polling 30s) |
-| BT keep-alive joystick | thread 300ms — corrige VESC cut quand joystick maintenu immobile |
-| BT panneaux config-aware | angles/vitesse depuis servo_angles.json, pas de valeurs hardcodées |
-| BT inactivity timeout étendu | slider 600s + saisie manuelle jusqu'à 3600s |
-| Caméra USB autodetect | sysfs scan — pas de `/dev/videoN` hardcodé · auto-reconnect stream |
-| Admin inactivity tous onglets | VESC / Choreo / Config trackés via pointerdown + _activeTabId |
-| Déploiement auto (bouton dôme) | git pull + rsync + reboot en un clic |
-| E-STOP + RESET sans restart | PCA9685 SLEEP instantané |
-| Cockpit Status Panel complet | Topbar propre · pills HB/UART/BT · pill SLAVE · E-STOP overlay · STATUS toujours à jour |
-| HAT diagnostic cockpit | Dome/Body Servo HATs · Motor HAT I2C probe · RP2040 Screen health · labels config-driven |
-| CSS theme system | 8 built-in themes · theme customizer avec live preview · 7 polices sci-fi · **persistés server-side** (custom_themes.json) |
-| Behavior engine ALIVE | idle behaviors configurables |
-| **Backup / Restore complet** | `.bck` de tout l'état (configs/sons/choreos/calibrations/thèmes) · restore = remplacement total + reboot auto · réseau préservé · durci anti zip-slip + anti-RCE |
-| **Config-not-in-git (seed/working)** | état robot-local hors git · seeds `*_default`/`.example` copiés à l'install · `git pull` ne bloque jamais |
-| **Index audio auto-réconcilié** | retire les fantômes · classe les inconnus sous `others` · au boot + à la demande |
-| **App Android tablette-ready** | WebView file-picker (restore/upload) + DownloadManager (backup) + tap-to-add choreo (touch) |
+| UART Master↔Slave + CRC + watchdog | 3 independent safety layers (app 600ms→1.5s · drive 800ms · slave UART 500ms) |
+| Audio — multi-category sounds | mpg123 on the Slave, cubic volume curve, random-per-category · auto-reconciled index |
+| Teeces32 / AstroPixels+ FLD/RLD/PSI | JawaLite, live preview, hot-swappable lights backend (no reboot) |
+| RP2040 LCD GC9A01 | BOOT/OP/LOCKED/NET/TELEM/BUS screens, dynamic ACM port |
+| Auto deploy (Settings UI) | git pull + rsync to Slave + reboot in one click · rollback · `behind_count` before UPDATE |
+
+### Phase 2 — Propulsion & servos
+| Feature | Notes |
+|---|---|
+| VESC ×2 (USB + CAN), native CRC-16 | multiplicative power scale · per-side invert · duty/rpm mode · bench mode |
+| Live VESC telemetry | v_in/temp/current/rpm/duty/fault every 200ms · per-cell thresholds (green/orange/red) |
+| Dome servos (I2C PCA9685) + body (UART) | multi-HAT, editable labels, angle/speed calibration, config-aware arms sequence |
+| E-STOP + RESET without restart | pure freeze (PWM holds position) · reset = slow anti-pinch stow |
+
+### Phase 3 — Choreography engine & behaviors
+| Feature | Notes |
+|---|---|
+| Event-driven ChoreoPlayer (TICK 50ms) | multichannel audio (12 tracks) · dome+body servo interpolation · hot-swappable latencies |
+| 48 .chor choreographies | categorized, editable emoji/label, rename/delete with shortcuts cascade |
+| ALIVE behavior engine | configurable idle behaviors · startup behavior · next-idle countdown |
+| Per-axis lockout during choreo | propulsion / dome selectively locked, never everything at once |
+
+### Phase 4 — Dashboard, control & safety
+| Feature | Notes |
+|---|---|
+| Flask REST API + web dashboard | 14 blueprints · R2-D2 theme, mobile-first · cache-bust `?v=` |
+| Android app for tablet + phone | WebView file picker (restore/upload) + DownloadManager (backup) + touch DnD (Pointer Events) |
+| BT gamepad via evdev (Pi-native) | Shield/Xbox/PS · scan/pair/unpair from the UI · 300ms keep-alive · battery%+RSSI · extended timeout |
+| **Custom BT button actions (per-MAC)** | bind any button → arms/panel/dome/choreo/sound/random · press-to-capture workflow |
+| **VESC Safety Lock** | `vesc_safety.py` single source · refuses motion if a VESC is absent/faulted/stale · bench bypass · CAN liveness · Drive overlay pills |
+| **3-tier lock modes** | Normal / Kids (speed cap) / Child Lock (drive blocked) · server-side unlock via `hmac.compare_digest` |
+| **Two-password model** | admin (`X-Admin-Pw` hmac, 53+ endpoints) · WPA-PSK network · verify rate-limit 10/60s → lockout · "default password" banner |
+| **Visual sequence editor** | drag & drop timeline, blocks color-coded by type, live preview, save/load/export `.scr`, touch-ready |
+| Shortcuts (Drive-tab macros) | 12 max · arms/panel/dome/choreo/sound/random · per-type validation · rename/delete cascade |
+| Full Cockpit Status Panel | topbar · HB/UART/BT/SLAVE pills · E-STOP overlay · mode pills (bench/kids/lock) · STATUS always up to date |
+| HAT diagnostic + Diagnostics tab | Dome/Body/Motor HAT I2C probe · RP2040 Screen health · auto-refreshing logs/RTT/stats |
+| USB camera autodetect | live MJPEG streaming · sysfs scan (no hardcoded `/dev/videoN`) · last-connect-wins · auto-reconnect |
+| CSS theme system | 8 built-in themes + customizer with live preview + 7 fonts · **persisted server-side** (custom_themes.json) |
+| **Full backup / restore** | `.bck` of all state · restore = full replacement + auto reboot · network preserved · hardened against zip-slip + RCE |
+| **Graceful reboot / shutdown** | Master/Slave/both · service-only restart · countdown overlay + auto reconnect |
+| **Per-robot hotspot SSID + live network** | unique `Astromech_Control_XXXX` · slave-first hotspot change (abort if Slave unreachable) · `sudo -n nmcli` |
+| **Config-not-in-git (seed/working)** | robot-local state outside git · `*_default`/`.example` seeds copied at install · `git pull` never blocks |
+| **Auto-reconciled audio index** | drops ghost entries · files unknown ones under `others` · at boot + on demand |
 
 ---
 
-## 🔥 Priorité 1 — Manette Performance complète
+## 🔜 Phase 5 — Vision & AI *(in progress)*
 
-> La Shield devient un instrument de spectacle, pas juste un joystick.
+> The camera has arrived and live streaming is in production. What remains is the intelligence on top.
 
-- [ ] **Éditeur de mapping visuel** dans l'onglet Config
-  - Chaque bouton/axe → dropdown : son, catégorie, séquence spécifique, panneau, mode…
-  - Gâchettes L2/R2 = volume ou vitesse dôme en temps réel
-- [ ] **Mode Conduite** (défaut) — sticks = drive + dôme, boutons = sons rapides
-- [ ] **Mode Performance** (combo bouton pour switcher) — tous les boutons déclenchent des séquences/sons, sticks font le dôme seulement
-- [ ] Déclencher des **séquences .scr** directement depuis la manette
+- [x] **Live USB camera streaming** — MJPEG, autodetect, last-connect-wins, Drive-tab overlay
+- [ ] **Person tracking** — the dome turns toward the detected visitor
+- [ ] **Facial recognition** — greet by name, visitor memory (camera + ML model)
+- [ ] **Snapshot / capture** on trigger (`/camera/snapshot` endpoint already present)
 
 ---
 
-## 🔨 Priorité 1b — VESC Safety Lock *(critique — avant utilisation en public)*
+## 🟡 Still to do — leftovers from Phase 4
 
-> Un seul VESC en panne = poussée asymétrique = robot incontrôlable. Le système doit refuser de bouger, pas juste avertir.
+These initial ideas are **partially shipped** or intentionally deferred:
 
-- [ ] **Détection VESC_DEGRADED** — trigger si :
-  - VESC L ou R absent au boot (pas de telemetry dans les Xs)
-  - Fault code actif (`fault_str ≠ FAULT_CODE_NONE`) sur l'un ou l'autre
-  - Timeout telemetry en cours d'opération
-  - CAN scan ne trouve pas VESC ID2
-- [ ] **Blocage propulsion total** — aucune commande `M:` envoyée au Slave, quel que soit la source (web / BT gamepad / Android)
-- [ ] **Overlay Drive tab** — alerte rouge évidente sur la zone caméra (style "STREAM TAKEN") ou bannière fixe en bas
-  - Message : `PROPULSION DISABLED — VESC [L/R] not responding`
-  - Joystick web grisé et non-interactif
-  - BT gamepad : axe drive ignoré (keepalive supprimé aussi)
-  - Android : même gate JS
-- [ ] Dome / audio / servos / séquences restent **100% opérationnels**
-
-> ⚠️ Pour l'instant les tests bench avec un seul VESC sont acceptables. Cette protection est obligatoire avant toute utilisation autour de personnes.
+- **Performance gamepad** — custom per-button actions and sequence triggering are shipped. The **Drive Mode ↔ Performance Mode switch** via combo and the analog L2/R2 triggers (real-time volume / dome speed) are still to do.
+- **VESC Safety Lock** — ✅ shipped (see the Phase 4 table). Single-VESC bench mode remains available and is explicitly flagged.
 
 ---
 
-## 🔥 Priorité 2 — Télémétrie VESC + Protection batterie
+## 🔥 Priority 2 — Progressive battery protection
 
-> Le robot ne mourra jamais d'une batterie à plat sans prévenir.
+> The robot will never die on a flat battery without warning.
 
-- [ ] **Dashboard temps réel** — voltage cellule, %, temp moteurs, courant instantané, RPM
-- [ ] **Graphique historique** — consommation sur la session
-- [ ] **Alertes progressives automatiques**
-  - 30% → son proc (avertissement doux)
-  - 15% → son alarm + LED rouge RP2040
-  - 10% → mode économie auto (vitesse -50%, sons off)
-  - 5% → arrêt moteurs + séquence shutdown
-- [ ] **Refus de démarrage** si voltage trop bas au boot
-- [ ] Affichage voltage sur RP2040 LCD (écran TELEMETRY déjà prévu)
-
----
-
-## 🔥 Priorité 3 — Mode Show / Autonomie intelligente
-
-> R2-D2 "vit" quand tu veux, se tait quand tu veux.
-
-- [ ] **Toggle "Mode Show"** dans l'UI + raccourci manette dédié
-- [ ] **Humeur aléatoire intelligente** — pool pondéré de séquences + sons + panneaux + dôme avec pauses naturelles qui varient, jamais répétitif
-- [ ] **Programmateur de show** — timeline dans l'UI
-  - "À 0:00 joue startup, toutes les 5 min une séquence random, à 1:00 joue cantina"
-  - Export/import de programmes de show (.json)
-  - Idéal pour convention avec horaire précis
+- [x] **Real-time dashboard** — voltage, motor temps, current, rpm, duty per side + aggregated (`/status`, `/vesc/telemetry`)
+- [x] **Per-cell thresholds** — green ≥3.8V · orange ≥3.6V · red <3.6V · configurable 4S/6S/7S/8S chemistry
+- [x] **ChoreoPlayer cutoff** under critical voltage — abort if `cells×3.5V` / 80°C / 30A
+- [ ] **Historical graph** — consumption over the session
+- [ ] **Automatic progressive alerts** (beyond the existing cutoff threshold)
+  - 30% → proc sound (gentle warning)
+  - 15% → alarm sound + RP2040 red LED
+  - 10% → automatic power-save mode (speed -50%, sounds off)
+  - 5% → motor shutdown + shutdown sequence
+- [ ] **Refuse to start** if voltage is too low at boot
+- [ ] Voltage display on the RP2040 LCD (TELEMETRY screen already planned)
 
 ---
 
-## 🔥 Priorité 4 — Éditeur visuel de séquences
+## ✅ Priority 4 — Visual sequence editor *(shipped)*
 
-> N'importe quel builder peut créer ses propres séquences sans toucher à un fichier texte.
+> Any builder can create their own sequences without touching a text file. **Shipped** (`choreoEditor`/`scriptEngine`, endpoints `/choreo/load`·`/choreo/save`·`/choreo/export_scr`).
 
-- [ ] **Timeline drag & drop** dans le dashboard
-  - Blocs colorés par type : son 🔊, servo 🦾, dôme 🔄, Teeces 💡, pause ⏸
-  - Lignes parallèles pour les actions simultanées
-- [ ] **Aperçu en temps réel** — joue la séquence pendant qu'on la construit
-- [ ] **Bibliothèque** — sauvegarder, nommer, partager
-- [ ] **Export .scr** — compatible avec le format existant
-- [ ] **Import** — glisser-déposer un `.scr` existant pour l'éditer visuellement
+- [x] **Drag & drop timeline** in the dashboard — blocks color-coded by type (sound/servo/dome/lights/pause), parallel lanes
+- [x] **Real-time preview** — plays the sequence while you build it
+- [x] **Library** — save, name, categorize, rename
+- [x] **.scr export** — compatible with the existing format
+- [x] **Touch-ready** — DnD migrated to Pointer Events (tested on Xiaomi Pad 6)
 
 ---
 
-## 🔥 Priorité 5 — Self-Test & Diagnostic
+## 🟡 Priority 5 — Self-Test & Diagnostics *(partially shipped)*
 
-> Partir en convention avec la certitude que tout fonctionne.
+> Head off to a convention confident that everything works.
 
-- [ ] **Self-test au boot** (optionnel, activable dans config)
-  - Teste chaque servo, joue un son, tourne le dôme, vérifie UART + RP2040 + Teeces
-  - Résultat en 30 sec sur le LCD + dans les logs
-- [ ] **Onglet Diagnostic** dans le dashboard
-  - Tester chaque composant individuellement
-  - Voir le log system en direct
-  - Rapport de santé vert/orange/rouge pour chaque sous-système
-- [ ] **Score global de santé** affiché en permanence dans le header de l'UI
+- [x] **Diagnostics tab** in the dashboard — live logs (ALL/WARN/ERROR filter), UART RTT, CRC/health stats, Slave ping, I2C scan
+- [x] **Per-subsystem health** — HB/UART/BT/SLAVE cockpit pills + HAT health (Dome/Body/Motor) + RP2040 Screen, green/orange/red
+- [ ] **Self-test at boot** (optional) — tests each servo, plays a sound, rotates the dome, checks UART + RP2040 + Teeces · result shown on the LCD
+- [ ] **Individual component test** triggered on demand
+- [ ] **Overall health score** displayed permanently in the header
 
 ---
 
-## 🌱 Priorité 6 — Petits capteurs, grand impact (~15$ hardware)
+## 🔥 Priority 6 — Show Mode / Smart autonomy
 
-> Sans micro ni caméra, R2 peut déjà réagir à son environnement physique.
+> The droid "comes alive" when you want, goes quiet when you want. The ALIVE engine (idle behaviors) lays the groundwork; the coordinated Show Mode is still to do.
 
-- [ ] **Ultrasons HC-SR04** sur le Slave (GPIO)
-  - Quelqu'un s'approche à <1m → dôme tourne vers eux + son "curious"
-  - Désactivable en mode silencieux
-- [ ] **Accéléromètre MPU6050** sur le Slave (I2C)
-  - R2 bousculé → son "surprised"
-  - R2 incliné → son "alarm" + séquence stabilisation
+- [ ] **"Show Mode" toggle** in the UI + a dedicated gamepad shortcut
+- [ ] **Smart random mood** — a weighted pool of sequences + sounds + panels + dome with natural pauses that vary, never repetitive
+- [ ] **Show scheduler** — timeline in the UI
+  - "At 0:00 play startup, every 5 min a random sequence, at 1:00 play cantina"
+  - Export/import of show programs (.json)
+  - Ideal for conventions with a precise schedule
 
 ---
 
-## 🔮 Phase future (après caméra)
+## 🌱 Priority 7 — Small sensors, big impact (~$15 hardware)
 
-> Ces features nécessitent du hardware supplémentaire ou sont très complexes.
+> Without a mic or camera, R2 can already react to its physical environment.
 
-| Feature | Hardware requis | Complexité |
+- [ ] **HC-SR04 ultrasonic sensor** on the Slave (GPIO)
+  - Someone approaches within <1m → dome turns toward them + "curious" sound
+  - Can be disabled in silent mode
+- [ ] **MPU6050 accelerometer** on the Slave (I2C)
+  - R2 gets bumped → "surprised" sound
+  - R2 gets tilted → "alarm" sound + stabilization sequence
+
+---
+
+## 🔮 Future phase
+
+> These features require extra hardware or are highly complex (beyond Phase 5 vision).
+
+| Feature | Hardware required | Complexity |
 |---|---|---|
-| 🎙️ **Micro dans le dôme** — contexte émotionnel, commandes vocales, réponse ambiance | Dongle USB audio ~8$ ou jack TRRS Master | ⭐⭐⭐ |
-| 📷 **Caméra USB** — streaming live ✅ · suivi personne 📋 | Caméra UVC 3.6mm OTG 720/1080P commandée — holo projector housing, MJPEG hardware natif | ⭐⭐⭐⭐ |
-| 👁️ **Reconnaissance faciale** — saluer par prénom, mémoire visiteurs | Caméra + modèle ML | ⭐⭐⭐⭐⭐ |
-| 🏷️ **NFC/RFID** — tapoter un badge = déclencher une séquence | Module NFC ~8$ | ⭐⭐ |
-| 👥 **Multi-manette** — pilote + opérateur (sons/séquences) | 2e gamepad BT | ⭐⭐ |
-| 🌐 **API externe / webhooks** — déclencher R2 depuis IFTTT, Home Assistant, etc. | Aucun | ⭐⭐ |
+| 🎙️ **Mic in the dome** — emotional context, voice commands, ambiance response | USB audio dongle ~$8 or TRRS jack on Master | ⭐⭐⭐ |
+| 👁️ **Facial recognition** — greet by name, visitor memory (see Phase 5) | Camera + ML model | ⭐⭐⭐⭐⭐ |
+| 🏷️ **NFC/RFID** — tap a badge to trigger a sequence | NFC module ~$8 | ⭐⭐ |
+| 👥 **Multi-gamepad** — driver + operator (sounds/sequences) | 2nd BT gamepad | ⭐⭐ |
+| 🌐 **External API / webhooks** — trigger the robot from IFTTT, Home Assistant, etc. | None | ⭐⭐ |
 
 ---
 
-## 🧠 Vision architecture Master Pi
+## 🧠 Master Pi architecture vision
 
-Le **Master Pi (dôme) = cerveau central** :
-- Flask API, séquences, servos dôme, Teeces32 ← déjà là
-- Manette BT evdev ← déjà là
-- **Caméra USB** (phase 5) ← observe les gens
-- **Micro USB** (phase future) ← écoute l'ambiance
-- **Mode Show** ← coordonne tout en autonomie
+The **Master Pi (dome) = central brain**:
+- Flask API, sequences, dome servos, lights ← shipped
+- BT gamepad via evdev (+ custom per-button actions) ← shipped
+- **USB camera** (Phase 5) ← live streaming shipped · vision/AI in progress
+- **USB mic** (future phase) ← listens to the ambiance
+- **Show Mode** (Priority 6) ← coordinates everything autonomously
 
-Le Slave Pi (corps) reste concentré sur le hardware physique : propulsion, servos body, audio, capteurs.
+The Slave Pi (body) stays focused on the physical hardware: propulsion, body servos, audio, sensors.
 
 ---
 
-*Dernière mise à jour : 2026-05-08*
+*Last updated: 2026-05-23 (generic hostnames `astromech-master`/`astromech-slave` · R2-D2 = example droid)*
