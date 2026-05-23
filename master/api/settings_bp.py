@@ -92,6 +92,12 @@ HOTSPOT_CON  = 'r2d2-hotspot'
 # The Slave joins the Master hotspot via this nmcli profile (setup_slave_network.sh).
 # Changing the hotspot must update this on the Slave FIRST, or the Slave can't rejoin.
 _SLAVE_HOTSPOT_CON = 'r2d2-master-hotspot'
+# The Flask service runs as 'artoo' (not root), and nmcli MUTATIONS
+# (modify/up/down/add/delete) need polkit auth that a non-interactive systemd
+# service doesn't have -> 'Insufficient privileges'. artoo has passwordless sudo
+# (same as the slave-restart path), so write-ops go through sudo -n. READ-only
+# nmcli (-g ... show / wifi list) works as artoo and stays bare.
+_NMCLI_W = ('sudo', '-n', 'nmcli')
 
 
 # =============================================================================
@@ -532,7 +538,7 @@ def wifi_scan():
     try:
         # P2 fix 2026-05-16: shorter rescan timeout (3s vs 5s) — radio rescan
         # rarely needs the full window and a stale rescan burns a thread.
-        _run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', 'wlan1'], timeout=3)
+        _run([*_NMCLI_W, 'device', 'wifi', 'rescan', 'ifname', 'wlan1'], timeout=3)
 
         rc, out, _ = _run(
             ['nmcli', '-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY,FREQ',
@@ -635,9 +641,9 @@ def _set_wifi_impl():
         _write_key('home_wifi', 'password', password)
 
     # Reconfigure NetworkManager
-    _run(['nmcli', 'connection', 'delete', INTERNET_CON])
+    _run([*_NMCLI_W, 'connection', 'delete', INTERNET_CON])
 
-    cmd = ['nmcli', 'connection', 'add',
+    cmd = [*_NMCLI_W, 'connection', 'add',
            'type', 'wifi', 'ifname', 'wlan1',
            'con-name', INTERNET_CON,
            'ssid', ssid,
@@ -656,7 +662,7 @@ def _set_wifi_impl():
         _write_key('home_wifi', 'password', prev_pwd)
         return jsonify({'error': f'nmcli error: {err}', 'rolled_back': True}), 500
 
-    rc2, _, up_err = _run(['nmcli', 'connection', 'up', INTERNET_CON])
+    rc2, _, up_err = _run([*_NMCLI_W, 'connection', 'up', INTERNET_CON])
     connected = rc2 == 0
 
     # E9 fix 2026-05-16: if 'up' failed AND the error hints at bad
@@ -670,10 +676,10 @@ def _set_wifi_impl():
         log.warning("nmcli up wlan1 failed — credentials rejected — rolling back")
         _write_key('home_wifi', 'ssid', prev_ssid)
         _write_key('home_wifi', 'password', prev_pwd)
-        _run(['nmcli', 'connection', 'delete', INTERNET_CON])
+        _run([*_NMCLI_W, 'connection', 'delete', INTERNET_CON])
         # Re-add previous if any
         if prev_ssid:
-            prev_cmd = ['nmcli', 'connection', 'add',
+            prev_cmd = [*_NMCLI_W, 'connection', 'add',
                         'type', 'wifi', 'ifname', 'wlan1',
                         'con-name', INTERNET_CON,
                         'ssid', prev_ssid,
@@ -682,7 +688,7 @@ def _set_wifi_impl():
             if prev_pwd:
                 prev_cmd += ['wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', prev_pwd]
             _run(prev_cmd)
-            _run(['nmcli', 'connection', 'up', INTERNET_CON])
+            _run([*_NMCLI_W, 'connection', 'up', INTERNET_CON])
         return jsonify({
             'error': 'wrong password — credentials rolled back to previous',
             'rolled_back': True,
@@ -790,7 +796,7 @@ def _set_hotspot_impl():
         _write_key('hotspot', 'password', password)
 
     # Update the NM connection
-    modify_cmd = ['nmcli', 'connection', 'modify', HOTSPOT_CON, 'ssid', ssid]
+    modify_cmd = [*_NMCLI_W, 'connection', 'modify', HOTSPOT_CON, 'ssid', ssid]
     if password:
         modify_cmd += ['wifi-sec.psk', password]
     rc_mod, _, err_mod = _run(modify_cmd)
@@ -808,8 +814,8 @@ def _set_hotspot_impl():
         return jsonify(resp), 500
 
     # Restart the hotspot (clients disconnect then reconnect)
-    _run(['nmcli', 'connection', 'down', HOTSPOT_CON])
-    rc, _, err = _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
+    _run([*_NMCLI_W, 'connection', 'down', HOTSPOT_CON])
+    rc, _, err = _run([*_NMCLI_W, 'connection', 'up', HOTSPOT_CON])
 
     if rc != 0:
         # B3: bring-up failed too — restore prev creds + try one nmcli modify
@@ -818,11 +824,11 @@ def _set_hotspot_impl():
         _write_key('hotspot', 'ssid', prev_ssid)
         if prev_pwd:
             _write_key('hotspot', 'password', prev_pwd)
-        restore_cmd = ['nmcli', 'connection', 'modify', HOTSPOT_CON, 'ssid', prev_ssid]
+        restore_cmd = [*_NMCLI_W, 'connection', 'modify', HOTSPOT_CON, 'ssid', prev_ssid]
         if prev_pwd:
             restore_cmd += ['wifi-sec.psk', prev_pwd]
         _run(restore_cmd)
-        _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
+        _run([*_NMCLI_W, 'connection', 'up', HOTSPOT_CON])
         ok_rev, rev_detail = _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the restored old Master AP
         resp = {'error': f'nmcli up failed: {err}', 'rolled_back': True}
         if not ok_rev:
