@@ -462,6 +462,7 @@ def get_settings():
         _sys_user = 'artoo'
     return jsonify({
         'system_user': _sys_user if is_admin else '',
+        'local_cfg_path': LOCAL_CFG if is_admin else '',
         'wifi': {
             'ssid':       _mask_ssid(wlan1_ssid),
             'connected':  wlan1_connected,

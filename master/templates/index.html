@@ -2434,8 +2434,8 @@
           <details class="forgot-password-help" style="margin-top:12px;font-size:11px;opacity:.7">
             <summary style="cursor:pointer">🔑 Forgot password?</summary>
             <div style="padding:6px 0">
-              SSH into Master (<code>ssh artoo@&lt;master-ip&gt;</code>), edit
-              <code>/home/artoo/astromechos/master/config/local.cfg</code>,
+              SSH into Master (<code>ssh <span class="ssh-username">artoo</span>@&lt;master-ip&gt;</code>), edit
+              <code class="local-cfg-path">/home/artoo/astromechos/master/config/local.cfg</code>,
               find the <code>[admin]</code> section, set <code>password = newpwd</code>,
               save + restart: <code>sudo systemctl restart astromech-master.service</code>.
             </div>
