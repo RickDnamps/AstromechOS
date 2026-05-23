@@ -2368,8 +2368,10 @@
                   onclick="confirmAction('Restart Master services? (~5s, faster than full reboot)', '/system/restart_master', true)">
             ↻ RESTART MASTER SERVICES <span style="opacity:.6;font-size:9px">(~5s)</span>
           </button>
-          <div class="settings-divider"></div>
-          <h3 class="settings-sub-title">BACKUP / RESTORE</h3>
+        </section>
+
+        <section class="card settings-card">
+          <h2 class="card-title">BACKUP / RESTORE</h2>
           <div class="settings-note">Full backup (.bck): configs, sounds, choreos, calibration, themes. Keep it safe — it contains the WiFi credentials + admin password.</div>
           <button id="btn-backup" class="btn" style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Create backup</button>
           <div id="backup-progress-wrap" style="display:none;margin-top:10px">
@@ -2387,8 +2389,10 @@
             <div id="restore-progress-text" style="font-size:11px;margin-top:4px;color:var(--text-dim)"></div>
           </div>
 
-          <div class="settings-divider"></div>
-          <h3 class="settings-sub-title">CHANGE ADMIN PASSWORD</h3>
+        </section>
+
+        <section class="card settings-card">
+          <h2 class="card-title">CHANGE ADMIN PASSWORD</h2>
           <div class="settings-note">Secures the <strong>web / app interface</strong> only — the admin unlock used across Settings, VESC, servos and the Kids/Child&nbsp;Lock. The robot's SSH login (user <strong>artoo</strong>) is <strong>separate</strong> and is not changed here; change it on the Pi with <code>passwd</code> for full lockdown.</div>
           <div class="settings-row">
             <label class="settings-label">Current password</label>
