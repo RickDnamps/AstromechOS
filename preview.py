@@ -54,18 +54,51 @@ STATIC   = os.path.join(BASE, 'master', 'static')
 # ---------------------------------------------------------------------------
 
 FAKE_STATUS = {
-    "version":        "abc1234",
-    "uptime":         3725,
-    "heartbeat_ok":   True,
-    "uart_ready":     True,
-    "teeces_ready":   True,
-    "vesc_ready":     False,
-    "dome_ready":     False,
-    "servo_ready":    False,
-    "bt_controller":  None,
-    "battery_voltage": 24.5,
-    "temperature":    38.0,
-    "scripts_running": []
+    # Mirrors the real master/api/status_bp.py::get_status() schema so the
+    # dashboard renders identically to a live robot (updated 2026-05-23).
+    # --- identity / version / deploy ---
+    "robot_name": "Astromech", "robot_icon": "",
+    "master_location": "Dome", "slave_location": "Body",
+    "version": "abc1234", "commit": "abc1234", "uptime": 3725,
+    "behind_count": 0, "admin_pwd_is_default": True,
+    # --- heartbeat / UART ---
+    "heartbeat_ok": True, "app_hb_age_ms": 120,
+    "uart_ready": True, "uart_crc_errors": 0, "slave_hb_age_ms": 80,
+    "uart_health": {"valid_pct": 99, "rx": 18420, "errors": 2},
+    "slave_host": "astromech-slave.local",
+    # --- subsystems ---
+    "teeces_ready": True, "teeces_mode": "random", "lights_backend": "teeces",
+    "dome_ready": True, "dome_servo_ready": True, "servo_ready": True,
+    "display_ready": True, "display_port": "/dev/ttyACM0",
+    "dome_hat_health": [{"addr": "0x40", "ok": True, "errors": 0}],
+    "body_hat_health": [{"addr": "0x41", "ok": True, "errors": 0}],
+    "motor_hat_health": {"addr": "0x40", "ok": True},
+    # --- VESC (bench-mode demo) ---
+    "vesc_ready": True, "vesc_drive_safe": True, "vesc_bench_mode": True,
+    "vesc_l_ok": True, "vesc_r_ok": True,
+    "vesc_l_temp": 32.0, "vesc_r_temp": 31.5, "vesc_temp": 32.0,
+    "vesc_l_curr": 0.0, "vesc_r_curr": 0.0,
+    "vesc_l_rpm": 0, "vesc_r_rpm": 0,
+    "vesc_l_duty": 0.0, "vesc_r_duty": 0.0, "vesc_duty": 0.0,
+    "power_scale": 0.6,
+    # --- battery / temps / load ---
+    "battery_voltage": 24.5, "battery_cells": 6, "battery_chemistry": "lipo",
+    "temperature": 44.0, "slave_temp": 41.0,
+    "master_cpu": 12, "master_mem": 38, "master_disk": 41,
+    "slave_cpu": 8, "slave_mem": 30, "slave_disk": 39,
+    # --- choreo / audio ---
+    "choreo_playing": False, "choreo_name": "", "choreo_abort_reason": None,
+    "choreo_uses_propulsion": False, "choreo_uses_dome": False, "choreo_uses_lights": False,
+    "audio_playing": False, "audio_current": None,
+    # --- safety / lock modes ---
+    "estop_active": False, "stow_in_progress": False,
+    "drive_ramp_active": False, "dome_ramp_active": False,
+    "lock_mode": 0, "current_mode": "normal",
+    "kids_speed_limit": 0.5, "child_dome_speed_limit": 0.5,
+    # --- camera / BT gamepad / shortcuts / behavior ---
+    "camera_found": True, "camera_active": False,
+    "bt_connected": False, "bt_rssi": None,
+    "shortcut_states": {}, "alive_enabled": False, "next_idle_in_s": None,
 }
 
 FAKE_CATEGORIES = {

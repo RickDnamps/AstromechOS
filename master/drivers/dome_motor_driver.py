@@ -31,10 +31,11 @@
 Master Dome Motor Driver — Phase 2.
 Controls the dome DC motor via UART:
 
-  D:SPEED          → dome DC motor (sent to Slave → Syren10/Sabertooth)
+  D:SPEED          → dome DC motor (sent to Slave → TB6612 motor HAT @ I2C 0x40)
   TEECES:cmd        → Teeces32 LEDs (local Master via TeecesController)
 
-The Slave receives D: and drives the Syren10 on /dev/ttyUSB1 (or other port).
+The Slave receives D: and drives the dome DC motor via the TB6612 motor HAT
+(I2C 0x40, configured by [i2c_servo_hats] slave_motor_hat in slave.cfg).
 
 Phase 2 activation:
   1. Uncomment the import in master/main.py
@@ -100,7 +101,7 @@ class DomeMotorDriver:
         """
         # Audit finding Motion L-2 2026-05-15: reject NaN/Inf before
         # format. `f"{nan:.3f}"` produces 'nan' which is forwarded to
-        # the slave's Syren10 driver as `D:nan` → float('nan') →
+        # the slave's TB6612 dome-motor driver as `D:nan` → float('nan') →
         # undefined behaviour.
         import math
         if not math.isfinite(speed):

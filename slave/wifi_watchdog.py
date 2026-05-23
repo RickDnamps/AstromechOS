@@ -51,6 +51,11 @@ L1_WAIT_S           = 15         # wait after nmcli connection up (Level 1)
 L1_MAX_ATTEMPTS     = 5          # before switching to Level 2
 L2_WAIT_S           = 20         # wait after home WiFi connection
 HOME_CHECK_S        = 60         # check interval in HOME_FALLBACK state
+# Internal nmcli profile id — the Slave's connection to the Master AP. Intentionally
+# kept "r2d2-" (legacy, zero user visibility): it MUST match the profile created by
+# setup_slave_network.sh AND the Master's _SLAVE_HOTSPOT_CON. The reconnect below
+# (`nmcli connection up AP_PROFILE`) depends on this exact name — a rename mismatch
+# would strand the Slave off the hotspot. Not renamed by design (see settings_bp.py).
 AP_PROFILE          = "r2d2-master-hotspot"
 HOME_PROFILE        = "netplan-wlan0-mywifi2"
 IFACE               = "wlan0"

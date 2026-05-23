@@ -87,8 +87,21 @@ _ALLOWED_LIST_EXT   = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
 _ALLOWED_UPLOAD_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 # Backward-compat alias for old call sites that referenced _ALLOWED_EXT
 _ALLOWED_EXT = _ALLOWED_UPLOAD_EXT
-INTERNET_CON = 'r2d2-internet'
-HOTSPOT_CON  = 'r2d2-hotspot'
+# ── nmcli connection-profile names (INTERNAL Linux names, never shown to users) ──
+# These three nmcli profile *ids* intentionally keep the legacy "r2d2-" prefix.
+# They are internal OS plumbing with ZERO user visibility (the user-facing SSID is
+# already generic — Astromech_Control_XXXX). They are deliberately NOT renamed
+# because the exact name must match across THREE places at once: this Master code,
+# the Slave's wifi_watchdog (slave/wifi_watchdog.py AP_PROFILE) used for reconnect,
+# and the actual nmcli profiles created on BOTH Pis by setup_*_network.sh. A
+# mismatch would strand the Slave off the hotspot — its watchdog reconnect
+# (`nmcli connection up <profile>`) would fail — recoverable only over UART or with
+# physical access. Per the zero-bug rule (impact analysis 2026-05-23): a live rename
+# carries a real Master↔Slave-comm-break risk, so the names are kept as-is and
+# documented. Backup/restore never touches nmcli profiles (they live in
+# /etc/NetworkManager, not in the .bck), so this is orthogonal to restore.
+INTERNET_CON = 'r2d2-internet'        # wlan1 → home WiFi (set_wifi)
+HOTSPOT_CON  = 'r2d2-hotspot'         # wlan0 → Master access point (set_hotspot)
 # The Slave joins the Master hotspot via this nmcli profile (setup_slave_network.sh).
 # Changing the hotspot must update this on the Slave FIRST, or the Slave can't rejoin.
 _SLAVE_HOTSPOT_CON = 'r2d2-master-hotspot'
