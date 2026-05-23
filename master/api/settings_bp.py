@@ -799,8 +799,13 @@ def _set_hotspot_impl():
         _write_key('hotspot', 'ssid', prev_ssid)
         if prev_pwd:
             _write_key('hotspot', 'password', prev_pwd)
-        _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the (unchanged) Master AP
-        return jsonify({'error': f'nmcli error: {err_mod}', 'rolled_back': True}), 500
+        ok_rev, rev_detail = _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the (unchanged) Master AP
+        resp = {'error': f'nmcli error: {err_mod}', 'rolled_back': True}
+        if not ok_rev:
+            log.error("Slave revert FAILED after Master rollback (%s) — Slave may be on the NEW creds while the Master is OLD", rev_detail)
+            resp['warning'] = ('Master rolled back, but the Slave could not be reverted — power-cycle the '
+                               'Slave or re-run its network setup if it does not rejoin.')
+        return jsonify(resp), 500
 
     # Restart the hotspot (clients disconnect then reconnect)
     _run(['nmcli', 'connection', 'down', HOTSPOT_CON])
@@ -818,8 +823,13 @@ def _set_hotspot_impl():
             restore_cmd += ['wifi-sec.psk', prev_pwd]
         _run(restore_cmd)
         _run(['nmcli', 'connection', 'up', HOTSPOT_CON])
-        _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the restored old Master AP
-        return jsonify({'error': f'nmcli up failed: {err}', 'rolled_back': True}), 500
+        ok_rev, rev_detail = _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the restored old Master AP
+        resp = {'error': f'nmcli up failed: {err}', 'rolled_back': True}
+        if not ok_rev:
+            log.error("Slave revert FAILED after Master rollback (%s) — Slave may be on the NEW creds while the Master is OLD", rev_detail)
+            resp['warning'] = ('Master rolled back, but the Slave could not be reverted — power-cycle the '
+                               'Slave or re-run its network setup if it does not rejoin.')
+        return jsonify(resp), 500
 
     log.info(f"Hotspot updated: ssid={ssid} (Slave pre-updated)")
     return jsonify({
