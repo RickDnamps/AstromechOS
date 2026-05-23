@@ -370,6 +370,11 @@ ssh artoo@r2-slave.local
 > Do not use `.local` hostnames from Windows — mDNS is unreliable.
 > Use the fixed IPs above instead.
 
+### Changing the hotspot or home WiFi (Admin → Config → Network)
+
+- **Hotspot SSID / password** (the network the Slave and your tablet join): each robot ships with a **unique** SSID like `Astromech_Control_XXXX` (derived from the Pi serial), so several droids don't clash at an expo. When you change the hotspot SSID or password, the Master updates the **Slave first** (so it can rejoin), then switches its own access point — the Slave reconnects automatically within a few seconds, and **UART keeps drive/safety alive** during the brief WiFi gap. **If the Slave is powered off or unreachable, the change is refused** so you can never strand it. Your tablet/PC must reconnect manually with the new credentials.
+- **Home WiFi (wlan1, internet)**: connects the Master's USB WiFi dongle to your home network for internet + deploys. The panel shows the **live** network you're actually connected to (not a stale saved value).
+
 ### Backup & Restore
 
 Protect your robot against a dead SD card. **Admin → Config → System → Backup / Restore.**
