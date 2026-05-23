@@ -87,24 +87,36 @@ _ALLOWED_LIST_EXT   = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'}
 _ALLOWED_UPLOAD_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
 # Backward-compat alias for old call sites that referenced _ALLOWED_EXT
 _ALLOWED_EXT = _ALLOWED_UPLOAD_EXT
-# ── nmcli connection-profile names (INTERNAL Linux names, never shown to users) ──
-# These three nmcli profile *ids* intentionally keep the legacy "r2d2-" prefix.
-# They are internal OS plumbing with ZERO user visibility (the user-facing SSID is
-# already generic — Astromech_Control_XXXX). They are deliberately NOT renamed
-# because the exact name must match across THREE places at once: this Master code,
-# the Slave's wifi_watchdog (slave/wifi_watchdog.py AP_PROFILE) used for reconnect,
-# and the actual nmcli profiles created on BOTH Pis by setup_*_network.sh. A
-# mismatch would strand the Slave off the hotspot — its watchdog reconnect
-# (`nmcli connection up <profile>`) would fail — recoverable only over UART or with
-# physical access. Per the zero-bug rule (impact analysis 2026-05-23): a live rename
-# carries a real Master↔Slave-comm-break risk, so the names are kept as-is and
-# documented. Backup/restore never touches nmcli profiles (they live in
-# /etc/NetworkManager, not in the .bck), so this is orthogonal to restore.
-INTERNET_CON = 'r2d2-internet'        # wlan1 → home WiFi (set_wifi)
-HOTSPOT_CON  = 'r2d2-hotspot'         # wlan0 → Master access point (set_hotspot)
-# The Slave joins the Master hotspot via this nmcli profile (setup_slave_network.sh).
-# Changing the hotspot must update this on the Slave FIRST, or the Slave can't rejoin.
-_SLAVE_HOTSPOT_CON = 'r2d2-master-hotspot'
+# ── nmcli connection-profile names — tolerant resolution (migration-safe) ─────────
+# New installs create 'astromech-*' profiles (setup_*_network.sh). Robots installed
+# before the rename still have 'r2d2-*'. _resolve_con() picks whichever EXISTS in
+# NetworkManager, preferring the new name, so a pre-rename robot keeps working after
+# a plain `git pull` — NO manual nmcli migration, NO re-run of the network setup.
+# These are INTERNAL Linux profile ids (zero user visibility; the public SSID is
+# already generic). Backup/restore never touches nmcli profiles.
+_CON_INTERNET      = ('astromech-internet',       'r2d2-internet')        # wlan1 home WiFi
+_CON_HOTSPOT       = ('astromech-hotspot',        'r2d2-hotspot')         # wlan0 Master AP
+_CON_SLAVE_HOTSPOT = ('astromech-master-hotspot', 'r2d2-master-hotspot')  # Slave → Master AP
+
+_con_cache: dict = {}
+
+def _resolve_con(names: tuple) -> str:
+    """Return the nmcli profile id that EXISTS on this Pi — prefer the new
+    'astromech-*' name, fall back to the legacy 'r2d2-*' (backward-compat). Result
+    is cached. If neither exists yet (fresh install mid-setup), returns the new name."""
+    new, legacy = names
+    if _con_cache.get(new):
+        return _con_cache[new]
+    # List ALL profile names (valid nmcli usage) + check membership, preferring the
+    # new name. NOTE: checking a specific id via `-f NAME ... show <name>` is INVALID
+    # usage and returns a non-zero rc even when the profile exists — must list + match.
+    rc, out, _ = _run(['nmcli', '-t', '-f', 'NAME', 'connection', 'show'], timeout=4)
+    existing = set(out.split('\n')) if rc == 0 else set()
+    for name in (new, legacy):
+        if name in existing:
+            _con_cache[new] = name
+            return name
+    return new
 # The Flask service runs as 'artoo' (not root), and nmcli MUTATIONS
 # (modify/up/down/add/delete) need polkit auth that a non-interactive systemd
 # service doesn't have -> 'Insufficient privileges'. artoo has passwordless sudo
@@ -662,12 +674,13 @@ def _set_wifi_impl():
     if password:
         _write_key('home_wifi', 'password', password)
 
-    # Reconfigure NetworkManager
-    _run([*_NMCLI_W, 'connection', 'delete', INTERNET_CON])
+    # Reconfigure NetworkManager (tolerant profile name: astromech-* or legacy r2d2-*)
+    internet_con = _resolve_con(_CON_INTERNET)
+    _run([*_NMCLI_W, 'connection', 'delete', internet_con])
 
     cmd = [*_NMCLI_W, 'connection', 'add',
            'type', 'wifi', 'ifname', 'wlan1',
-           'con-name', INTERNET_CON,
+           'con-name', internet_con,
            'ssid', ssid,
            'connection.autoconnect', 'yes',
            'connection.autoconnect-priority', '10']
@@ -684,7 +697,7 @@ def _set_wifi_impl():
         _write_key('home_wifi', 'password', prev_pwd)
         return jsonify({'error': f'nmcli error: {err}', 'rolled_back': True}), 500
 
-    rc2, _, up_err = _run([*_NMCLI_W, 'connection', 'up', INTERNET_CON])
+    rc2, _, up_err = _run([*_NMCLI_W, 'connection', 'up', internet_con])
     connected = rc2 == 0
 
     # E9 fix 2026-05-16: if 'up' failed AND the error hints at bad
@@ -698,19 +711,19 @@ def _set_wifi_impl():
         log.warning("nmcli up wlan1 failed — credentials rejected — rolling back")
         _write_key('home_wifi', 'ssid', prev_ssid)
         _write_key('home_wifi', 'password', prev_pwd)
-        _run([*_NMCLI_W, 'connection', 'delete', INTERNET_CON])
+        _run([*_NMCLI_W, 'connection', 'delete', internet_con])
         # Re-add previous if any
         if prev_ssid:
             prev_cmd = [*_NMCLI_W, 'connection', 'add',
                         'type', 'wifi', 'ifname', 'wlan1',
-                        'con-name', INTERNET_CON,
+                        'con-name', internet_con,
                         'ssid', prev_ssid,
                         'connection.autoconnect', 'yes',
                         'connection.autoconnect-priority', '10']
             if prev_pwd:
                 prev_cmd += ['wifi-sec.key-mgmt', 'wpa-psk', 'wifi-sec.psk', prev_pwd]
             _run(prev_cmd)
-            _run([*_NMCLI_W, 'connection', 'up', INTERNET_CON])
+            _run([*_NMCLI_W, 'connection', 'up', internet_con])
         return jsonify({
             'error': 'wrong password — credentials rolled back to previous',
             'rolled_back': True,
@@ -722,7 +735,8 @@ def _set_wifi_impl():
 
 
 def _push_slave_hotspot_creds(ssid: str, password: str) -> tuple[bool, str]:
-    """Update the Slave's nmcli hotspot profile (_SLAVE_HOTSPOT_CON) to these
+    """Update the Slave's nmcli hotspot profile (resolved on the Slave: prefer
+    astromech-master-hotspot, fall back to legacy r2d2-master-hotspot) to these
     creds, via key-based SSH. `nmcli modify` rewrites the stored profile WITHOUT
     dropping the Slave's live connection, so the Slave keeps the old AP until the
     Master actually switches, then auto-rejoins with the new creds. Returns
@@ -735,7 +749,13 @@ def _push_slave_hotspot_creds(ssid: str, password: str) -> tuple[bool, str]:
     # fails with 'Insufficient privileges' as a normal user. The Slave grants
     # artoo passwordless sudo (same as the slave-restart path), so sudo -n works
     # and fails fast (non-interactive) if it ever isn't set up.
-    remote_cmd = f"sudo -n nmcli connection modify {_SLAVE_HOTSPOT_CON} 802-11-wireless.ssid {shlex.quote(ssid)}"
+    # Resolve the profile name ON THE SLAVE (prefer astromech-master-hotspot, fall
+    # back to legacy r2d2-master-hotspot) so this works on both fresh and pre-rename
+    # robots without the Master needing to know which one the Slave actually has.
+    _new, _legacy = _CON_SLAVE_HOTSPOT   # ('astromech-master-hotspot', 'r2d2-master-hotspot')
+    _pick = (f"CON=$(nmcli -t -f NAME connection show 2>/dev/null "
+             f"| grep -Fxq '{_new}' && echo {_new} || echo {_legacy})")
+    remote_cmd = f"{_pick}; sudo -n nmcli connection modify \"$CON\" 802-11-wireless.ssid {shlex.quote(ssid)}"
     if password:
         remote_cmd += f" wifi-sec.psk {shlex.quote(password)}"
     try:
@@ -817,8 +837,9 @@ def _set_hotspot_impl():
     if password:
         _write_key('hotspot', 'password', password)
 
-    # Update the NM connection
-    modify_cmd = [*_NMCLI_W, 'connection', 'modify', HOTSPOT_CON, 'ssid', ssid]
+    # Update the NM connection (tolerant profile name: astromech-* or legacy r2d2-*)
+    hotspot_con = _resolve_con(_CON_HOTSPOT)
+    modify_cmd = [*_NMCLI_W, 'connection', 'modify', hotspot_con, 'ssid', ssid]
     if password:
         modify_cmd += ['wifi-sec.psk', password]
     rc_mod, _, err_mod = _run(modify_cmd)
@@ -836,8 +857,8 @@ def _set_hotspot_impl():
         return jsonify(resp), 500
 
     # Restart the hotspot (clients disconnect then reconnect)
-    _run([*_NMCLI_W, 'connection', 'down', HOTSPOT_CON])
-    rc, _, err = _run([*_NMCLI_W, 'connection', 'up', HOTSPOT_CON])
+    _run([*_NMCLI_W, 'connection', 'down', hotspot_con])
+    rc, _, err = _run([*_NMCLI_W, 'connection', 'up', hotspot_con])
 
     if rc != 0:
         # B3: bring-up failed too — restore prev creds + try one nmcli modify
@@ -846,11 +867,11 @@ def _set_hotspot_impl():
         _write_key('hotspot', 'ssid', prev_ssid)
         if prev_pwd:
             _write_key('hotspot', 'password', prev_pwd)
-        restore_cmd = [*_NMCLI_W, 'connection', 'modify', HOTSPOT_CON, 'ssid', prev_ssid]
+        restore_cmd = [*_NMCLI_W, 'connection', 'modify', hotspot_con, 'ssid', prev_ssid]
         if prev_pwd:
             restore_cmd += ['wifi-sec.psk', prev_pwd]
         _run(restore_cmd)
-        _run([*_NMCLI_W, 'connection', 'up', HOTSPOT_CON])
+        _run([*_NMCLI_W, 'connection', 'up', hotspot_con])
         ok_rev, rev_detail = _push_slave_hotspot_creds(prev_ssid, prev_pwd)   # revert Slave to match the restored old Master AP
         resp = {'error': f'nmcli up failed: {err}', 'rolled_back': True}
         if not ok_rev:

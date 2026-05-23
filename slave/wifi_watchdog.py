@@ -29,7 +29,8 @@
 # ============================================================
 """
 WiFi Watchdog — Slave Pi 4B.
-Monitors connectivity to the Master hotspot (r2d2-master-hotspot).
+Monitors connectivity to the Master hotspot (astromech-master-hotspot, or the
+legacy r2d2-master-hotspot on robots installed before the rename — resolved at runtime).
 Level 1 : up to 5 reconnection attempts to the hotspot.
 Level 2 : fallback to home WiFi (netplan-wlan0-mywifi2).
 """
@@ -51,12 +52,13 @@ L1_WAIT_S           = 15         # wait after nmcli connection up (Level 1)
 L1_MAX_ATTEMPTS     = 5          # before switching to Level 2
 L2_WAIT_S           = 20         # wait after home WiFi connection
 HOME_CHECK_S        = 60         # check interval in HOME_FALLBACK state
-# Internal nmcli profile id — the Slave's connection to the Master AP. Intentionally
-# kept "r2d2-" (legacy, zero user visibility): it MUST match the profile created by
-# setup_slave_network.sh AND the Master's _SLAVE_HOTSPOT_CON. The reconnect below
-# (`nmcli connection up AP_PROFILE`) depends on this exact name — a rename mismatch
-# would strand the Slave off the hotspot. Not renamed by design (see settings_bp.py).
-AP_PROFILE          = "r2d2-master-hotspot"
+# nmcli profile ids. The Slave→Master AP profile is resolved at runtime
+# (WiFiWatchdog._ap_profile): prefer the new 'astromech-master-hotspot', fall back to
+# legacy 'r2d2-master-hotspot'. A robot installed before the rename keeps reconnecting
+# after a plain `git pull` — no manual nmcli migration needed. (Internal Linux profile
+# ids; the public SSID is already generic.)
+AP_PROFILE_NEW      = "astromech-master-hotspot"   # fresh installs (setup_slave_network.sh)
+AP_PROFILE_LEGACY   = "r2d2-master-hotspot"        # robots installed before the rename
 HOME_PROFILE        = "netplan-wlan0-mywifi2"
 IFACE               = "wlan0"
 
@@ -73,6 +75,7 @@ class WiFiWatchdog:
         Can be None — display calls are silently ignored.
         """
         self._display  = display
+        self._ap_cache = ''   # resolved Slave→Master AP profile id (see _ap_profile)
         self._stop_evt = threading.Event()
         self._thread   = threading.Thread(
             target=self._run,
@@ -88,6 +91,25 @@ class WiFiWatchdog:
     def stop(self) -> None:
         """Clean stop signal — returns without waiting for the thread to finish."""
         self._stop_evt.set()
+
+    def _ap_profile(self) -> str:
+        """Slave→Master AP nmcli profile id, resolved lazily: prefer AP_PROFILE_NEW,
+        fall back to AP_PROFILE_LEGACY. Cached on the first successful nmcli query; on
+        a transient query failure returns the legacy name (the safe guess for
+        pre-rename robots) WITHOUT caching, so it re-resolves on the next attempt."""
+        if self._ap_cache:
+            return self._ap_cache
+        try:
+            r = subprocess.run(['nmcli', '-t', '-f', 'NAME', 'connection', 'show'],
+                               capture_output=True, text=True, timeout=5)
+            names = set(r.stdout.split('\n')) if r.returncode == 0 else set()
+        except Exception:
+            names = set()
+        for cand in (AP_PROFILE_NEW, AP_PROFILE_LEGACY):
+            if cand in names:
+                self._ap_cache = cand
+                return cand
+        return AP_PROFILE_LEGACY
 
     # ------------------------------------------------------------------
     # Interne
@@ -127,7 +149,7 @@ class WiFiWatchdog:
                 # Disconnect + reconnect
                 self._nmcli_disconnect()
                 self._disp_net_ap(l1_attempt)
-                self._nmcli_up(AP_PROFILE)
+                self._nmcli_up(self._ap_profile())
 
                 # Wait then re-ping
                 if self._stop_evt.wait(L1_WAIT_S):
@@ -149,7 +171,7 @@ class WiFiWatchdog:
             elif state == HOME_FALLBACK:
                 if ping_ok:
                     log.info("WiFiWatchdog: Master back online — reconnecting to AP")
-                    self._nmcli_up(AP_PROFILE)
+                    self._nmcli_up(self._ap_profile())
                     if self._stop_evt.wait(L1_WAIT_S):
                         break
                     if self._ping_master():

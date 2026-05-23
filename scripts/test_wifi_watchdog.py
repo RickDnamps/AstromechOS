@@ -51,8 +51,21 @@ if sys.platform == 'win32':
 
 TIMEOUT_DETECTION_S = 45   # 30s cycle watchdog + 15s marge
 TIMEOUT_RECONNECT_S = 30   # after nmcli connection up
-AP_PROFILE          = "r2d2-master-hotspot"
-SLAVE_CONN_CHECK    = "r2d2-master-hotspot"
+def _resolve_ap_profile():
+    """Prefer the new 'astromech-master-hotspot' profile, fall back to legacy
+    'r2d2-master-hotspot' (robots installed before the rename)."""
+    try:
+        names = subprocess.run(['nmcli', '-t', '-f', 'NAME', 'connection', 'show'],
+                               capture_output=True, text=True, timeout=5).stdout.split('\n')
+    except Exception:
+        names = []
+    for cand in ('astromech-master-hotspot', 'r2d2-master-hotspot'):
+        if cand in names:
+            return cand
+    return 'r2d2-master-hotspot'
+
+AP_PROFILE          = _resolve_ap_profile()
+SLAVE_CONN_CHECK    = AP_PROFILE
 
 
 def _run(cmd, timeout=10):

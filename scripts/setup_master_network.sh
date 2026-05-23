@@ -74,8 +74,8 @@ LOCAL_CFG_EXAMPLE="${REPO_PATH}/master/config/local.cfg.example"
 HOTSPOT_SSID="$(bash "${REPO_PATH}/scripts/gen_hotspot_ssid.sh" 2>/dev/null || echo 'Astromech_Control')"
 HOTSPOT_PASS="r2d2droid"
 HOTSPOT_IP="192.168.4.1/24"
-HOTSPOT_CON="r2d2-hotspot"
-INTERNET_CON="r2d2-internet"
+HOTSPOT_CON="astromech-hotspot"
+INTERNET_CON="astromech-internet"
 
 # Colors
 RED='\033[0;31m'

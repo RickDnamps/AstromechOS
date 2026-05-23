@@ -63,7 +63,7 @@ set -e
 # Reopen stdin from the terminal if the script is run via pipe (curl | bash)
 [ -t 0 ] || exec < /dev/tty
 
-HOTSPOT_CON="r2d2-master-hotspot"
+HOTSPOT_CON="astromech-master-hotspot"
 
 # Colors
 RED='\033[0;31m'
