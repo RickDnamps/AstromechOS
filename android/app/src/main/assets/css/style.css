@@ -5569,6 +5569,13 @@ body[data-lock-mode="2"] .drive-wrapper {
    password fields) had the eye overlapping the placeholder text. */
 .pwd-input-wrap .input-text,
 .pwd-input-wrap .settings-input { padding-right: 38px; flex: 1; }
+/* Password rows: drop the strength meter / match indicator / caps warning to a
+   full-width line BELOW the input (indented under it) instead of cramming them
+   beside it as flex siblings (looked unaligned). */
+.settings-row.pwd-row { flex-wrap: wrap; }
+.settings-row.pwd-row .pwd-strength-meter,
+.settings-row.pwd-row .pwd-match-indicator,
+.settings-row.pwd-row .admin-pwd-caps { flex-basis: 100%; margin-left: 120px; }
 .pwd-toggle {
   position: absolute;
   right: 4px;

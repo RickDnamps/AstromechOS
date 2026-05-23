@@ -2370,7 +2370,7 @@
           </button>
         </section>
 
-        <section class="card settings-card">
+        <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">BACKUP / RESTORE</h2>
           <div class="settings-note">Full backup (.bck): configs, sounds, choreos, calibration, themes. Keep it safe — it contains the WiFi credentials + admin password.</div>
           <button id="btn-backup" class="btn" style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Create backup</button>
@@ -2391,10 +2391,10 @@
 
         </section>
 
-        <section class="card settings-card">
+        <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">CHANGE ADMIN PASSWORD</h2>
           <div class="settings-note">Secures the <strong>web / app interface</strong> only — the admin unlock used across Settings, VESC, servos and the Kids/Child&nbsp;Lock. The robot's SSH login (user <strong>artoo</strong>) is <strong>separate</strong> and is not changed here; change it on the Pi with <code>passwd</code> for full lockdown.</div>
-          <div class="settings-row">
+          <div class="settings-row pwd-row">
             <label class="settings-label">Current password</label>
             <!-- W1 fix 2026-05-16: show/hide eye toggle (reuse Network pattern) -->
             <div class="pwd-input-wrap">
@@ -2403,7 +2403,7 @@
               <button type="button" class="pwd-toggle" onclick="togglePwdVisibility('admin-pwd-current', this)" aria-label="Show password">👁</button>
             </div>
           </div>
-          <div class="settings-row">
+          <div class="settings-row pwd-row">
             <label class="settings-label">New password</label>
             <div class="pwd-input-wrap">
               <input type="password" id="admin-pwd-new" class="settings-input"
@@ -2419,7 +2419,7 @@
             </div>
             <div id="admin-pwd-caps-new" class="admin-pwd-caps hidden">⇪ CAPS LOCK IS ON</div>
           </div>
-          <div class="settings-row">
+          <div class="settings-row pwd-row">
             <label class="settings-label">Confirm</label>
             <div class="pwd-input-wrap">
               <input type="password" id="admin-pwd-confirm" class="settings-input"
