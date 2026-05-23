@@ -9709,6 +9709,12 @@ async function loadSettings() {
   const data = await api('/settings');
   if (!data) return;
 
+  // SSH username shown in the admin-password note — the REAL OS user the
+  // service runs as (artoo / C3PO / pi / …), never hardcoded.
+  if (data.system_user) {
+    document.querySelectorAll('.ssh-username').forEach(e => { e.textContent = data.system_user; });
+  }
+
   if (data.wifi) {
     const ssid = el('wifi-ssid');
     if (ssid) ssid.value = data.wifi.ssid || '';

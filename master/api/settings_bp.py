@@ -453,7 +453,15 @@ def get_settings():
 
     # B4: mask sensitive fields when no admin token
     _mask_ssid = lambda s: s if is_admin else (('•' * min(len(s), 8)) if s else '')
+    # Real Linux user the service runs as — NOT hardcoded, so the admin-password
+    # note shows the actual SSH login user (artoo / C3PO / pi / …) per install.
+    try:
+        import pwd as _pwd_mod
+        _sys_user = _pwd_mod.getpwuid(os.getuid()).pw_name
+    except Exception:
+        _sys_user = 'artoo'
     return jsonify({
+        'system_user': _sys_user if is_admin else '',
         'wifi': {
             'ssid':       _mask_ssid(wlan1_ssid),
             'connected':  wlan1_connected,
