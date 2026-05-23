@@ -5569,13 +5569,23 @@ body[data-lock-mode="2"] .drive-wrapper {
    password fields) had the eye overlapping the placeholder text. */
 .pwd-input-wrap .input-text,
 .pwd-input-wrap .settings-input { padding-right: 38px; flex: 1; }
-/* Password rows: drop the strength meter / match indicator / caps warning to a
-   full-width line BELOW the input (indented under it) instead of cramming them
-   beside it as flex siblings (looked unaligned). */
+/* Password rows. The real fix the operator flagged: the three labels have
+   different lengths ("Current password" > "New password" > "Confirm"), and
+   min-width:110px let the longer ones grow → the inputs started at different
+   x (and ended at different x). A FIXED label width makes all three inputs
+   align — same left start AND same right end. */
+.settings-row.pwd-row .settings-label {
+  width: 132px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+/* Keep the strength meter / match / caps on their own full-width line below the
+   input (indented under it), so every input is identical width — perfectly
+   aligned. */
 .settings-row.pwd-row { flex-wrap: wrap; }
 .settings-row.pwd-row .pwd-strength-meter,
 .settings-row.pwd-row .pwd-match-indicator,
-.settings-row.pwd-row .admin-pwd-caps { flex-basis: 100%; margin-left: 120px; }
+.settings-row.pwd-row .admin-pwd-caps { flex-basis: 100%; margin-left: 142px; }
 .pwd-toggle {
   position: absolute;
   right: 4px;

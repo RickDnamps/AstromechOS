@@ -9407,9 +9407,8 @@ class StatusPoller {
     this._setCockpitHbPill(data.heartbeat_ok);
     this._setCockpitUartPill(data.uart_ready, data.uart_health, data.uart_crc_errors ?? 0);
 
-    const sysver = el('system-version');
-    if (sysver) sysver.textContent =
-      `Master: v${data.version || '?'}  |  Uptime: ${data.uptime || '--'}`;
+    // (Master version + uptime removed from the System panel — already shown
+    // in the cockpit STATUS overview, no need to duplicate.)
 
     // Robot name — update header and pre-fill settings input
     if (data.robot_name) {
