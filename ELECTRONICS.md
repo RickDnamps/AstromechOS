@@ -100,7 +100,7 @@ flowchart TB
         BROWSER["Web Browser\nor Android App"]
     end
 
-    subgraph MASTER["🎩 R2-MASTER — Raspberry Pi 4B 4GB  (Dome — rotates with slip ring)"]
+    subgraph MASTER["🎩 MASTER — Raspberry Pi 4B 4GB  (Dome — rotates with slip ring)"]
         direction TB
         FLASK["🌐 Flask REST API\nport 5000"]
         ENGINE["🎬 Script Engine\n40 behavioral sequences"]
@@ -127,7 +127,7 @@ flowchart TB
         SR_SPARE["Spare\n4 wires"]
     end
 
-    subgraph SLAVE["🤖 R2-SLAVE — Raspberry Pi 4B 2GB  (Body — fixed)"]
+    subgraph SLAVE["🤖 SLAVE — Raspberry Pi 4B 2GB  (Body — fixed)"]
         direction TB
         UART_S["📡 UART Listener\n+ Watchdog 500ms"]
         WDG["🛑 Hardware Watchdog\nCuts VESCs if no heartbeat"]
@@ -307,7 +307,7 @@ Three independent timing watchdogs (below) plus a software safety lock and a pai
 flowchart TD
     subgraph WD1["🟡 Layer 1 — App Watchdog  (Master)"]
         APP_HB["App sends POST /heartbeat\nevery 200ms"]
-        APP_WD["AppWatchdog\n600ms timeout"]
+        APP_WD["AppWatchdog\n1.5s timeout"]
         APP_STOP["safe_stop()\nspeed ramp → 0"]
         APP_HB -->|"feeds"| APP_WD
         APP_WD -->|"timeout → triggers"| APP_STOP

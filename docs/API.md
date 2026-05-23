@@ -13,7 +13,7 @@ All POST endpoints accept and return `application/json`.
 | GET | `/status/version` | `{master: VERSION}` (legacy) |
 | GET | `/system/version` | `{version, commit, message, date}` — full git info (WOW polish I1, 2026-05-15) |
 | GET | `/system/deploy_status` | admin · `{local_sha, remote_sha, remote_msg, behind_count}` — git fetch + remote compare, cached 60s (WOW polish I1) |
-| POST | `/heartbeat` | App ↔ Master watchdog (every 200ms, 600ms timeout) |
+| POST | `/heartbeat` | App ↔ Master watchdog (every 200ms, 1.5s timeout) |
 
 **Key `/status` fields:** `robot_name` · `master_location` · `slave_location` · `version` · `uptime` · `temperature` · `heartbeat_ok` · `uart_ready` · `uart_health` (Slave stats or null) · `battery_voltage` · `vesc_ready` · `vesc_l_ok` · `vesc_r_ok` · `vesc_bench_mode` · `dome_servo_ready` · `servo_ready` · `choreo_playing` · `audio_playing` · `estop_active` · `stow_in_progress` · `drive_ramp_active` · `dome_ramp_active` · `lock_mode` · `kids_speed_limit` · `camera_found` · `camera_active` · `dome_hat_health [{addr,ok,errors}]` · `body_hat_health [{addr,ok,errors}]` · `motor_hat_health {addr,ok}` · `display_ready` · `display_port` · `bt_connected` · `bt_rssi` · `slave_temp` · `slave_cpu` · `master_wlan0` · `master_wlan1`
 

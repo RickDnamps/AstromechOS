@@ -186,7 +186,7 @@ r2d2/
 │   │   ├── body_servo_driver.py   — Body panels via UART SRV: commands
 │   │   ├── dome_motor_driver.py   — Dome rotation via UART D: commands
 │   │   └── bt_controller_driver.py — Linux evdev BT gamepad, Kids/Child Lock
-│   ├── api/                       — 8 Flask blueprints (60+ endpoints)
+│   ├── api/                       — 14 Flask blueprints (85+ endpoints)
 │   │   ├── audio_bp.py            — 317 sounds, categories, volume
 │   │   ├── motion_bp.py           — Drive + dome + lock mode enforcement
 │   │   ├── script_bp.py           — Sequences CRUD + run/stop
