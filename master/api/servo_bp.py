@@ -91,7 +91,7 @@ def _slave_host() -> str:
     """Read Slave host from local.cfg [slave] host — configurable per installation."""
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return 'artoo@' + cfg.get('slave', 'host', fallback='r2-slave.local')
+    return 'artoo@' + cfg.get('slave', 'host', fallback='astromech-slave.local')
 
 def _read_hat_addresses() -> tuple[list, list]:
     """Returns (master_hat_addrs, slave_hat_addrs) from local.cfg [i2c_servo_hats].

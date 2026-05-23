@@ -33,7 +33,7 @@
 # Ensuite: git pull sur le PC de dev → Claude lit les fichiers
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE=artoo@r2-slave.local
+SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 OUT_DIR=$REPO/debug/$TIMESTAMP
 SLAVE_OUT=$OUT_DIR/slave
@@ -145,4 +145,4 @@ echo "=== Fait ==="
 echo "Fichiers dans: $OUT_DIR"
 echo ""
 echo "To retrieve on your Windows PC (Git Bash):"
-echo "  scp -r artoo@r2-master.local:$REPO/debug/$TIMESTAMP/ \"J:/R2-D2_Build/software/debug/\""
+echo "  scp -r artoo@astromech-master.local:$REPO/debug/$TIMESTAMP/ \"J:/R2-D2_Build/software/debug/\""

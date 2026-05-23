@@ -77,7 +77,7 @@ err()   { echo -e "${RED}[ERR ]${NC}  $*"; exit 1; }
 
 # Check that we are on the Slave (not the Master)
 HOSTNAME=$(hostname)
-if [ "$HOSTNAME" = "r2-master" ]; then
+if [ "$HOSTNAME" = "astromech-master" ]; then
     err "This script must be run on the R2-SLAVE, not on the Master! (hostname: $HOSTNAME)"
 fi
 
@@ -254,7 +254,7 @@ echo "  Slave installation complete ✓"
 echo "============================================================"
 echo ""
 echo "  After reboot:"
-echo "    The Slave connects to the AstromechOS hotspot on the Master."
+echo "    The Slave connects to the hotspot (Astromech_Control_XXXX, unique per robot) on the Master."
 echo ""
 echo "  On the Master, run the first deployment:"
 echo "    bash $REPO_PATH/scripts/deploy.sh --first-install"

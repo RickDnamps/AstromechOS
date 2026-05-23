@@ -30,7 +30,7 @@
 # ============================================================
 # -*- coding: utf-8 -*-
 """
-Find the IP of r2-master from Windows.
+Find the IP of astromech-master from Windows.
 Tries mDNS first, then SSH scan on the local subnet.
 Usage: python3 scripts/find_master.py
 """
@@ -43,7 +43,7 @@ if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 
-def _try_mdns(hostname='r2-master.local', timeout=2) -> str | None:
+def _try_mdns(hostname='astromech-master.local', timeout=2) -> str | None:
     try:
         socket.setdefaulttimeout(timeout)
         ip = socket.gethostbyname(hostname)
@@ -80,7 +80,7 @@ def _scan_ssh(prefix: str, port=22, timeout=0.5) -> list[str]:
 
 def find_master() -> str | None:
     # 1. mDNS attempt
-    print('Trying mDNS r2-master.local...', end=' ', flush=True)
+    print('Trying mDNS astromech-master.local...', end=' ', flush=True)
     ip = _try_mdns()
     if ip:
         print(f'found → {ip}')
@@ -101,11 +101,11 @@ def find_master() -> str | None:
 
     # Single SSH host → most likely the Pi
     if len(hosts) == 1:
-        print(f'→ r2-master probably at {hosts[0]}')
+        print(f'→ astromech-master probably at {hosts[0]}')
         return hosts[0]
 
     # Multiple hosts → display the list, let the user choose
-    print('Multiple SSH hosts found. Which one is r2-master?')
+    print('Multiple SSH hosts found. Which one is astromech-master?')
     for i, h in enumerate(hosts):
         print(f'  [{i}] {h}')
     return None
@@ -114,7 +114,7 @@ def find_master() -> str | None:
 if __name__ == '__main__':
     ip = find_master()
     if ip:
-        print(f'\nr2-master IP: {ip}')
+        print(f'\nastromech-master IP: {ip}')
         sys.exit(0)
     else:
         print('\nNot found')

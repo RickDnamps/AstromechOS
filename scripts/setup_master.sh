@@ -74,7 +74,7 @@ err()   { echo -e "${RED}[ERR ]${NC}  $*"; exit 1; }
 
 # Check that we are on the Master (not the Slave)
 HOSTNAME=$(hostname)
-if [ "$HOSTNAME" = "r2-slave" ]; then
+if [ "$HOSTNAME" = "astromech-slave" ]; then
     err "This script must be run on the R2-MASTER, not on the Slave! (hostname: $HOSTNAME)"
 fi
 
@@ -195,12 +195,12 @@ SSH_KEY="/home/$USER/.ssh/id_ed25519"
 if [ -f "$SSH_KEY" ]; then
     ok "SSH key already present: $SSH_KEY"
 else
-    sudo -u "$USER" ssh-keygen -t ed25519 -C "r2-master" -f "$SSH_KEY" -N ""
+    sudo -u "$USER" ssh-keygen -t ed25519 -C "astromech-master" -f "$SSH_KEY" -N ""
     ok "SSH key generated: $SSH_KEY"
 fi
 echo ""
 echo -e "  ${YEL}Public key to copy to the Slave (after Slave installation):${NC}"
-echo "    ssh-copy-id artoo@r2-slave.local"
+echo "    ssh-copy-id artoo@astromech-slave.local"
 echo "  (or via setup_ssh_keys.sh once the Slave is connected to the hotspot)"
 echo ""
 
@@ -226,7 +226,7 @@ echo "  Repo    : $REPO_PATH"
 echo "  Version : $(cat $REPO_PATH/VERSION)"
 echo ""
 echo "  After reboot:"
-echo "    → Connect to the AstromechOS hotspot"
+echo "    → Connect to the hotspot (Astromech_Control_XXXX, unique per robot)"
 echo "    → SSH: ssh artoo@192.168.4.1"
 echo "    → Check: sudo systemctl status astromech-master"
 echo ""

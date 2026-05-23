@@ -30,7 +30,7 @@
 # ============================================================
 # update.sh — Full AstromechOS update: git pull + rsync Slave + restart everything
 # Usage: bash scripts/update.sh
-# Run on the Master (r2-master.local)
+# Run on the Master (astromech-master.local)
 #
 # This script:
 #   1. Git pull (if wlan1 available)
@@ -41,7 +41,9 @@
 #   6. Verify that services are active
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE=artoo@r2-slave.local
+# Slave host: env override → local.cfg [slave] host (works for any hostname/IP) → generic default.
+SLAVE_HOST="${SLAVE_HOST:-$(awk -F= '/^\[/{s=$0} s=="[slave]" && /^[[:space:]]*host[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$REPO/master/config/local.cfg" 2>/dev/null)}"
+SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 VERSION_FILE=$REPO/VERSION
 ERRORS=0

@@ -82,7 +82,7 @@ class DeployController:
         operator's /settings/config changes take effect immediately."""
         c = configparser.ConfigParser()
         c.read([MAIN_CFG, LOCAL_CFG])
-        self._slave_host    = c.get('slave',  'host',     fallback='r2-slave.local')
+        self._slave_host    = c.get('slave',  'host',     fallback='astromech-slave.local')
         self._github_url    = c.get('github', 'repo_url', fallback='')
         self._github_branch = c.get('github', 'branch',   fallback='main')
 

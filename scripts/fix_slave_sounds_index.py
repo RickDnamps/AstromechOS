@@ -8,7 +8,7 @@ MASTER_HOST  = '192.168.2.104'
 MASTER_USER  = 'artoo'
 MASTER_PASS  = 'deetoo'
 MASTER_INDEX = '/home/artoo/astromechos/master/sounds_index.json'
-SLAVE_HOST   = 'r2-slave.local'
+SLAVE_HOST   = 'astromech-slave.local'
 SLAVE_INDEX  = '/home/artoo/astromechos/slave/sounds_index.json'
 
 c = paramiko.SSHClient()

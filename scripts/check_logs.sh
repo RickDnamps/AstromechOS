@@ -33,8 +33,8 @@
 # Options: --tail 50   (number of log lines, default 80)
 #          --servo     (envoie aussi une commande test servo via API)
 
-MASTER=artoo@r2-master.local
-SLAVE=artoo@r2-slave.local
+MASTER=artoo@${MASTER_HOST:-astromech-master.local}
+SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
 MASTER_IP=192.168.4.1
 TAIL=${2:-80}
 

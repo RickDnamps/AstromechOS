@@ -106,7 +106,7 @@ def _iface_ip(iface: str) -> str | None:
 
 
 def _slave_host() -> str:
-    return _cached_cfg().get('slave', 'host', fallback='r2-slave.local')
+    return _cached_cfg().get('slave', 'host', fallback='astromech-slave.local')
 
 
 def _battery_cells() -> int:

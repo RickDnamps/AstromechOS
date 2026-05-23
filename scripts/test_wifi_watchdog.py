@@ -32,7 +32,7 @@
 """
 Test WiFi Watchdog — non-destructive validation.
 Run from the Master via SSH on the Slave:
-  ssh artoo@r2-slave.local "python3 /home/artoo/astromechos/scripts/test_wifi_watchdog.py"
+  ssh artoo@astromech-slave.local "python3 /home/artoo/astromechos/scripts/test_wifi_watchdog.py"
 
 Steps:
   1. Verify that the Slave is connected to the Master hotspot (pre-condition)
@@ -125,15 +125,15 @@ def restore_connection():
         print(f"  ⚠ nmcli connection up rc={rc}: {err}")
 
     # Verify ping to Master
-    print(f"  → Checking ping r2-master.local ({TIMEOUT_RECONNECT_S}s)...")
+    print(f"  → Checking ping astromech-master.local ({TIMEOUT_RECONNECT_S}s)...")
     start = time.monotonic()
     while time.monotonic() - start < TIMEOUT_RECONNECT_S:
-        rc, _, _ = _run("ping -c 1 -W 2 r2-master.local", timeout=4)
+        rc, _, _ = _run("ping -c 1 -W 2 astromech-master.local", timeout=4)
         if rc == 0:
-            print("  ✓ Ping r2-master.local : OK")
+            print("  ✓ Ping astromech-master.local : OK")
             return True
         time.sleep(3)
-    print("  ✗ Ping r2-master.local : TIMEOUT")
+    print("  ✗ Ping astromech-master.local : TIMEOUT")
     return False
 
 

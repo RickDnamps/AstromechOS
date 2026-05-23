@@ -70,7 +70,7 @@ _SECRET_RE = re.compile(
 def _slave_host() -> str:
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('slave', 'host', fallback='r2-slave.local')
+    return cfg.get('slave', 'host', fallback='astromech-slave.local')
 
 
 @diagnostics_bp.get('/diagnostics/logs')

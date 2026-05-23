@@ -66,7 +66,7 @@ from shared.paths import LOCAL_CFG, SLAVE_CFG as _SLAVE_CFG
 def _resolve_slave_ssh_target() -> str:
     """Return 'artoo@<host>' where <host> comes from local.cfg, or a
     sensible default if the config is missing."""
-    host = _read_cfg().get('slave', 'host', fallback='r2-slave.local')
+    host = _read_cfg().get('slave', 'host', fallback='astromech-slave.local')
     return f'artoo@{host}'
 _ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
 # User-reported 2026-05-15: post-B-82 the pre-shipped SVG icons
@@ -486,7 +486,7 @@ def get_settings():
                                   if cfg.get('github', 'auto_pull_on_boot', fallback='true').lower() in ('true','false','yes','no','on','off','0','1') else True)(),
         },
         'slave': {
-            'host': cfg.get('slave', 'host', fallback='r2-slave.local') if is_admin else '',
+            'host': cfg.get('slave', 'host', fallback='astromech-slave.local') if is_admin else '',
         },
         'hardware': {
             'master_hats':       cfg.get('i2c_servo_hats', 'master_hats', fallback='0x40'),

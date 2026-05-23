@@ -33,7 +33,7 @@
 # Ctrl+C to stop tests
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE=artoo@r2-slave.local
+SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
 
 # ──────────────────────────────────────────────
 # MASTER — I2C check + install + test

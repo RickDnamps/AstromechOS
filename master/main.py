@@ -452,7 +452,7 @@ def main() -> None:
     def _slave_health_poll() -> None:
         import urllib.request
         import json as _json
-        slave_host = cfg.get('slave', 'host', fallback='r2-slave.local')
+        slave_host = cfg.get('slave', 'host', fallback='astromech-slave.local')
         url = f'http://{slave_host}:5001/uart_health'
         log.info("Slave health poll: %s", url)
         while True:

@@ -30,14 +30,14 @@
 # ============================================================
 # setup_ssh_keys.sh — SSH sans mot de passe R2-Master → R2-Slave
 # Run from the R2-Master (Pi 4B) after the hotspot is active
-# and the R2-Slave is connected (hostname: r2-slave.local)
+# and the R2-Slave is connected (hostname: astromech-slave.local)
 #
 # Usage: bash setup_ssh_keys.sh
 
 set -e
 
 SLAVE_USER="artoo"
-SLAVE_HOST="r2-slave.local"
+SLAVE_HOST="astromech-slave.local"
 
 echo "=== SSH key generation (if absent) ==="
 if [ ! -f ~/.ssh/id_ed25519 ]; then

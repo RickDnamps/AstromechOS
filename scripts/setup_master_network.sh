@@ -335,7 +335,7 @@ if ! command -v avahi-daemon &>/dev/null; then
     apt-get install -y avahi-daemon -qq
 fi
 systemctl enable --now avahi-daemon
-ok "avahi-daemon active (r2-master.local / r2-slave.local)"
+ok "avahi-daemon active (astromech-master.local / astromech-slave.local)"
 
 # =============================================================================
 # SUMMARY

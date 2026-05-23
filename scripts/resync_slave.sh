@@ -33,7 +33,9 @@
 # Usage: bash scripts/resync_slave.sh
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE=artoo@r2-slave.local
+# Slave host: env override → local.cfg [slave] host (works for any hostname/IP) → generic default.
+SLAVE_HOST="${SLAVE_HOST:-$(awk -F= '/^\[/{s=$0} s=="[slave]" && /^[[:space:]]*host[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$REPO/master/config/local.cfg" 2>/dev/null)}"
+SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 VERSION_FILE=$REPO/VERSION
 ERRORS=0

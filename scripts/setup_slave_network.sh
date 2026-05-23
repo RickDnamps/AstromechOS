@@ -40,8 +40,8 @@
 # What it does:
 #   1. Prompts for the R2-Master hotspot SSID and password
 #   2. Replaces the home WiFi connection (wlan0) with the Master hotspot
-#   3. Configures the hostname r2-slave
-#   4. Enables avahi-daemon for r2-slave.local resolution
+#   3. Configures the hostname astromech-slave
+#   4. Enables avahi-daemon for astromech-slave.local resolution
 #
 # End result:
 #   wlan0  → R2-Master Hotspot  192.168.4.x  (DHCP assigned by Master)
@@ -197,20 +197,20 @@ info "Step 5 — Hostname and .local resolution..."
 
 # Check/fix the hostname
 CURRENT_HOSTNAME=$(hostname)
-if [[ "$CURRENT_HOSTNAME" != "r2-slave" ]]; then
-    hostnamectl set-hostname r2-slave
+if [[ "$CURRENT_HOSTNAME" != "astromech-slave" ]]; then
+    hostnamectl set-hostname astromech-slave
     # Update /etc/hosts
-    sed -i "s/127.0.1.1.*/127.0.1.1\tr2-slave/" /etc/hosts
-    ok "Hostname configured: r2-slave"
+    sed -i "s/127.0.1.1.*/127.0.1.1\tastromech-slave/" /etc/hosts
+    ok "Hostname configured: astromech-slave"
 else
-    ok "Hostname already correct: r2-slave"
+    ok "Hostname already correct: astromech-slave"
 fi
 
 if ! command -v avahi-daemon &>/dev/null; then
     apt-get install -y avahi-daemon -qq
 fi
 systemctl enable --now avahi-daemon
-ok "avahi-daemon active (r2-slave.local)"
+ok "avahi-daemon active (astromech-slave.local)"
 
 # =============================================================================
 # SUMMARY
@@ -224,12 +224,12 @@ echo -e "  ${BLU}wlan0${NC} → R2-Master Hotspot (on reboot)"
 echo    "         SSID     : ${HOTSPOT_SSID}"
 echo    "         IP       : 192.168.4.x (DHCP from Master)"
 echo ""
-echo -e "  ${BLU}Hostname${NC}: r2-slave  →  r2-slave.local"
+echo -e "  ${BLU}Hostname${NC}: astromech-slave  →  astromech-slave.local"
 echo ""
 echo -e "  ${YEL}Next steps:${NC}"
 echo    "    1. sudo reboot"
 echo    "    2. From the Master, verify:"
-echo    "       ping r2-slave.local"
-echo    "       ssh artoo@r2-slave.local"
+echo    "       ping astromech-slave.local"
+echo    "       ssh artoo@astromech-slave.local"
 echo    "    3. Continue installation: HOWTO.md Step 3"
 echo ""

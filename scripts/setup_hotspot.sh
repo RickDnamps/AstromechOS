@@ -30,7 +30,7 @@
 # ============================================================
 # setup_hotspot.sh — Configure wlan0 as an access point on Pi 4B
 # wlan1 = external USB adapter → internet (git pull)
-# wlan0 = interface interne → hotspot "AstromechOS" 192.168.4.x
+# wlan0 = interface interne → hotspot "Astromech_Control_XXXX" 192.168.4.x
 #
 # Usage: sudo bash setup_hotspot.sh
 

@@ -40,7 +40,7 @@ password = r2d2droid
 
 [slave]
 # Hostname du Slave sur le hotspot (username: artoo)
-host = r2-slave.local
+host = astromech-slave.local
 
 [admin]
 # Dashboard admin password (protects SERVO / VESC / CONFIG / CHOREO tabs)

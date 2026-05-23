@@ -43,7 +43,7 @@ import re
 log = logging.getLogger(__name__)
 
 # Parameters
-PING_HOST           = "r2-master.local"
+PING_HOST           = "192.168.4.1"
 PING_RETRIES        = 3          # consecutive pings before declaring loss
 PING_TIMEOUT_S      = 2          # timeout per ping
 CHECK_INTERVAL_S    = 30         # normal check interval

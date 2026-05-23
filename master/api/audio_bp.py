@@ -58,7 +58,7 @@ from master.api.audio_reconcile import reconcile_index, should_abort_reconcile
 def _slave_host() -> str:
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('slave', 'host', fallback='r2-slave.local')
+    return cfg.get('slave', 'host', fallback='astromech-slave.local')
 
 
 def _slave_sftp_creds() -> dict:
@@ -78,7 +78,7 @@ def _slave_sftp_creds() -> dict:
     cfg = configparser.ConfigParser()
     cfg.read([_MAIN_CFG, _LOCAL_CFG])
     host = cfg.get('slave', 'host', fallback=None) \
-        or cfg.get('deploy', 'slave_host', fallback='r2-slave.local')
+        or cfg.get('deploy', 'slave_host', fallback='astromech-slave.local')
     user = cfg.get('deploy', 'slave_user', fallback='artoo')
     pwd  = cfg.get('deploy', 'slave_password', fallback=None) or None
     creds = {'hostname': host, 'username': user, 'timeout': 8.0}

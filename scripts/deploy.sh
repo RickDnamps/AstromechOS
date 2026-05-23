@@ -39,7 +39,9 @@ set -e
 
 REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
 SLAVE_USER="artoo"
-SLAVE_HOST="r2-slave.local"
+# Slave host: env override → local.cfg [slave] host (works for any hostname/IP) → generic default.
+SLAVE_HOST="${SLAVE_HOST:-$(awk -F= '/^\[/{s=$0} s=="[slave]" && /^[[:space:]]*host[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$REPO_PATH/master/config/local.cfg" 2>/dev/null)}"
+SLAVE_HOST="${SLAVE_HOST:-astromech-slave.local}"
 SLAVE_REPO="$REPO_PATH"
 VERSION_FILE="$REPO_PATH/VERSION"
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
@@ -82,7 +84,7 @@ fi
 echo "[2/4] Checking Slave connection (${SLAVE_HOST})..."
 if ! ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" echo "ping" > /dev/null 2>&1; then
     echo "ERROR: Cannot reach the Slave ${SLAVE_HOST}"
-    echo "       Check that the R2-Slave is connected to the AstromechOS hotspot"
+    echo "       Check that the R2-Slave is connected to the hotspot (Astromech_Control_XXXX, unique per robot)"
     exit 1
 fi
 echo "      Slave reachable OK"

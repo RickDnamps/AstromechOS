@@ -34,10 +34,10 @@
 #
 # If /dev/ttyAMA0 is in use (systemd service), stop it first:
 #   sudo systemctl stop astromech-master.service astromech-monitor.service
-#   ssh artoo@r2-slave.local "sudo systemctl stop astromech-slave.service"
+#   ssh artoo@astromech-slave.local "sudo systemctl stop astromech-slave.service"
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE=artoo@r2-slave.local
+SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
 
 echo "=== Nettoyage ==="
 ssh $SLAVE "pkill -9 -f 'slave.main' 2>/dev/null; true"
