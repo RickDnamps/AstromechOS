@@ -187,16 +187,16 @@ r2d2/
 │   │   ├── dome_motor_driver.py   — Dome rotation via UART D: commands
 │   │   └── bt_controller_driver.py — Linux evdev BT gamepad, Kids/Child Lock
 │   ├── api/                       — 14 Flask blueprints (85+ endpoints)
-│   │   ├── audio_bp.py            — 317 sounds, categories, volume
+│   │   ├── audio_bp.py            — 324 sounds, categories, volume
 │   │   ├── motion_bp.py           — Drive + dome + lock mode enforcement
-│   │   ├── script_bp.py           — Sequences CRUD + run/stop
+│   │   ├── bt_bp.py               — Bluetooth gamepad + custom button actions
 │   │   ├── choreo_bp.py           — Choreography CRUD + play/stop
 │   │   ├── teeces_bp.py           — Lights control + animation trigger
 │   │   ├── servo_bp.py            — 22 panels open/close + calibration save
 │   │   ├── settings_bp.py         — WiFi, hotspot, config, lights hot-swap
 │   │   ├── status_bp.py           — System status, e-stop, lock, reboot
 │   │   └── vesc_bp.py             — VESC telemetry, power scale, CAN scan
-│   ├── sequences/                 — 40 built-in behavioral sequences (.scr)
+│   ├── choreographies/            — 48 built-in behavioral sequences (.chor JSON)
 │   ├── config/
 │   │   ├── main.cfg               — Default configuration
 │   │   ├── local.cfg              — Local overrides (gitignored)
@@ -207,7 +207,7 @@ r2d2/
 │   ├── main.py
 │   ├── watchdog.py                — UART heartbeat watchdog → cuts VESCs at 500ms
 │   └── drivers/
-│       ├── audio_driver.py        — mpg123 + sounds_index.json (317 sounds)
+│       ├── audio_driver.py        — mpg123 + sounds_index.json (324 sounds)
 │       ├── vesc_driver.py         — VESC ERPM propulsion (native CRC-16, no pyvesc)
 │       ├── body_servo_driver.py   — PCA9685 @ 0x41
 │       └── display_driver.py      — RP2040 GC9A01 LCD via /dev/ttyACM*
@@ -226,28 +226,33 @@ r2d2/
 
 ---
 
-## 📜 Sequence Format (.scr)
+## 🎬 Sequence Format (.chor)
 
-Plain CSV files in `master/sequences/` — easy to read, write, and share. The **CHOREO tab** is the primary authoring tool for new content; `.scr` files remain for legacy behavioral sequences.
+Behavioral sequences are **`.chor` files** — a multi-track JSON timeline in `master/choreographies/`, authored visually in the **CHOREO tab** (drag blocks onto lanes, set timing, live preview). Two top-level keys:
 
+- **`meta`** — `label`, `emoji`, `category`, `duration`, `audio_channels_required`, `author`, `version`…
+- **`tracks`** — keyed by lane, each an array of time-stamped events (field `t` = seconds from start):
+  - `audio` — multichannel sound (channel `ch`, `file` or `RANDOM:<category>`, `volume`, `priority`)
+  - `propulsion` (drive L/R) · `dome` (dome rotation)
+  - `dome_servos` · `body_servos` · `arm_servos` — panel & arm open/close angles + speed
+  - `lights` — Teeces / AstroPixels+ animations & text
+
+```json
+{
+  "meta": { "label": "Curious", "emoji": "🤔", "category": "emotion",
+            "duration": 12.92, "audio_channels_required": 2 },
+  "tracks": {
+    "audio": [
+      { "t": 0,   "action": "play", "ch": 0, "file": "RANDOM:proc", "volume": 85 },
+      { "t": 2.8, "action": "play", "ch": 0, "file": "RANDOM:ooh",  "volume": 85 }
+    ]
+  }
+}
 ```
-# Full sequence example
-sound,RANDOM,happy                     # random happy sound
-servo,Servo_M0,open,40,8             # open Dome_Panel_1 to 40° at speed 8
-teeces,anim,11                         # Imperial March animation
-sleep,1.5                              # wait 1.5 seconds
-servo,all,open                         # all dome panels simultaneously
-sleep,random,0.5,2.0                   # random pause 0.5–2s
-teeces,text,R2-D2,fld_both            # scroll text on FLD top + bottom
-servo,all,close                        # close everything
-motion,STOP                            # ensure motors stopped
-```
 
-**Servo IDs:** `Servo_M0`–`Servo_M10` = Master HAT channels 0–10 (dome). `Servo_S0`–`Servo_S10` = Slave HAT channels 0–10 (body).
+The event-driven **ChoreoPlayer** (50 ms tick) schedules every track in sync — body-servo (UART) events are advanced slightly ahead of dome-servo (I2C) events to absorb the serial-link latency (tunable via the UART RTT calibration tool). Servo events use per-panel calibrated angles automatically — calibrate once in the Servo tab, every sequence respects it.
 
-Available commands: `sleep` · `sound` · `servo` · `dome` · `motion` · `teeces`
-
-Sequences use per-panel calibrated angles automatically — calibrate once in the Servo tab, every sequence respects it.
+> **Lineage — why it feels familiar:** the `.chor` format was **inspired by the `.scr` CSV script format** from [dpoulson's r2_control](https://github.com/dpoulson/r2_control). The bundled sequences were auto-converted from the original `.scr` files (you'll still see `"source": "curious.scr"` / `"author": "scr_to_chor converter"` in their `meta`), but **`.scr` is no longer used at runtime** — everything is `.chor` now, edited in the visual timeline.
 
 ---
 
