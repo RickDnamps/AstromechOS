@@ -432,6 +432,8 @@ ssh artoo@r2-slave.local sudo systemctl status astromech-slave
 ssh artoo@r2-slave.local sudo journalctl -u astromech-slave -f
 ```
 
+> **Note:** older logs may show `astromech-master.service: Failed with result 'exit-code'` lines — one per deploy/restart. These were **not** crashes; the service stops, exits, and restarts immediately. They were caused by a shutdown-handler bug (fixed) and are harmless. A clean stop now logs `Master shut down cleanly` + `Deactivated successfully`.
+
 ### Collect debug info
 
 ```bash
