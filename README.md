@@ -181,6 +181,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 💾 **Backup & Restore** | One-click full backup of all robot state (configs · sounds · choreos · calibrations · custom themes) to a downloadable `.bck` · Restore = total replacement + auto-reboot, recovers a dead SD card "like before" · network config preserved so master↔slave never lose each other · hardened (anti zip-slip + anti-RCE allow-list) |
 | 🔄 **Self-healing audio index** | The sound index reconciles against the files actually on the robot (drops ghosts, files unknown ones under *others*) on boot + on demand — a failed upload never leaves a phantom |
 | 🛜 **Per-robot hotspot + safe network changes** | Each robot's hotspot gets a unique SSID (`Astromech_Control_XXXX` from the Pi serial) so multiple droids don't collide at expos · changing the hotspot SSID/password updates the **Slave first** and aborts if it's unreachable, so the Slave never gets stranded — and UART keeps drive/safety alive across the WiFi micro-gap (live-tested) |
+| 🔐 **Clear two-password model** | The **admin password** unlocks the web/app interface only (Settings + the Choreo/Audio/Sequence editors) and is changed in-app; the **Linux/SSH login** is completely separate and untouched · all UI text shows your *real* system username, never a hardcoded one |
 
 ---
 

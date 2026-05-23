@@ -239,6 +239,15 @@ Connect your device to Wi-Fi **AstromechOS**, then open: **http://192.168.4.1:50
 
 Click the **🔒 ADMIN** button in the tab bar (beside the ⚙️ gear) to unlock admin mode from any tab — no need to navigate to Settings first. Enter the password once, and admin stays active for 5 minutes of inactivity. The timer resets on any mouse movement, click, or key press, so you won't be logged out while actively working. Click the button again (now 🔓) to lock immediately.
 
+### Changing the admin password (Admin → Config → System)
+
+There are **two separate passwords** on the robot — don't confuse them:
+
+- 🔑 **Interface Admin Password** — the one you type to unlock this dashboard/app (Settings + the Choreo, Audio & Sequence editors). Change it in **System → Change Admin Password**. This only updates the dashboard password; it does **not** touch your Linux login.
+- 🖥️ **Linux / SSH Password** — the password for the Pi's system account (the user you created at install, e.g. `artoo`). It's completely separate and is **not** changed from the dashboard. To change it, SSH in and run `passwd`. The dashboard always shows your *real* username (it's read from the system, never hardcoded), so the on-screen "Forgot password?" recovery steps point at the correct user and config path for your install.
+
+So changing the admin password locks down the web interface but leaves SSH as-is — change the Linux password too if you want to fully secure remote access.
+
 ### Adding sounds
 
 In admin mode, the **Audio tab** shows an upload zone. Drag an MP3 onto it (or click to browse), choose a category, and upload. The sound is saved and synced to the Slave Pi automatically — no SSH, no restart, available immediately.
