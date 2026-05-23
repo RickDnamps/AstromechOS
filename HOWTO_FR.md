@@ -1,4 +1,4 @@
-# R2-D2 — Guide d'installation
+# AstromechOS — Guide d'installation
 
 > 🇬🇧 **[Read in English →](HOWTO.md)** *(recommended — more up to date)*
 
@@ -69,12 +69,12 @@ Utiliser **Raspberry Pi Imager** → cliquer ⚙️ Options avant d'écrire :
 |-----------|--------|-------|
 | Username | `artoo` | `artoo` |
 | Password | (ton choix — même des deux côtés recommandé) | idem |
-| Hostname | `r2-master` | `r2-slave` |
+| Hostname | `astromech-master` | `astromech-slave` |
 | WiFi | ton réseau maison | ton réseau maison |
 | SSH | activé | activé |
 
 Les deux Pi démarrent connectés à ton WiFi maison sur wlan0.
-Trouver leurs IPs dans ton routeur, ou utiliser `r2-master.local` / `r2-slave.local`.
+Trouver leurs IPs dans ton routeur, ou utiliser `astromech-master.local` / `astromech-slave.local`.
 
 ---
 
@@ -83,7 +83,7 @@ Trouver leurs IPs dans ton routeur, ou utiliser `r2-master.local` / `r2-slave.lo
 Brancher la clé USB WiFi dans le Master, puis se connecter en SSH depuis le PC :
 
 ```bash
-ssh artoo@r2-master.local
+ssh artoo@astromech-master.local
 # ou : ssh artoo@<IP_MASTER>  si .local ne résout pas
 ```
 
@@ -108,7 +108,7 @@ Le script gère tout automatiquement :
 - Activation UART matériel + I2C
 - Dépendances Python
 - `local.cfg` créé depuis le template exemple
-- Reconfiguration WiFi : wlan0 → hotspot `AstromechOS` (192.168.4.1), wlan1 → internet maison
+- Reconfiguration WiFi : wlan0 → hotspot `Astromech_Control_XXXX` (192.168.4.1), wlan1 → internet maison
 - Génération clé SSH Ed25519 (pour rsync Master → Slave)
 - Services systemd installés et activés
 
@@ -122,13 +122,13 @@ Après le reboot, le WiFi du Master a changé :
 
 ```
 Avant :  wlan0 → WiFi maison  (accessible depuis ton PC)
-Après :  wlan0 → hotspot AstromechOS  192.168.4.1  (seulement depuis le hotspot)
+Après :  wlan0 → hotspot `Astromech_Control_XXXX`  192.168.4.1  (seulement depuis le hotspot)
          wlan1 → WiFi maison  (nouvelle IP assignée par le routeur)
 ```
 
 Ton PC est encore sur le réseau maison, donc **deux options** pour se reconnecter :
 
-**Option A — Connecter le PC au hotspot AstromechOS (recommandé)**
+**Option A — Connecter le PC au hotspot `Astromech_Control_XXXX` (recommandé)**
 
 1. Sur ton PC, se connecter au réseau WiFi : **AstromechOS**
 2. SSH avec l'IP fixe du hotspot :
@@ -141,8 +141,8 @@ Ton PC est encore sur le réseau maison, donc **deux options** pour se reconnect
 
 Le wlan1 du Master reçoit une nouvelle IP DHCP depuis ton routeur.
 La trouver via :
-- La page admin du routeur (chercher `r2-master`)
-- Essayer : `ssh artoo@r2-master.local` (fonctionne sur Linux/Mac via mDNS, peu fiable sur Windows)
+- La page admin du routeur (chercher `astromech-master`)
+- Essayer : `ssh artoo@astromech-master.local` (fonctionne sur Linux/Mac via mDNS, peu fiable sur Windows)
 - Un scanner réseau (ex : Fing sur téléphone, Angry IP Scanner sur PC)
 
 > L'option A est plus simple et c'est ce qu'on utilise en permanence — l'IP 192.168.4.1 est fixe pour toujours.
@@ -155,7 +155,7 @@ La trouver via :
 **Pendant que le Slave est encore sur le WiFi maison** (avant de rejoindre le hotspot), se connecter en SSH :
 
 ```bash
-ssh artoo@r2-slave.local
+ssh artoo@astromech-slave.local
 # ou : ssh artoo@<IP_SLAVE>
 ```
 
@@ -170,7 +170,7 @@ Le script gère tout automatiquement :
 - Fix UART (`disable-bt`)
 - Activation UART matériel + I2C
 - Dépendances Python (pyserial, smbus2, adafruit-pca9685)
-- WiFi : connexion wlan0 au hotspot `AstromechOS`
+- WiFi : connexion wlan0 au hotspot `Astromech_Control_XXXX`
 - Audio ALSA : sortie jack 3.5mm, volume 100%
 
 **À la fin il demande de rebooter — répondre Y.**
@@ -183,8 +183,8 @@ Le Slave est maintenant connecté au hotspot Master à `192.168.4.171`.
 
 Se connecter en SSH au Master avec la même méthode qu'à l'étape 1 :
 
-- **Option A (hotspot) :** ton PC est sur `AstromechOS` → `ssh artoo@192.168.4.1`
-- **Option B (réseau maison) :** `ssh artoo@r2-master.local` ou l'IP trouvée dans le routeur
+- **Option A (hotspot) :** ton PC est sur le hotspot du robot → `ssh artoo@192.168.4.1`
+- **Option B (réseau maison) :** `ssh artoo@astromech-master.local` ou l'IP trouvée dans le routeur
 
 Lancer le premier déploiement :
 
@@ -201,10 +201,10 @@ Cela :
 Puis copier la clé SSH vers le Slave (active le rsync sans mot de passe pour les futures mises à jour) :
 
 ```bash
-ssh-copy-id artoo@r2-slave.local
+ssh-copy-id artoo@astromech-slave.local
 ```
 
-**Terminé.** R2-D2 est opérationnel.
+**Terminé.** Ton droïde est opérationnel.
 
 ---
 
@@ -215,15 +215,15 @@ Flask écoute sur toutes les interfaces réseau — pas besoin de changer de WiF
 **Depuis le WiFi maison (le plus pratique — rester sur son réseau normal) :**
 
 Trouver l'IP de wlan1 du Master (celle assignée par le routeur) :
-- Dans la page admin du routeur (chercher `r2-master`)
+- Dans la page admin du routeur (chercher `astromech-master`)
 - Ou en SSH sur le Master : `hostname -I` — la deuxième IP est wlan1
-- Ou essayer directement dans un navigateur : `http://r2-master.local:5000` (fonctionne sur Linux/Mac/Android)
+- Ou essayer directement dans un navigateur : `http://astromech-master.local:5000` (fonctionne sur Linux/Mac/Android)
 
 Puis ouvrir : `http://<IP-wlan1>:5000`
 
 > Cette IP peut changer si le routeur la réassigne. Pour la figer, créer un bail DHCP statique dans les paramètres du routeur pour l'adresse MAC du Master.
 
-**Depuis le hotspot AstromechOS (IP fixe, toujours disponible — idéal en convention) :**
+**Depuis le hotspot `Astromech_Control_XXXX` (IP fixe, toujours disponible — idéal en convention) :**
 
 Se connecter au WiFi **AstromechOS**, puis ouvrir : **http://192.168.4.1:5000**
 
@@ -236,12 +236,12 @@ Se connecter au WiFi **AstromechOS**, puis ouvrir : **http://192.168.4.1:5000**
 ### Accès SSH
 
 ```bash
-# Depuis n'importe quel appareil sur le hotspot AstromechOS :
+# Depuis n'importe quel appareil sur le hotspot `Astromech_Control_XXXX` :
 ssh artoo@192.168.4.1    # Master (dôme)
 ssh artoo@192.168.4.171  # Slave (corps)
 
 # Depuis le Master, rejoindre le Slave :
-ssh artoo@r2-slave.local
+ssh artoo@astromech-slave.local
 ```
 
 > Ne pas utiliser les hostnames `.local` depuis Windows — mDNS peu fiable.
@@ -269,7 +269,7 @@ Protégez le robot contre une carte SD morte. **Admin → Config → Système �
 
 Créez un thème dans **Config → Apparence → Thème** (8 sélecteurs de couleur + police). Vos thèmes perso sont enregistrés **sur le robot** (pas seulement dans le navigateur) : ils survivent aux reboots, apparaissent sur chaque appareil qui se connecte, et entrent dans les sauvegardes.
 
-### Mettre à jour R2-D2
+### Mettre à jour AstromechOS
 
 **Depuis le dashboard :** cliquer sur le bouton **Admin** (en haut à droite) → entrer le mot de passe **`deetoo`** → les menus protégés deviennent visibles → Settings → Deploy → bouton **UPDATE** (git pull + rsync Slave + restart, tout automatique).
 
@@ -293,8 +293,8 @@ sudo systemctl status astromech-master
 sudo journalctl -u astromech-master -f
 
 # Sur le Slave (depuis le Master) :
-ssh artoo@r2-slave.local sudo systemctl status astromech-slave
-ssh artoo@r2-slave.local sudo journalctl -u astromech-slave -f
+ssh artoo@astromech-slave.local sudo systemctl status astromech-slave
+ssh artoo@astromech-slave.local sudo journalctl -u astromech-slave -f
 ```
 
 ### Collecter les logs de debug
@@ -359,7 +359,7 @@ Flasher manuellement via `mpremote` (seulement après remplacement matériel ou 
 
 ```bash
 # SSH sur le Slave :
-ssh artoo@r2-slave.local
+ssh artoo@astromech-slave.local
 
 # Flasher (toujours rm avant cp — mpremote compare les timestamps, pas le contenu) :
 python3 -m mpremote connect /dev/ttyACM0 rm :display.py

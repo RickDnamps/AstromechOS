@@ -169,7 +169,7 @@ Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Inv
 | 🎯 **BT Custom Button Actions** | **Per-controller profiles** keyed by MAC — bind ANY button to `play_choreo` / `play_sound` / `play_random_audio` / `arms_toggle` / `body_panel_toggle` / `dome_panel_toggle`. **Press-to-capture** workflow: click 🎯 CAPTURE NEW BUTTON, press the physical button, it's bound. Two NVIDIA Shields plug in → each remembers its own bindings independently. MAC resolution falls back to `bluetoothctl` for controllers that don't expose `evdev.uniq` (NVIDIA Shield, several 8BitDo). Validation by action type at save AND at trigger (defense-in-depth) |
 | 🔊 **324 authentic astromech sounds** | 14 mood categories · random by mood · drag-and-drop MP3 upload (admin) |
 | 📱 **Android app** | Offline banner · IP auto-discovery · full-screen · APK included · **tablet/touch-optimized** (file picker for restore/upload, native backup download, touch drag-and-drop in the editor) |
-| 🛡️ **Triple safety watchdog** | App 600ms · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
+| 🛡️ **Triple safety watchdog** | App 1.5s · Drive 800ms · UART 500ms · graceful decel ramp — no abrupt stops |
 | 🚨 **VESC safety lock** | Blocks drive when ESC offline or faulted · bench mode bypass for bench testing |
 | 📊 **Cockpit Status Panel** | Real-time robot snapshot from any tab — HAT health · VESC · RP2040 screen · Pi temps · IPs · E-STOP overlay |
 | 🔒 **Admin mode** | Password-protected · unlocks editor/upload from any tab · 5-min inactivity lock |
@@ -211,7 +211,7 @@ No single point of failure can leave the robot moving uncontrolled:
 
 | Layer | Timeout | Triggers when |
 |-------|---------|---------------|
-| **App watchdog** | 600 ms | Browser closed, phone screen off, Wi-Fi drop |
+| **App watchdog** | 1.5 s | Browser closed, phone screen off, Wi-Fi drop |
 | **Drive timeout** | 800 ms | No drive command received while motors are spinning |
 | **UART watchdog** | 500 ms | Master crash, slip ring disconnected, Slave offline |
 
@@ -246,7 +246,7 @@ All three trigger a **graceful decel ramp** — never an abrupt stop that could 
 │  🎮 BT Gamepad           ←── Bluetooth (evdev, direct to Pi)       │
 │                                                                     │
 │  ┌──────────────────────────┐   ┌───────────────────────────────┐  │
-│  │  R2-MASTER (Dome)        │   │  R2-SLAVE (Body)              │  │
+│  │  MASTER (Dome)           │   │  SLAVE (Body)                 │  │
 │  │  Pi 4B — 4GB             │   │  Pi 4B — 2GB                  │  │
 │  │                          │   │                               │  │
 │  │  Flask REST API :5000    │   │  UART listener + CRC          │  │
@@ -310,7 +310,7 @@ ssh-copy-id artoo@192.168.4.171
 bash /home/artoo/astromechos/scripts/deploy.sh --first-install
 ```
 
-**Done.** Open **`http://192.168.4.1:5000`** on any device connected to the `AstromechOS` hotspot.
+**Done.** Open **`http://192.168.4.1:5000`** on any device connected to the robot hotspot (`Astromech_Control_XXXX`).
 
 📖 **[Full installation guide →](HOWTO.md)** (recommended — covers reconnecting after reboot, network options, and daily use)
 
