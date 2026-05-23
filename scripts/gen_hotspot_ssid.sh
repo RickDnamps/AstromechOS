@@ -16,14 +16,17 @@ BASE="${1:-Astromech_Control}"
 suffix=""
 
 # 1. Pi serial — stable + unique per board (last 4 hex chars).
-serial="$(grep -m1 -E '^Serial' /proc/cpuinfo 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]')"
+# `|| true`: under `set -euo pipefail`, a grep no-match (boards with no
+# /proc/cpuinfo "Serial" line, e.g. Pi 5 / non-Pi) would abort the script BEFORE
+# the fallbacks below — collapsing every such robot to the fixed base name.
+serial="$(grep -m1 -E '^Serial' /proc/cpuinfo 2>/dev/null | awk '{print $NF}' | tr -d '[:space:]' || true)"
 if [[ "$serial" =~ [0-9a-fA-F]{4}$ ]]; then
     suffix="${serial: -4}"
 fi
 
 # 2. Fallback: last 4 hex of the wlan0 MAC.
 if [[ -z "$suffix" ]]; then
-    mac="$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':[:space:]')"
+    mac="$(cat /sys/class/net/wlan0/address 2>/dev/null | tr -d ':[:space:]' || true)"
     [[ "$mac" =~ [0-9a-fA-F]{4}$ ]] && suffix="${mac: -4}"
 fi
 
