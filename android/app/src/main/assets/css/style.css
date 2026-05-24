@@ -3138,7 +3138,6 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   position: absolute;
   top: 4px; right: 4px;
   font-size: 11px;
-  animation: seq-loop-spin 2s linear infinite;
 }
 
 /* Admin mode card reveals */
@@ -3159,6 +3158,10 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 .seq-card.running .seq-card-loop { display: block; }
 .seq-card.running.looping .seq-card-loop { display: block; }
 .seq-card:not(.looping) .seq-card-loop { display: none; }
+/* Spin ONLY while the sequence is actually in repeat/loop mode (started
+ * via press-and-hold). The idle ghost (faint 🔄 on every card, below) stays
+ * static — a spinning idle icon read as "every card is busy". */
+.seq-card.looping .seq-card-loop { animation: seq-loop-spin 2s linear infinite; }
 
 /* WOW polish 2026-05-15: last-played sequence marker — small green
  * dot top-right + subtle accent. Helps re-trigger the last played
