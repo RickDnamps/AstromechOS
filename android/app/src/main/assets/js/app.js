@@ -103,6 +103,8 @@ const _THEMES = {
       '--status-warn': '#aa5500',
       '--status-err':  '#cc1133',
       '--val-color':   '#0849d6',
+      '--input-text':  '#0a1840',
+      '--btn-text':    '#0a1840',
     },
   },
   r5d4: {
@@ -189,6 +191,15 @@ function applyTheme(id, persist = true) {
   if (id !== 'default' && vars) {
     Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
+  // v2: light-theme flag drives Choreo legibility overrides (body.theme-light)
+  let _isLight = false;
+  if (_THEMES[id]) _isLight = !!_THEMES[id].light;
+  else {
+    const t = _loadCustomThemes().find(c => c.id === id);
+    const bg = (t && (t._pickerBg || (t.vars && t.vars['--bg']))) || '';
+    if (/^#[0-9a-f]{6}$/i.test(bg)) _isLight = _relLum(_hexToRgb(bg)) > 0.4;
+  }
+  document.body.classList.toggle('theme-light', _isLight);
   // WOW polish X4 2026-05-15: persist=false for ephemeral hover preview.
   // Only commit to localStorage + flip active state when the change is
   // a real selection (click), not a hover preview.
@@ -266,6 +277,10 @@ function _buildCustomVars() {
   const stOk    = document.getElementById('theme-editor-ok').value;
   const stWarn  = document.getElementById('theme-editor-warn').value;
   const stErr   = document.getElementById('theme-editor-err').value;
+  // v2 pickers: Input BG / Input Text / Button Text — with auto-contrast defaults
+  const inputBg  = (document.getElementById('theme-editor-inputbg')  || {}).value || _defaultInputBg(bg);
+  const inputTxt = (document.getElementById('theme-editor-inputtext')|| {}).value || _autoTextOn(inputBg);
+  const btnTxt   = (document.getElementById('theme-editor-btntext')  || {}).value || _autoTextOn(bg);
   const fontOpt = (document.querySelector('input[name="theme-font"]:checked') || {}).value || 'system';
   const bg2 = _shadeHex(bg, 6);
   const bg3 = _shadeHex(bg, 12);
@@ -292,7 +307,9 @@ function _buildCustomVars() {
     '--text': textVal, '--text-dim': `rgba(${_hexToRgbStr(textVal)},0.5)`,
     '--topbar-bg': topbar,
     '--sidebar-bg': `rgba(${bgRgb},0.5)`,
-    '--input-bg': `rgba(${bgRgb},0.8)`,
+    '--input-bg': inputBg,
+    '--input-text': inputTxt,
+    '--btn-text': btnTxt,
     '--input-option': bg2,
     '--bg-dark-overlay': 'rgba(0,0,0,0.4)',
     '--card-dark': card,
@@ -346,7 +363,7 @@ function _doPreviewCustomTheme() {
   // overwrites the var and avoids the extra full-style-invalidation
   // from the attribute wipe.
   Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
-  ['bg','topbar','card','accent','text','ok','warn','err'].forEach(f => {
+  ['bg','topbar','card','accent','text','ok','warn','err','inputbg','inputtext','btntext'].forEach(f => {
     const lbl = document.getElementById('lbl-' + f);
     const inp = document.getElementById('theme-editor-' + f);
     if (lbl && inp) lbl.textContent = inp.value;
@@ -366,14 +383,31 @@ function openThemeEditor(id) {
     bg: '#080c14', topbar: '#050810', card: '#0d1525',
     accent: '#00aaff', text: '#c8d8ea',
     ok: '#00ff88', warn: '#ffcc00', err: '#ff4455',
+    inputbg: '#ffffff', inputtext: '#101418', btntext: '#101418',
   };
+  // Explicit storage-key map for fields whose auto-generated key would have
+  // wrong case: 'inputbg' → '_pickerInputbg' (auto) vs '_pickerInputBg' (stored).
+  const _pkKey = { inputbg: '_pickerInputBg', inputtext: '_pickerInputText', btntext: '_pickerBtnText' };
   if (id) {
     const t = _loadCustomThemes().find(c => c.id === id);
     if (t) {
       document.getElementById('theme-editor-name').value = t.label || '';
+      const bgVal = t._pickerBg || defaults.bg;
       Object.keys(defaults).forEach(f => {
-        const el = document.getElementById('theme-editor-' + f);
-        if (el) el.value = t['_picker' + f.charAt(0).toUpperCase() + f.slice(1)] || defaults[f];
+        const elRef = document.getElementById('theme-editor-' + f);
+        if (!elRef) return;
+        const storeKey = _pkKey[f] || ('_picker' + f.charAt(0).toUpperCase() + f.slice(1));
+        if (t[storeKey]) {
+          elRef.value = t[storeKey];
+        } else if (f === 'inputbg') {
+          elRef.value = _defaultInputBg(bgVal);
+        } else if (f === 'inputtext') {
+          elRef.value = _autoTextOn(_defaultInputBg(bgVal));
+        } else if (f === 'btntext') {
+          elRef.value = _autoTextOn(bgVal);
+        } else {
+          elRef.value = defaults[f];
+        }
       });
       const r = document.querySelector(`input[name="theme-font"][value="${t._pickerFont||'system'}"]`);
       if (r) r.checked = true;
@@ -381,8 +415,8 @@ function openThemeEditor(id) {
   } else {
     document.getElementById('theme-editor-name').value = '';
     Object.keys(defaults).forEach(f => {
-      const el = document.getElementById('theme-editor-' + f);
-      if (el) el.value = defaults[f];
+      const elRef = document.getElementById('theme-editor-' + f);
+      if (elRef) elRef.value = defaults[f];
     });
     const r = document.querySelector('input[name="theme-font"][value="system"]');
     if (r) r.checked = true;
@@ -414,6 +448,9 @@ function saveCustomTheme() {
     _pickerOk:     document.getElementById('theme-editor-ok').value,
     _pickerWarn:   document.getElementById('theme-editor-warn').value,
     _pickerErr:    document.getElementById('theme-editor-err').value,
+    _pickerInputBg:   (document.getElementById('theme-editor-inputbg')  || {}).value || '',
+    _pickerInputText: (document.getElementById('theme-editor-inputtext')|| {}).value || '',
+    _pickerBtnText:   (document.getElementById('theme-editor-btntext')  || {}).value || '',
     _pickerFont:   fontOpt,
   };
   const list = _loadCustomThemes().filter(c => c.id !== entry.id);
@@ -539,6 +576,15 @@ function _contrastRatio(hex1, hex2) {
   const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
   return (hi + 0.05) / (lo + 0.05);
 }
+// v2: pick the most-readable text token (near-black vs near-white) for a bg.
+function _autoTextOn(bgHex) {
+  const dark = '#101418', light = '#f4f8ff';
+  return _contrastRatio(bgHex, dark) >= _contrastRatio(bgHex, light) ? dark : light;
+}
+function _defaultInputBg(bgHex) {
+  // light themes -> white field; dark themes -> slightly lifted from bg
+  return _relLum(_hexToRgb(bgHex)) > 0.4 ? '#ffffff' : _shadeHex(bgHex, 8);
+}
 function _updateContrastIndicators() {
   const target = el('theme-contrast-indicators');
   if (!target) return;
@@ -553,6 +599,47 @@ function _updateContrastIndicators() {
   target.innerHTML =
     `<div><span class="contrast-label">Text on BG:</span> ${fmt(_contrastRatio(text, bg))}</div>` +
     `<div><span class="contrast-label">Accent on BG:</span> ${fmt(_contrastRatio(accent, bg))}</div>`;
+}
+
+// ── v2: Choreo editor text-size (two independent sliders) ──────────────
+// Server (local.cfg [ui]) is source of truth; localStorage is a boot mirror.
+const _SCALE_KEYS = { inspector: 'astromech-inspector-scale', timeline: 'astromech-timeline-scale' };
+let _scalePostTimer = 0;
+
+function _clampScale(v) {
+  let f = parseFloat(v); if (!isFinite(f)) f = 1.0;
+  f = Math.max(1.0, Math.min(1.4, f));
+  return Math.round(f * 10) / 10;
+}
+function _applyScale(which, v) {
+  const prop = which === 'inspector' ? '--inspector-scale' : '--timeline-scale';
+  document.body.style.setProperty(prop, String(v));
+  const lbl = document.getElementById('scale-lbl-' + which);
+  if (lbl) lbl.textContent = v.toFixed(1) + '\xd7';
+  const sl = document.getElementById('scale-slider-' + which);
+  if (sl && parseFloat(sl.value) !== v) sl.value = v;
+}
+function _initEditorScale() {
+  // 1) instant apply from localStorage mirror (no flash)
+  ['inspector', 'timeline'].forEach(w => _applyScale(w, _clampScale(_lsGet(_SCALE_KEYS[w]) || '1.0')));
+  // 2) reconcile with server (source of truth)
+  api('/settings/ui_scale').then(d => {
+    if (!d) return;
+    ['inspector', 'timeline'].forEach(w => {
+      const v = _clampScale(d[w]); _applyScale(w, v); _lsSet(_SCALE_KEYS[w], String(v));
+    });
+  }).catch(() => {});
+}
+function onScaleSlider(which, raw) {
+  const v = _clampScale(raw);
+  _applyScale(which, v);
+  _lsSet(_SCALE_KEYS[which], String(v));
+  clearTimeout(_scalePostTimer);
+  _scalePostTimer = setTimeout(() => {
+    api('/settings/ui_scale', 'POST', { [which]: v })
+      .then(r => { if (!r) toast('Text size saved locally (server sync failed)', 'warn'); })
+      .catch(() => toast('Text size saved locally (server sync failed)', 'warn'));
+  }, 350);
 }
 
 function _initThemes() {
@@ -12687,6 +12774,7 @@ document.addEventListener('DOMContentLoaded', () => {
   _initCamVisibilityHandler();
   _initIconPicker();
   _initThemes();
+  _initEditorScale();
   init();
 });
 
