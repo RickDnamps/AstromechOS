@@ -89,6 +89,11 @@
   --status-warn: #ffcc00;
   --status-err:  #ff4455;
   --val-color:   #00ccff;
+  /* ─── Scale / text-routing vars (consumed by Choreo Inspector + Timeline) ─── */
+  --inspector-scale: 1;
+  --timeline-scale:  1;
+  --input-text: var(--text);
+  --btn-text:   var(--text);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -913,7 +918,7 @@ body[data-lock-mode="2"] #js-left-ring::after {
   border: 1px solid rgba(var(--blue-rgb), 0.4);
   border-radius: 8px;
   background: rgba(var(--blue-rgb), 0.08);
-  color: var(--text);
+  color: var(--btn-text);
   font-family: var(--font);
   font-size: 9px;
   letter-spacing: 0.3px;
@@ -3993,7 +3998,7 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 ================================================================ */
 .btn {
   background: var(--btn-bg);
-  color: var(--text);
+  color: var(--btn-text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 8px 14px;
@@ -4010,7 +4015,7 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
 .btn:hover {
   background: var(--btn-hover-bg);
   border-color: var(--blue);
-  color: var(--blue);
+  color: var(--btn-text);
   box-shadow: 0 0 8px rgba(var(--blue-rgb),0.2);
 }
 
@@ -4138,7 +4143,7 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 7px 10px;
-  color: var(--text);
+  color: var(--input-text);
   font-family: var(--font);
   font-size: 11px;
   transition: border-color 0.2s;
@@ -4162,7 +4167,7 @@ select.input-text option { background: var(--input-option); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 7px 6px;
-  color: var(--text);
+  color: var(--input-text);
   font-family: var(--font);
   font-size: 11px;
   cursor: pointer;
@@ -6876,7 +6881,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   top: 0; bottom: 0;
   width: 1px;
   background: rgba(var(--blue-rgb),.1);
-  font-size: 9px;
+  font-size: calc(9px * var(--timeline-scale));
   color: rgba(var(--blue-rgb),.3);
   padding-top: 3px;
   padding-left: 2px;
@@ -6910,7 +6915,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   min-width: 20px;
   border: 1px solid;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: calc(10px * var(--timeline-scale));
   letter-spacing: .6px;
   font-family: var(--font-data);
   display: flex;
@@ -7049,7 +7054,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 /* Dynamic inspector title — two-line: category + full label */
 .chor-inspector-title {
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: calc(11px * var(--inspector-scale));
   font-weight: bold;
   letter-spacing: 2px;
   text-transform: uppercase;
@@ -7061,7 +7066,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 
 /* Static sub-labels inside the inspector (EASING, etc.) */
 .chor-props-title {
-  font-size: 8px;
+  font-size: calc(8px * var(--inspector-scale));
   letter-spacing: 3px;
   color: var(--text-dim);
   padding: 6px 10px;
@@ -7075,16 +7080,17 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   padding: 4px 10px;
   border-bottom: 1px solid rgba(var(--blue-rgb),.04);
 }
-.chor-prop-key { color: var(--text-dim); font-size: 7px; letter-spacing: 1px; font-family: var(--font-data); }
-.chor-prop-val { color: var(--val-color); font-family: var(--font-data); font-size: 10px; }
+.chor-prop-key { color: var(--text-dim); font-size: calc(7px * var(--inspector-scale)); letter-spacing: 1px; font-family: var(--font-data); }
+.chor-prop-val { color: var(--val-color); font-family: var(--font-data); font-size: calc(10px * var(--inspector-scale)); }
 .chor-prop-input {
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 2px;
-  color: var(--val-color);
+  color: var(--input-text);
   font-family: var(--font-data);
-  font-size: 10px;
-  padding: 2px 4px;
+  font-size: calc(10px * var(--inspector-scale));
+  padding: calc(2px * var(--inspector-scale)) 4px;
+  min-height: calc(18px * var(--inspector-scale));
   width: 70px;
   text-align: right;
   outline: none;
@@ -7096,10 +7102,11 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 2px;
-  color: var(--val-color);
+  color: var(--input-text);
   font-family: var(--font-data);
-  font-size: 9px;
-  padding: 2px 4px;
+  font-size: calc(9px * var(--inspector-scale));
+  padding: calc(2px * var(--inspector-scale)) 4px;
+  min-height: calc(17px * var(--inspector-scale));
   width: 100%;
   outline: none;
   cursor: pointer;
@@ -7122,7 +7129,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 
 /* Easing buttons */
 .chor-ease-btn {
-  font-size: 7px;
+  font-size: calc(7px * var(--inspector-scale));
   letter-spacing: .8px;
   padding: 2px 6px;
   background: none;
