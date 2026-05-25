@@ -49,6 +49,12 @@ AGENTS.md
 feedbacks/
 image/
 
+# Transient scratch (harness-saved images, ad-hoc scripts) + local dev tools.
+# tools/ holds the README screenshot-refresh tool, which reads SSH/admin creds
+# at runtime — keep it out of the public repo.
+.tmp/
+tools/
+
 # Gradle local cache (généré automatiquement)
 android/.gradle/
 
