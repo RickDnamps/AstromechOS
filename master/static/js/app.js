@@ -590,6 +590,47 @@ function _updateContrastIndicators() {
     `<div><span class="contrast-label">Accent on BG:</span> ${fmt(_contrastRatio(accent, bg))}</div>`;
 }
 
+// ── v2: Choreo editor text-size (two independent sliders) ──────────────
+// Server (local.cfg [ui]) is source of truth; localStorage is a boot mirror.
+const _SCALE_KEYS = { inspector: 'astromech-inspector-scale', timeline: 'astromech-timeline-scale' };
+let _scalePostTimer = 0;
+
+function _clampScale(v) {
+  let f = parseFloat(v); if (!isFinite(f)) f = 1.0;
+  f = Math.max(1.0, Math.min(1.4, f));
+  return Math.round(f * 10) / 10;
+}
+function _applyScale(which, v) {
+  const prop = which === 'inspector' ? '--inspector-scale' : '--timeline-scale';
+  document.body.style.setProperty(prop, String(v));
+  const lbl = document.getElementById('scale-lbl-' + which);
+  if (lbl) lbl.textContent = v.toFixed(1) + '\xd7';
+  const sl = document.getElementById('scale-slider-' + which);
+  if (sl && parseFloat(sl.value) !== v) sl.value = v;
+}
+function _initEditorScale() {
+  // 1) instant apply from localStorage mirror (no flash)
+  ['inspector', 'timeline'].forEach(w => _applyScale(w, _clampScale(_lsGet(_SCALE_KEYS[w]) || '1.0')));
+  // 2) reconcile with server (source of truth)
+  api('/settings/ui_scale').then(d => {
+    if (!d) return;
+    ['inspector', 'timeline'].forEach(w => {
+      const v = _clampScale(d[w]); _applyScale(w, v); _lsSet(_SCALE_KEYS[w], String(v));
+    });
+  }).catch(() => {});
+}
+function onScaleSlider(which, raw) {
+  const v = _clampScale(raw);
+  _applyScale(which, v);
+  _lsSet(_SCALE_KEYS[which], String(v));
+  clearTimeout(_scalePostTimer);
+  _scalePostTimer = setTimeout(() => {
+    api('/settings/ui_scale', 'POST', { [which]: v })
+      .then(r => { if (!r) toast('Text size saved locally (server sync failed)', 'warn'); })
+      .catch(() => toast('Text size saved locally (server sync failed)', 'warn'));
+  }, 350);
+}
+
 function _initThemes() {
   _renderThemePicker();
   window.addEventListener('resize', _fitPreview);
@@ -12722,6 +12763,7 @@ document.addEventListener('DOMContentLoaded', () => {
   _initCamVisibilityHandler();
   _initIconPicker();
   _initThemes();
+  _initEditorScale();
   init();
 });
 
