@@ -7654,3 +7654,51 @@ body.theme-light .tab:hover { color: #eef4ff; }
 /* Danger buttons (STOP / STOP ALL) — red-on-dark-red-tint failed AA on light.
    Pale-red fill + darker red text keeps the semantic red and reads. Global. */
 body.theme-light .btn-danger { background: rgba(204,17,51,0.10); color:#9e0c26; }
+
+/* ════════════════════════════════════════════════════════════════════
+   Light-theme chrome polish — topbar · cockpit · VESC/diag dark surfaces
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Topbar stays navy in light theme (blueprint look), but the static brand +
+   clock text inherit the light theme's DARK accent vars (--blue / --cyan) →
+   navy-on-navy. Lift them to bright on-navy colours. (Temp + battery voltage
+   get bright tier colours inline from JS, so they already read.) */
+body.theme-light .brand-r2    { color:#5fa3ff; text-shadow:0 0 12px rgba(95,163,255,0.55); }
+body.theme-light .brand-sub   { color:rgba(176,200,242,0.9); opacity:1; }
+body.theme-light .stat-val    { color:#8fb8ec; }                 /* clock (temp keeps its inline tier colour) */
+body.theme-light .stat-sep    { color:rgba(176,200,242,0.45); }
+body.theme-light .battery-pct { font-size:9px; font-weight:600; } /* nudge voltage up for visibility */
+body.theme-light .cockpit-btn        { color:#34d17a; }          /* STATUS button reads on navy */
+body.theme-light .cockpit-btn.alert  { color:#ffac42; }
+body.theme-light .cockpit-btn.danger { color:#ff6079; }
+
+/* Cockpit status panel is a dropdown extension of the navy chrome → keep it a
+   dark "status island" (matching the topbar) rather than a light panel hanging
+   off dark chrome. Retint to topbar-navy, set base light text, and lift the
+   dimmest white-alpha values + semantic colours so every row reads. */
+body.theme-light .cockpit-panel        { background:rgba(10,24,64,0.97); border-bottom-color:rgba(8,73,214,0.45); color:rgba(222,232,250,0.92); }
+body.theme-light .cockpit-pills-row    { border-bottom-color:rgba(176,200,242,0.18); }
+body.theme-light .cockpit-section-title{ color:rgba(176,200,242,0.7); }
+body.theme-light .cockpit-card         { background:rgba(255,255,255,0.06); border-color:rgba(160,185,235,0.22); }
+body.theme-light .cockpit-card-lbl     { color:rgba(176,200,242,0.72); }
+body.theme-light .cockpit-card-sub     { color:rgba(176,200,242,0.72); }
+body.theme-light .cockpit-row          { background:rgba(255,255,255,0.06); }
+body.theme-light .cockpit-row-lbl      { color:rgba(176,200,242,0.72); }
+body.theme-light .cockpit-dim          { color:rgba(176,200,242,0.55); }
+body.theme-light .cockpit-card-val,
+body.theme-light .cockpit-ok           { color:#34d17a; }        /* bright semantic colours on navy */
+body.theme-light .cockpit-warn         { color:#ffac42; }
+body.theme-light .cockpit-err          { color:#ff6079; }
+body.theme-light .cockpit-alert.ok     { color:rgba(206,220,248,0.78); }
+
+/* VESC telemetry + session/fault cards are hardcoded dark (rgba(0,10,30,.7) /
+   rgba(0,0,0,.3)) and sit INSIDE the light settings panel — their dark text
+   vars (--text/--cyan) went invisible on them. Lighten the card surfaces so
+   the existing dark text reads (opposite of the cockpit, which is chrome). */
+body.theme-light .vesc-card,
+body.theme-light .vesc-config-card { background:var(--bg-card); }
+
+/* Diagnostics log console + UART-stats box are hardcoded near-black. Lighten to
+   match the panel; the err/warn/info line colours read fine on light. */
+body.theme-light .diag-log-box   { background:rgba(255,255,255,0.6); border-color:rgba(8,73,214,0.18); color:var(--text); }
+body.theme-light .diag-stats-box { background:rgba(8,73,214,0.05); }
