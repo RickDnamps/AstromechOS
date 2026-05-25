@@ -538,6 +538,42 @@ def get_settings():
     })
 
 
+@settings_bp.get('/settings/ui_scale')
+def get_ui_scale():
+    """LAN-open read of the Choreo editor text-size multipliers so the
+    UI can apply them at boot even before admin-unlock. Non-sensitive."""
+    from master.api.backup_core import validate_ui_scale
+    cfg = _read_cfg()
+    return jsonify({
+        'inspector': validate_ui_scale(cfg.get('ui', 'inspector_scale', fallback='1.0')),
+        'timeline':  validate_ui_scale(cfg.get('ui', 'timeline_scale',  fallback='1.0')),
+    })
+
+
+@settings_bp.post('/settings/ui_scale')
+@require_admin
+def set_ui_scale():
+    """Persist editor text-size multipliers to local.cfg [ui]. Each field
+    is optional; only provided keys are written. Validated + clamped."""
+    from master.api.backup_core import validate_ui_scale
+    from master.api._admin_auth import get_json_object
+    body = get_json_object()
+    out = {}
+    if 'inspector' in body:
+        v = validate_ui_scale(body.get('inspector'))
+        _write_key('ui', 'inspector_scale', str(v))
+        out['inspector'] = v
+    if 'timeline' in body:
+        v = validate_ui_scale(body.get('timeline'))
+        _write_key('ui', 'timeline_scale', str(v))
+        out['timeline'] = v
+    cfg = _read_cfg()
+    return jsonify({
+        'inspector': out.get('inspector', validate_ui_scale(cfg.get('ui', 'inspector_scale', fallback='1.0'))),
+        'timeline':  out.get('timeline',  validate_ui_scale(cfg.get('ui', 'timeline_scale',  fallback='1.0'))),
+    })
+
+
 # B2/P1 fix 2026-05-16: cache scan results + scan lock to prevent LAN
 # DoS. Anyone on the LAN/hotspot could spam SCAN → each call burns
 # Flask thread up to 15s + thrashes wlan1 radio. Now:
