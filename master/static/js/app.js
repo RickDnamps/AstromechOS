@@ -189,6 +189,15 @@ function applyTheme(id, persist = true) {
   if (id !== 'default' && vars) {
     Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
+  // v2: light-theme flag drives Choreo legibility overrides (body.theme-light)
+  let _isLight = false;
+  if (_THEMES[id]) _isLight = !!_THEMES[id].light;
+  else {
+    const t = _loadCustomThemes().find(c => c.id === id);
+    const bg = (t && (t._pickerBg || (t.vars && t.vars['--bg']))) || '';
+    if (/^#[0-9a-f]{6}$/i.test(bg)) _isLight = _relLum(_hexToRgb(bg)) > 0.4;
+  }
+  document.body.classList.toggle('theme-light', _isLight);
   // WOW polish X4 2026-05-15: persist=false for ephemeral hover preview.
   // Only commit to localStorage + flip active state when the change is
   // a real selection (click), not a hover preview.
