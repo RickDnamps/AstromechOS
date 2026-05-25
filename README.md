@@ -40,22 +40,24 @@ A **complete, production-grade control system** for a 1:1 scale astromech droid 
 
 ## Screenshots
 
+> Captured live on the dashboard at Xiaomi Pad 6 resolution (2880 × 1800). Audio, Sequences and the Choreography editor are shown in **both user and admin mode** — a single password unlocks the editing/upload controls that stay hidden for guests.
+
 <table>
 <tr>
 <td align="center" width="50%">
 
 ### 🕹️ Drive
-Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction HUD · E-Stop · Lock modes · **🎛️ Shortcuts** overlay (up to 12 macro buttons split symmetrically over both joysticks for one-tap arms/panels/sound/choreo)
+Dual virtual joysticks (propulsion + dome) · WASD / arrow keys · live MJPEG camera feed · speed arc + direction HUD · always-visible E-STOP · the per-axis **Shortcuts** overlay (up to 12 macro buttons split over both joysticks).
 
-![Drive Interface](Screenshots/Drive.png)
+![Drive interface](Screenshots/drive.png)
 
 </td>
 <td align="center" width="50%">
 
-### 🔊 Audio
-317 sounds · 14 mood categories · Animated waveform · Perceptual volume curve · Drag-and-drop upload (admin)
+### 📊 Cockpit Status
+One-tap real-time snapshot from any tab — heartbeat & UART health, both VESCs, every servo/motor HAT, the RP2040 screen, Pi temps/CPU/disk, IP addresses, and active safety alerts (here: bench mode engaged).
 
-![Audio Interface](Screenshots/Audio.png)
+![Cockpit status panel](Screenshots/cockpit-status.png)
 
 </td>
 </tr>
@@ -63,99 +65,149 @@ Dual joystick · WASD + arrow keys · MJPEG camera feed · Speed arc + direction
 <td align="center" width="50%">
 
 ### 🟡 Kids Lock
-Speed capped at configurable % — great for shows with young pilots
+Drive speed capped at a configurable % (amber **KIDS** pill) — ideal for young pilots at a show. The dome and sounds stay fully free.
 
-![Kids Lock Mode](Screenshots/Drive_kidsmode.png)
+![Kids lock mode](Screenshots/drive-kids-lock.png)
 
 </td>
 <td align="center" width="50%">
 
 ### 🔴 Child Lock
-All motion blocked — droid on display safely, lights & sounds still work
+Propulsion blocked (left joystick disabled, red **CHILD LOCK** pill) while the dome, lights and sounds keep working — hand the tablet to a small child with the droid on display.
 
-![Child Lock Mode](Screenshots/Drive_Childsmode.png)
+![Child lock mode](Screenshots/drive-child-lock.png)
 
 </td>
 </tr>
 <tr>
 <td align="center" width="50%">
 
-### 🎬 Sequences
-48 behavioral sequences · Pill categories · Emoji picker · Loop mode · Admin drag-to-reorder
+### 🔊 Audio — user
+317 authentic sounds across 14 mood categories · animated waveform · perceptual volume curve · one-tap random-by-mood.
 
-![Sequences Interface](Screenshots/Sequences.png)
+![Audio interface, user mode](Screenshots/audio-user.png)
 
 </td>
+<td align="center" width="50%">
+
+### 🔊 Audio — admin
+Same tab unlocked: create / rename categories, drag-and-drop MP3 upload, and **Verify sounds** to reconcile the index against the files actually on the robot.
+
+![Audio interface, admin mode](Screenshots/audio-admin.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🎬 Sequences — user
+48 behavioral sequences as emoji cards in pill categories. Tap to play, press-and-hold to loop. Lock badges warn which joystick a sequence will take over before you trigger it.
+
+![Sequences, user mode](Screenshots/sequences-user.png)
+
+</td>
+<td align="center" width="50%">
+
+### 🎬 Sequences — admin
+Unlocked: rename, set emoji, drag cards between categories, and delete — all guarded by the admin password and cascaded to dependent shortcuts.
+
+![Sequences, admin mode](Screenshots/sequences-admin.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🎼 Choreography editor — user
+Multi-track timeline (audio · lights · dome · dome/body/arm servos · drive) with a Digital-Twin dome preview. Guests can browse and PLAY, but cannot alter a sequence.
+
+![Choreography editor, user mode](Screenshots/choreo-user.png)
+
+</td>
+<td align="center" width="50%">
+
+### 🎼 Choreography editor — admin
+The same editor unlocked — **RENAME, SAVE, DELETE, EXPORT and IMPORT** appear once the admin password is entered.
+
+![Choreography editor, admin mode](Screenshots/choreo-admin.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🎚️ Inspector — sound block
+Click any block to edit it. A **sound** block exposes specific-file vs random-by-category, volume, channel and fade — synced to the millisecond against the rest of the timeline.
+
+![Choreo sound block inspector](Screenshots/choreo-inspector-sound.png)
+
+</td>
+<td align="center" width="50%">
+
+### 🦾 Inspector — servo block
+A **servo** block exposes the target panel, the open/close action, duration and easing — so panels move in perfect sync with audio and lights.
+
+![Choreo servo block inspector](Screenshots/choreo-inspector-servo.png)
+
+</td>
+</tr>
+<tr>
 <td align="center" width="50%">
 
 ### 💡 Lights
-Teeces32 or AstroPixels+ · 22 animations · FLD/RLD/BOTH text · PSI sequences
+Teeces32 or AstroPixels+ · 22 animations · FLD / RLD / BOTH text targets · PSI sequences · hot-swappable backend without a reboot.
 
-![Lights Interface](Screenshots/Light.png)
-
-</td>
-</tr>
-<tr>
-<td align="center" width="50%">
-
-### 🎼 Choreography Timeline Editor
-Multi-track · Drag-and-drop · VESC drive · audio · servos · lights in sync · Digital Twin monitor
-
-![Choreo Timeline Editor](Screenshots/Choreo_Sequence_Editor.png)
+![Lights interface](Screenshots/lights.png)
 
 </td>
 <td align="center" width="50%">
 
-### 🔐 Admin Login
-Password-protected · Unlocks upload, category creation, sequence editor
-
-![Admin Login](Screenshots/Admin_Login.png)
-
-</td>
-</tr>
-<tr>
-<td align="center" width="50%">
-
-### 🦾 Servo Calibration
-Hardware IDs · Editable labels · Per-panel open/close/speed · Saved to JSON
-
-![Servo Calibration](Screenshots/Servos_Config_open_close_position.png)
-
-</td>
-<td align="center" width="50%">
-
-### 🔧 Config — BT Gamepad
-Premium header (icon + LED status + MAC pill + battery bar + signal dBm) · 2×2 axis grouping (DRIVE / LOOK + future camera tilt) · Deadzone · Inactivity timeout · **Per-MAC Custom Button Actions** (press-to-capture · bind any button to choreo/sound/panels/arms · independent profiles per controller) · BT scan/pair/unpair (collapsible)
-
-![Config Bluetooth](Screenshots/Config_Menu_Bluetooth.png)
-
-</td>
-</tr>
-<tr>
-<td align="center" width="50%">
-
-### ⚙️ Config — Wi-Fi, Audio & Battery
-Hotspot · Home Wi-Fi · Audio channels · Battery cell count · Dome light · Auto-deploy
-
-![Config WiFi](Screenshots/Config_Menu_Wifi_Audio_Battery_DomeLight.png)
-
-</td>
-<td align="center" width="50%">
-
-### 📊 VESC Diagnostic Dashboard
-Bar indicators · Power (W) · L/R symmetry · Session peaks · Fault log · Invert toggles
-
-![VESC Config](Screenshots/VESC_MinimalConfig.png)
-
-</td>
-<td align="center" width="50%">
-
-### 🎨 Theme System
-7 built-in themes · Custom color picker · 7 sci-fi fonts · Live mini preview · Up to 16 saved custom themes
+### 🔐 Admin mode
+A single password unlocks editing/upload across Settings and the Audio / Sequence / Choreography editors, with a 5-minute inactivity auto-lock — shown throughout the user-vs-admin pairs above.
 
 </td>
 </tr>
 </table>
+
+<details>
+<summary><b>⚙️ Every Settings sub-panel</b> — click to expand (17 panels)</summary>
+
+<br>
+
+<table>
+<tr>
+<td align="center" width="33%"><b>🎛️ Shortcuts</b><br><sub>Up to 12 Drive-overlay macro buttons</sub><br><img src="Screenshots/settings-shortcuts.png"></td>
+<td align="center" width="33%"><b>🤖 Behavior</b><br><sub>Idle & startup behaviors · next-trigger countdown</sub><br><img src="Screenshots/settings-behavior.png"></td>
+<td align="center" width="33%"><b>🔒 Lock Mode</b><br><sub>Normal / Kids / Child Lock + speed caps</sub><br><img src="Screenshots/settings-lock-mode.png"></td>
+</tr>
+<tr>
+<td align="center"><b>⚡ VESC</b><br><sub>Telemetry · power · faults · invert · bench mode</sub><br><img src="Screenshots/settings-vesc.png"></td>
+<td align="center"><b>🎩 HATs</b><br><sub>I2C servo/motor HAT addresses · UART latency</sub><br><img src="Screenshots/settings-hats.png"></td>
+<td align="center"><b>🦾 Arms</b><br><sub>Arm/panel mapping · per-arm open delays</sub><br><img src="Screenshots/settings-arms.png"></td>
+</tr>
+<tr>
+<td align="center"><b>🔧 Calibration</b><br><sub>Per-servo label · open/close angle · speed</sub><br><img src="Screenshots/settings-calibration.png"></td>
+<td align="center"><b>💡 Lights</b><br><sub>Backend select · dome light config</sub><br><img src="Screenshots/settings-lights.png"></td>
+<td align="center"><b>🔋 Battery</b><br><sub>Cell count + chemistry → live thresholds</sub><br><img src="Screenshots/settings-battery.png"></td>
+</tr>
+<tr>
+<td align="center"><b>🎮 BT Gamepad</b><br><sub>Premium header · custom button actions · scan/pair</sub><br><img src="Screenshots/settings-bluetooth.png"></td>
+<td align="center"><b>📷 Camera</b><br><sub>Resolution / bitrate with live preview</sub><br><img src="Screenshots/settings-camera.png"></td>
+<td align="center"><b>📡 Network</b><br><sub>Hotspot + home Wi-Fi · slave-first changes</sub><br><img src="Screenshots/settings-network.png"></td>
+</tr>
+<tr>
+<td align="center"><b>🎵 Audio</b><br><sub>Channels + per-channel volume profiles</sub><br><img src="Screenshots/settings-audio.png"></td>
+<td align="center"><b>🎨 Interface</b><br><sub>7 themes + custom colour/font editor</sub><br><img src="Screenshots/settings-interface.png"></td>
+<td align="center"><b>🚀 Deploy</b><br><sub>Commit card + one-button OTA update</sub><br><img src="Screenshots/settings-deploy.png"></td>
+</tr>
+<tr>
+<td align="center"><b>🖥️ System</b><br><sub>Reboot/shutdown · admin password · backup & restore</sub><br><img src="Screenshots/settings-system.png"></td>
+<td align="center"><b>🔍 Diagnostics</b><br><sub>Live logs · UART RTT calibration</sub><br><img src="Screenshots/settings-diagnostics.png"></td>
+<td align="center"></td>
+</tr>
+</table>
+
+</details>
 
 ---
 
