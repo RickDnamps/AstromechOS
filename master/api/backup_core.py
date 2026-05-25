@@ -48,6 +48,12 @@ def validate_theme(t) -> bool:
         v = t.get(fld)
         if not (isinstance(v, str) and _HEX_RE.match(v)):
             return False
+    # v2: Input BG / Input Text / Button Text pickers are OPTIONAL
+    # (older themes lack them). When present they must be valid hex.
+    for fld in ('_pickerInputBg', '_pickerInputText', '_pickerBtnText'):
+        v = t.get(fld)
+        if v is not None and not (isinstance(v, str) and _HEX_RE.match(v)):
+            return False
     font = t.get('_pickerFont')
     if font is not None and not (isinstance(font, str)
                                  and (font == 'system' or _FONT_KEY_RE.match(font))):

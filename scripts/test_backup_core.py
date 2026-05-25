@@ -130,3 +130,19 @@ def test_ui_scale_non_numeric_defaults_to_1():
     assert validate_ui_scale('big') == 1.0
     assert validate_ui_scale(None) == 1.0
     assert validate_ui_scale(float('nan')) == 1.0
+
+
+# ---- theme v2: optional input/button-text pickers (rk2) ----
+def test_theme_new_pickers_valid():
+    assert validate_theme(_good_theme(
+        _pickerInputBg='#ffffff', _pickerInputText='#101418', _pickerBtnText='#0a1840'))
+
+def test_theme_new_pickers_absent_still_valid():
+    # back-compat: existing themes have none of the new fields
+    t = _good_theme()
+    assert '_pickerInputBg' not in t
+    assert validate_theme(t)
+
+def test_theme_new_picker_bad_hex_rejected():
+    assert not validate_theme(_good_theme(_pickerInputBg='white; }body{'))
+    assert not validate_theme(_good_theme(_pickerBtnText='nothex'))
