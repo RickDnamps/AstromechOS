@@ -163,7 +163,9 @@ Teeces32 or AstroPixels+ · 22 animations · FLD / RLD / BOTH text targets · PS
 <td align="center" width="50%">
 
 ### 🔐 Admin mode
-A single password unlocks editing/upload across Settings and the Audio / Sequence / Choreography editors, with a 5-minute inactivity auto-lock — shown throughout the user-vs-admin pairs above.
+Tap the **ADMIN** icon from any tab to unlock editing/upload across Settings and the Audio / Sequence / Choreography editors — one password, with a 5-minute inactivity auto-lock (shown throughout the user-vs-admin pairs above).
+
+![Admin access password prompt](Screenshots/admin-mode.png)
 
 </td>
 </tr>
