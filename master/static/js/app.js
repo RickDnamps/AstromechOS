@@ -103,6 +103,8 @@ const _THEMES = {
       '--status-warn': '#aa5500',
       '--status-err':  '#cc1133',
       '--val-color':   '#0849d6',
+      '--input-text':  '#0a1840',
+      '--btn-text':    '#0a1840',
     },
   },
   r5d4: {
