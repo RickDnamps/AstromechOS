@@ -169,40 +169,50 @@ A single password unlocks editing/upload across Settings and the Audio / Sequenc
 </tr>
 </table>
 
+### ⚙️ Settings — a whole tab of deep-dive sub-panels
+
+Everything tunable lives in the **Settings** tab, organised into five nav sections — **Operator · Hardware · Connectivity · Appearance · System**. As a taste, here's the **Shortcuts** editor: build up to 12 Drive-overlay macro buttons (toggle arms/panels, play a choreo/sound/random-by-mood), each auto-balanced half over the left propulsion joystick and half over the right dome joystick — with a live preview of exactly where every button lands on the Drive tab.
+
+<div align="center">
+
+![Settings — Shortcuts editor](Screenshots/settings-shortcuts.png)
+
+</div>
+
 <details>
-<summary><b>⚙️ Every Settings sub-panel</b> — click to expand (17 panels)</summary>
+<summary><b>⚙️ See the 16 other Settings sub-panels</b> — click to expand</summary>
 
 <br>
 
 <table>
 <tr>
-<td align="center" width="33%"><b>🎛️ Shortcuts</b><br><sub>Up to 12 Drive-overlay macro buttons</sub><br><img src="Screenshots/settings-shortcuts.png"></td>
 <td align="center" width="33%"><b>🤖 Behavior</b><br><sub>Idle & startup behaviors · next-trigger countdown</sub><br><img src="Screenshots/settings-behavior.png"></td>
 <td align="center" width="33%"><b>🔒 Lock Mode</b><br><sub>Normal / Kids / Child Lock + speed caps</sub><br><img src="Screenshots/settings-lock-mode.png"></td>
+<td align="center" width="33%"><b>⚡ VESC</b><br><sub>Telemetry · power · faults · invert · bench mode</sub><br><img src="Screenshots/settings-vesc.png"></td>
 </tr>
 <tr>
-<td align="center"><b>⚡ VESC</b><br><sub>Telemetry · power · faults · invert · bench mode</sub><br><img src="Screenshots/settings-vesc.png"></td>
 <td align="center"><b>🎩 HATs</b><br><sub>I2C servo/motor HAT addresses · UART latency</sub><br><img src="Screenshots/settings-hats.png"></td>
 <td align="center"><b>🦾 Arms</b><br><sub>Arm/panel mapping · per-arm open delays</sub><br><img src="Screenshots/settings-arms.png"></td>
+<td align="center"><b>🔧 Calibration</b><br><sub>Per-servo label · open/close angle · speed</sub><br><img src="Screenshots/settings-calibration.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🔧 Calibration</b><br><sub>Per-servo label · open/close angle · speed</sub><br><img src="Screenshots/settings-calibration.png"></td>
 <td align="center"><b>💡 Lights</b><br><sub>Backend select · dome light config</sub><br><img src="Screenshots/settings-lights.png"></td>
 <td align="center"><b>🔋 Battery</b><br><sub>Cell count + chemistry → live thresholds</sub><br><img src="Screenshots/settings-battery.png"></td>
+<td align="center"><b>🎮 BT Gamepad</b><br><sub>Premium header · custom button actions · scan/pair</sub><br><img src="Screenshots/settings-bluetooth.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🎮 BT Gamepad</b><br><sub>Premium header · custom button actions · scan/pair</sub><br><img src="Screenshots/settings-bluetooth.png"></td>
 <td align="center"><b>📷 Camera</b><br><sub>Resolution / bitrate with live preview</sub><br><img src="Screenshots/settings-camera.png"></td>
 <td align="center"><b>📡 Network</b><br><sub>Hotspot + home Wi-Fi · slave-first changes</sub><br><img src="Screenshots/settings-network.png"></td>
+<td align="center"><b>🎵 Audio</b><br><sub>Channels + per-channel volume profiles</sub><br><img src="Screenshots/settings-audio.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🎵 Audio</b><br><sub>Channels + per-channel volume profiles</sub><br><img src="Screenshots/settings-audio.png"></td>
 <td align="center"><b>🎨 Interface</b><br><sub>7 themes + custom colour/font editor</sub><br><img src="Screenshots/settings-interface.png"></td>
 <td align="center"><b>🚀 Deploy</b><br><sub>Commit card + one-button OTA update</sub><br><img src="Screenshots/settings-deploy.png"></td>
+<td align="center"><b>🖥️ System</b><br><sub>Reboot/shutdown · admin password · backup & restore</sub><br><img src="Screenshots/settings-system.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🖥️ System</b><br><sub>Reboot/shutdown · admin password · backup & restore</sub><br><img src="Screenshots/settings-system.png"></td>
 <td align="center"><b>🔍 Diagnostics</b><br><sub>Live logs · UART RTT calibration</sub><br><img src="Screenshots/settings-diagnostics.png"></td>
+<td align="center"></td>
 <td align="center"></td>
 </tr>
 </table>
