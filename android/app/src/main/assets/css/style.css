@@ -7221,9 +7221,14 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   pointer-events: none;
 }
 .cockpit-panel.open {
-  max-height: 520px;
+  /* Cap to the viewport below the chrome — the old fixed 520px clipped the
+     ALERTS row once the full SERVICES list + active alerts pushed the inner
+     content past 520px. overflow-y:auto lets a short screen scroll instead of
+     hiding the bottom section. */
+  max-height: calc(100vh - var(--topbar-h) - var(--tabbar-h) - 12px);
   opacity: 1;
   pointer-events: auto;
+  overflow-y: auto;
 }
 .cockpit-panel.has-alert {
   border-bottom-color: rgba(255,136,0,0.4);
