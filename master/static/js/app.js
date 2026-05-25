@@ -604,7 +604,9 @@ function _updateContrastIndicators() {
 // ── v2: Choreo editor text-size (two independent sliders) ──────────────
 // Server (local.cfg [ui]) is source of truth; localStorage is a boot mirror.
 const _SCALE_KEYS = { inspector: 'astromech-inspector-scale', timeline: 'astromech-timeline-scale' };
-let _scalePostTimer = 0;
+// Per-slider debounce timers — a shared timer let a fast second-slider edit
+// cancel the first slider's pending POST (it then never persisted server-side).
+const _scalePostTimers = {};
 
 function _clampScale(v) {
   let f = parseFloat(v); if (!isFinite(f)) f = 1.0;
@@ -634,8 +636,8 @@ function onScaleSlider(which, raw) {
   const v = _clampScale(raw);
   _applyScale(which, v);
   _lsSet(_SCALE_KEYS[which], String(v));
-  clearTimeout(_scalePostTimer);
-  _scalePostTimer = setTimeout(() => {
+  clearTimeout(_scalePostTimers[which]);
+  _scalePostTimers[which] = setTimeout(() => {
     api('/settings/ui_scale', 'POST', { [which]: v })
       .then(r => { if (!r) toast('Text size saved locally (server sync failed)', 'warn'); })
       .catch(() => toast('Text size saved locally (server sync failed)', 'warn'));

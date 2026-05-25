@@ -557,7 +557,9 @@ def set_ui_scale():
     is optional; only provided keys are written. Validated + clamped."""
     from master.api.backup_core import validate_ui_scale
     from master.api._admin_auth import get_json_object
-    body = get_json_object()
+    # get_json_object() returns None for a null/array/non-object body; every
+    # field here is optional, so treat None as empty (avoids `'x' in None` 500).
+    body = get_json_object() or {}
     out = {}
     if 'inspector' in body:
         v = validate_ui_scale(body.get('inspector'))
