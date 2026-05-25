@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from master.api.backup_core import (
     validate_theme, is_safe_member, classify_member,
     build_manifest, validate_manifest, BACKUP_FILESET, merge_local_cfg,
+    validate_ui_scale,
 )
 
 
@@ -108,3 +109,24 @@ def test_restore_allowlist():
     assert not ok('master', 'api/backup_bp.py')
     assert not ok('slave', 'main.py')
     assert not ok('master', 'config/../../etc/x')
+
+
+# ---- UI scale (v2 readability) ----
+def test_ui_scale_valid_steps():
+    for v in (1.0, 1.1, 1.2, 1.3, 1.4):
+        assert validate_ui_scale(v) == v
+
+def test_ui_scale_clamps_high():
+    assert validate_ui_scale(99) == 1.4
+
+def test_ui_scale_clamps_low():
+    assert validate_ui_scale(0.2) == 1.0
+
+def test_ui_scale_rounds_to_step():
+    assert validate_ui_scale(1.23) == 1.2
+    assert validate_ui_scale(1.26) == 1.3
+
+def test_ui_scale_non_numeric_defaults_to_1():
+    assert validate_ui_scale('big') == 1.0
+    assert validate_ui_scale(None) == 1.0
+    assert validate_ui_scale(float('nan')) == 1.0

@@ -4,6 +4,7 @@ No Flask, no paramiko, no filesystem side effects beyond path math — kept
 dependency-free so it is unit-testable in isolation (see scripts/test_backup_core.py).
 """
 from __future__ import annotations
+import math
 import os
 import posixpath
 import re
@@ -59,6 +60,21 @@ def validate_theme(t) -> bool:
             if not _safe_css_value(val):
                 return False
     return True
+
+
+def validate_ui_scale(v) -> float:
+    """Coerce an editor text-size multiplier to a safe value.
+    Accepts numeric input; non-numeric / NaN / inf -> 1.0. Clamps to
+    [1.0, 1.4] and snaps to the nearest 0.1 step (slider positions
+    1.0/1.1/1.2/1.3/1.4)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 1.0
+    if not math.isfinite(f):
+        return 1.0
+    f = max(1.0, min(1.4, f))
+    return round(round(f * 10) / 10, 1)
 
 
 # ── Backup manifest + fileset (B.1) ──────────────────────────────────────────
