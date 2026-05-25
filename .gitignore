@@ -20,6 +20,7 @@ slave/config/servo_angles.json
 # Keeps git pull from ever blocking on operator edits + survives reset.
 # ------------------------------------------------------------
 slave/sounds/
+docs/superpowers/
 master/choreographies/
 slave/config/slave.cfg
 master/config/choreo_categories.json
