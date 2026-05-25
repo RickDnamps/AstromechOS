@@ -7605,3 +7605,15 @@ body.theme-light .chor-block[data-track="dome"]       { color:#6a1a9c; backgroun
 body.theme-light .chor-inspector-title,
 body.theme-light .chor-props-title,
 body.theme-light .chor-prop-key { color: var(--text); }
+
+/* The Choreo editor command bar / timeline canvas / ruler are HARDCODED dark
+   (rgba(4,10,22,.95) / rgba(8,12,20,.72) / #0a1840) and never adapt to light
+   themes — so the dark button/block text above was unreadable on them. Lighten
+   the surfaces so the whole editor reads as one coherent light surface. */
+body.theme-light .chor-command-bar { background: rgba(208,222,244,0.96); border-bottom-color: rgba(8,73,214,0.18); }
+body.theme-light .chor-canvas      { background: rgba(228,236,248,0.94); }
+body.theme-light .chor-ruler       { background: rgba(200,216,240,0.98); border-bottom-color: rgba(8,73,214,0.18); }
+body.theme-light .chor-tick        { color: rgba(8,73,214,0.65); }
+body.theme-light .chor-tick.major  { color: #0a1840; }
+/* Palette "add track" chips stay dark so their bright per-track labels read */
+body.theme-light .chor-src-btn     { background: rgba(10,18,35,0.88); }
