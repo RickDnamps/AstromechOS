@@ -7585,3 +7585,23 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   background: var(--blue);
   border-radius: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   v2 readability: Choreo timeline/Inspector legibility on LIGHT themes
+   Dark themes are 100% unaffected — every rule is scoped under body.theme-light.
+   ══════════════════════════════════════════════════════════════════════ */
+body.theme-light .chor-block[data-track="audio"]      { color:#054a73; background:rgba(0,110,170,.16); border-color:rgba(0,110,170,.55); }
+body.theme-light .chor-block[data-track="audio2"]     { color:#0a4a9c; background:rgba(0,90,200,.15);  border-color:rgba(0,90,200,.5);  }
+body.theme-light .chor-block[data-track="lights"]     { color:#8a5200; background:rgba(200,120,0,.18); border-color:rgba(200,120,0,.55); }
+body.theme-light .chor-block[data-track="lights"][data-mode="alarm"] { color:#a01028; background:rgba(200,30,60,.18);  border-color:rgba(200,30,60,.55);  }
+body.theme-light .chor-block[data-track="lights"][data-mode="disco"] { color:#5a1a9c; background:rgba(140,50,200,.18); border-color:rgba(140,50,200,.55); }
+body.theme-light .chor-block[data-track="dome_servos"]{ color:#0a6a3a; background:rgba(0,140,80,.16);  border-color:rgba(0,140,80,.55);  }
+body.theme-light .chor-block[data-track="body_servos"]{ color:#125a32; background:rgba(20,120,70,.16); border-color:rgba(20,120,70,.55); }
+body.theme-light .chor-block[data-track="arm_servos"] { color:#1a6a3c; background:rgba(30,140,80,.16); border-color:rgba(30,140,80,.55); }
+body.theme-light .chor-block[data-track="propulsion"] { color:#8a4500; background:rgba(210,110,0,.18); border-color:rgba(210,110,0,.55); }
+body.theme-light .chor-block[data-track="dome"]       { color:#6a1a9c; background:rgba(160,60,220,.16); border-color:rgba(160,60,220,.55); }
+
+/* Inspector dim text was too faint on light cards */
+body.theme-light .chor-inspector-title,
+body.theme-light .chor-props-title,
+body.theme-light .chor-prop-key { color: var(--text); }
