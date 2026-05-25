@@ -146,3 +146,33 @@ def test_theme_new_pickers_absent_still_valid():
 def test_theme_new_picker_bad_hex_rejected():
     assert not validate_theme(_good_theme(_pickerInputBg='white; }body{'))
     assert not validate_theme(_good_theme(_pickerBtnText='nothex'))
+
+
+# ---- local.cfg [ui] backup/restore coverage (Task 3 / rk2) ----
+from master.api.backup_core import NETWORK_PRESERVE_SECTIONS
+
+def test_local_cfg_in_backup_fileset():
+    # [ui] scales live in local.cfg -> must ship in every .bck
+    assert 'master/config/local.cfg' in BACKUP_FILESET['master']
+
+def test_ui_section_not_network_preserved():
+    # [ui] must be RESTORED from the backup (not kept from live machine)
+    assert 'ui' not in NETWORK_PRESERVE_SECTIONS
+
+def test_merge_local_cfg_restores_ui_section():
+    backup = '[ui]\ninspector_scale = 1.4\ntimeline_scale = 1.2\n[home_wifi]\nssid = FROM_BACKUP\n'
+    live   = '[ui]\ninspector_scale = 1.0\ntimeline_scale = 1.0\n[home_wifi]\nssid = LIVE_NET\n'
+    merged = merge_local_cfg(backup, live)
+    # Re-parse for format-tolerance (RawConfigParser.write() uses 'key = value' spacing,
+    # but we verify intent via re-parse rather than string contains to be robust).
+    import configparser
+    p = configparser.RawConfigParser()
+    p.optionxform = str
+    p.read_string(merged)
+    # [ui] must come from backup
+    assert p.get('ui', 'inspector_scale') == '1.4'
+    assert p.get('ui', 'timeline_scale') == '1.2'
+    # [home_wifi] must come from live (network preserved)
+    assert p.get('home_wifi', 'ssid') == 'LIVE_NET'
+    # Backup's network value must not appear
+    assert 'FROM_BACKUP' not in merged
