@@ -489,6 +489,9 @@ def get_status():
         'motor_hat_health':  (reg.slave_uart_health or {}).get('motor_hat_health'),
         'display_ready':     (reg.slave_uart_health or {}).get('display_ready'),
         'display_port':      (reg.slave_uart_health or {}).get('display_port'),
+        # 7qp: True/False when slave reachable (AudioDriver.setup() result),
+        # None when slave unreachable — UI shows '— N/A' instead of alarming.
+        'audio_ready':       (reg.slave_uart_health or {}).get('audio_ready'),
         # Per-side stats — also gated by staleness so a disconnected
         # side returns None (UI shows '--') instead of the last frame.
         'vesc_l_temp':       (_fresh_telem('L') or {}).get('temp'),

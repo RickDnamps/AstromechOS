@@ -294,7 +294,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Health Monitor — HTTP port 5001, exposes UART stats to Master
     # ------------------------------------------------------------------
-    start_health_server(uart, body_servo=servo, display=display)
+    start_health_server(uart, body_servo=servo, display=display, audio=audio)
 
     # ------------------------------------------------------------------
     # Start UART listener (thread)

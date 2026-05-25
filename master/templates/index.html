@@ -535,6 +535,16 @@
      TAB 2: AUDIO
 ================================================================ -->
 <div class="tab-content" id="tab-audio">
+  <!-- 7qp: shown by StatusPoller when /status reports audio_ready === false
+       (AudioDriver failed to start on the slave — corrupt/missing sounds
+       index or no audio device). Hidden otherwise. -->
+  <div id="audio-disabled-banner" class="audio-disabled-banner" style="display:none">
+    <span class="audio-disabled-banner-icon">⚠</span>
+    <div class="audio-disabled-banner-text">
+      <b>Audio is disabled on the Slave</b>
+      <span>The sound player failed to start — sounds will not play. Likely a missing or corrupt sounds index, or no audio device. Check <b>Settings → Diagnostics</b>, then run <b>Verify sounds</b> below to rebuild the index.</span>
+    </div>
+  </div>
   <div class="audio-layout">
 
     <!-- Category pills -->

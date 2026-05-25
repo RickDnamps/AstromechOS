@@ -199,6 +199,12 @@ class _HealthHandler(BaseHTTPRequestHandler):
             else:
                 stats['display_ready'] = False
                 stats['display_port']  = None
+            # 7qp: surface AudioDriver.setup() failure to the Master/UI.
+            # is_ready() is False when sounds_index.json is missing/corrupt
+            # or no audio device — the slave logs it but the operator never
+            # saw it (S: commands silently no-op). Mirror the display field.
+            audio = self.server.audio
+            stats['audio_ready'] = bool(audio.is_ready()) if audio is not None else False
             self._json(stats)
         elif self.path == '/audio/bt/status':
             self._json(_bt_status())
@@ -305,12 +311,13 @@ class _HealthHandler(BaseHTTPRequestHandler):
         pass   # suppress access logs
 
 
-def start_health_server(uart_listener, body_servo=None, display=None, port: int = _DEFAULT_PORT) -> None:
+def start_health_server(uart_listener, body_servo=None, display=None, audio=None, port: int = _DEFAULT_PORT) -> None:
     """Start the HTTP health + BT server as a daemon thread (non-blocking)."""
     server = HTTPServer(('', port), _HealthHandler)
     server.uart_listener   = uart_listener
     server.body_servo      = body_servo
     server.display         = display
+    server.audio           = audio
     server.motor_hat_addr  = _read_motor_hat_addr()
     threading.Thread(
         target=server.serve_forever,

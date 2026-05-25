@@ -1704,6 +1704,40 @@ body.choreo-dome-locked .joystick-panel-right .joystick-ring::after {
   overflow: hidden;
 }
 
+/* 7qp: audio-disabled alert banner at the top of the Audio tab. Toggled to
+   flex by StatusPoller when /status reports audio_ready === false. */
+.audio-disabled-banner {
+  display: none;                       /* poller flips to flex when disabled */
+  align-items: center;
+  gap: 12px;
+  margin: 10px 16px 0;
+  padding: 11px 16px;
+  border: 1px solid var(--amber);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: rgba(255, 179, 0, 0.10);
+  box-shadow: 0 0 16px rgba(255, 179, 0, 0.18);
+}
+.audio-disabled-banner-icon {
+  flex: 0 0 auto;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--amber);
+}
+.audio-disabled-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color: var(--text);
+}
+.audio-disabled-banner-text b {
+  color: var(--amber);
+  font-family: var(--font);
+  letter-spacing: 0.5px;
+}
+
 .audio-categories-wrap {
   padding: 12px 16px 8px;
   flex-shrink: 0;

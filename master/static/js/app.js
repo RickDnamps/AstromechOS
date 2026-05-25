@@ -8781,7 +8781,12 @@ const cockpitPanel = {
         ? this._svcRow(`${data.slave_location} Screen`,
                        data.display_ready ? 'ok' : 'warn',
                        data.display_ready ? `✓ ${data.display_port || 'OK'}` : '⚠ not connected')
-        : this._svcRow(`${data.slave_location} Screen`, 'dim', '— N/A'));
+        : this._svcRow(`${data.slave_location} Screen`, 'dim', '— N/A')) +
+      (data.audio_ready != null
+        ? this._svcRow(`${data.slave_location} Audio`,
+                       data.audio_ready ? 'ok' : 'warn',
+                       data.audio_ready ? '✓ OK' : '⚠ disabled')
+        : this._svcRow(`${data.slave_location} Audio`, 'dim', '— N/A'));
   },
 
   _updateActivity(data) {
@@ -8847,6 +8852,7 @@ const cockpitPanel = {
       data.servo_ready === false ||
       data.camera_found === false ||
       data.display_ready === false ||
+      data.audio_ready === false ||
       (typeof data.uart_crc_errors === 'number' && data.uart_crc_errors > 0)
     );
 
@@ -8937,6 +8943,8 @@ const cockpitPanel = {
       alerts.push({ cls: 'err', msg: `${data.slave_location} Motor HAT ${data.motor_hat_health.addr} — not responding` });
     if (data.display_ready === false)
       alerts.push({ cls: 'warn', msg: `${data.slave_location} Screen (RP2040) not connected` });
+    if (data.audio_ready === false)
+      alerts.push({ cls: 'warn', msg: `${data.slave_location} audio disabled — sounds won't play (check sounds index)` });
     const rssi = data.bt_rssi;
     if (data.bt_connected && rssi != null && rssi <= -80)
       alerts.push({ cls: 'warn', msg: `BT weak signal ${rssi} dBm` });
@@ -9565,6 +9573,13 @@ class StatusPoller {
     // Always update cockpit button color; also refresh panel content if open
     cockpitPanel.updateBtn(data);
     if (cockpitPanel.isOpen) cockpitPanel.update(data);
+
+    // 7qp: audio-disabled banner on the Audio tab. Only show when the slave
+    // is reachable AND explicitly reported audio_ready=false (null = slave
+    // offline → the cockpit already surfaces "Slave unreachable", no need to
+    // also claim audio is down).
+    const _audioBanner = el('audio-disabled-banner');
+    if (_audioBanner) _audioBanner.style.display = data.audio_ready === false ? 'flex' : 'none';
 
     // BT Gamepad panel: auto-refresh custom mappings UI when the active
     // device MAC changes (controller paired/unpaired/reconnected) AND the
