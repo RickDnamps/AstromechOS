@@ -7637,3 +7637,7 @@ body.theme-light .chor-footer-sep   { color:rgba(8,73,214,0.65); }
 body.theme-light .chor-footer-dur   { color:rgba(8,73,214,0.85); }
 body.theme-light .chor-cmd-label    { color:#2a4068; }
 body.theme-light .chor-snap-btn     { color:#2a4068; }
+
+/* Danger buttons (STOP / STOP ALL) — red-on-dark-red-tint failed AA on light.
+   Pale-red fill + darker red text keeps the semantic red and reads. Global. */
+body.theme-light .btn-danger { background: rgba(204,17,51,0.10); color:#9e0c26; }
