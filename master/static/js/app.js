@@ -61,7 +61,7 @@ const _THEMES = {
     },
   },
   r2d2_light: {
-    label: 'R2-D2 Clair', swatch: '#0849d6', light: true,
+    label: 'R2-D2 Light', swatch: '#0849d6', light: true,
     vars: {
       // ── Blueprint: pale blue-sky bg, navy topbar, light-blue cards ──
       '--bg': '#dde8f8', '--bg2': '#d0def5', '--bg3': '#c8d8f0',
