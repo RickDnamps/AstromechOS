@@ -7613,6 +7613,10 @@ body.theme-light .chor-prop-key { color: var(--text); }
 body.theme-light .chor-command-bar { background: rgba(208,222,244,0.96); border-bottom-color: rgba(8,73,214,0.18); }
 body.theme-light .chor-canvas      { background: rgba(228,236,248,0.94); }
 body.theme-light .chor-ruler       { background: rgba(200,216,240,0.98); border-bottom-color: rgba(8,73,214,0.18); }
+/* Label-column spacer is the ruler's left-hand sibling (same default
+   var(--topbar-bg) navy) and was missed in rk2 — it left a stray navy box
+   beside the ruler, above the track-source buttons. Match it to the ruler. */
+body.theme-light .chor-label-spacer { background: rgba(200,216,240,0.98); border-bottom-color: rgba(8,73,214,0.18); }
 body.theme-light .chor-tick        { color: rgba(8,73,214,0.65); }
 body.theme-light .chor-tick.major  { color: #0a1840; }
 /* Palette "add track" chips → light surface + per-track darkened labels
@@ -7637,6 +7641,15 @@ body.theme-light .chor-footer-sep   { color:rgba(8,73,214,0.65); }
 body.theme-light .chor-footer-dur   { color:rgba(8,73,214,0.85); }
 body.theme-light .chor-cmd-label    { color:#2a4068; }
 body.theme-light .chor-snap-btn     { color:#2a4068; }
+
+/* Topbar tabs: the topbar/tabbar stays navy in light theme (blueprint look),
+   but inactive .tab text falls back to --text-dim (#4a6090) = navy-on-navy
+   (~1.4:1, illegible). Lift to a light periwinkle so DRIVE/AUDIO/SEQUENCES/
+   LIGHTS read against the navy bar; active tab already uses --blue + glow and
+   is left untouched. */
+body.theme-light .tab       { color: rgba(196,210,240,0.88); }
+body.theme-light .tab-icon  { opacity: 0.85; }
+body.theme-light .tab:hover { color: #eef4ff; }
 
 /* Danger buttons (STOP / STOP ALL) — red-on-dark-red-tint failed AA on light.
    Pale-red fill + darker red text keeps the semantic red and reads. Global. */
