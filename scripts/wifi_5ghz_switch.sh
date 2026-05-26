@@ -7,19 +7,24 @@
 # (band/channel only) so already-paired tablets/PC just re-associate by name.
 #
 # Run AS THE artoo USER (NOT via sudo bash) so the master->slave ssh uses
-# artoo's key. Privileged ops use `sudo -n` (passwordless), matching the
-# project's nmcli pattern. The operator's SSH to the Master is over wlan1 (home
-# WiFi) — independent of the wlan0 hotspot — so Master control is never lost;
-# the deadman only covers this script itself dying mid-flight.
+# artoo's key. Privileged ops use `sudo -n` (artoo has NOPASSWD). The operator's
+# SSH to the Master is over wlan1 (home WiFi) — independent of the wlan0 hotspot
+# — so Master control is never lost; the deadman only covers this script dying.
 #
-# SAFETY: SLAVE-FIRST + systemd-run DEADMAN auto-rollback on BOTH Pis. The
-# script also verifies synchronously and reverts NOW on failure; the deadman is
-# the backstop if the script/SSH dies.
+# NOTE: `iw` lives in /usr/sbin (not in a bare non-login PATH) and reg reads need
+# root here, so all iw calls go through `sudo -n iw`. 5 GHz feasibility is judged
+# from nmcli's WIFI-PROPERTIES.5GHZ + the reg domain advertising the UNII-1 band.
+#
+# SAFETY: SLAVE-FIRST + systemd-run DEADMAN auto-rollback on BOTH Pis. The script
+# also verifies synchronously and reverts NOW on failure; the deadman backstops a
+# script death. softAP-on-5GHz support of the brcmfmac firmware is unproven — the
+# verify+deadman is exactly what tests it safely.
 #
 # Usage (on the Master, as artoo):
 #   bash scripts/wifi_5ghz_switch.sh --dry-run   # validate + print plan, change nothing
 #   bash scripts/wifi_5ghz_switch.sh             # execute the live switch
 set -u
+export PATH="/usr/sbin:/sbin:$PATH"
 
 DRY=0; [[ "${1:-}" == "--dry-run" ]] && DRY=1
 
@@ -33,10 +38,19 @@ SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 artoo@${SLAVE_HOST}"
 
 log(){ echo "[5GHz] $*"; }
 
-# Ensure the regulatory domain (idempotent, harmless; required for 5 GHz channels).
+# 5 GHz feasibility: wlan0 reports 5GHz capability AND the reg domain advertises
+# the UNII-1 band (5150-5250 = channels 36-48). Robust (no iw PATH / phy index).
+fiveok(){
+  sudo -n iw reg set "${COUNTRY}" >/dev/null 2>&1 || true
+  local cap reg
+  cap="$(nmcli -f WIFI-PROPERTIES dev show wlan0 2>/dev/null | grep -i '5ghz' | grep -ci yes)"
+  reg="$(sudo -n iw reg get 2>/dev/null | grep -c '5150 - 5250')"
+  [[ "${cap:-0}" -ge 1 && "${reg:-0}" -ge 1 ]] && echo yes || echo no
+}
+
 sudo -n iw reg set "$COUNTRY" 2>/dev/null || true
 
-# Capture current state (to PRESERVE the SSID + know the revert target). Reads = no sudo.
+# Capture current state (PRESERVE the SSID + know the revert target). Reads = no sudo.
 ORIG_SSID="$(nmcli -g 802-11-wireless.ssid con show "$HOTSPOT_CON" 2>/dev/null)"
 ORIG_BAND="$(nmcli -g 802-11-wireless.band con show "$HOTSPOT_CON" 2>/dev/null)"
 ORIG_CHAN="$(nmcli -g 802-11-wireless.channel con show "$HOTSPOT_CON" 2>/dev/null)"
@@ -46,18 +60,18 @@ log "Current SSID       : '$ORIG_SSID'   (PRESERVED — never touched)"
 log "Current band/chan  : band='${ORIG_BAND:-auto/2.4}' chan='${ORIG_CHAN:-0}'"
 log "Target             : band=$BAND channel=$CHANNEL (5 GHz UNII-1) — SAME SSID/password"
 
-usable_5ghz(){ iw phy phy0 info 2>/dev/null | grep " 5180 MHz" | grep -ivE "disabled|no IR" | wc -l; }
-M5="$(usable_5ghz)"
-S5="$($SSH "sudo -n iw reg set ${COUNTRY} 2>/dev/null; $(declare -f usable_5ghz); usable_5ghz" 2>/dev/null | tr -dc '0-9')"
+M5="$(fiveok)"
+S5="$($SSH "COUNTRY=${COUNTRY}; $(declare -f fiveok); fiveok" 2>/dev/null | tr -d '[:space:]')"
 $SSH true 2>/dev/null && SLAVE_OK=1 || SLAVE_OK=0
 
-log "5 GHz ch36 usable  : master=$([[ "${M5:-0}" -ge 1 ]] && echo yes || echo NO)  slave=$([[ "${S5:-0}" -ge 1 ]] && echo yes || echo NO)"
-log "Slave reachable    : $([[ $SLAVE_OK -eq 1 ]] && echo yes || echo NO)  ($SLAVE_HOST)"
+log "5 GHz feasible     : master=${M5}  slave=${S5:-no}"
+log "Slave reachable    : $([[ $SLAVE_OK -eq 1 ]] && echo yes || echo no)  ($SLAVE_HOST)"
+log "Reg domain         : $(sudo -n iw reg get 2>/dev/null | grep -m1 country || echo '(none)')"
 
-[[ -n "$ORIG_SSID" ]]  || { log "ABORT: cannot read current SSID — wrong connection name?"; exit 2; }
-[[ "${M5:-0}" -ge 1 ]] || { log "ABORT: master has no usable 5 GHz channel (reg domain?)"; exit 2; }
-[[ "${S5:-0}" -ge 1 ]] || { log "ABORT: slave has no usable 5 GHz channel (reg domain?)"; exit 2; }
-[[ $SLAVE_OK -eq 1 ]]  || { log "ABORT: slave unreachable — cannot arm its deadman"; exit 2; }
+[[ -n "$ORIG_SSID" ]]   || { log "ABORT: cannot read current SSID — wrong connection name?"; exit 2; }
+[[ "$M5" == "yes" ]]    || { log "ABORT: master not 5 GHz-feasible (cap/reg)"; exit 2; }
+[[ "${S5}" == "yes" ]]  || { log "ABORT: slave not 5 GHz-feasible (cap/reg)"; exit 2; }
+[[ $SLAVE_OK -eq 1 ]]   || { log "ABORT: slave unreachable — cannot arm its deadman"; exit 2; }
 
 if [[ $DRY -eq 1 ]]; then
   log "================= DRY-RUN — NO changes to hotspot/SSID ================="
@@ -100,7 +114,7 @@ for i in 1 2 3 4 5; do
 done
 
 if [[ $OK -eq 1 ]]; then
-  FREQ="$(iw dev wlan0 info 2>/dev/null | awk '/channel/{$1="";print}')"
+  FREQ="$(sudo -n iw dev wlan0 info 2>/dev/null | awk '/channel/{$1="";print}')"
   log "[5/5] SUCCESS — slave reachable on 5 GHz. wlan0:${FREQ}"
   sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null || true
   $SSH "sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null" || true
