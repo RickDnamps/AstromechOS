@@ -47,7 +47,7 @@ A **complete, production-grade control system** for a 1:1 scale astromech droid 
 <td align="center" width="50%">
 
 ### 🕹️ Drive
-Dual virtual joysticks (propulsion + dome) · WASD / arrow keys · live MJPEG camera feed · speed arc + direction HUD · always-visible E-STOP · the per-axis **Shortcuts** overlay (up to 12 macro buttons split over both joysticks).
+Dual virtual joysticks (propulsion + dome) · WASD / arrow keys · live MJPEG camera feed · speed arc + direction HUD · always-visible E-STOP · the per-axis **Shortcuts** overlay (up to 16 macro buttons) · and a fully **customizable layout** (see below).
 
 ![Drive interface](Screenshots/drive.png)
 
@@ -58,6 +58,24 @@ Dual virtual joysticks (propulsion + dome) · WASD / arrow keys · live MJPEG ca
 One-tap real-time snapshot from any tab — heartbeat & UART health, both VESCs, every servo/motor HAT, the RP2040 screen, Pi temps/CPU/disk, IP addresses, and active safety alerts (here: bench mode engaged).
 
 ![Cockpit status panel](Screenshots/cockpit-status.png)
+
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+
+### 🎨 Custom Drive Layout — "Roblox-style" editor
+**Drag the joysticks, every shortcut button, and the camera anywhere.** A live **5 % snap grid** (adjustable 1–20 %, or free pixel mode), a **resizable + movable** camera panel, transparent joysticks so the feed shows through, and a floating Save / Reset / Cancel banner. Saved **per device** (tablet ≠ PC ≠ phone) and included in your backups. _(Shown in the R2-D2 Light theme.)_
+
+![Custom Drive Layout editor](Screenshots/custom-layout-editor.png)
+
+</td>
+<td align="center" width="50%">
+
+### 🎯 Neon alignment guides
+Grab any element and a **theme-coloured laser crosshair** + live **%-position badge** locks to its edges (shortcut) or its center (joystick) for pixel-perfect alignment, then fades on release. Buttons dragged **over the video** auto-switch to a dark high-contrast fill; off the video they keep the theme styling.
+
+![Neon alignment guides](Screenshots/custom-layout-guides.png)
 
 </td>
 </tr>
@@ -227,6 +245,7 @@ Everything tunable lives in the **Settings** tab, organised into five nav sectio
 
 | | |
 |---|---|
+| 🎨 **Custom Drive Layout** | Operator-positionable Drive tab — **drag the joysticks, every shortcut button, and the camera anywhere** · adjustable 5 % snap grid (1–20 %, or free pixel placement) · **resizable + movable** camera panel · transparent joysticks so the feed shows through · **neon, theme-coloured alignment guides** + live %-position badge · saved **per device** (tablet ≠ PC ≠ phone) and included in the backup · edit mode is admin-gated, auto-closes on lock/inactivity, and never fires an action while you arrange |
 | 🎭 **48 behavioral sequences** | One-click coordinated performances — sound · dome · panels · lights · loop mode |
 | 🎼 **Choreography timeline editor** | Multi-track · VESC · audio · servos · lights · admin-guarded Save/Delete · **full touch support** (drag from palette to add, drag to move, drag-edge to resize — all work on a tablet, not just mouse) |
 | 🎮 **Bluetooth gamepad** | Xbox/PS4/8BitDo/NVIDIA Shield direct to Pi · zero lag · battery % · RSSI · 2×2 axis grouping (DRIVE / LOOK) · premium header card with status LED + MAC pill |
@@ -241,7 +260,7 @@ Everything tunable lives in the **Settings** tab, organised into five nav sectio
 | 🚀 **One-button OTA deploy** | Dome button → git pull + rsync + reboot — no SSH needed |
 | 📷 **USB camera autodetect** | MJPEG stream · hardware-compressed · auto-reconnect after restart |
 | 🎨 **Theme system** | 7 built-in themes · up to 16 custom themes · live preview · 7 sci-fi fonts · **persisted server-side** (survives reboots & device changes, included in backups) |
-| 🎛️ **Drive-tab Shortcuts** | Up to 12 operator-configurable macro buttons split over both joysticks · toggle arms/panels · play choreo/sound/random · green pulse while playing · re-press kills · auto-fills icon+label from choreo emoji · per-axis motion lockout (drive choreo locks left, dome choreo locks dome rotation, sound-only stays free) |
+| 🎛️ **Drive-tab Shortcuts** | Up to 16 operator-configurable macro buttons · toggle arms/panels · play choreo/sound/random · green pulse while playing · re-press kills · auto-fills icon+label from choreo emoji · per-axis motion lockout (drive choreo locks left, dome choreo locks dome rotation, sound-only stays free) |
 | 💾 **Backup & Restore** | One-click full backup of all robot state (configs · sounds · choreos · calibrations · custom themes) to a downloadable `.bck` · Restore = total replacement + auto-reboot, recovers a dead SD card "like before" · network config preserved so master↔slave never lose each other · hardened (anti zip-slip + anti-RCE allow-list) |
 | 🔄 **Self-healing audio index** | The sound index reconciles against the files actually on the robot (drops ghosts, files unknown ones under *others*) on boot + on demand — a failed upload never leaves a phantom |
 | 🛜 **Per-robot hotspot + safe network changes** | Each robot's hotspot gets a unique SSID (`Astromech_Control_XXXX` from the Pi serial) so multiple droids don't collide at expos · changing the hotspot SSID/password updates the **Slave first** and aborts if it's unreachable, so the Slave never gets stranded — and UART keeps drive/safety alive across the WiFi micro-gap (live-tested) |
