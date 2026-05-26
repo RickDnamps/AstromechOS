@@ -4988,8 +4988,6 @@ select.chor-dirty {
  * Dense timelines = misclicks without affordance. Now hover lights
  * the block + the resize grip becomes visible. */
 .chor-block:hover {
-  filter: brightness(1.25);
-  box-shadow: 0 0 10px currentColor;
   z-index: 4;
 }
 .chor-block .chor-block-resize {
@@ -6933,16 +6931,28 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   outline-offset: 1px;
   box-shadow: 0 0 10px rgba(var(--cyan-rgb),.4);
 }
-.chor-block[data-track="audio"]       { background:rgba(0,200,255,.2);   color:var(--val-color); border-color:rgba(0,200,255,.5); }
-.chor-block[data-track="audio2"]      { background:rgba(0,123,255,.18);  color:#007bff; border-color:rgba(0,123,255,.5); }
-.chor-block[data-track="lights"]      { background:rgba(255,180,0,.18);  color:#ffb800; border-color:rgba(255,180,0,.45); }
-.chor-block[data-track="lights"][data-mode="alarm"] { background:rgba(255,40,80,.22); color:#ff2855; border-color:rgba(255,40,80,.55); }
-.chor-block[data-track="lights"][data-mode="disco"] { background:rgba(160,80,255,.22); color:#b055ff; border-color:rgba(160,80,255,.55); }
-.chor-block[data-track="dome_servos"] { background:rgba(0,255,136,.16);  color:var(--status-ok); border-color:rgba(0,255,136,.4); }
-.chor-block[data-track="body_servos"] { background:rgba(25,135,84,.18);  color:#198754; border-color:rgba(25,135,84,.5); }
-.chor-block[data-track="arm_servos"]  { background:rgba(45,160,90,.16);  color:#2da05a; border-color:rgba(45,160,90,.45); }
-.chor-block[data-track="propulsion"]  { background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
-.chor-block[data-track="dome"]        { background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
+.chor-block[data-track="audio"]       { --blk-rgb:0,200,255;  background:rgba(0,200,255,.2);   color:var(--val-color); border-color:rgba(0,200,255,.5); }
+.chor-block[data-track="audio2"]      { --blk-rgb:0,123,255;  background:rgba(0,123,255,.18);  color:#007bff; border-color:rgba(0,123,255,.5); }
+.chor-block[data-track="lights"]      { --blk-rgb:255,180,0;  background:rgba(255,180,0,.18);  color:#ffb800; border-color:rgba(255,180,0,.45); }
+.chor-block[data-track="lights"][data-mode="alarm"] { --blk-rgb:255,40,80;  background:rgba(255,40,80,.22); color:#ff2855; border-color:rgba(255,40,80,.55); }
+.chor-block[data-track="lights"][data-mode="disco"] { --blk-rgb:160,80,255; background:rgba(160,80,255,.22); color:#b055ff; border-color:rgba(160,80,255,.55); }
+.chor-block[data-track="dome_servos"] { --blk-rgb:0,255,136;  background:rgba(0,255,136,.16);  color:var(--status-ok); border-color:rgba(0,255,136,.4); }
+.chor-block[data-track="body_servos"] { --blk-rgb:25,135,84;  background:rgba(25,135,84,.18);  color:#198754; border-color:rgba(25,135,84,.5); }
+.chor-block[data-track="arm_servos"]  { --blk-rgb:45,160,90;  background:rgba(45,160,90,.16);  color:#2da05a; border-color:rgba(45,160,90,.45); }
+.chor-block[data-track="propulsion"]  { --blk-rgb:255,120,0;  background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
+.chor-block[data-track="dome"]        { --blk-rgb:200,60,255; background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
+
+/* Hover: surface the block's OWN track hue strongly. Idle backgrounds sit at
+   ~.16-.2 alpha, so on the dark canvas every block read as a faint blue-grey.
+   On hover we raise that block's --blk-rgb to a saturated fill + matching glow
+   so the operator instantly sees audio=cyan, lights=amber, servos=green,
+   dome=violet, propulsion=orange, etc. The [data-track] attribute keeps this
+   above the idle per-track rules in the cascade. */
+.chor-block[data-track]:hover {
+  background: rgba(var(--blk-rgb, 0,200,255), .42);
+  border-color: rgba(var(--blk-rgb, 0,200,255), .95);
+  box-shadow: 0 0 12px rgba(var(--blk-rgb, 0,200,255), .55);
+}
 
 /* Servo config mismatch badges */
 .chor-issue-badge {
@@ -7595,16 +7605,25 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
    v2 readability: Choreo timeline/Inspector legibility on LIGHT themes
    Dark themes are 100% unaffected — every rule is scoped under body.theme-light.
    ══════════════════════════════════════════════════════════════════════ */
-body.theme-light .chor-block[data-track="audio"]      { color:#054a73; background:rgba(0,110,170,.16); border-color:rgba(0,110,170,.55); }
-body.theme-light .chor-block[data-track="audio2"]     { color:#0a4a9c; background:rgba(0,90,200,.15);  border-color:rgba(0,90,200,.5);  }
-body.theme-light .chor-block[data-track="lights"]     { color:#8a5200; background:rgba(200,120,0,.18); border-color:rgba(200,120,0,.55); }
-body.theme-light .chor-block[data-track="lights"][data-mode="alarm"] { color:#a01028; background:rgba(200,30,60,.18);  border-color:rgba(200,30,60,.55);  }
-body.theme-light .chor-block[data-track="lights"][data-mode="disco"] { color:#5a1a9c; background:rgba(140,50,200,.18); border-color:rgba(140,50,200,.55); }
-body.theme-light .chor-block[data-track="dome_servos"]{ color:#0a6a3a; background:rgba(0,140,80,.16);  border-color:rgba(0,140,80,.55);  }
-body.theme-light .chor-block[data-track="body_servos"]{ color:#125a32; background:rgba(20,120,70,.16); border-color:rgba(20,120,70,.55); }
-body.theme-light .chor-block[data-track="arm_servos"] { color:#1a6a3c; background:rgba(30,140,80,.16); border-color:rgba(30,140,80,.55); }
-body.theme-light .chor-block[data-track="propulsion"] { color:#8a4500; background:rgba(210,110,0,.18); border-color:rgba(210,110,0,.55); }
-body.theme-light .chor-block[data-track="dome"]       { color:#6a1a9c; background:rgba(160,60,220,.16); border-color:rgba(160,60,220,.55); }
+body.theme-light .chor-block[data-track="audio"]      { --blk-rgb:0,110,170;  color:#054a73; background:rgba(0,110,170,.16); border-color:rgba(0,110,170,.55); }
+body.theme-light .chor-block[data-track="audio2"]     { --blk-rgb:0,90,200;   color:#0a4a9c; background:rgba(0,90,200,.15);  border-color:rgba(0,90,200,.5);  }
+body.theme-light .chor-block[data-track="lights"]     { --blk-rgb:200,120,0;  color:#8a5200; background:rgba(200,120,0,.18); border-color:rgba(200,120,0,.55); }
+body.theme-light .chor-block[data-track="lights"][data-mode="alarm"] { --blk-rgb:200,30,60;  color:#a01028; background:rgba(200,30,60,.18);  border-color:rgba(200,30,60,.55);  }
+body.theme-light .chor-block[data-track="lights"][data-mode="disco"] { --blk-rgb:140,50,200; color:#5a1a9c; background:rgba(140,50,200,.18); border-color:rgba(140,50,200,.55); }
+body.theme-light .chor-block[data-track="dome_servos"]{ --blk-rgb:0,140,80;   color:#0a6a3a; background:rgba(0,140,80,.16);  border-color:rgba(0,140,80,.55);  }
+body.theme-light .chor-block[data-track="body_servos"]{ --blk-rgb:20,120,70;  color:#125a32; background:rgba(20,120,70,.16); border-color:rgba(20,120,70,.55); }
+body.theme-light .chor-block[data-track="arm_servos"] { --blk-rgb:30,140,80;  color:#1a6a3c; background:rgba(30,140,80,.16); border-color:rgba(30,140,80,.55); }
+body.theme-light .chor-block[data-track="propulsion"] { --blk-rgb:210,110,0;  color:#8a4500; background:rgba(210,110,0,.18); border-color:rgba(210,110,0,.55); }
+body.theme-light .chor-block[data-track="dome"]       { --blk-rgb:160,60,220; color:#6a1a9c; background:rgba(160,60,220,.16); border-color:rgba(160,60,220,.55); }
+
+/* Light-theme hover: same track-hue intensification, lower alpha so the dark
+   per-track text stays legible on the lighter fill. Higher specificity than the
+   idle light rules above (extra :hover) so it wins. */
+body.theme-light .chor-block[data-track]:hover {
+  background: rgba(var(--blk-rgb, 0,110,170), .30);
+  border-color: rgba(var(--blk-rgb, 0,110,170), .9);
+  box-shadow: 0 0 10px rgba(var(--blk-rgb, 0,110,170), .4);
+}
 
 /* Inspector dim text was too faint on light cards */
 body.theme-light .chor-inspector-title,
