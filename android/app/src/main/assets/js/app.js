@@ -682,6 +682,13 @@ function _initThemes() {
   // B.0: pull server-side custom themes into the local cache (multi-device);
   // first run migrates existing localStorage themes up to the server.
   _syncThemesFromServer();
+  // Custom Drive Layout: restore the saved mode + pull this robot's per-device
+  // layouts from the server (localStorage mirror, like themes). apply() runs
+  // inside setMode/syncFromServer and is a no-op in Standard mode.
+  if (typeof driveLayout !== 'undefined') {
+    driveLayout.setMode(_lsGet('astromech-drive-mode') === 'custom' ? 'custom' : 'standard');
+    driveLayout.syncFromServer();
+  }
 }
 
 // Apply saved theme immediately when script loads — before first paint
@@ -2002,6 +2009,8 @@ function _applyTabSwitch(tabId) {
     if (typeof _resumeCameraStream === 'function') _resumeCameraStream();
   } else {
     if (typeof _pauseCameraStream === 'function') _pauseCameraStream();
+    // Leaving Drive auto-exits Custom-Layout edit mode (discard in-flight drag).
+    if (typeof driveLayout !== 'undefined') driveLayout.exitEdit(false);
   }
 
   if (tabId === 'choreo') choreoEditor.init();
@@ -11202,6 +11211,198 @@ const shortcutsEditor = {
 // to Drive, and after a successful save in the editor. Renders into
 // the two .shortcut-pad containers (left + right) inside the joystick
 // panels.
+// ════════════════════════════════════════════════════════════════════════
+// Custom Drive Layout — operator-positionable joysticks + shortcut buttons
+// inside .drive-main ("Roblox-style"). Persistence mirrors the theme pattern
+// (server drive_layouts.json + localStorage mirror), keyed by deviceKey;
+// coords are % of the .drive-main box.
+// 🛡️ SAFETY: this NEVER touches the .drive-bottom-bar (E-STOP, Speed/VESC,
+// ALIVE, Camera, Lock, Bluetooth) — only .drive-main children move. Edit mode
+// freezes the joysticks so you can't drive while arranging.
+// ════════════════════════════════════════════════════════════════════════
+const driveLayout = {
+  _editing: false,
+  _drag: null,
+  _DEFAULTS: { propulsion: { x: 2, y: 28 }, dome: { x: 80, y: 28 } },
+
+  deviceKey() {
+    const t = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse';
+    return `${t}_${Math.round(window.innerWidth)}x${Math.round(window.innerHeight)}`;
+  },
+  _mirrorKey() { return _lsKey('astromech-drive-layouts'); },
+  _loadMirror() { try { return JSON.parse(localStorage.getItem(this._mirrorKey()) || '{}') || {}; } catch { return {}; } },
+  _saveMirror(o) { try { localStorage.setItem(this._mirrorKey(), JSON.stringify(o)); } catch {} },
+  _current() { const m = this._loadMirror()[this.deviceKey()]; return (m && typeof m === 'object') ? m : { shortcuts: {} }; },
+  isCustom() { return document.body.classList.contains('drive-custom-layout'); },
+
+  _main() { return document.querySelector('.drive-main'); },
+  _propPanel() { return document.querySelector('.joystick-panel-left'); },
+  _domePanel() { return document.querySelector('.joystick-panel-right'); },
+  _setPt(e, p) {
+    if (!e || !p) return;
+    e.style.setProperty('--lx', Math.min(100, Math.max(0, p.x)) + '%');
+    e.style.setProperty('--ly', Math.min(100, Math.max(0, p.y)) + '%');
+  },
+  _pctOf(e) { return { x: parseFloat(e.style.getPropertyValue('--lx')) || 0, y: parseFloat(e.style.getPropertyValue('--ly')) || 0 }; },
+
+  // Remove free shortcut nodes from .drive-main so a shortcutsRunner re-render
+  // (which rebuilds canonical buttons into the pads) can't duplicate them.
+  _detachFreeShortcuts() {
+    document.querySelectorAll('.drive-main > .shortcut-btn.dl-free').forEach(n => n.remove());
+  },
+
+  async syncFromServer() {
+    const d = await api('/drive/layouts');
+    if (d && typeof d === 'object' && !Array.isArray(d)) this._saveMirror(d);
+    this.apply();
+  },
+
+  setMode(mode) {
+    const custom = mode === 'custom';
+    if (!custom) this.exitEdit(false);
+    document.body.classList.toggle('drive-custom-layout', custom);
+    _lsSet('astromech-drive-mode', custom ? 'custom' : 'standard');
+    if (custom) {
+      this.apply();
+    } else {
+      // Restore Standard: clear joystick inline coords + rebuild shortcuts into pads.
+      [this._propPanel(), this._domePanel()].forEach(e => {
+        if (e) { e.style.removeProperty('--lx'); e.style.removeProperty('--ly'); }
+      });
+      this._detachFreeShortcuts();
+      if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
+    }
+    const r = document.querySelector(`input[name="drive-layout-mode"][value="${custom ? 'custom' : 'standard'}"]`);
+    if (r) r.checked = true;
+  },
+
+  // Apply this device's saved layout. Called after every shortcutsRunner render
+  // (so freshly-rendered buttons pick up saved positions) and on mode enter.
+  apply() {
+    if (!this.isCustom()) return;
+    const lay = this._current();
+    this._setPt(this._propPanel(), lay.propulsion || this._DEFAULTS.propulsion);
+    this._setPt(this._domePanel(), lay.dome || this._DEFAULTS.dome);
+    const main = this._main();
+    const saved = lay.shortcuts || {};
+    if (main) {
+      Object.keys(saved).forEach(scid => {
+        let btn = null;
+        try { btn = document.querySelector(`.shortcut-btn[data-scid="${CSS.escape(scid)}"]`); } catch { btn = null; }
+        if (btn) { btn.classList.add('dl-free'); main.appendChild(btn); this._setPt(btn, saved[scid]); }
+      });
+    }
+  },
+
+  _draggables() {
+    const els = [];
+    const pp = this._propPanel(); if (pp) els.push(pp);
+    const dp = this._domePanel(); if (dp) els.push(dp);
+    document.querySelectorAll('.drive-main .shortcut-btn').forEach(b => els.push(b));
+    return els;
+  },
+  _bindEdit(on) {
+    this._draggables().forEach(e => {
+      e.removeEventListener('pointerdown', this._onDown);
+      if (on) e.addEventListener('pointerdown', this._onDown);
+    });
+  },
+  enterEdit() {
+    if (!this.isCustom()) this.setMode('custom');
+    this._editing = true;
+    document.body.classList.add('drive-layout-editing');
+    this._bindEdit(true);
+  },
+  async exitEdit(save) {
+    if (!this._editing) return;
+    this._editing = false;
+    this._bindEdit(false);
+    document.body.classList.remove('drive-layout-editing');
+    document.body.classList.remove('dl-dragging');
+    if (save) {
+      const layout = this._collect();
+      const all = this._loadMirror();
+      all[this.deviceKey()] = layout;
+      this._saveMirror(all);
+      const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+      if (tok) { try { await api('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout }); } catch {} }
+      else if (typeof toast === 'function') toast('Layout saved on this device (admin login needed to sync + back up)', 'info');
+    }
+    this.apply();
+  },
+  async reset() {
+    const all = this._loadMirror();
+    delete all[this.deviceKey()];
+    this._saveMirror(all);
+    const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+    if (tok) { try { await api('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout: null }); } catch {} }
+    this.exitEdit(false);
+    this._detachFreeShortcuts();
+    if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
+    [this._propPanel(), this._domePanel()].forEach(e => {
+      if (e) { e.style.removeProperty('--lx'); e.style.removeProperty('--ly'); }
+    });
+    this.apply();
+    if (typeof toast === 'function') toast('Layout reset to default', 'info');
+  },
+  _collect() {
+    const lay = { shortcuts: {} };
+    const pp = this._propPanel(); if (pp) lay.propulsion = this._pctOf(pp);
+    const dp = this._domePanel(); if (dp) lay.dome = this._pctOf(dp);
+    document.querySelectorAll('.drive-main > .shortcut-btn.dl-free').forEach(b => {
+      if (b.dataset.scid) lay.shortcuts[b.dataset.scid] = this._pctOf(b);
+    });
+    return lay;
+  },
+
+  // --- Pointer-Events drag (touch + mouse). NEVER setPointerCapture (timeline
+  //     lesson 973ecf6); move/up live on document. Clamped to .drive-main. ---
+  _onDown: (ev) => {
+    if (!driveLayout._editing || !ev.isPrimary) return;
+    const e = ev.currentTarget;
+    ev.preventDefault();
+    const main = driveLayout._main().getBoundingClientRect();
+    // Lift a pad shortcut into free positioning on first grab (no visual jump).
+    if (e.classList.contains('shortcut-btn') && !e.classList.contains('dl-free')) {
+      const r0 = e.getBoundingClientRect();
+      e.classList.add('dl-free');
+      driveLayout._main().appendChild(e);
+      driveLayout._setPt(e, {
+        x: (r0.left - main.left) / main.width * 100,
+        y: (r0.top - main.top) / main.height * 100,
+      });
+    }
+    const r = e.getBoundingClientRect();
+    driveLayout._drag = { e, main, offx: ev.clientX - r.left, offy: ev.clientY - r.top, w: r.width, h: r.height };
+    document.body.classList.add('dl-dragging');
+    document.addEventListener('pointermove', driveLayout._onMove);
+    document.addEventListener('pointerup', driveLayout._onUp);
+    document.addEventListener('pointercancel', driveLayout._onUp);
+  },
+  _onMove: (ev) => {
+    const d = driveLayout._drag; if (!d) return;
+    let x = ev.clientX - d.main.left - d.offx;
+    let y = ev.clientY - d.main.top - d.offy;
+    x = Math.min(d.main.width - d.w, Math.max(0, x));   // clamp fully inside .drive-main
+    y = Math.min(d.main.height - d.h, Math.max(0, y));
+    const maxPx = Math.max(0, (d.main.width - d.w) / d.main.width * 100);
+    const maxPy = Math.max(0, (d.main.height - d.h) / d.main.height * 100);
+    let px = Math.round((x / d.main.width) * 100 / 5) * 5;   // 5% snap
+    let py = Math.round((y / d.main.height) * 100 / 5) * 5;
+    px = Math.min(maxPx, Math.max(0, px));   // snap can overshoot the clamp → re-clamp in-bounds
+    py = Math.min(maxPy, Math.max(0, py));
+    d.e.style.setProperty('--lx', px + '%');
+    d.e.style.setProperty('--ly', py + '%');
+  },
+  _onUp: () => {
+    driveLayout._drag = null;
+    document.body.classList.remove('dl-dragging');
+    document.removeEventListener('pointermove', driveLayout._onMove);
+    document.removeEventListener('pointerup', driveLayout._onUp);
+    document.removeEventListener('pointercancel', driveLayout._onUp);
+  },
+};
+
 const shortcutsRunner = {
   _shortcuts: [],
   _states:    {},
@@ -11218,6 +11419,9 @@ const shortcutsRunner = {
     const left  = el('shortcut-pad-left');
     const right = el('shortcut-pad-right');
     if (!left || !right) return;
+    // Custom layout: drop any free shortcut nodes parented onto .drive-main so
+    // the rebuild below can't leave duplicates (they get re-freed by apply()).
+    if (typeof driveLayout !== 'undefined') driveLayout._detachFreeShortcuts();
     left.replaceChildren();
     right.replaceChildren();
     this._btnById = {};   // id → DOM button, used by updateFromStatus
@@ -11253,6 +11457,9 @@ const shortcutsRunner = {
       let _lpTimer = null;
       let _lpFired = false;
       btn.addEventListener('pointerdown', () => {
+        // Don't arm the long-press → Settings jump while arranging the Custom
+        // layout (a hold-drag would yank the operator out of edit mode).
+        if (typeof driveLayout !== 'undefined' && driveLayout._editing) return;
         _lpFired = false;
         _lpTimer = setTimeout(() => {
           _lpFired = true;
@@ -11274,6 +11481,8 @@ const shortcutsRunner = {
       dest.appendChild(btn);
       this._btnById[sc.id] = btn;
     });
+    // Custom layout: re-apply saved positions to the freshly-rendered buttons.
+    if (typeof driveLayout !== 'undefined') driveLayout.apply();
   },
 
   // Called every status-poll tick (~2s) with the /status payload.

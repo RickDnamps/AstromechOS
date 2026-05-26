@@ -385,6 +385,14 @@
 
     <div class="drive-main">
 
+      <!-- Custom-layout edit toolbar — overlay, shown only in edit mode (body.
+           drive-layout-editing). NEVER placed in the fixed bottom bar. -->
+      <div id="dl-editbar" class="dl-editbar">
+        <button class="btn btn-xs btn-primary" onclick="driveLayout.exitEdit(true)">✓ SAVE</button>
+        <button class="btn btn-xs" onclick="driveLayout.reset()">RESET</button>
+        <button class="btn btn-xs" onclick="driveLayout.exitEdit(false)">✕ CANCEL</button>
+      </div>
+
       <!-- Left joystick — Propulsion -->
       <div class="joystick-panel joystick-panel-left">
         <!-- Shortcuts pad — populated by shortcutsRunner.render() from
@@ -2154,6 +2162,18 @@
             <input type="range" class="holo-slider" id="scale-slider-timeline"
                    min="1.0" max="1.4" step="0.1" value="1.0"
                    oninput="onScaleSlider('timeline', this.value)">
+          </div>
+        </section>
+        <section class="card settings-card" id="drive-layout-card" style="margin-top:12px">
+          <h2 class="card-title">DRIVE LAYOUT</h2>
+          <div class="settings-note">Arrange the <span class="robot-name">R2-D2</span> Drive screen. In <strong>Custom</strong> mode you can drag the two joysticks and each shortcut button anywhere inside the drive area. The bottom bar (E-STOP, speed, lock, camera…) always stays fixed. Layouts are saved per device and ride your backups.</div>
+          <div style="display:flex;gap:16px;margin-top:8px">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="drive-layout-mode" value="standard" checked onchange="driveLayout.setMode(this.value)"> Standard</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="drive-layout-mode" value="custom" onchange="driveLayout.setMode(this.value)"> Custom</label>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-primary" onclick="driveLayout.setMode('custom'); switchTab('drive'); driveLayout.enterEdit()">✎ EDIT LAYOUT</button>
+            <button class="btn btn-secondary" onclick="driveLayout.reset()">RESET TO DEFAULT</button>
           </div>
         </section>
         <section class="card settings-card" style="margin-top:12px">

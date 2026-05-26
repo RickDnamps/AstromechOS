@@ -11457,6 +11457,9 @@ const shortcutsRunner = {
       let _lpTimer = null;
       let _lpFired = false;
       btn.addEventListener('pointerdown', () => {
+        // Don't arm the long-press → Settings jump while arranging the Custom
+        // layout (a hold-drag would yank the operator out of edit mode).
+        if (typeof driveLayout !== 'undefined' && driveLayout._editing) return;
         _lpFired = false;
         _lpTimer = setTimeout(() => {
           _lpFired = true;
