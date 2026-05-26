@@ -6,19 +6,19 @@
 # (band a, channel 36 — UNII-1, non-DFS) WITHOUT changing the SSID or password
 # (band/channel only) so already-paired tablets/PC just re-associate by name.
 #
-# Runs ON THE MASTER (which has key-based SSH to the Slave). The operator's SSH
-# to the Master is over wlan1 (home WiFi) — independent of the wlan0 hotspot —
-# so control of the Master is never lost; the deadman only covers this script
-# itself dying mid-flight.
+# Run AS THE artoo USER (NOT via sudo bash) so the master->slave ssh uses
+# artoo's key. Privileged ops use `sudo -n` (passwordless), matching the
+# project's nmcli pattern. The operator's SSH to the Master is over wlan1 (home
+# WiFi) — independent of the wlan0 hotspot — so Master control is never lost;
+# the deadman only covers this script itself dying mid-flight.
 #
-# SAFETY: SLAVE-FIRST + systemd-run DEADMAN auto-rollback on BOTH Pis. If the
-# 5 GHz link is not verified, both Pis self-revert to the original 2.4 GHz after
-# the deadman delay. The script also verifies synchronously and reverts NOW on
-# failure (the deadman is the backstop if the script/SSH dies).
+# SAFETY: SLAVE-FIRST + systemd-run DEADMAN auto-rollback on BOTH Pis. The
+# script also verifies synchronously and reverts NOW on failure; the deadman is
+# the backstop if the script/SSH dies.
 #
-# Usage (on the Master):
-#   sudo bash scripts/wifi_5ghz_switch.sh --dry-run   # validate + print plan, change nothing
-#   sudo bash scripts/wifi_5ghz_switch.sh             # execute the live switch
+# Usage (on the Master, as artoo):
+#   bash scripts/wifi_5ghz_switch.sh --dry-run   # validate + print plan, change nothing
+#   bash scripts/wifi_5ghz_switch.sh             # execute the live switch
 set -u
 
 DRY=0; [[ "${1:-}" == "--dry-run" ]] && DRY=1
@@ -33,10 +33,10 @@ SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 artoo@${SLAVE_HOST}"
 
 log(){ echo "[5GHz] $*"; }
 
-# --- Ensure the regulatory domain (idempotent, harmless; required for 5 GHz) ---
-iw reg set "$COUNTRY" 2>/dev/null || true
+# Ensure the regulatory domain (idempotent, harmless; required for 5 GHz channels).
+sudo -n iw reg set "$COUNTRY" 2>/dev/null || true
 
-# --- Capture current state (to PRESERVE the SSID + know the revert target) ---
+# Capture current state (to PRESERVE the SSID + know the revert target). Reads = no sudo.
 ORIG_SSID="$(nmcli -g 802-11-wireless.ssid con show "$HOTSPOT_CON" 2>/dev/null)"
 ORIG_BAND="$(nmcli -g 802-11-wireless.band con show "$HOTSPOT_CON" 2>/dev/null)"
 ORIG_CHAN="$(nmcli -g 802-11-wireless.channel con show "$HOTSPOT_CON" 2>/dev/null)"
@@ -46,27 +46,25 @@ log "Current SSID       : '$ORIG_SSID'   (PRESERVED — never touched)"
 log "Current band/chan  : band='${ORIG_BAND:-auto/2.4}' chan='${ORIG_CHAN:-0}'"
 log "Target             : band=$BAND channel=$CHANNEL (5 GHz UNII-1) — SAME SSID/password"
 
-# --- Count usable 5 GHz AP channel (5180 MHz = ch36) on master + slave ---
-usable_5ghz(){ iw reg set "$COUNTRY" 2>/dev/null || true; iw phy phy0 info 2>/dev/null | grep " 5180 MHz" | grep -ivE "disabled|no IR" | wc -l; }
+usable_5ghz(){ iw phy phy0 info 2>/dev/null | grep " 5180 MHz" | grep -ivE "disabled|no IR" | wc -l; }
 M5="$(usable_5ghz)"
-S5="$($SSH "sudo -n bash -c '$(declare -f usable_5ghz); usable_5ghz'" 2>/dev/null | tr -dc '0-9')"
+S5="$($SSH "sudo -n iw reg set ${COUNTRY} 2>/dev/null; $(declare -f usable_5ghz); usable_5ghz" 2>/dev/null | tr -dc '0-9')"
 $SSH true 2>/dev/null && SLAVE_OK=1 || SLAVE_OK=0
 
 log "5 GHz ch36 usable  : master=$([[ "${M5:-0}" -ge 1 ]] && echo yes || echo NO)  slave=$([[ "${S5:-0}" -ge 1 ]] && echo yes || echo NO)"
 log "Slave reachable    : $([[ $SLAVE_OK -eq 1 ]] && echo yes || echo NO)  ($SLAVE_HOST)"
 
-# --- Abort if prerequisites are not met (don't even try) ---
-[[ -n "$ORIG_SSID" ]]      || { log "ABORT: cannot read current SSID — wrong connection name?"; exit 2; }
-[[ "${M5:-0}" -ge 1 ]]     || { log "ABORT: master has no usable 5 GHz channel (reg domain?)"; exit 2; }
-[[ "${S5:-0}" -ge 1 ]]     || { log "ABORT: slave has no usable 5 GHz channel (reg domain?)"; exit 2; }
-[[ $SLAVE_OK -eq 1 ]]      || { log "ABORT: slave unreachable — cannot arm its deadman"; exit 2; }
+[[ -n "$ORIG_SSID" ]]  || { log "ABORT: cannot read current SSID — wrong connection name?"; exit 2; }
+[[ "${M5:-0}" -ge 1 ]] || { log "ABORT: master has no usable 5 GHz channel (reg domain?)"; exit 2; }
+[[ "${S5:-0}" -ge 1 ]] || { log "ABORT: slave has no usable 5 GHz channel (reg domain?)"; exit 2; }
+[[ $SLAVE_OK -eq 1 ]]  || { log "ABORT: slave unreachable — cannot arm its deadman"; exit 2; }
 
 if [[ $DRY -eq 1 ]]; then
   log "================= DRY-RUN — NO changes to hotspot/SSID ================="
   log "Would execute, slave-first:"
-  log " 1. SLAVE deadman  (+${DEADMAN_S}s): ssh slave -> systemd-run --unit=$UNIT 'iw reg set $COUNTRY; nmcli con down/up $SLAVE_CON'"
-  log " 2. MASTER deadman (+${DEADMAN_M}s): systemd-run --unit=$UNIT 'nmcli con mod $HOTSPOT_CON band=${ORIG_BAND:-<auto>} chan=${ORIG_CHAN:-0}; nmcli con up'"
-  log " 3. FLIP master   : nmcli con mod $HOTSPOT_CON 802-11-wireless.band $BAND .channel $CHANNEL  (SSID '$ORIG_SSID' untouched); nmcli con up"
+  log " 1. SLAVE deadman  (+${DEADMAN_S}s): ssh slave -> sudo -n systemd-run --unit=$UNIT 'iw reg set $COUNTRY; nmcli con down/up $SLAVE_CON'"
+  log " 2. MASTER deadman (+${DEADMAN_M}s): sudo -n systemd-run --unit=$UNIT 'nmcli con mod $HOTSPOT_CON band=${ORIG_BAND:-<auto>} chan=${ORIG_CHAN:-0}; nmcli con up'"
+  log " 3. FLIP master   : sudo -n nmcli con mod $HOTSPOT_CON 802-11-wireless.band $BAND .channel $CHANNEL  (SSID '$ORIG_SSID' untouched); con up"
   log " 4. wait 25s, ping slave $SLAVE_HOST (x5)"
   log " 5a SUCCESS -> cancel both deadmans + persist reg-domain $COUNTRY (astromech-regdom.service) on both Pis"
   log " 5b FAIL    -> revert master to band='${ORIG_BAND:-auto}' NOW + cancel deadmans + report (stay 2.4)"
@@ -79,19 +77,19 @@ fi
 # ===================== REAL EXECUTION (slave-first) =====================
 log "[1/5] Arming SLAVE deadman (+${DEADMAN_S}s)..."
 $SSH "sudo -n systemctl stop ${UNIT}.timer 2>/dev/null; sudo -n systemd-run --on-active=${DEADMAN_S} --unit=${UNIT} --timer-property=AccuracySec=1s /bin/sh -c 'iw reg set ${COUNTRY}; nmcli con down ${SLAVE_CON} || true; nmcli con up ${SLAVE_CON} || true'" \
-  && log "  slave deadman armed (will re-associate at +${DEADMAN_S}s if not cancelled)" \
+  && log "  slave deadman armed (re-associates at +${DEADMAN_S}s if not cancelled)" \
   || { log "ABORT: failed to arm slave deadman — no changes made"; exit 3; }
 
 log "[2/5] Arming MASTER deadman (+${DEADMAN_M}s)..."
-systemctl stop ${UNIT}.timer 2>/dev/null || true
-systemd-run --on-active=${DEADMAN_M} --unit=${UNIT} --timer-property=AccuracySec=1s \
+sudo -n systemctl stop ${UNIT}.timer 2>/dev/null || true
+sudo -n systemd-run --on-active=${DEADMAN_M} --unit=${UNIT} --timer-property=AccuracySec=1s \
   /bin/sh -c "nmcli con mod '${HOTSPOT_CON}' 802-11-wireless.band '${ORIG_BAND}' 802-11-wireless.channel ${ORIG_CHAN:-0}; nmcli con up '${HOTSPOT_CON}'" \
-  && log "  master deadman armed (will revert AP to 2.4 at +${DEADMAN_M}s if not cancelled)" \
+  && log "  master deadman armed (reverts AP to 2.4 at +${DEADMAN_M}s if not cancelled)" \
   || { log "ABORT: failed to arm master deadman"; $SSH "sudo -n systemctl stop ${UNIT}.timer 2>/dev/null"; exit 3; }
 
 log "[3/5] Flipping master hotspot to 5 GHz (band $BAND ch $CHANNEL; SSID '$ORIG_SSID' + password PRESERVED)..."
-nmcli con mod "$HOTSPOT_CON" 802-11-wireless.band "$BAND" 802-11-wireless.channel "$CHANNEL"
-timeout 35 nmcli con up "$HOTSPOT_CON" || log "  (con up non-zero/timeout — verifying by ping)"
+sudo -n nmcli con mod "$HOTSPOT_CON" 802-11-wireless.band "$BAND" 802-11-wireless.channel "$CHANNEL"
+timeout 35 sudo -n nmcli con up "$HOTSPOT_CON" || log "  (con up non-zero/timeout — verifying by ping)"
 
 log "[4/5] Waiting 25s for the 5 GHz AP + slave re-association..."
 sleep 25
@@ -103,11 +101,10 @@ done
 
 if [[ $OK -eq 1 ]]; then
   FREQ="$(iw dev wlan0 info 2>/dev/null | awk '/channel/{$1="";print}')"
-  log "[5/5] ✅ SUCCESS — slave reachable on 5 GHz. wlan0:${FREQ}"
-  systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null || true
+  log "[5/5] SUCCESS — slave reachable on 5 GHz. wlan0:${FREQ}"
+  sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null || true
   $SSH "sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null" || true
   log "  both deadmans cancelled. Link is now 5 GHz, SSID '$ORIG_SSID' unchanged."
-  # Persist the reg domain so 5 GHz survives a reboot (same oneshot the installers use).
   install_regdom(){ cat > /etc/systemd/system/astromech-regdom.service <<U
 [Unit]
 Description=AstromechOS - set WiFi regulatory domain (enables 5 GHz)
@@ -123,19 +120,19 @@ WantedBy=multi-user.target
 U
   sed -i "s/REGCC/${1}/" /etc/systemd/system/astromech-regdom.service
   systemctl daemon-reload; systemctl enable astromech-regdom.service 2>/dev/null; }
-  install_regdom "$COUNTRY"
+  sudo -n bash -c "$(declare -f install_regdom); install_regdom ${COUNTRY}"
   $SSH "sudo -n bash -c '$(declare -f install_regdom); install_regdom ${COUNTRY}'" 2>/dev/null || true
   log "  reg-domain $COUNTRY persisted on both Pis (survives reboot)."
   exit 0
 else
-  log "[5/5] ⚠ FAIL — slave NOT reachable on 5 GHz. Reverting master to 2.4 NOW..."
-  nmcli con mod "$HOTSPOT_CON" 802-11-wireless.band "$ORIG_BAND" 802-11-wireless.channel "${ORIG_CHAN:-0}"
-  timeout 35 nmcli con up "$HOTSPOT_CON" || true
-  systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null || true
+  log "[5/5] FAIL — slave NOT reachable on 5 GHz. Reverting master to 2.4 NOW..."
+  sudo -n nmcli con mod "$HOTSPOT_CON" 802-11-wireless.band "$ORIG_BAND" 802-11-wireless.channel "${ORIG_CHAN:-0}"
+  timeout 35 sudo -n nmcli con up "$HOTSPOT_CON" || true
+  sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null || true
   log "  master reverted to 2.4 (band='${ORIG_BAND:-auto}'). Waiting 20s for slave to rejoin..."
   sleep 20
   if ping -c2 -W2 "$SLAVE_HOST" >/dev/null 2>&1; then
-    log "  slave back on 2.4 ✓ — cancelling slave deadman."
+    log "  slave back on 2.4 — cancelling slave deadman."
     $SSH "sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null" || true
   else
     log "  slave not back yet — leaving its deadman (+${DEADMAN_S}s) to re-associate."
