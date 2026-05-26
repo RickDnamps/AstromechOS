@@ -1439,7 +1439,18 @@ class LockManager {
     const submitBtn = document.querySelector('#lock-modal .btn.btn-active');
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'UNLOCK'; }
     if (this._lockoutTimer) { clearInterval(this._lockoutTimer); this._lockoutTimer = null; }
-    setTimeout(() => inp?.focus(), 80);
+    // FIX 2026-05-26: focus the input IMMEDIATELY (synchronously, inside the
+    // tap/click gesture) instead of setTimeout(80ms). The delayed focus meant a
+    // fast operator who started typing before focus landed lost the leading
+    // characters → the first unlock POSTed a TRUNCATED password and 401'd, the
+    // field cleared, and the retype (now focused) worked = the "enter my password
+    // twice" bug. Synchronous focus also keeps the soft-keyboard raise inside the
+    // user gesture on mobile/WebView. rAF re-focus is a fallback for engines that
+    // need a layout flush first.
+    if (inp) {
+      try { inp.focus(); } catch {}
+      requestAnimationFrame(() => { try { inp.focus(); } catch {} });
+    }
   }
 
   _showKidsChoiceModal() {
