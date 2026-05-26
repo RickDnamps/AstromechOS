@@ -1973,9 +1973,10 @@ function _applyTabSwitch(tabId) {
     loadServoSettings();
     armsConfig.load();
     behaviorPanel.load();
-    // Activate first sidebar item if none selected yet
+    shortcutsEditor.load();   // Shortcuts is the default panel → load its data on open
+    // Activate the default sidebar item if none selected yet
     if (!document.querySelector('.settings-nav-item.active')) {
-      switchSettingsPanel('behavior');
+      switchSettingsPanel('shortcuts');
     }
   }
   if (tabId === 'sequences') loadScripts();

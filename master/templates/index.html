@@ -1082,9 +1082,12 @@
          want by category instead of scanning all 16. -->
     <nav class="settings-sidebar">
       <span class="settings-nav-section-label">OPERATOR</span>
-      <button class="settings-nav-item" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">🎛️ Shortcuts</button>
-      <button class="settings-nav-item active" data-panel="behavior" onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
+      <button class="settings-nav-item active" data-panel="shortcuts" onclick="switchSettingsPanel('shortcuts')">🎛️ Shortcuts</button>
+      <button class="settings-nav-item" data-panel="behavior" onclick="switchSettingsPanel('behavior')">🤖 Behavior</button>
       <button class="settings-nav-item" data-panel="lock"      onclick="switchSettingsPanel('lock')">🔒 Lock Mode</button>
+
+      <span class="settings-nav-section-label">APPEARANCE</span>
+      <button class="settings-nav-item" data-panel="interface" onclick="switchSettingsPanel('interface')">🎨 Interface</button>
 
       <span class="settings-nav-section-label">HARDWARE</span>
       <button class="settings-nav-item" data-panel="vesc"      onclick="switchSettingsPanel('vesc')">⚡ VESC</button>
@@ -1099,9 +1102,6 @@
       <button class="settings-nav-item" data-panel="camera"    onclick="switchSettingsPanel('camera')">📷 Camera</button>
       <button class="settings-nav-item" data-panel="network"   onclick="switchSettingsPanel('network')">📡 Network</button>
       <button class="settings-nav-item" data-panel="audio"     onclick="switchSettingsPanel('audio')">🎵 Audio</button>
-
-      <span class="settings-nav-section-label">APPEARANCE</span>
-      <button class="settings-nav-item" data-panel="interface" onclick="switchSettingsPanel('interface')">🎨 Interface</button>
 
       <span class="settings-nav-section-label">SYSTEM</span>
       <button class="settings-nav-item" data-panel="deploy"      onclick="switchSettingsPanel('deploy')">🚀 Deploy</button>
@@ -1497,7 +1497,7 @@
       </div>
 
       <!-- 🤖 Behavior -->
-      <div class="settings-panel active" id="spanel-behavior">
+      <div class="settings-panel" id="spanel-behavior">
         <section class="card settings-card">
           <h2 class="card-title">STARTUP SEQUENCE</h2>
           <!-- W6 fix 2026-05-16: explain what this does -->
@@ -1832,7 +1832,7 @@
       </div>
 
       <!-- 🎛️ Shortcuts -->
-      <div class="settings-panel" id="spanel-shortcuts">
+      <div class="settings-panel active" id="spanel-shortcuts">
         <section class="card settings-card">
           <h2 class="card-title">SHORTCUTS</h2>
           <p class="settings-note">
