@@ -932,20 +932,24 @@ body.drive-custom-layout .drive-main > .shortcut-btn.dl-free {
   min-height: 0;
   padding: 2px;
   overflow: hidden;
-  /* Legibility over the live camera: dense fill + crisp border + drop shadow so
-     the button reads clearly whatever the video shows behind it. */
+}
+/* OVER the camera feed only → dense dark fill + crisp border + white text so the
+   button reads over the video. When NOT over the camera the button keeps its
+   normal theme styling (so it matches the shortcuts still grouped on a joystick,
+   e.g. stays light in R2-D2 Light). The .dl-over-cam class is toggled in JS by
+   testing each free shortcut against the camera rect. */
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.dl-over-cam {
   opacity: 1;
   background: rgba(8, 16, 40, 0.82);
   border: 1.5px solid var(--blue);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
 }
-/* High-contrast white text/icon with an outline so labels pop over the video. */
-body.drive-custom-layout .drive-main > .shortcut-btn.dl-free .shortcut-icon,
-body.drive-custom-layout .drive-main > .shortcut-btn.dl-free .shortcut-label {
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.dl-over-cam .shortcut-icon,
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.dl-over-cam .shortcut-label {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.85);
 }
-/* Keep the playing/on accent visible over the dense dark fill (green border + glow). */
+/* Keep the playing/on accent visible (green border + glow) in either context. */
 body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.is-on,
 body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.is-playing {
   border-color: var(--green);

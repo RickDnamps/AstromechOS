@@ -11344,6 +11344,26 @@ const driveLayout = {
       main.style.setProperty('--cam-w', (Number.isFinite(cam.w) ? cam.w : 100) + '%');
       main.style.setProperty('--cam-h', (Number.isFinite(cam.h) ? cam.h : 100) + '%');
     }
+    this._updateOverCam();
+  },
+
+  // Toggle .dl-over-cam on each free shortcut whose CENTER is inside the camera
+  // rect → only those get the dark "over-video" fill; the rest keep their theme.
+  _updateOverCam() {
+    if (!this.isCustom()) return;
+    const main = this._main(); if (!main) return;
+    const r = main.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    const num = (v, d) => { const n = parseFloat(main.style.getPropertyValue(v)); return Number.isFinite(n) ? n : d; };
+    const cx0 = num('--cam-x', 0), cy0 = num('--cam-y', 0), cw = num('--cam-w', 100), ch = num('--cam-h', 100);
+    const bw = 56 / r.width * 100, bh = 56 / r.height * 100;   // button size in %
+    main.querySelectorAll(':scope > .shortcut-btn.dl-free').forEach(b => {
+      const sx = parseFloat(b.style.getPropertyValue('--lx')) || 0;
+      const sy = parseFloat(b.style.getPropertyValue('--ly')) || 0;
+      const ccx = sx + bw / 2, ccy = sy + bh / 2;             // button center %
+      const over = ccx >= cx0 && ccx <= cx0 + cw && ccy >= cy0 && ccy <= cy0 + ch;
+      b.classList.toggle('dl-over-cam', over);
+    });
   },
 
   _draggables() {
@@ -11375,6 +11395,8 @@ const driveLayout = {
       return;
     }
     if (!this.isCustom()) this.setMode('custom');
+    this.apply();   // reload the LAST SAVED layout (positions + camera size/pos) so
+                    // re-editing fine-tunes the saved arrangement, never resets to full
     this._editing = true;
     const cur = this._current();
     this._snap = cur.snap !== false;   // per-device, default ON
@@ -11490,6 +11512,7 @@ const driveLayout = {
       m.style.setProperty('--cam-w', w.toFixed(1) + '%');
       m.style.setProperty('--cam-h', h.toFixed(1) + '%');
     }
+    driveLayout._updateOverCam();   // camera moved/resized → re-check which shortcuts are over it
   },
   _onCamPointerUp: () => {
     driveLayout._camDrag = null;
@@ -11642,6 +11665,7 @@ const driveLayout = {
     py = Math.min(maxPy, Math.max(0, py));
     d.e.style.setProperty('--lx', px + '%');
     d.e.style.setProperty('--ly', py + '%');
+    if (d.e.classList.contains('shortcut-btn')) driveLayout._updateOverCam();   // live over-cam tint
   },
   _onUp: () => {
     driveLayout._drag = null;
@@ -11785,6 +11809,9 @@ const shortcutsRunner = {
   },
 
   async _trigger(id, btn) {
+    // No action while arranging the Custom layout — clicking/holding a shortcut
+    // to drag it must NOT fire its action (nothing sent to the robot).
+    if (typeof driveLayout !== 'undefined' && driveLayout._editing) return;
     btn.disabled = true;
     // 2026-05-16: optimistic joystick lock — mirror sequences-tab
     // scriptEngine.play() behaviour so a play_choreo shortcut on the
