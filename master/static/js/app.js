@@ -9023,8 +9023,14 @@ const cockpitPanel = {
     if (!svc) return;
     const uartCls = !data.uart_ready ? 'err' : data.uart_health == null ? 'warn' : 'ok';
     const uartVal = !data.uart_ready ? '✗ DOWN' : data.uart_health == null ? '⚠ NO SLAVE' : '✓ OK';
-    const vescLCls = data.vesc_l_ok ? 'ok' : 'err';
-    const vescRCls = data.vesc_r_ok ? 'ok' : 'err';
+    // Bench mode bypasses the VESC safety check entirely (is_drive_safe()
+    // returns True regardless of telemetry), so the ESCs may not even be wired.
+    // Don't claim "OK" — show "BYPASSED" so the operator isn't misled.
+    const benchOn = !!data.vesc_bench_mode;
+    const vescLCls = benchOn ? 'warn' : (data.vesc_l_ok ? 'ok' : 'err');
+    const vescRCls = benchOn ? 'warn' : (data.vesc_r_ok ? 'ok' : 'err');
+    const vescLVal = benchOn ? '⊘ BYPASSED' : (data.vesc_l_ok ? '✓ OK' : '✗ OFFLINE');
+    const vescRVal = benchOn ? '⊘ BYPASSED' : (data.vesc_r_ok ? '✓ OK' : '✗ OFFLINE');
     const btCls    = !data.bt_connected ? 'dim' : (data.bt_rssi != null && data.bt_rssi <= -70) ? 'warn' : 'ok';
     const btVal    = !data.bt_connected ? '— disconnected'
                    : data.bt_rssi != null ? `✓ ${data.bt_rssi} dBm` : '✓ OK';
@@ -9036,8 +9042,8 @@ const cockpitPanel = {
       this._svcRow('E-STOP',     estopCls, estopVal) +
       this._svcRow('Bench Mode', benchCls, benchVal) +
       this._svcRow('UART',       uartCls,  uartVal) +
-      this._svcRow('VESC L',     vescLCls, data.vesc_l_ok ? '✓ OK' : '✗ OFFLINE') +
-      this._svcRow('VESC R',     vescRCls, data.vesc_r_ok ? '✓ OK' : '✗ OFFLINE') +
+      this._svcRow('VESC L',     vescLCls, vescLVal) +
+      this._svcRow('VESC R',     vescRCls, vescRVal) +
       this._svcRow(data.lights_backend === 'astropixels' ? 'AstroPixels' : 'Teeces',
                    data.teeces_ready ? 'ok' : 'dim', data.teeces_ready ? '✓ OK' : '— N/A') +
       this._svcRow('Camera',     data.camera_found ? (data.camera_active ? 'ok' : 'dim') : 'warn',
@@ -9113,7 +9119,7 @@ const cockpitPanel = {
     // Direct danger checks (any one = red)
     const hasDanger = !!(
       data.estop_active ||
-      !data.vesc_l_ok || !data.vesc_r_ok ||
+      (!data.vesc_bench_mode && (!data.vesc_l_ok || !data.vesc_r_ok)) ||   // bench bypasses VESC → not a danger
       !data.uart_ready ||
       (data.temperature != null && data.temperature >= 75) ||
       (data.slave_temp  != null && data.slave_temp  >= 75) ||
@@ -9183,8 +9189,11 @@ const cockpitPanel = {
       alerts.push({ cls: 'err',  msg: `Battery critical ${v.toFixed(1)}V` });
     else if (v != null && batteryGauge.voltToColor(v) === '#ff8800')
       alerts.push({ cls: 'warn', msg: `Battery low ${v.toFixed(1)}V` });
-    if (!data.vesc_l_ok) alerts.push({ cls: 'err', msg: 'VESC L offline / fault' });
-    if (!data.vesc_r_ok) alerts.push({ cls: 'err', msg: 'VESC R offline / fault' });
+    // Bench mode intentionally bypasses the VESC check — the dedicated
+    // "Bench mode ON — VESC safety bypassed" warn below covers it, so don't
+    // also raise a contradictory offline/fault error.
+    if (!data.vesc_bench_mode && !data.vesc_l_ok) alerts.push({ cls: 'err', msg: 'VESC L offline / fault' });
+    if (!data.vesc_bench_mode && !data.vesc_r_ok) alerts.push({ cls: 'err', msg: 'VESC R offline / fault' });
     if (!data.uart_ready)
       alerts.push({ cls: 'err',  msg: 'UART port not open' });
     else if (data.uart_health == null)
