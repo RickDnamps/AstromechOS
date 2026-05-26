@@ -1,0 +1,102 @@
+# AstromechOS — UI / Frontend Patterns
+
+> Reference catalog of reusable frontend building blocks (helpers, CSS classes,
+> status fields, endpoints). CLAUDE.md keeps only the high-level rules; the full
+> detail lives here so it isn't loaded into every session's context.
+>
+> **RULE before building any new UI**: reuse these patterns, don't reinvent.
+> Grep the existing classes (`holo-slider`, `btn-*`, `settings-card`…) before
+> writing new HTML — never a native browser default when a custom class exists.
+
+---
+
+## 🖥️ Topbar & Cockpit
+
+**Topbar (clean)** : brand · `pill-offline` (Master unreachable) · `pill-slave` (UART down) · `cockpit-btn` STATUS · battery arc · temp + clock.
+
+**Cockpit pills** : `ck-pill-hb` (HB ok/down) · `ck-pill-uart` (≥95% green / 70-94% orange / <70% red) · `ck-pill-bt` (RSSI threshold).
+
+**STATUS button color** updated every poll via `cockpitPanel.updateBtn(data)` (bench mode = orange intentional).
+
+**E-STOP overlay** : `position:fixed inset:0 pointer-events:none z-index:9999`, class `active` = red pulsing border, synced from `data.estop_active`. Prompt `.estop-prompt` à l'intérieur : titre rouge "EMERGENCY STOP ENGAGED" + sub "Press RESET E-STOP below to re-arm drive" (opacity contrôlée par le `.active` de l'overlay parent).
+
+**SERVICES HAT health** : dome HATs via `DomeServoDriver.hat_health()` (Master) · body+motor HAT + Screen via slave's port 5001 → `reg.slave_uart_health`.
+
+**JS syntax rule** : `StatusPoller` est un `class` (no trailing comma) · `cockpitPanel` est un object literal (trailing comma). Mixer = silent syntax error. **Toujours `node --check master/static/js/app.js` avant commit.**
+
+**Drive mode pills overlay** (`#drive-mode-strip`) : `position:absolute top:8px center` SUR le flux camera (PAS dans drive-wrapper — sinon push le layout). Pills `mode-bench` (🛡 BENCH MODE, ambré pulsant) · `mode-kids` (👶 KIDS MODE X%, vert) · `mode-lock` (🔒 CHILD LOCK, rouge). Visible quand `vesc_bench_mode || lock_mode≠0`. Tooltip natif via `title=` pour l'explication complète.
+
+**Anti-tip ramp visual cue** (`body.drive-ramping` / `body.dome-ramping`) : pulse ambré inset sur le joystick ring concerné pendant les 400ms du ramp-down. Source : `data.drive_ramp_active` / `dome_ramp_active` du `/status`.
+
+**Joystick knob gradient color** : `Math.hypot(x, y)` → vert <33% / ambré <66% / rouge ≥66%. Box-shadow scale avec magnitude. Reset au release.
+
+**STOWING button text** : pendant les ~3-5s de `_safe_home_runner`, le texte du bouton E-STOP devient `STOWING…`. Optimistic (instant au clic) + 500ms watch loop pour clear quand `data.stow_in_progress === false`. Pattern memo : commits `cc7532b..ccf22a3`.
+
+**Toast position** : `top:60px` (PAS bottom — masquait le bouton E-STOP). Animation slide-down-on-enter, fade-out-on-exit.
+
+**Themed dialogs** (`_appDialog` → `confirmDialog`/`alertDialog`/`promptDialog`, Promise-based) : remplacent les natifs `confirm/alert/prompt` (qui rendaient des boutons en locale OS, ex "Annuler"). Non-bloquants → l'overlay `.admin-modal` (z-index 2000) bloque le pointeur, et `_appDialog.isOpen()` gate le keydown drive pour que WASD ne pilote pas derrière. Détails : `bd memories the-themed-dialog-appdialog`.
+
+---
+
+## 🎨 Settings WOW patterns
+
+**`withSaveFeedback(btn, asyncFn)`** universal helper (app.js) : wrap toute API save → button passe Saving… (spinner) → Saved ✓ (vert pulse) → restore. Failed path = red shake. Utilisé pour `saveConfig` (Deploy), `saveLightsBackend`, `saveBatteryCells`, `armsConfig._testRow`. Étendre aux autres save handlers.
+
+**Settings nav grouping** : 5 sections via `.settings-nav-section-label` (header texte petit + ligne fade-to-transparent à droite, pointer-events:none) — OPERATOR / HARDWARE / CONNECTIVITY / APPEARANCE / SYSTEM.
+
+**Mode switcher buttons** (Lock panel, `.lock-mode-switcher`) : 3 boutons grid avec colors sémantiques (vert/ambré/rouge) + icon + sub-label. `.active` class sync via `lockMgr.syncFromStatus`.
+
+**Live preview before APPLY** (Battery, Camera bitrate) : `onchange` sur dropdowns/sliders update une `<div>` preview avec les valeurs calculées AVANT le save → operator informed.
+
+**REBOOT/SHUTDOWN countdown overlay** (`#reboot-overlay`) : full-screen, big amber title + countdown 30→0 + polling `/status` jusqu'à reconnexion → auto `location.reload()`. Réutilisé par I2 deploy progress (custom title "UPDATING").
+
+**Deploy commit card** : `GET /system/version` (commit + msg + relative date) + `GET /system/deploy_status` (git fetch + remote SHA + behind_count, cached 60s, admin-gated). Card visible avant UPDATE button.
+
+**WiFi/BT signal bars** (`.signal-bars` + `.signal-bar.lit/.weak/.bad`) : SVG-like CSS 4-bar component, lit count = strength tier. WiFi % thresholds : ≥75/50/25 → 4/3/2/1 bars. BT RSSI : ≥-55/-65/-75 → 4/3/2/1. Color : green ≥-65 / amber ≥-75 / red.
+
+**Custom card lists** (WiFi scan) : remplace `<select><option>` quand on veut SVG + multi-info per row. Garde un `<select style="display:none">` pour la compatibilité form-state.
+
+**Diagnostics auto-refresh** : `diagPanel._autoTimer` (5s) + `diagPanel._tailTimer` (2s tail mode) — self-clean check `.active` class à chaque tick.
+
+**Behavior next-trigger countdown** : `/behavior/status` expose `next_idle_in_s` (computed depuis `last_activity + idle_timeout_min`). Frontend `_startCountdown` utilise `performance.now()` pour ticking local précis.
+
+**Camera preview thumbnail** post-restart : `_showPreview()` injecte `<img src="/camera/stream?_=ts">` 2.2s après save (cold start), auto-close 8s plus tard pour libérer le stream.
+
+**Badges pattern** : sur les fields spécifiques (jamais sur les section headers — confusant). REBOOT (ambré) pour conséquences lourdes (~30s Master reboot). LIVE (vert) parcimonieux. Note précise > badges partout.
+
+**Loading states** : seulement si latence réelle >200ms. Fade artificiel sur des switches instant = sluggish, pas WOW. Pattern : voir `feedback_polish_matters.md` memory.
+
+**Dynamic robot name** (`<span class="robot-name">R2-D2</span>`) : tout body copy qui mentionne le robot wrap dans ce span. Le default text est juste fallback — `StatusPoller` réécrit le textContent sur chaque poll depuis `data.robot_name` (skip `#header-robot-name` qui a son propre handler). Applique : settings notes, warnings VESC, audio note. Theme labels "R2-D2" intentionnellement STATIC (ce sont des noms de thèmes).
+
+**HATs sub-panel** : `spanel-hats` contient I2C HATs (Master/Slave servo + motor HAT) + UART Latency (`body_servo_uart_lat` + RTT MEASURE/APPLY). Extrait du panel System pour cohérence sémantique (System = REBOOT/SHUTDOWN/password seulement). Dans la section nav HARDWARE entre VESC et Arms.
+
+**Heartbeat Web Worker** (`startAppHeartbeat`) : le heartbeat 200ms tourne dans un Worker thread (inline Blob, pas de .js séparé) pour éviter qu'un sync block du main thread (heavy choreo render = 1-1.5s) cause des heartbeat misses → R3 fire E-STOP à tort. Fallback à `setInterval` si Worker fail. `_hbStart/_hbStop` sur visibilitychange. `TIMEOUT_S` server bumped à 1.5s pour tolérance jitter LAN.
+
+**Optimistic joystick lock** : `/choreo/list` expose `uses_propulsion` + `uses_dome` par row (pré-calculés en backend de `tracks.propulsion.length > 0` etc.). Frontend appelle `_setChoreoLockUI(usesProp, usesDome, name)` IMMÉDIATEMENT au click (avant l'ACK backend) + rollback `_setChoreoLockUI(false,false,'')` si POST refusé (409/503/429). StatusPoller poursuit la sync canonique. **Coverage matrix** : Sequences tab `scriptEngine.play()` ✓ · `choreoEditor.play()` ✓ · `shortcutsRunner._trigger()` ✓ (ajouté 715bca5) · **BT gamepad ✗** (pas de hook frontend possible, le press se fait sur le Pi — seul le poll cadence aide). **RÈGLE** : tout nouveau trigger path qui fire `play_choreo` DOIT call `_setChoreoLockUI` optimistiquement + rollback sur refus. Détails : `bd memories joystick-lockout-reaction-time`.
+
+**StatusPoller cadence** : `start(intervalMs = 1000)` depuis 715bca5 (2026-05-16). Avant: 2000ms depuis l'origine du projet (commit `bf634bd`). Worst-case lockout reaction pour les paths sans optimistic lock (= BT gamepad) : 1s, average 500ms. `/status` est ~3KB JSON, doubler le rate (~30→60 req/min) reste largement sous la capacité Flask sur Pi 4B. `_inFlight` guard prévient le stacking si Flask devient lent (long-running save, deploy).
+
+**Editor playhead guard** (`choreoEditor._startPolling`) : sameChoreo check = `loadedName && status.name && status.name === loadedName`. Si rien loadé OU mismatch → playhead figé à 0, timecode = "▶ {playing_name}". Évite que la startup choreo (post-deploy auto-fire) fasse avancer le playhead d'un editor vide.
+
+**Global choreo abort toast** (`StatusPoller`) : edge-trigger sur transition `_lastPlaying:true → _newPlaying:false` AVEC `choreo_abort_reason` set ET reason ∈ {uart_loss, undervoltage, overheat, overcurrent} (pre-flight rejects estop_active/stow_in_progress filtrés — operator a déjà vu le 503). `_lastPlaying` initialisé au premier poll comme baseline silencieux → pas de false toast au page load.
+
+**Signal density rule** : 2 signaux clairs > 3 signaux loud. E-STOP exemple = red border pulse + bottom button text swap suffisent ; ajouter un prompt overlay centré = saturation. Cas inverse (STOWING, mode pills, ramp visual) = vrais infos manquantes, justifient le visuel. Distinguer "feedback absent" vs "feedback redondant".
+
+**Optimistic concurrency token** (`X-Categories-Version` header + `If-Match` POST) : pour endpoints où 2 admins peuvent modifier simultanément (categories reorder). Server retourne mtime dans header GET, client le renvoie via `If-Match` sur POST mutation, server compare → 409 sur mismatch. Frontend refresh + toast. Pattern réutilisable pour toute ressource shared-state. Backwards-compat : If-Match optionnel, legacy clients sans header passent.
+
+**Per-robot localStorage namespacing** (`_lsGet`/`_lsSet` helpers) : multi-robot operator du même browser ne devrait pas partager last-played markers (R2 et BB-8 ont leurs propres). StatusPoller cache `robot_name` via `_setCachedRobotName(data.robot_name)` au premier poll. `_lsKey(base)` retourne `base:robot_name` ou `base` si pas encore cached. `_lsGet` fallback automatique sur legacy key pour migration. Appliqué à `astromech-last-sound` + `astromech-last-choreo`.
+
+**Sequence card visual hierarchy** :
+- `.seq-card-locks` (top-left) : 🚗 propulsion / ↻ dome — pre-play indicator que la séquence va lock les joysticks (operator sait AVANT de tap)
+- `.seq-card.last-played` (top-right green dot + left border)
+- `.seq-card.running` (cyan border pulse) + `.seq-card.looping`
+- `.seq-card-loop` (faint 0.18 opacity sur idle cards, 0.9 hover) — gesture discoverable
+- `.seq-card-meta` (footer `⏱2.4s · 12evt`) toujours visible — touch parity vs hover-only title tooltip
+
+**Optimistic local mutation pattern** (drag-to-pill recategorization) : muter `_scripts.find(name).category = newCat` en mémoire + `_renderPills()/_renderGrid()` ciblé AVANT le POST. POST en background, rollback + toast si fail. Évite full `load()` (refetch list + categories) pour 1 card move. Status poll catche divergence dans 2s si silent fail. Pattern : `optimistic mutation → POST .then(fail ? rollback : noop)`.
+
+**Single-instance player invariant** : ChoreoPlayer is single-instance (1 sequence at a time). Frontend `scriptEngine.play()` doit clear `_running` set AVANT d'ajouter le nouveau name, sinon double-click affiche 2 cards running pendant 2s (backend serialize via `_play_lock` mais UI ment).
+
+**STOP button visible quand running** (`#seq-stop-btn`) : `display:flex` only when `running.length > 0`. Reuse de `scriptEngine.stopAll()` (déjà existant). Alternative was long-press ou re-tap = obscure. Pattern : critical safe-state actions doivent avoir une affordance visible, pas cachée derrière un gesture.
+
+**Inline rename pattern** (sequence label + category label) : `_startRename`/`_startCategoryRename` swap le span avec un `<input>` in-place. Enter/blur save, Esc cancel. Width capé via `maxLength` matching server validation. CRITICAL: track `_renamingName` guard pour que le périodic reload 15s ne destroy pas l'input mid-edit.
