@@ -686,7 +686,12 @@ function _initThemes() {
   // layouts from the server (localStorage mirror, like themes). apply() runs
   // inside setMode/syncFromServer and is a no-op in Standard mode.
   if (typeof driveLayout !== 'undefined') {
-    driveLayout._captureStandard();        // snapshot Standard positions (Drive tab is active at boot)
+    // Measure the Standard positions SYNCHRONOUSLY now — the Drive tab is active and
+    // still in flex layout. A custom-mode-at-boot device would otherwise never get the
+    // measured default: _captureStandard's rAF fires AFTER _applyDeviceMode has already
+    // switched to Custom, so its isCustom() guard skips it and apply() falls back to
+    // the hardcoded _DEFAULTS.
+    const _s = driveLayout._measureStandard(); if (_s) driveLayout._stdSnapshot = _s;
     driveLayout._applyDeviceMode(false);   // mode is per-device (from the mirror); no persist at boot
     driveLayout.syncFromServer();          // refresh mirror from server → re-applies mode + layout
   }
@@ -11269,7 +11274,6 @@ const driveLayout = {
   _drag: null,
   _snap: true,
   _snapStep: 5,              // snap granularity in % (adjustable via +/- in the banner)
-  _camResize: null,
   _online: true,             // Master reachability (fed by StatusPoller._setOffline)
   _idleTimer: null,
   _IDLE_MS: 5 * 60 * 1000,   // auto-close the editor after 5 min of inactivity
@@ -11496,6 +11500,10 @@ const driveLayout = {
   async exitEdit(save) {
     if (!this._editing) return;
     this._editing = false;
+    // A force-exit (idle / admin-lock / child-lock / tab-switch) can fire while a
+    // drag is in progress. Abort it so the document pointer listeners are removed
+    // and the element stops moving — _onMove has no _editing guard, only `if (!_drag)`.
+    this._onUp(); this._onCamPointerUp();
     clearTimeout(this._idleTimer); this._idleTimer = null;
     document.removeEventListener('pointerdown', this._onActivity, true);
     document.removeEventListener('keydown', this._onActivity, true);

@@ -13,12 +13,18 @@ import re
 import json
 import math
 import tempfile
+import threading
 
 from flask import Blueprint, jsonify
 
 from master.api._admin_auth import require_admin, get_json_object
 
 drive_layout_bp = Blueprint('drive_layout', __name__)
+
+# Serializes the read-modify-write of drive_layouts.json so two concurrent admin
+# POSTs (e.g. two tablets, or a deferred sync retry) can't lose each other's
+# device entry. Mirrors the custom-themes _themes_lock pattern.
+_write_lock = threading.Lock()
 
 # master/config/drive_layouts.json — sits next to this file's parent (master/).
 _CFG = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'drive_layouts.json')
@@ -145,16 +151,21 @@ def post_layout():
     key = body.get('deviceKey')
     if not _valid_device_key(key):
         return jsonify({"error": "bad deviceKey"}), 400
-    all_ = _read_all()
+    # Validate the layout BEFORE taking the lock (pure, no shared state).
     layout = body.get('layout')
-    if layout is None:
-        all_.pop(key, None)                       # Reset → remove this device's entry
-    else:
+    clean = None
+    if layout is not None:
         clean = _sanitize_layout(layout)
         if clean is None:
             return jsonify({"error": "bad layout"}), 400
-        if key not in all_ and len(all_) >= _MAX_DEVICES:
-            return jsonify({"error": "too many devices"}), 400
-        all_[key] = clean
-    _atomic_write(all_)
+    # Serialize read-modify-write so concurrent device upserts don't clobber.
+    with _write_lock:
+        all_ = _read_all()
+        if clean is None:
+            all_.pop(key, None)                       # Reset → remove this device's entry
+        else:
+            if key not in all_ and len(all_) >= _MAX_DEVICES:
+                return jsonify({"error": "too many devices"}), 400
+            all_[key] = clean
+        _atomic_write(all_)
     return jsonify({"status": "ok"})
