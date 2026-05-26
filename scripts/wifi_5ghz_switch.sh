@@ -119,24 +119,24 @@ if [[ $OK -eq 1 ]]; then
   sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null || true
   $SSH "sudo -n systemctl stop ${UNIT}.timer ${UNIT}.service 2>/dev/null" || true
   log "  both deadmans cancelled. Link is now 5 GHz, SSID '$ORIG_SSID' unchanged."
-  install_regdom(){ cat > /etc/systemd/system/astromech-regdom.service <<U
-[Unit]
-Description=AstromechOS - set WiFi regulatory domain (enables 5 GHz)
-DefaultDependencies=no
-Before=NetworkManager.service wpa_supplicant.service network-pre.target
-Wants=network-pre.target
-[Service]
-Type=oneshot
-ExecStart=/bin/sh -c 'iw reg set REGCC'
-RemainAfterExit=yes
-[Install]
-WantedBy=multi-user.target
-U
-  sed -i "s/REGCC/${1}/" /etc/systemd/system/astromech-regdom.service
-  systemctl daemon-reload; systemctl enable astromech-regdom.service 2>/dev/null; }
-  sudo -n bash -c "$(declare -f install_regdom); install_regdom ${COUNTRY}"
-  $SSH "sudo -n bash -c '$(declare -f install_regdom); install_regdom ${COUNTRY}'" 2>/dev/null || true
-  log "  reg-domain $COUNTRY persisted on both Pis (survives reboot)."
+  # Persist the reg domain on BOTH Pis so 5 GHz survives a reboot. Build the unit
+  # with printf (no heredoc) + base64 it over SSH to avoid nested-quoting failures.
+  REGDOM_UNIT="$(printf '%s\n' \
+    '[Unit]' \
+    'Description=AstromechOS - set WiFi regulatory domain (enables 5 GHz)' \
+    'DefaultDependencies=no' \
+    'Before=NetworkManager.service wpa_supplicant.service network-pre.target' \
+    'Wants=network-pre.target' \
+    '[Service]' \
+    'Type=oneshot' \
+    "ExecStart=/bin/sh -c 'iw reg set ${COUNTRY}'" \
+    'RemainAfterExit=yes' \
+    '[Install]' \
+    'WantedBy=multi-user.target')"
+  REGDOM_B64="$(printf '%s' "$REGDOM_UNIT" | base64 -w0)"
+  REGDOM_CMD="echo ${REGDOM_B64} | base64 -d | sudo -n tee /etc/systemd/system/astromech-regdom.service >/dev/null && sudo -n systemctl daemon-reload && sudo -n systemctl enable astromech-regdom.service"
+  eval "$REGDOM_CMD" >/dev/null 2>&1 && log "  reg-domain $COUNTRY persisted on master" || log "  WARN: master regdom persist failed"
+  $SSH "$REGDOM_CMD" >/dev/null 2>&1 && log "  reg-domain $COUNTRY persisted on slave"  || log "  WARN: slave regdom persist failed"
   exit 0
 else
   log "[5/5] FAIL — slave NOT reachable on 5 GHz. Reverting master to 2.4 NOW..."
