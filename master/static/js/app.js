@@ -229,9 +229,17 @@ function _saveCustomThemesStore(list) {
 // Server persistence (best-effort). Succeeds for admins → custom themes become
 // multi-device + included in the backup. Non-admins keep localStorage only.
 function _persistThemeToServer(entry) {
+  // Server write is admin-gated. Only attempt it when an admin token is held,
+  // otherwise the POST 401s and spams the console — the boot-time sync below
+  // runs while locked, so this fired on every reload. Non-admins keep
+  // localStorage only (see _syncThemesFromServer).
+  const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+  if (!tok) return;
   try { if (typeof api === 'function') api('/themes/custom', 'POST', { theme: entry }); } catch (e) {}
 }
 function _deleteThemeOnServer(id) {
+  const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+  if (!tok) return;
   try { if (typeof api === 'function') api('/themes/custom/' + encodeURIComponent(id), 'DELETE'); } catch (e) {}
 }
 // On load: pull server themes into the local cache (so every device sees the
