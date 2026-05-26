@@ -4,8 +4,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from master.api.backup_core import (
     validate_theme, is_safe_member, classify_member,
     build_manifest, validate_manifest, BACKUP_FILESET, merge_local_cfg,
-    validate_ui_scale,
+    validate_ui_scale, is_allowed_restore_member,
 )
+
+
+def test_drive_layouts_in_fileset_and_allowed():
+    # Custom Drive Layout: drive_layouts.json must be backed up AND pass the
+    # anti-RCE restore allow-list (rel is relative to the side root).
+    assert 'master/config/drive_layouts.json' in BACKUP_FILESET['master']
+    assert is_allowed_restore_member('master', 'config/drive_layouts.json')
+    # Code paths must still be rejected by the allow-list (regression guard).
+    assert not is_allowed_restore_member('master', 'main.py')
 
 
 # ---- themes (B.0) — real frontend shape ----
