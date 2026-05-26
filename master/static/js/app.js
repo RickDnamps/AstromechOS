@@ -931,6 +931,24 @@ async function withSaveFeedback(btn, asyncFn, opts = {}) {
   try {
     const result = await asyncFn();
     btn.classList.remove('btn-saving');
+    // P0 resilience fix: api() returns null, many handlers return false, and
+    // apiDetail returns {ok:false} on a network failure WITHOUT throwing — that
+    // used to flash a FALSE "Saved ✓" while the Master was offline. Treat those
+    // as failure. undefined / truthy = success, so handlers that legitimately
+    // return nothing on success are unaffected. The handler already toasted its
+    // own error on these paths, so reflect failure on the button without re-throwing.
+    const failed = (result === null || result === false ||
+                    (result && typeof result === 'object' && result.ok === false));
+    if (failed) {
+      btn.classList.add('btn-failed');
+      btn.textContent = failedTxt;
+      setTimeout(() => {
+        btn.classList.remove('btn-failed');
+        btn.textContent = origText;
+        btn.disabled = wasDisabled;
+      }, 1800);
+      return result;
+    }
     btn.classList.add('btn-saved');
     btn.textContent = savedTxt;
     setTimeout(() => {
@@ -12122,15 +12140,18 @@ const armsConfig = {
         // Open panel (if any), wait delay, open arm, then close both
         // after a brief hold so operator can see the result. Uses the
         // generic /servo/<side>/open endpoint with the current selections.
+        // P0: each api() returning null (offline) throws so the button shows
+        // FAILED instead of a false "OK ✓".
+        const ok = (r) => { if (!r) throw new Error('servo request failed (offline?)'); return r; };
         if (panelServo) {
-          await api('/servo/body/open', 'POST', { name: panelServo });
+          ok(await api('/servo/body/open', 'POST', { name: panelServo }));
           await new Promise(r => setTimeout(r, delay * 1000));
         }
-        await api('/servo/body/open', 'POST', { name: armServo });
+        ok(await api('/servo/body/open', 'POST', { name: armServo }));
         await new Promise(r => setTimeout(r, 1500));
-        await api('/servo/body/close', 'POST', { name: armServo });
+        ok(await api('/servo/body/close', 'POST', { name: armServo }));
         await new Promise(r => setTimeout(r, delay * 1000));
-        if (panelServo) await api('/servo/body/close', 'POST', { name: panelServo });
+        if (panelServo) ok(await api('/servo/body/close', 'POST', { name: panelServo }));
         return { status: 'ok' };
       }, { saving: 'TESTING…', saved: 'OK ✓', failed: 'FAILED' });
     } catch {
@@ -16076,7 +16097,7 @@ const choreoEditor = (() => {
                      r.status === 400 ? '' :   // schema error already in r.error
                      r.status === 503 ? ' — server busy' : '';
         toast(`Save failed: ${r.error}${hint}`, 'error');
-        return;
+        return false;   // signal failure so withSaveFeedback shows "Failed", not a false "Saved ✓" (dirty stays true)
       }
       _setDirty(false); _existsOnDisk = true;
       _validateServoRefs(); _validateAudioRefs();
