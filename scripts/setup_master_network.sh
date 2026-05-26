@@ -76,6 +76,14 @@ HOTSPOT_PASS="r2d2droid"
 HOTSPOT_IP="192.168.4.1/24"
 HOTSPOT_CON="astromech-hotspot"
 INTERNET_CON="astromech-internet"
+# Master<->Slave link defaults to 5 GHz (UNII-1 ch 36, non-DFS) to dodge the
+# 2.4 GHz + Bluetooth saturation at conventions. Auto-falls back to 2.4 GHz if
+# the Pi firmware can't softAP on 5 GHz (see hotspot bring-up). The home WiFi on
+# wlan1 is untouched (stays whatever the dongle uses). Override at install:
+#   REG_COUNTRY=US HOTSPOT_BAND=bg HOTSPOT_CHANNEL=7 sudo bash setup_master_network.sh
+REG_COUNTRY="${REG_COUNTRY:-CA}"
+HOTSPOT_BAND="${HOTSPOT_BAND:-a}"
+HOTSPOT_CHANNEL="${HOTSPOT_CHANNEL:-36}"
 
 # Colors
 RED='\033[0;31m'
@@ -104,6 +112,35 @@ if ! systemctl is-active --quiet NetworkManager; then
     die "NetworkManager is not active. Bookworm required.\n    sudo systemctl enable --now NetworkManager"
 fi
 ok "NetworkManager active"
+
+# --- WiFi regulatory domain (REQUIRED before any 5 GHz channel is usable) ---
+# A fresh Pi OS image often boots with an EMPTY reg domain (country 00) → the
+# kernel disables ALL 5 GHz channels and a 5 GHz hotspot silently fails. Set +
+# PERSIST the country (systemd oneshot, ordered BEFORE NetworkManager) so 5 GHz
+# is available at every boot — natively, on any fresh SD card.
+setup_regdomain() {
+    info "Setting WiFi regulatory domain → ${REG_COUNTRY} (enables 5 GHz)..."
+    raspi-config nonint do_wifi_country "$REG_COUNTRY" 2>/dev/null || true
+    iw reg set "$REG_COUNTRY" 2>/dev/null || true
+    cat > /etc/systemd/system/astromech-regdom.service <<UNIT
+[Unit]
+Description=AstromechOS - set WiFi regulatory domain (enables 5 GHz)
+DefaultDependencies=no
+Before=NetworkManager.service wpa_supplicant.service network-pre.target
+Wants=network-pre.target
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'iw reg set ${REG_COUNTRY}'
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable astromech-regdom.service 2>/dev/null || true
+    systemctl start  astromech-regdom.service 2>/dev/null || true
+    ok "Regulatory domain '${REG_COUNTRY}' applied + persisted (astromech-regdom.service)"
+}
+setup_regdomain
 
 # --- Repo check ---
 [[ -d "$REPO_PATH" ]] || die "Repo not found: $REPO_PATH\n    Clone first: git clone ... $REPO_PATH"
@@ -311,6 +348,8 @@ nmcli connection add \
     con-name "$HOTSPOT_CON" \
     ssid "$HOTSPOT_SSID" \
     mode ap \
+    wifi.band "$HOTSPOT_BAND" \
+    wifi.channel "$HOTSPOT_CHANNEL" \
     wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk "$HOTSPOT_PASS" \
     ipv4.method shared \
@@ -319,11 +358,21 @@ nmcli connection add \
     connection.autoconnect yes \
     connection.autoconnect-priority 100
 
-ok "Hotspot '$HOTSPOT_CON' created on wlan0"
+ok "Hotspot '$HOTSPOT_CON' created on wlan0 (band ${HOTSPOT_BAND}, ch ${HOTSPOT_CHANNEL})"
 
-# Activate the hotspot
-nmcli connection up "$HOTSPOT_CON" && ok "Hotspot started on wlan0" \
-    || warn "Hotspot startup deferred to reboot"
+# Activate the hotspot. If it's a 5 GHz AP and this Pi's firmware can't softAP on
+# 5 GHz (or the channel is unavailable), AUTO-FALL BACK to 2.4 GHz so a fresh
+# install NEVER ends up with a dead Master<->Slave link.
+if nmcli connection up "$HOTSPOT_CON"; then
+    ok "Hotspot started on wlan0 (${HOTSPOT_BAND}/${HOTSPOT_CHANNEL})"
+elif [[ "$HOTSPOT_BAND" == "a" ]]; then
+    warn "5 GHz AP failed to start — falling back to 2.4 GHz (channel 7)"
+    nmcli connection modify "$HOTSPOT_CON" wifi.band bg wifi.channel 7
+    nmcli connection up "$HOTSPOT_CON" && ok "Hotspot started on 2.4 GHz (fallback)" \
+        || warn "Hotspot startup deferred to reboot"
+else
+    warn "Hotspot startup deferred to reboot"
+fi
 
 # =============================================================================
 # STEP 5 — Avahi for .local resolution

@@ -98,6 +98,35 @@ if ! systemctl is-active --quiet NetworkManager; then
 fi
 ok "NetworkManager active"
 
+# --- WiFi regulatory domain (REQUIRED so the Slave can associate on 5 GHz) ---
+# Must match the Master's country, else the kernel disables 5 GHz channels and
+# the Slave can't join a 5 GHz hotspot. Set + persist (systemd oneshot, before
+# NetworkManager) so it survives a fresh SD flash / reboot.
+REG_COUNTRY="${REG_COUNTRY:-CA}"
+setup_regdomain() {
+    info "Setting WiFi regulatory domain → ${REG_COUNTRY} (enables 5 GHz)..."
+    raspi-config nonint do_wifi_country "$REG_COUNTRY" 2>/dev/null || true
+    iw reg set "$REG_COUNTRY" 2>/dev/null || true
+    cat > /etc/systemd/system/astromech-regdom.service <<UNIT
+[Unit]
+Description=AstromechOS - set WiFi regulatory domain (enables 5 GHz)
+DefaultDependencies=no
+Before=NetworkManager.service wpa_supplicant.service network-pre.target
+Wants=network-pre.target
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'iw reg set ${REG_COUNTRY}'
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable astromech-regdom.service 2>/dev/null || true
+    systemctl start  astromech-regdom.service 2>/dev/null || true
+    ok "Regulatory domain '${REG_COUNTRY}' applied + persisted (astromech-regdom.service)"
+}
+setup_regdomain
+
 # =============================================================================
 # STEP 1 — Enter Master hotspot credentials
 # =============================================================================
