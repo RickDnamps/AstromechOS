@@ -9852,6 +9852,11 @@ class StatusPoller {
     if (pillOffline) pillOffline.style.display = offline ? '' : 'none';
     const pillSlave = el('pill-slave');
     if (pillSlave && offline) pillSlave.style.display = 'none';
+    // Master unreachable → no fresh telemetry. Degrade the cockpit header pills
+    // + STATUS button so they don't keep showing their last healthy (green)
+    // state: _pollOnce returns early on the offline path, so without this the
+    // APP HB / UART / BT pills freeze green even though the Master is down.
+    if (offline) this._degradeCockpitOffline();
     // Reload data when coming back online
     if (wasOffline && !offline) {
       audioBoard.loadCategories();
@@ -9871,6 +9876,37 @@ class StatusPoller {
         }
       } catch {}
     }
+  }
+
+  // Force the cockpit header pills + STATUS button to an error/unknown state
+  // while the Master is unreachable. We have no telemetry to trust, so showing
+  // the last healthy green state would lie. The success path of _pollOnce
+  // repaints all of these on the next reachable poll, so recovery is automatic.
+  _degradeCockpitOffline() {
+    // APP HB — the browser ↔ Master ping is, by definition, not getting through.
+    this._setCockpitHbPill(false);
+
+    // UART (Master ↔ Slave) — unknown: we can't reach the Master to ask.
+    const u = el('ck-pill-uart');
+    if (u) {
+      u.className = 'status-pill error';
+      u.title = 'Master unreachable — UART state unknown';
+      for (const node of u.childNodes)
+        if (node.nodeType === Node.TEXT_NODE) node.textContent = 'UART';
+    }
+
+    // BT controller — likewise unknown while the Master is down.
+    const b = el('ck-pill-bt');
+    if (b) {
+      b.className = 'status-pill error';
+      b.title = 'Master unreachable — controller state unknown';
+      const lbl = el('ck-pill-bt-label');
+      if (lbl) lbl.textContent = 'BT';
+    }
+
+    // STATUS button → red (whole system unreachable; clears any amber warn).
+    const btn = el('cockpit-btn');
+    if (btn) { btn.classList.add('danger'); btn.classList.remove('alert'); }
   }
 
   _setCockpitHbPill(heartbeatOk) {
