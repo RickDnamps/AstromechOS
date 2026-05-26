@@ -11389,16 +11389,20 @@ const driveLayout = {
   _updateOverCam() {
     if (!this.isCustom()) return;
     const main = this._main(); if (!main) return;
-    const r = main.getBoundingClientRect();
-    if (!r.width || !r.height) return;
+    const mr = main.getBoundingClientRect();
+    if (!mr.width || !mr.height) return;
     const num = (v, d) => { const n = parseFloat(main.style.getPropertyValue(v)); return Number.isFinite(n) ? n : d; };
-    const cx0 = num('--cam-x', 0), cy0 = num('--cam-y', 0), cw = num('--cam-w', 100), ch = num('--cam-h', 100);
-    const bw = 56 / r.width * 100, bh = 56 / r.height * 100;   // button size in %
-    main.querySelectorAll(':scope > .shortcut-btn.dl-free').forEach(b => {
-      const sx = parseFloat(b.style.getPropertyValue('--lx')) || 0;
-      const sy = parseFloat(b.style.getPropertyValue('--ly')) || 0;
-      const ccx = sx + bw / 2, ccy = sy + bh / 2;             // button center %
-      const over = ccx >= cx0 && ccx <= cx0 + cw && ccy >= cy0 && ccy <= cy0 + ch;
+    // Camera rect in viewport px (from --cam-* % of .drive-main).
+    const camL = mr.left + num('--cam-x', 0)   / 100 * mr.width;
+    const camT = mr.top  + num('--cam-y', 0)   / 100 * mr.height;
+    const camR = camL    + num('--cam-w', 100) / 100 * mr.width;
+    const camB = camT    + num('--cam-h', 100) / 100 * mr.height;
+    // EVERY shortcut — free OR still grouped on a joystick — by its rendered
+    // center, so grouped buttons dragged over the camera also get the dark fill.
+    main.querySelectorAll('.shortcut-btn').forEach(b => {
+      const r = b.getBoundingClientRect();
+      const ccx = r.left + r.width / 2, ccy = r.top + r.height / 2;
+      const over = ccx >= camL && ccx <= camR && ccy >= camT && ccy <= camB;
       b.classList.toggle('dl-over-cam', over);
     });
   },
@@ -11474,13 +11478,17 @@ const driveLayout = {
     this._saveMirror(all);
     const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
     if (tok) { try { await api('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout: null }); } catch {} }
-    this.exitEdit(false);
-    this._detachFreeShortcuts();
-    if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
+    // Reset positions to the standard-like default but STAY in the editor (Save or
+    // Cancel ends the session). Clear free positions + rebuild grouped shortcuts.
     [this._propPanel(), this._domePanel()].forEach(e => {
       if (e) { e.style.removeProperty('--lx'); e.style.removeProperty('--ly'); }
     });
+    this._detachFreeShortcuts();
+    if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
     this.apply();
+    // The re-rendered shortcut buttons are new DOM nodes → re-bind drag handlers
+    // so they (and the joysticks/camera) stay draggable while still editing.
+    if (this._editing) this._bindEdit(true);
     if (typeof toast === 'function') toast('Layout reset to default', 'info');
   },
   _collect() {
@@ -11665,6 +11673,8 @@ const driveLayout = {
     if (!driveLayout._editing || !ev.isPrimary) return;
     const e = ev.currentTarget;
     ev.preventDefault();
+    ev.stopPropagation();   // a shortcut's pointerdown must NOT bubble to the joystick
+                            // panel's handler (that would drag the joystick instead).
     const main = driveLayout._main().getBoundingClientRect();
     // Lift a pad shortcut into free positioning on first grab (no visual jump).
     if (e.classList.contains('shortcut-btn') && !e.classList.contains('dl-free')) {
@@ -11702,7 +11712,7 @@ const driveLayout = {
     py = Math.min(maxPy, Math.max(0, py));
     d.e.style.setProperty('--lx', px + '%');
     d.e.style.setProperty('--ly', py + '%');
-    if (d.e.classList.contains('shortcut-btn')) driveLayout._updateOverCam();   // live over-cam tint
+    driveLayout._updateOverCam();   // live over-cam tint (also when dragging a joystick: its grouped buttons move with it)
   },
   _onUp: () => {
     driveLayout._drag = null;

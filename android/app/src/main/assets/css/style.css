@@ -938,14 +938,14 @@ body.drive-custom-layout .drive-main > .shortcut-btn.dl-free {
    normal theme styling (so it matches the shortcuts still grouped on a joystick,
    e.g. stays light in R2-D2 Light). The .dl-over-cam class is toggled in JS by
    testing each free shortcut against the camera rect. */
-body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.dl-over-cam {
+body.drive-custom-layout .shortcut-btn.dl-over-cam {
   opacity: 1;
   background: rgba(8, 16, 40, 0.82);
   border: 1.5px solid var(--blue);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
 }
-body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.dl-over-cam .shortcut-icon,
-body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.dl-over-cam .shortcut-label {
+body.drive-custom-layout .shortcut-btn.dl-over-cam .shortcut-icon,
+body.drive-custom-layout .shortcut-btn.dl-over-cam .shortcut-label {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.85);
 }
