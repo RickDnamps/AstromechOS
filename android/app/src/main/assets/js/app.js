@@ -970,7 +970,46 @@ async function withSaveFeedback(btn, asyncFn, opts = {}) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// netBreaker — global network circuit breaker (P1 resilience). When the Master
+// is unreachable for a couple of polls it OPENS: mutating requests (POST/PUT/
+// DELETE) are short-circuited (instant fail → P0 shows "Failed", no 3-5s hang,
+// no false "Saved ✓"), the UI freezes mutating controls (body.net-breaker-open)
+// and a banner shows. Reads (GET) + safety paths (/system/estop*, /heartbeat)
+// are NEVER gated. Auto-closes on the next reachable /status poll. Fed by
+// StatusPoller._setOffline (which runs every poll).
+// ════════════════════════════════════════════════════════════════════════
+const netBreaker = {
+  _open: false,
+  _streak: 0,
+  _THRESHOLD: 2,                 // consecutive failed polls before tripping (debounce flicker)
+  get isOpen() { return this._open; },
+  feed(online) {
+    if (online) { this._streak = 0; if (this._open) this._set(false); return; }
+    this._streak++;
+    if (!this._open && this._streak >= this._THRESHOLD) this._set(true);
+  },
+  _set(open) {
+    this._open = open;
+    document.body.classList.toggle('net-breaker-open', open);
+    const banner = (typeof el === 'function') && el('net-breaker-banner');
+    if (banner) banner.style.display = open ? '' : 'none';
+    if (open && typeof toast === 'function') toast('🔌 Master hors-ligne — modifications gelées', 'warn');
+  },
+};
+
+// Block this request? Only mutating methods while the breaker is OPEN — and never
+// the safety/heartbeat paths (those must always be attempted).
+function _breakerBlocks(endpoint, method) {
+  if (typeof netBreaker === 'undefined' || !netBreaker.isOpen) return false;
+  const m = (method || 'GET').toUpperCase();
+  if (m === 'GET' || m === 'HEAD') return false;
+  if (/(system\/estop|heartbeat)/.test(endpoint || '')) return false;
+  return true;
+}
+
 async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
+  if (_breakerBlocks(endpoint, method)) return null;   // breaker open → fail fast (P0 → "Failed")
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -1013,6 +1052,7 @@ async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
 // collapses every non-2xx into `null`, which forced callers to fall
 // back to generic toasts.
 async function apiDetail(endpoint, method = 'GET', body = null, timeoutMs = 5000) {
+  if (_breakerBlocks(endpoint, method)) return { ok: false, status: 0, data: null, error: 'offline (link frozen)' };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -9921,6 +9961,7 @@ class StatusPoller {
   _setOffline(offline) {
     const wasOffline = this._offline;
     this._offline = offline;
+    if (typeof netBreaker !== 'undefined') netBreaker.feed(!offline);   // P1: feed the circuit breaker every poll
     // Feed Master reachability to the drive-layout editor (offline badge +
     // deferred-save sync on reconnect). Every poll; the method is idempotent.
     if (typeof driveLayout !== 'undefined' && driveLayout._setOnline) driveLayout._setOnline(!offline);

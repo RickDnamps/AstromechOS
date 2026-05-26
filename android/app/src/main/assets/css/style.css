@@ -1114,6 +1114,28 @@ body.drive-layout-editing .dl-editbar { display: flex; }
 }
 body.drive-layout-editing.master-offline .dl-offline-badge { display: inline-flex; align-items: center; }
 body.master-offline .dl-editbar .btn.btn-primary { color: var(--orange); border-color: var(--orange); }
+
+/* ── Network circuit breaker (P1) — disconnect banner + frozen mutating controls ── */
+.net-breaker-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+  background: var(--err, #ff2a4d); color: #fff;
+  font-family: var(--font, sans-serif); font-size: 13px; font-weight: 600;
+  letter-spacing: .4px; text-align: center;
+  padding: 6px 12px; pointer-events: none;   /* never blocks the topbar/E-STOP underneath */
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .55);
+  animation: net-breaker-pulse 2s ease-in-out infinite;
+}
+@keyframes net-breaker-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .72; } }
+/* While the link is frozen, neuter mutating controls (the api() layer already
+   blocks them functionally; this is the visual lock). Reads stay live. */
+body.net-breaker-open [data-mutating],
+body.net-breaker-open .chor-admin-btn {
+  pointer-events: none !important;
+  opacity: .45 !important;
+  filter: grayscale(.7);
+  cursor: not-allowed;
+}
+
 /* Snap toggle + step (+/-) group in the editor banner. */
 .dl-snap-group { display: inline-flex; align-items: center; gap: 4px; }
 .dl-snap-step { font-size: 10px; color: var(--text); min-width: 28px; text-align: center; font-family: var(--font); }

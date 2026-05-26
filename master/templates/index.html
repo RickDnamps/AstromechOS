@@ -49,6 +49,13 @@
 </head>
 <body>
 
+<!-- Network circuit breaker — disconnect banner (shown when the Master link is
+     frozen; mutating controls are disabled meanwhile). pointer-events:none so
+     it never blocks the topbar underneath. Auto-hides on reconnect. -->
+<div id="net-breaker-banner" class="net-breaker-banner" role="status" aria-live="polite" style="display:none">
+  🔌 Connexion au Master perdue — modifications gelées · reprise automatique au retour
+</div>
+
 <!-- WOW polish I3 2026-05-15: reboot countdown overlay — shown while
      Master reboots, auto-clears when /status comes back online. -->
 <div id="reboot-overlay" class="reboot-overlay">
@@ -2473,7 +2480,7 @@
         <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">BACKUP / RESTORE</h2>
           <div class="settings-note">📦 <strong>Full backup (.bck):</strong> configs, sounds, choreos, calibration &amp; themes.<br>🔒 <strong>Keep it safe</strong> — it includes the WiFi passwords (hotspot + home network) and the admin password, in clear text.<br>🔄 <strong>On restore the network is NOT touched:</strong> the hotspot SSID/password &amp; home WiFi stay as they are on this robot (never overwritten by the backup), so the Slave never loses its link. Change the hotspot in Settings → Network instead.</div>
-          <button id="btn-backup" class="btn" style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Create backup</button>
+          <button id="btn-backup" class="btn" data-mutating style="width:100%;margin-top:6px" onclick="backupMgr.start(this)">⬇ Create backup</button>
           <div id="backup-progress-wrap" style="display:none;margin-top:10px">
             <div style="height:14px;background:rgba(var(--blue-rgb),0.12);border-radius:7px;overflow:hidden">
               <div id="backup-progress-fill" style="height:100%;width:0%;background:var(--blue);transition:width .3s"></div>
@@ -2481,7 +2488,7 @@
             <div id="backup-progress-text" style="font-size:11px;margin-top:4px;color:var(--text-dim)"></div>
           </div>
           <input type="file" id="restore-file-input" accept=".bck" style="display:none" onchange="restoreMgr.upload(this)">
-          <button id="btn-restore" class="btn btn-warn" style="width:100%;margin-top:8px" onclick="restoreMgr.pick()">⬆ Restore from backup…</button>
+          <button id="btn-restore" class="btn btn-warn" data-mutating style="width:100%;margin-top:8px" onclick="restoreMgr.pick()">⬆ Restore from backup…</button>
           <div id="restore-progress-wrap" style="display:none;margin-top:10px">
             <div style="height:14px;background:rgba(var(--blue-rgb),0.12);border-radius:7px;overflow:hidden">
               <div id="restore-progress-fill" style="height:100%;width:0%;background:var(--amber,#ffaa44);transition:width .3s"></div>
