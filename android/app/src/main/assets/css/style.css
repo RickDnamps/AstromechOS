@@ -7854,3 +7854,33 @@ body.theme-light .bt-device-profile-list { background:rgba(8,73,214,0.04); }
 body.theme-light .bt-device-card         { background:rgba(255,255,255,0.6); }
 body.theme-light .bt-custom-row          { background:rgba(8,73,214,0.05); }
 body.theme-light .bt-value-input         { background:rgba(213,226,244,0.9); color:var(--blue); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   R2-D2 Light fix — bottom-bar control triad (Lock / ALIVE / Camera).
+   These three buttons hardcode `background: rgba(0,0,0,0.4)` + `var(--text-dim)`
+   text (see .drive-lock-btn / .alive-btn / .cam-toggle-btn base rules), so on
+   light themes they stayed dark-grey with washed-out content. Give them a pale
+   fill, crisp border and dark idle text/icon — WITHOUT disturbing their
+   semantic states (lock Kids=orange / Child=red, ALIVE on=cyan, camera on=blue)
+   nor the dark themes (every rule scoped under body.theme-light). They live in
+   the fixed .drive-bottom-bar, so this is identical in Standard + Custom layout.
+   ════════════════════════════════════════════════════════════════════════ */
+/* Pale fill for all three (background is never set by the colored state rules,
+   so this is conflict-free). */
+body.theme-light .drive-lock-btn,
+body.theme-light .alive-btn,
+body.theme-light .cam-toggle-btn { background: var(--pill-bg); }
+body.theme-light .drive-lock-btn:hover,
+body.theme-light .alive-btn:hover,
+body.theme-light .cam-toggle-btn:hover { background: var(--btn-hover-bg); }
+/* Dark, crisp idle (resting) text + border — colored "on" states and :hover are
+   excluded so they keep their accent (orange/red/cyan/blue). High specificity
+   beats the base + lock-mode rules; mode 1/2 (orange/red) are untouched. */
+body.theme-light[data-lock-mode="0"] .drive-lock-btn:not(:hover) {
+  color: var(--text); border-color: var(--border-hi);
+}
+body.theme-light .alive-btn:not(.alive-btn-on):not(:hover) {
+  color: var(--text); border-color: var(--border-hi);
+}
+/* Camera: only the dark fill was wrong — cam-on (blue icon) and cam-off (faded)
+   already read fine on the pale fill, so they keep their own colors/borders. */
