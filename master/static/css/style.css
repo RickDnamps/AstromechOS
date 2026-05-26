@@ -6306,7 +6306,12 @@ body:not(.admin-unlocked) .seq-pill.is-empty {
 .lock-mode-btn:hover { background: var(--surface); }
 
 /* SVG open/closed selon mode */
-.lock-svg { display: none; }
+/* overflow:visible — the padlock body rect sits at y=8..16, i.e. its bottom edge
+   is ON the viewBox bottom (height 16), so the 1.4-wide stroke's lower half
+   (y=16..16.7) fell outside the viewBox and was clipped (~0.9px once scaled to
+   20px tall) — it read as the button border cutting off the icon's bottom.
+   Applies to both lock-open + lock-closed → fixes all lock modes. */
+.lock-svg { display: none; overflow: visible; }
 body[data-lock-mode="0"] .lock-open  { display: block; }
 body[data-lock-mode="1"] .lock-closed { display: block; }
 body[data-lock-mode="2"] .lock-closed { display: block; }
