@@ -7715,3 +7715,32 @@ body.theme-light .diag-stats-box .cockpit-row     { background:rgba(8,73,214,0.0
 body.theme-light .diag-stats-box .cockpit-row-lbl { color:var(--text-dim); }
 body.theme-light .diag-stats-box .cockpit-dim     { color:var(--text-dim); }
 body.theme-light .diag-stats-box .cockpit-row-val { color:var(--text); }
+
+/* ════════════════════════════════════════════════════════════════════
+   Light-theme settings sub-panels — grey/dark surfaces that the rk2 pass
+   missed (Battery · BT Gamepad · Camera · Network · Audio · Deploy · System).
+   All are dark or translucent-black fills sitting inside light panels → they
+   read as grey boxes / muddy buttons. Lighten to a blueprint tint; their text
+   uses theme vars (--text/--text-dim/--cyan/semantic) that are already dark.
+   (Found via .tmp/audit/dark_scan.mjs.) software-j3y
+   ════════════════════════════════════════════════════════════════════ */
+
+/* The recurring "weird" button: .btn-warn was a dark-brown fill
+   (rgba(50,25,0,.6)) that looked grey/muddy on light. Pale-orange fill +
+   darker orange text keeps the semantic warning colour and reads
+   (camera APPLY · network hotspot APPLY · audio · deploy UPDATE · system REBOOT). */
+body.theme-light .btn.btn-warn { background:rgba(204,85,0,0.10); border-color:rgba(204,85,0,0.5); color:#9a4f00; }
+
+/* Battery / Camera / Deploy preview + info boxes (rgba(0,0,0,.3) / rgba(10,15,26,.5)). */
+body.theme-light .battery-preview      { background:rgba(8,73,214,0.05); border-color:rgba(8,73,214,0.18); }
+body.theme-light .cam-integration-card { background:rgba(8,73,214,0.05); }
+body.theme-light .deploy-commit-card   { background:rgba(8,73,214,0.05); border-color:rgba(8,73,214,0.18); }
+
+/* BT Gamepad: header, axis-mapping groups, profile list/cards, custom-action
+   rows + the inactivity number input were all dark / translucent-black. */
+body.theme-light .bt-status-row          { background:rgba(8,73,214,0.06); }
+body.theme-light .bt-axes-group          { background:rgba(8,73,214,0.05); }
+body.theme-light .bt-device-profile-list { background:rgba(8,73,214,0.04); }
+body.theme-light .bt-device-card         { background:rgba(255,255,255,0.6); }
+body.theme-light .bt-custom-row          { background:rgba(8,73,214,0.05); }
+body.theme-light .bt-value-input         { background:rgba(213,226,244,0.9); color:var(--blue); }
