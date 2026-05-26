@@ -10763,7 +10763,7 @@ const _SHORTCUT_ACTION_TYPES = [
 
 const shortcutsEditor = {
   _shortcuts: [],
-  _max:        12,
+  _max:        16,
   _scripts:    null,   // cache of /choreo/list for the choreo dropdown
   _sounds:     null,   // cache of /audio/index for the sound dropdown
   _cats:       null,   // audio categories
@@ -10771,7 +10771,7 @@ const shortcutsEditor = {
   async load() {
     const d = await api('/shortcuts');
     if (!d) return;
-    this._max = d.max || 12;
+    this._max = d.max || 16;
     this._shortcuts = (d.shortcuts || []).slice();
     // Lazy-fetch the dropdown sources only once per editor open.
     if (!this._scripts) this._scripts = await api('/choreo/list') || [];
@@ -11282,6 +11282,7 @@ const driveLayout = {
       });
       this._detachFreeShortcuts();
       if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
+      document.body.classList.remove('drive-cam-full');   // full-bleed camera is Custom-only
     }
     const r = document.querySelector(`input[name="drive-layout-mode"][value="${custom ? 'custom' : 'standard'}"]`);
     if (r) r.checked = true;
@@ -11303,6 +11304,8 @@ const driveLayout = {
         if (btn) { btn.classList.add('dl-free'); main.appendChild(btn); this._setPt(btn, saved[scid]); }
       });
     }
+    document.body.classList.toggle('drive-cam-full', !!lay.camFull);   // item 5: full-bleed cam
+    this._updateCamBtn();
   },
 
   _draggables() {
@@ -11363,7 +11366,19 @@ const driveLayout = {
     document.querySelectorAll('.drive-main > .shortcut-btn.dl-free').forEach(b => {
       if (b.dataset.scid) lay.shortcuts[b.dataset.scid] = this._pctOf(b);
     });
+    lay.camFull = document.body.classList.contains('drive-cam-full');   // item 5
     return lay;
+  },
+  // Item 5: toggle full-bleed camera (Custom mode only). Persisted in the layout
+  // (camFull) via _collect on Save; applied on load by apply().
+  toggleCam() {
+    if (!this.isCustom()) return;
+    document.body.classList.toggle('drive-cam-full');
+    this._updateCamBtn();
+  },
+  _updateCamBtn() {
+    const b = el('dl-cam-toggle');
+    if (b) b.classList.toggle('btn-active', document.body.classList.contains('drive-cam-full'));
   },
 
   // --- Pointer-Events drag (touch + mouse). NEVER setPointerCapture (timeline

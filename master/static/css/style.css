@@ -922,14 +922,40 @@ body.drive-custom-layout .drive-main > .shortcut-btn.dl-free {
   margin: 0;
   z-index: 6;
 }
-/* Free shortcut buttons reparented onto .drive-main keep their compact size. */
-body.drive-custom-layout .drive-main > .shortcut-btn.dl-free { width: auto; }
+/* Item 2 fix: an absolutely-positioned shortcut button collapses to content
+   width without an explicit size. Lock every free shortcut to a strict,
+   identical 56×56 square → zero layout shift on lift + perfect snap-grid
+   alignment. (Applies in Custom mode, operating or editing.) */
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free {
+  width: 56px;
+  height: 56px;
+  min-height: 0;
+  padding: 2px;
+  overflow: hidden;
+}
 
-/* Edit sub-mode: faint snap grid + drag affordances + frozen joysticks. */
+/* Item 3: in Custom mode the joysticks go semi-transparent + blurred so the
+   camera feed shows through behind them (AR-style); the border + knob stay for
+   control legibility. Replaces the opaque radial-gradient ring fill. */
+body.drive-custom-layout .joystick-ring {
+  background: rgba(10, 24, 64, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+/* Item 5: optional full-bleed camera. body.drive-cam-full (Custom mode only)
+   makes the camera fill the whole .drive-main and sit BEHIND the transparent
+   joysticks (z:6); without it the camera keeps its standard centered size. */
+body.drive-custom-layout.drive-cam-full .drive-center {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+/* Item 4: edit-mode snap grid — subtle bluish 5% lines to align by finger. */
 body.drive-layout-editing .drive-main {
   background-image:
-    linear-gradient(rgba(var(--blue-rgb), .10) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--blue-rgb), .10) 1px, transparent 1px);
+    linear-gradient(rgba(var(--blue-rgb), .14) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--blue-rgb), .14) 1px, transparent 1px);
   background-size: 5% 5%;
 }
 body.drive-layout-editing .joystick-panel-left,
@@ -946,20 +972,26 @@ body.drive-layout-editing .joystick-ring { pointer-events: none; opacity: .85; }
 body.drive-layout-editing.dl-dragging,
 body.drive-layout-editing.dl-dragging * { cursor: grabbing !important; }
 
-/* Drive-tab edit toolbar (overlay; never in the bottom bar). */
+/* Item 1: Drive-tab edit toolbar — a clear floating banner pinned to the BOTTOM
+   of .drive-main (just above the fixed bottom bar), centered, high z-index so
+   it's never hidden under the header/cockpit. Never placed in the bottom bar. */
 .dl-editbar {
   position: absolute;
-  top: 8px; left: 50%; transform: translateX(-50%);
+  bottom: 10px; top: auto; left: 50%; transform: translateX(-50%);
   display: none;
+  align-items: center;
   gap: 8px;
-  z-index: 20;
-  background: rgba(0, 0, 0, .55);
-  border: 1px solid var(--border);
+  z-index: 30;
+  background: rgba(0, 0, 0, .72);
+  border: 1.5px solid var(--blue);
   border-radius: var(--radius);
-  padding: 6px 8px;
-  backdrop-filter: blur(4px);
+  padding: 8px 12px;
+  max-width: calc(100% - 24px);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.5), 0 0 14px rgba(var(--blue-rgb),0.25);
+  backdrop-filter: blur(6px);
 }
 body.drive-layout-editing .dl-editbar { display: flex; }
+.dl-editbar-title { font-size: 10px; letter-spacing: 1px; color: var(--text-dim); margin-right: 2px; white-space: nowrap; }
 
 .shortcut-btn {
   pointer-events: auto;

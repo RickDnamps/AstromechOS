@@ -388,6 +388,8 @@
       <!-- Custom-layout edit toolbar — overlay, shown only in edit mode (body.
            drive-layout-editing). NEVER placed in the fixed bottom bar. -->
       <div id="dl-editbar" class="dl-editbar">
+        <span class="dl-editbar-title">EDIT LAYOUT</span>
+        <button class="btn btn-xs" id="dl-cam-toggle" onclick="driveLayout.toggleCam()" title="Camera: standard / full-width">🎥 CAM</button>
         <button class="btn btn-xs btn-primary" onclick="driveLayout.exitEdit(true)">✓ SAVE</button>
         <button class="btn btn-xs" onclick="driveLayout.reset()">RESET</button>
         <button class="btn btn-xs" onclick="driveLayout.exitEdit(false)">✕ CANCEL</button>
@@ -1831,7 +1833,7 @@
 
           <div class="form-group" style="display:flex;align-items:center;gap:14px">
             <label style="min-width:130px">How many buttons?</label>
-            <input type="range" id="shortcuts-count" min="0" max="12" value="0"
+            <input type="range" id="shortcuts-count" min="0" max="16" value="0"
                    class="holo-slider"
                    style="flex:1;max-width:280px"
                    oninput="shortcutsEditor.onCountChange(this.value)">

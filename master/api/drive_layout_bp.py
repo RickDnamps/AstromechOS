@@ -65,6 +65,9 @@ def _sanitize_layout(raw):
                 cpt = _clamp_pt(pt)
                 if cpt:
                     out['shortcuts'][sid] = cpt
+    # Full-bleed camera flag (Custom Drive Layout item 5) — bool only.
+    if isinstance(raw.get('camFull'), bool):
+        out['camFull'] = raw['camFull']
     return out
 
 

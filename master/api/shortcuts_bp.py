@@ -109,7 +109,10 @@ class _ShortcutRefused(Exception):
     """Raised when a hardware/safety condition refuses the trigger."""
 
 # Cap to avoid pathological configs flooding the Drive tab.
-_MAX_SHORTCUTS = 12
+# 16 since 2026-05-26 (was 12) — Custom Drive Layout lets the operator position
+# them freely, so more slots are usable. The GET /shortcuts response exposes this
+# as `max`, which the Settings editor reads to size its count slider + rows.
+_MAX_SHORTCUTS = 16
 
 # Allowed action types — adding here must be paired with a handler in
 # _ACTIONS below (server-side dispatch).

@@ -54,6 +54,13 @@ def test_sanitize_layout_empty_ok():
     assert out == {"shortcuts": {}}                       # valid, just nothing set
 
 
+def test_sanitize_layout_camfull_bool_only():
+    assert _sanitize_layout({"camFull": True})["camFull"] is True
+    assert _sanitize_layout({"camFull": False})["camFull"] is False
+    assert "camFull" not in _sanitize_layout({"camFull": "yes"})   # non-bool dropped
+    assert "camFull" not in _sanitize_layout({})                   # absent → not added
+
+
 if __name__ == "__main__":
     funcs = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
