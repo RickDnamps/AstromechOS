@@ -2022,9 +2022,19 @@ function _applyTabSwitch(tabId) {
   // the time the operator is in another tab.
   if (tabId === 'drive') {
     if (typeof _resumeCameraStream === 'function') _resumeCameraStream();
-    // Snapshot the real Standard-layout positions (for the Custom default) while
-    // the Drive tab is shown in Standard mode — they depend on the viewport.
-    if (typeof driveLayout !== 'undefined') driveLayout._captureStandard();
+    if (typeof driveLayout !== 'undefined') {
+      if (driveLayout.isCustom()) {
+        // Re-evaluate the over-camera tint now that the Drive area is VISIBLE.
+        // (If the mode was switched to Custom while on the Settings tab, apply()
+        // ran with .drive-main hidden → getBoundingClientRect was 0 → over-cam
+        // couldn't be computed; a shortcut on the camera came back light.)
+        requestAnimationFrame(() => driveLayout._updateOverCam());
+      } else {
+        // Snapshot the real Standard-layout positions (for the Custom default)
+        // while shown in Standard — they depend on the viewport.
+        driveLayout._captureStandard();
+      }
+    }
   } else {
     if (typeof _pauseCameraStream === 'function') _pauseCameraStream();
     // Leaving Drive auto-exits Custom-Layout edit mode (discard in-flight drag).
