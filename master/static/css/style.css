@@ -1005,6 +1005,45 @@ body.drive-custom-layout .drive-center {
 body.drive-layout-editing .dl-cam-move,
 body.drive-layout-editing .dl-cam-resize { display: block; }
 
+/* Alignment guides — Figma-style glowing crosshair + a position badge that follow
+   the dragged element; shown only while a drag is active (body.dl-dragging). */
+.dl-guide {
+  position: absolute;
+  display: none;
+  z-index: 8;
+  pointer-events: none;
+  /* Neon laser — thin, theme-accent colour, semi-transparent core + diffuse glow
+     so it pops elegantly over the camera video AND on light/dark UI backgrounds. */
+  background: rgba(var(--cyan-rgb), 0.6);
+  box-shadow:
+    0 0 3px rgba(var(--cyan-rgb), 0.9),
+    0 0 9px rgba(var(--cyan-rgb), 0.5),
+    0 0 1px rgba(255, 255, 255, 0.6);
+}
+.dl-guide-h { left: 0; width: 100%; height: 1px; }
+.dl-guide-v { top: 0; height: 100%; width: 1px; }
+.dl-guide-badge {
+  position: absolute;
+  display: none;
+  z-index: 9;
+  pointer-events: none;
+  transform: translate(8px, 8px);
+  /* Dark chip + theme-accent text/glow → legible over any background. */
+  background: rgba(8, 16, 40, 0.85);
+  color: var(--cyan);
+  border: 1px solid rgba(var(--cyan-rgb), 0.7);
+  font-family: var(--font);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  box-shadow: 0 0 8px rgba(var(--cyan-rgb), 0.5), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+body.dl-dragging .dl-guide-h,
+body.dl-dragging .dl-guide-v,
+body.dl-dragging .dl-guide-badge { display: block; }
+
 /* Item 4: edit-mode snap grid — bluish lines spaced at the (adjustable) snap
    step (--snap-step, default 5%) so the grid always matches the snap granularity. */
 body.drive-layout-editing .drive-main {

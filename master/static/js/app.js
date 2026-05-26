@@ -11417,6 +11417,30 @@ const driveLayout = {
     });
   },
 
+  // Figma-style alignment guides: a full-width H line + full-height V line that
+  // follow the dragged element (shortcut → top-left edges, joystick → center,
+  // camera → corner) + a % position badge at the intersection. Shown via the
+  // body.dl-dragging CSS; auto-hidden when the drag ends.
+  _positionGuides(elem, mode) {
+    const main = this._main(); if (!main || !elem) return;
+    const mr = main.getBoundingClientRect();
+    const er = elem.getBoundingClientRect();
+    let gx, gy;
+    if (mode === 'center')  { gx = er.left - mr.left + er.width / 2; gy = er.top - mr.top + er.height / 2; }
+    else if (mode === 'br') { gx = er.right - mr.left;               gy = er.bottom - mr.top; }
+    else                    { gx = er.left - mr.left;                gy = er.top - mr.top; }   // 'corner'
+    gx = Math.round(Math.max(0, Math.min(mr.width, gx)));   // round → crisp 1px laser line
+    gy = Math.round(Math.max(0, Math.min(mr.height, gy)));
+    const gh = el('dl-guide-h'), gv = el('dl-guide-v'), gb = el('dl-guide-badge');
+    if (gh) gh.style.top = gy + 'px';
+    if (gv) gv.style.left = gx + 'px';
+    if (gb) {
+      gb.style.left = gx + 'px'; gb.style.top = gy + 'px';
+      gb.textContent = Math.round(gx / mr.width * 100) + '%  ·  ' + Math.round(gy / mr.height * 100) + '%';
+    }
+  },
+  _guideMode(e) { return e.classList.contains('shortcut-btn') ? 'corner' : 'center'; },
+
   _draggables() {
     const els = [];
     const pp = this._propPanel(); if (pp) els.push(pp);
@@ -11545,6 +11569,7 @@ const driveLayout = {
     document.addEventListener('pointermove', this._onCamPointerMove);
     document.addEventListener('pointerup', this._onCamPointerUp);
     document.addEventListener('pointercancel', this._onCamPointerUp);
+    this._positionGuides(document.querySelector('.drive-center'), mode === 'resize' ? 'br' : 'corner');
   },
   _onCamPointerMove: (ev) => {
     const d = driveLayout._camDrag; if (!d) return;
@@ -11568,6 +11593,8 @@ const driveLayout = {
       m.style.setProperty('--cam-h', h.toFixed(1) + '%');
     }
     driveLayout._updateOverCam();   // camera moved/resized → re-check which shortcuts are over it
+    driveLayout._positionGuides(document.querySelector('.drive-center'),
+      (driveLayout._camDrag && driveLayout._camDrag.mode === 'resize') ? 'br' : 'corner');
   },
   _onCamPointerUp: () => {
     driveLayout._camDrag = null;
@@ -11702,6 +11729,7 @@ const driveLayout = {
     document.addEventListener('pointermove', driveLayout._onMove);
     document.addEventListener('pointerup', driveLayout._onUp);
     document.addEventListener('pointercancel', driveLayout._onUp);
+    driveLayout._positionGuides(e, driveLayout._guideMode(e));   // alignment guides on grab
   },
   _onMove: (ev) => {
     const d = driveLayout._drag; if (!d) return;
@@ -11723,6 +11751,7 @@ const driveLayout = {
     d.e.style.setProperty('--lx', px + '%');
     d.e.style.setProperty('--ly', py + '%');
     driveLayout._updateOverCam();   // live over-cam tint (also when dragging a joystick: its grouped buttons move with it)
+    driveLayout._positionGuides(d.e, driveLayout._guideMode(d.e));   // alignment guides follow the element
   },
   _onUp: () => {
     driveLayout._drag = null;
