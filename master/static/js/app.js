@@ -770,6 +770,11 @@ const _appDialog = {
     };
   },
 
+  // True while a themed dialog is awaiting a response. The Drive keyboard
+  // handler reads this to swallow WASD/arrows — the overlay blocks pointer
+  // events but not the keyboard (native confirm() used to freeze the page).
+  isOpen() { return this._resolve !== null; },
+
   show(opts) {
     const e = this._els();
     // Fallback to native if the dialog DOM is absent (e.g. mobile.html)
@@ -811,8 +816,12 @@ const _appDialog = {
     // Enter = OK, Escape = cancel (capture so it beats other key handlers
     // and the prompt input's own keydown). Removed again on close.
     this._onKey = (ev) => {
-      if (ev.key === 'Enter')  { ev.preventDefault(); this._confirm(); }
-      else if (ev.key === 'Escape') { ev.preventDefault(); this._cancel(); }
+      // stopPropagation so Enter/Escape stay inside the dialog and don't leak
+      // to other handlers (e.g. Escape closing the cockpit panel, arrows/Delete
+      // nudging choreo blocks). Non-handled keys are left alone so the prompt
+      // input still receives typed characters.
+      if (ev.key === 'Enter')  { ev.preventDefault(); ev.stopPropagation(); this._confirm(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); this._cancel(); }
     };
     document.addEventListener('keydown', this._onKey, true);
 
@@ -4281,6 +4290,13 @@ const KBD_IDS = {
 };
 
 document.addEventListener('keydown', e => {
+  // Safety: the themed dialog overlay blocks pointer events but NOT the
+  // keyboard. A confirm/alert focuses its OK button (not an INPUT), so the
+  // tag guard below wouldn't catch it — swallow drive keydowns while any
+  // dialog is open so WASD/arrows can't move the robot behind the modal.
+  // keyup is intentionally left ungated so a key held before the dialog
+  // opened still releases and stops motion.
+  if (typeof _appDialog !== 'undefined' && _appDialog.isOpen && _appDialog.isOpen()) return;
   // Audit finding Joystick L-1 2026-05-15: also skip contenteditable
   // elements (none on Drive today, but the choreo editor uses them
   // for inline label edit). Future-proofing.
@@ -4636,8 +4652,10 @@ const LIGHT_ANIMATIONS = [
 let _lightsAnimDataCache = null;
 
 async function loadLightSequences() {
-  let [seqData, animData, state] = await Promise.all([
-    api('/light/list'),
+  // /light/list is consumed only by the choreo editor (custom light-track
+  // options), not here — the Lights-tab grid is driven by /teeces/animations.
+  // So we don't fetch it on this path (was a wasted request).
+  let [animData, state] = await Promise.all([
     _lightsAnimDataCache ? Promise.resolve(_lightsAnimDataCache) : api('/teeces/animations'),
     api('/teeces/state'),
   ]);
