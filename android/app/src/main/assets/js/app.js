@@ -686,6 +686,7 @@ function _initThemes() {
   // layouts from the server (localStorage mirror, like themes). apply() runs
   // inside setMode/syncFromServer and is a no-op in Standard mode.
   if (typeof driveLayout !== 'undefined') {
+    driveLayout._captureStandard();        // snapshot Standard positions (Drive tab is active at boot)
     driveLayout._applyDeviceMode(false);   // mode is per-device (from the mirror); no persist at boot
     driveLayout.syncFromServer();          // refresh mirror from server → re-applies mode + layout
   }
@@ -2021,6 +2022,9 @@ function _applyTabSwitch(tabId) {
   // the time the operator is in another tab.
   if (tabId === 'drive') {
     if (typeof _resumeCameraStream === 'function') _resumeCameraStream();
+    // Snapshot the real Standard-layout positions (for the Custom default) while
+    // the Drive tab is shown in Standard mode — they depend on the viewport.
+    if (typeof driveLayout !== 'undefined') driveLayout._captureStandard();
   } else {
     if (typeof _pauseCameraStream === 'function') _pauseCameraStream();
     // Leaving Drive auto-exits Custom-Layout edit mode (discard in-flight drag).
@@ -11254,6 +11258,7 @@ const driveLayout = {
   // left/right, camera CENTERED between them (not full), shortcuts grouped on the
   // joysticks. So "Standard → Edit" lands on a standard-looking arrangement.
   _DEFAULTS: { propulsion: { x: 2, y: 28 }, dome: { x: 80, y: 28 }, cam: { x: 20, y: 0, w: 60, h: 100 } },
+  _stdSnapshot: null,   // measured Standard-layout positions (used as the Custom default)
 
   deviceKey() {
     const t = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse';
@@ -11317,9 +11322,36 @@ const driveLayout = {
       if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
       const m = this._main();   // clear the camera geometry vars (Custom-only)
       if (m) ['--cam-x', '--cam-y', '--cam-w', '--cam-h'].forEach(v => m.style.removeProperty(v));
+      this._captureStandard();   // back in flex → refresh the Standard snapshot
     }
     const r = document.querySelector(`input[name="drive-layout-mode"][value="${custom ? 'custom' : 'standard'}"]`);
     if (r) r.checked = true;
+  },
+
+  // Measure the live STANDARD (flex) positions as % of .drive-main. Only valid
+  // while NOT custom (elements still in flex). Used so the Custom default matches
+  // the real Standard layout for THIS viewport (not a hardcoded approximation).
+  _measureStandard() {
+    const main = this._main(); if (!main) return null;
+    const r = main.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const pct = (e) => {
+      if (!e) return null;
+      const b = e.getBoundingClientRect();
+      return { x: (b.left - r.left) / r.width * 100, y: (b.top - r.top) / r.height * 100,
+               w: b.width / r.width * 100, h: b.height / r.height * 100 };
+    };
+    const pp = pct(this._propPanel()), dp = pct(this._domePanel()), cc = pct(document.querySelector('.drive-center'));
+    if (!pp || !dp || !cc) return null;
+    return { propulsion: { x: pp.x, y: pp.y }, dome: { x: dp.x, y: dp.y }, cam: cc };
+  },
+  _captureStandard() {
+    if (this.isCustom()) return;
+    requestAnimationFrame(() => {
+      if (this.isCustom()) return;
+      const s = this._measureStandard();
+      if (s) this._stdSnapshot = s;
+    });
   },
 
   // Apply this device's saved layout. Called after every shortcutsRunner render
@@ -11327,8 +11359,9 @@ const driveLayout = {
   apply() {
     if (!this.isCustom()) return;
     const lay = this._current();
-    this._setPt(this._propPanel(), lay.propulsion || this._DEFAULTS.propulsion);
-    this._setPt(this._domePanel(), lay.dome || this._DEFAULTS.dome);
+    const snap = this._stdSnapshot || {};   // default = measured Standard positions
+    this._setPt(this._propPanel(), lay.propulsion || snap.propulsion || this._DEFAULTS.propulsion);
+    this._setPt(this._domePanel(), lay.dome || snap.dome || this._DEFAULTS.dome);
     const main = this._main();
     const saved = lay.shortcuts || {};
     if (main) {
@@ -11340,8 +11373,8 @@ const driveLayout = {
     }
     // Camera panel size (% of .drive-main, default full). Vars on .drive-main so
     // both .drive-center and the resize handle inherit them.
-    const dc = this._DEFAULTS.cam;
-    const cam = lay.cam || dc;   // no saved camera → centered standard-like default (not full)
+    const dc = snap.cam || this._DEFAULTS.cam;   // default = measured Standard camera area
+    const cam = lay.cam || dc;
     if (main) {
       main.style.setProperty('--cam-x', (Number.isFinite(cam.x) ? cam.x : dc.x) + '%');
       main.style.setProperty('--cam-y', (Number.isFinite(cam.y) ? cam.y : dc.y) + '%');
