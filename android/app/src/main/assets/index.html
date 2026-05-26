@@ -340,6 +340,31 @@
 </div>
 
 <!-- ================================================================
+     APP DIALOG — themed confirm/alert/prompt replacement. Native
+     dialogs render their buttons in the OS locale (e.g. "Annuler");
+     this one is always English and follows the active light/dark theme.
+================================================================ -->
+<div id="app-dialog" class="admin-modal hidden" role="dialog" aria-modal="true"
+     onclick="_appDialog.onOverlayClick(event)">
+  <div class="admin-modal-card app-dialog-card" id="app-dialog-card" onclick="event.stopPropagation()">
+    <div class="admin-modal-icon">
+      <svg width="26" height="26" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
+        <circle cx="8" cy="8" r="6.3"/>
+        <line x1="8" y1="4.6" x2="8" y2="8.8"/>
+        <circle cx="8" cy="11.3" r=".75" fill="currentColor"/>
+      </svg>
+    </div>
+    <div class="admin-modal-title" id="app-dialog-title">CONFIRM</div>
+    <div class="app-dialog-msg" id="app-dialog-msg"></div>
+    <input type="text" id="app-dialog-input" class="app-dialog-input hidden" autocomplete="off">
+    <div class="admin-modal-btns">
+      <button class="btn" id="app-dialog-cancel" onclick="_appDialog._cancel()">CANCEL</button>
+      <button class="btn btn-active" id="app-dialog-ok" onclick="_appDialog._confirm()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
      TAB 1: DRIVE
 ================================================================ -->
 <div class="tab-content active" id="tab-drive">

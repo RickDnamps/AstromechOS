@@ -167,6 +167,17 @@ const _THEMES = {
 
 let _activeTheme = 'default';
 
+// Single source of truth: does this theme engage light-mode legibility
+// overrides (body.theme-light)? Built-ins carry an explicit `light` flag;
+// custom themes are classified by background luminance. Used by both
+// applyTheme() and the pre-paint boot apply so a reload restores the flag.
+function _themeIsLight(id) {
+  if (_THEMES[id]) return !!_THEMES[id].light;
+  const t = _loadCustomThemes().find(c => c.id === id);
+  const bg = (t && (t._pickerBg || (t.vars && t.vars['--bg']))) || '';
+  return /^#[0-9a-f]{6}$/i.test(bg) ? _relLum(_hexToRgb(bg)) > 0.4 : false;
+}
+
 // ----------------------------------------------------------------
 // Theme application
 // ----------------------------------------------------------------
@@ -192,14 +203,7 @@ function applyTheme(id, persist = true) {
     Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
   }
   // v2: light-theme flag drives Choreo legibility overrides (body.theme-light)
-  let _isLight = false;
-  if (_THEMES[id]) _isLight = !!_THEMES[id].light;
-  else {
-    const t = _loadCustomThemes().find(c => c.id === id);
-    const bg = (t && (t._pickerBg || (t.vars && t.vars['--bg']))) || '';
-    if (/^#[0-9a-f]{6}$/i.test(bg)) _isLight = _relLum(_hexToRgb(bg)) > 0.4;
-  }
-  document.body.classList.toggle('theme-light', _isLight);
+  document.body.classList.toggle('theme-light', _themeIsLight(id));
   // WOW polish X4 2026-05-15: persist=false for ephemeral hover preview.
   // Only commit to localStorage + flip active state when the change is
   // a real selection (click), not a hover preview.
@@ -440,7 +444,7 @@ function closeThemeEditor() {
 
 function saveCustomTheme() {
   const name = document.getElementById('theme-editor-name').value.trim();
-  if (!name) { alert('Please enter a theme name'); return; }
+  if (!name) { alertDialog('Please enter a theme name', { title: 'THEME NAME' }); return; }
   const editId  = document.getElementById('theme-editor').dataset.editId;
   const fontOpt = (document.querySelector('input[name="theme-font"]:checked') || {}).value || 'system';
   const entry = {
@@ -654,6 +658,10 @@ function onScaleSlider(which, raw) {
 
 function _initThemes() {
   _renderThemePicker();
+  // Safety net for the pre-paint apply (in case <body> wasn't ready yet):
+  // re-sync the light-mode flag to the active theme. Cheap class toggle —
+  // does NOT touch the CSS vars, so no flash.
+  document.body.classList.toggle('theme-light', _themeIsLight(_activeTheme));
   window.addEventListener('resize', _fitPreview);
   // E2 fix 2026-05-16: cross-tab sync. When tab A deletes a custom
   // theme that tab B has applied, tab B's theme grid + applied theme
@@ -689,6 +697,13 @@ function _initThemes() {
     }
   }
   _activeTheme = id;
+  // FIX 2026-05-25: the pre-paint apply set the CSS vars but never the
+  // body.theme-light flag, so every light-theme legibility override
+  // (Choreo surfaces, Settings sub-panels) stayed off after a reload
+  // until the operator re-selected the theme. Set it here too. Guard for
+  // body in case the script ever loads from <head> (then _initThemes
+  // re-applies it once the DOM is ready).
+  if (document.body) document.body.classList.toggle('theme-light', _themeIsLight(id));
   if (id === 'default') return;
   const root = document.documentElement;
   const builtIn = _THEMES[id];
@@ -728,6 +743,114 @@ function escapeHtml(s) {
     .replace(/"/g,'&quot;')
     .replace(/'/g,'&#39;')
     .replace(/`/g,'&#96;');
+}
+
+// ================================================================
+// Custom dialogs — confirmDialog / alertDialog / promptDialog
+// ================================================================
+// Native confirm()/alert()/prompt() render their buttons in the OS
+// locale (e.g. "Annuler" on a French system), which we can't override.
+// These themed replacements always show English labels and inherit the
+// active theme (light/dark) via the shared .admin-modal classes.
+// All three return a Promise — callers must `await` them.
+const _appDialog = {
+  _resolve: null,
+  _kind: 'confirm',   // 'confirm' | 'alert' | 'prompt'
+  _onKey: null,
+
+  _els() {
+    return {
+      overlay: el('app-dialog'),
+      card:    el('app-dialog-card'),
+      title:   el('app-dialog-title'),
+      msg:     el('app-dialog-msg'),
+      input:   el('app-dialog-input'),
+      ok:      el('app-dialog-ok'),
+      cancel:  el('app-dialog-cancel'),
+    };
+  },
+
+  show(opts) {
+    const e = this._els();
+    // Fallback to native if the dialog DOM is absent (e.g. mobile.html)
+    // so the gating logic never silently breaks.
+    if (!e.overlay) {
+      if (opts.kind === 'alert')  { window.alert(opts.message); return Promise.resolve({ ok: true, value: '' }); }
+      if (opts.kind === 'prompt') { const v = window.prompt(opts.message, opts.value || ''); return Promise.resolve({ ok: v !== null, value: v || '' }); }
+      return Promise.resolve({ ok: window.confirm(opts.message), value: '' });
+    }
+    // Resolve a still-open dialog as cancelled (shouldn't happen — awaited).
+    if (this._resolve) this._finish(false);
+
+    this._kind = opts.kind || 'confirm';
+    e.title.textContent = opts.title || (this._kind === 'alert' ? 'NOTICE' : 'CONFIRM');
+    e.msg.textContent   = opts.message || '';
+    e.card.classList.toggle('app-dialog-danger', !!opts.danger);
+
+    if (this._kind === 'prompt') {
+      e.input.classList.remove('hidden');
+      e.input.value = opts.value || '';
+      e.input.placeholder = opts.placeholder || '';
+    } else {
+      e.input.classList.add('hidden');
+      e.input.value = '';
+    }
+
+    e.ok.textContent = opts.okText || 'OK';
+    e.ok.classList.toggle('btn-danger', !!opts.danger);
+    e.ok.classList.toggle('btn-active', !opts.danger);
+    if (this._kind === 'alert') {
+      e.cancel.classList.add('hidden');
+    } else {
+      e.cancel.classList.remove('hidden');
+      e.cancel.textContent = opts.cancelText || 'CANCEL';
+    }
+
+    e.overlay.classList.remove('hidden');
+
+    // Enter = OK, Escape = cancel (capture so it beats other key handlers
+    // and the prompt input's own keydown). Removed again on close.
+    this._onKey = (ev) => {
+      if (ev.key === 'Enter')  { ev.preventDefault(); this._confirm(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); this._cancel(); }
+    };
+    document.addEventListener('keydown', this._onKey, true);
+
+    setTimeout(() => { (this._kind === 'prompt' ? e.input : e.ok)?.focus(); }, 30);
+
+    return new Promise(res => { this._resolve = res; });
+  },
+
+  _confirm() {
+    const e = this._els();
+    this._finish(true, this._kind === 'prompt' ? (e.input?.value || '') : '');
+  },
+
+  // Cancel / overlay click / Escape. Alert has no semantic cancel — Escape
+  // just acknowledges it (ok=true), matching native alert behaviour.
+  _cancel() { this._finish(this._kind === 'alert'); },
+
+  _finish(ok, value = '') {
+    const e = this._els();
+    if (e.overlay) e.overlay.classList.add('hidden');
+    if (this._onKey) { document.removeEventListener('keydown', this._onKey, true); this._onKey = null; }
+    const r = this._resolve; this._resolve = null;
+    if (r) r({ ok: !!ok, value });
+  },
+
+  onOverlayClick(ev) { if (ev.target === el('app-dialog')) this._cancel(); },
+};
+
+// confirm → Promise<boolean>; alert → Promise<void>; prompt → Promise<string|null>
+function confirmDialog(message, opts = {}) {
+  return _appDialog.show({ kind: 'confirm', message, ...opts }).then(r => r.ok);
+}
+function alertDialog(message, opts = {}) {
+  return _appDialog.show({ kind: 'alert', message, ...opts }).then(() => undefined);
+}
+function promptDialog(message, defaultValue = '', opts = {}) {
+  return _appDialog.show({ kind: 'prompt', message, value: defaultValue, ...opts })
+    .then(r => (r.ok ? r.value : null));
 }
 
 // ================================================================
@@ -965,7 +1088,7 @@ const restoreMgr = {
     const file = input.files && input.files[0];
     input.value = '';
     if (!file) return;
-    if (!confirm('RESTORE overwrites ALL current sounds, choreos, configs, calibration and themes with this backup, then reboots the robot. (Your network config is preserved.) Continue?')) return;
+    if (!await confirmDialog('RESTORE overwrites ALL current sounds, choreos, configs, calibration and themes with this backup, then reboots the robot. (Your network config is preserved.) Continue?', { title: 'RESTORE BACKUP', okText: 'RESTORE', danger: true })) return;
     this._show(true);
     this._setBar(5, 'Uploading…');
     const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken) ? adminGuard.getToken() : '';
@@ -1792,11 +1915,18 @@ function switchTab(tabId) {
   if (currentTab === 'choreo' && tabId !== 'choreo'
       && typeof choreoEditor !== 'undefined' && choreoEditor.hasUnsavedChanges
       && choreoEditor.hasUnsavedChanges()) {
-    if (!confirm('Choreo editor has unsaved changes. Leave anyway and lose them?')) {
-      return;
-    }
+    // Async themed confirm → defer the actual switch into the promise.
+    // The non-dirty path below still switches synchronously so existing
+    // synchronous callers of switchTab() stay unaffected.
+    confirmDialog('Choreo editor has unsaved changes. Leave anyway and lose them?',
+                  { title: 'UNSAVED CHANGES', okText: 'LEAVE', cancelText: 'STAY', danger: true })
+      .then(ok => { if (ok) _applyTabSwitch(tabId); });
+    return;
   }
+  _applyTabSwitch(tabId);
+}
 
+function _applyTabSwitch(tabId) {
   document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   el('admin-gear-btn')?.classList.remove('active');
@@ -5318,7 +5448,7 @@ class AudioBoard {
     // Browser confirm is acceptable for destructive admin actions —
     // it's modal and unmissable. The toast pattern is for non-blocking
     // info; here we WANT to block.
-    if (!confirm(`Delete sound "${sound}"?\n\nThis removes it from:\n  - the audio library\n  - any shortcut targeting it (becomes "none")\n\nChoreo blocks that reference it are preserved — re-upload the same name to restore.`)) {
+    if (!await confirmDialog(`Delete sound "${sound}"?\n\nThis removes it from:\n  - the audio library\n  - any shortcut targeting it (becomes "none")\n\nChoreo blocks that reference it are preserved — re-upload the same name to restore.`, { title: 'DELETE SOUND', okText: 'DELETE', danger: true })) {
       return;
     }
     try {
@@ -6129,7 +6259,7 @@ class VescPanel {
 // W2 fix 2026-05-16: reset VESC config to safe defaults.
 // power_scale=1.0, invert L/R off, bench OFF, RPM mode.
 async function vescResetDefaults() {
-  if (!confirm('Reset VESC config to defaults?\n\nPower 100% · Both motors NORMAL · Bench OFF · RPM mode\n\n(Operator can re-adjust after.)')) return;
+  if (!await confirmDialog('Reset VESC config to defaults?\n\nPower 100% · Both motors NORMAL · Bench OFF · RPM mode\n\n(Operator can re-adjust after.)', { title: 'RESET VESC', okText: 'RESET' })) return;
   const results = await Promise.all([
     apiDetail('/vesc/config',     'POST', { scale: 1.0 }),
     apiDetail('/vesc/invert',     'POST', { side: 'L', state: false }),
@@ -6799,7 +6929,7 @@ class ScriptEngine {
   }
 
   async createCategory() {
-    const label = (prompt('Category name:') || '').trim();
+    const label = ((await promptDialog('Category name:', '', { title: 'NEW CATEGORY', okText: 'CREATE' })) || '').trim();
     if (!label) return;
     // F-11 (audit 2026-05-15): client-side validation of the derived id
     // before opening the emoji picker. A label of '日本語' or '!!' used
@@ -6841,7 +6971,7 @@ class ScriptEngine {
     const msg = count > 0
       ? `Delete "${cat.label}"? ${count} sequence(s) will move to New Choreo.`
       : `Delete "${cat.label}"?`;
-    if (!confirm(msg)) return;
+    if (!await confirmDialog(msg, { title: 'DELETE CATEGORY', okText: 'DELETE', danger: true })) return;
     // F-13 (audit 2026-05-15): inspect the response so admin failures
     // (401, 403) don't silently no-op. The await was already present
     // but the return value was discarded — null returns flowed through
@@ -8463,7 +8593,7 @@ const btCustomMappings = {
 
   async deleteMapping(id) {
     if (!id) return;
-    if (!confirm('Delete this mapping?')) return;
+    if (!await confirmDialog('Delete this mapping?', { title: 'DELETE MAPPING', okText: 'DELETE', danger: true })) return;
     const res = await apiDetail('/bt/custom_mapping/' + encodeURIComponent(id),
                                 'DELETE', { device_mac: this._activeMac });
     if (!res.ok) { toast(res.error || 'delete failed', 'error'); return; }
@@ -8474,7 +8604,7 @@ const btCustomMappings = {
     if (!this._activeMac) return;
     const profile = this._profiles[this._activeMac] || {};
     const name = profile.name || this._activeMac;
-    if (!confirm(`Delete the entire profile for "${name}"?\n\nAll custom mappings for this controller will be lost.`)) return;
+    if (!await confirmDialog(`Delete the entire profile for "${name}"?\n\nAll custom mappings for this controller will be lost.`, { title: 'DELETE PROFILE', okText: 'DELETE', danger: true })) return;
     const res = await apiDetail('/bt/device_profile/' + encodeURIComponent(this._activeMac), 'DELETE');
     if (!res.ok) { toast(res.error || 'delete failed', 'error'); return; }
     toast('Profile deleted', 'ok');
@@ -8624,13 +8754,13 @@ const btPairing = {
     });
   },
 
-  unpair(address) {
+  async unpair(address) {
     // W14 fix 2026-05-16: confirm before forget. Mistap on REMOVE was
     // dropping the operator's only paired controller, forcing a 1-3min
     // re-scan + re-pair cycle. Mirrors the destructive-action pattern
     // used for Audio sound delete (long-press) — explicit confirm here
     // because the cost of an undo is high.
-    if (!confirm(`Forget device ${address}?\n\nYou will need to re-pair from scratch (scan + pair). The robot will not auto-connect to this controller anymore.`)) return;
+    if (!await confirmDialog(`Forget device ${address}?\n\nYou will need to re-pair from scratch (scan + pair). The robot will not auto-connect to this controller anymore.`, { title: 'FORGET DEVICE', okText: 'FORGET', danger: true })) return;
     api('/bt/unpair', 'POST', { address }).then(r => {
       if (r && r.status === 'ok') { toast('Device removed', 'ok'); this.refresh(); }
       else toast('Remove error', 'error');
@@ -10460,8 +10590,8 @@ function updateCameraStatusPill(data) {
 }
 
 // W9 fix 2026-05-16: reset battery dropdowns to single-pack defaults
-function resetBatteryDefaults() {
-  if (!confirm('Reset to 4S Li-ion defaults? (Click APPLY to persist.)')) return;
+async function resetBatteryDefaults() {
+  if (!await confirmDialog('Reset to 4S Li-ion defaults? (Click APPLY to persist.)', { title: 'RESET BATTERY', okText: 'RESET' })) return;
   const c = el('battery-cells');     if (c) c.value = '4';
   const m = el('battery-chemistry'); if (m) m.value = 'liion';
   updateBatteryPreview();
@@ -11389,11 +11519,12 @@ const armsConfig = {
       for (let i = count; i < this._count; i++) {
         if (this._servos[i] || this._panels[i]) lost.push(`Arm${i+1}`);
       }
-      if (lost.length && !confirm(
+      if (lost.length && !await confirmDialog(
         `Reducing arms count from ${this._count} to ${count}.\n\n` +
         `This will UNASSIGN and REVERT auto-labels for: ${lost.join(', ')}.\n\n` +
         `Custom servo labels (e.g. 'Arm3_Pince') are now preserved (fix B1).\n\n` +
-        `Continue?`
+        `Continue?`,
+        { title: 'REDUCE ARMS', okText: 'REDUCE', danger: true }
       )) {
         return false;
       }
@@ -11578,7 +11709,7 @@ async function applyWifi() {
     toast('No changes — skipping wlan1 cycle', 'info');
     return;
   }
-  if (!confirm(`Switch wlan1 to "${ssid}"?\n\nThe current wlan1 connection will be dropped during reconnect. If your browser is on wlan1, you'll lose the page — reconnect via the hotspot (192.168.4.1) to verify.`)) return;
+  if (!await confirmDialog(`Switch wlan1 to "${ssid}"?\n\nThe current wlan1 connection will be dropped during reconnect. If your browser is on wlan1, you'll lose the page — reconnect via the hotspot (192.168.4.1) to verify.`, { title: 'SWITCH WIFI', okText: 'SWITCH' })) return;
   const btn = document.querySelector('#spanel-network button[onclick*="applyWifi"]');
   const run = async () => {
     const res = await apiDetail('/settings/wifi', 'POST', { ssid, password });
@@ -11613,7 +11744,7 @@ async function applyHotspot() {
     toast('No changes — skipping hotspot restart', 'info');
     return;
   }
-  if (!confirm(`Apply hotspot SSID "${ssid}"?\n\nALL WiFi clients (including this browser if you're on the hotspot) will be disconnected for ~5s.`)) return;
+  if (!await confirmDialog(`Apply hotspot SSID "${ssid}"?\n\nALL WiFi clients (including this browser if you're on the hotspot) will be disconnected for ~5s.`, { title: 'APPLY HOTSPOT', okText: 'APPLY' })) return;
   const btn = document.querySelector('#spanel-network button[onclick*="applyHotspot"]');
   const run = async () => {
     const res = await apiDetail('/settings/hotspot', 'POST', { ssid, password });
@@ -11643,7 +11774,7 @@ async function applyHotspot() {
 let _deployCfgBaseline = {};
 
 async function saveConfig() {
-  if (!confirm('Save deploy config?\n\nRepo URL / branch / slave host changes take effect on next git pull or reboot.')) return;
+  if (!await confirmDialog('Save deploy config?\n\nRepo URL / branch / slave host changes take effect on next git pull or reboot.', { title: 'SAVE DEPLOY CONFIG', okText: 'SAVE' })) return;
   const current = {
     'github.repo_url':          (el('repo-url')?.value || '').trim(),
     'github.branch':            (el('git-branch')?.value || '').trim(),
@@ -11678,7 +11809,7 @@ async function saveConfig() {
 // trapping the operator behind a 30s overlay for a reboot that never
 // happened.
 async function confirmAction(msg, endpoint, isServiceRestart) {
-  if (!confirm(msg)) return;
+  if (!await confirmDialog(msg, { title: 'CONFIRM', okText: 'CONTINUE', danger: true })) return;
   // W6 fix 2026-05-16: shorter overlay for service-only restart (~5s).
   const isReboot   = /\/system\/reboot/.test(endpoint);
   const isShutdown = /\/system\/shutdown/.test(endpoint);
@@ -11770,7 +11901,7 @@ function showRebootOverlay(title, sub, countdownSec, autoReconnect) {
 }
 
 async function systemUpdate() {
-  if (!confirm('Force update?\n\ngit pull + rsync Slave + reboot Slave')) return;
+  if (!await confirmDialog('Force update?\n\ngit pull + rsync Slave + reboot Slave', { title: 'FORCE UPDATE', okText: 'UPDATE' })) return;
   // WOW polish I2 2026-05-15: full-screen progress overlay during the
   // 30-90s deploy so operator isn't staring at a frozen UI wondering
   // 'did it work?'. Polls /system/version every 3s — when the SHA
@@ -11822,7 +11953,7 @@ async function systemUpdate() {
 }
 
 async function systemRollback() {
-  if (!confirm('ROLLBACK to previous commit?\n\nThis will revert the last git pull, then rsync Slave and reboot it.\n\nCannot be undone easily.')) return;
+  if (!await confirmDialog('ROLLBACK to previous commit?\n\nThis will revert the last git pull, then rsync Slave and reboot it.\n\nCannot be undone easily.', { title: 'ROLLBACK', okText: 'ROLLBACK', danger: true })) return;
   toast('Rollback started…', 'info');
   // B-113 (audit 2026-05-15): surface failure. Was fire-and-forget;
   // a 401 (admin lock expired) or 5xx silently looked successful
@@ -12071,8 +12202,8 @@ function validateHatField(inputId, single = false) {
 let _lastStatusForHats = null;
 
 // W9 fix 2026-05-16: reset HAT inputs to single-HAT defaults
-function resetHatDefaults() {
-  if (!confirm('Reset HAT addresses to single-HAT defaults? (You still need to SAVE to persist.)')) return;
+async function resetHatDefaults() {
+  if (!await confirmDialog('Reset HAT addresses to single-HAT defaults? (You still need to SAVE to persist.)', { title: 'RESET HATS', okText: 'RESET' })) return;
   const m = el('master-hats-input'); if (m) m.value = '0x40';
   const s = el('slave-hats-input');  if (s) s.value = '0x41';
   const mh= el('slave-motor-hat-input'); if (mh) mh.value = '0x40';
@@ -12187,7 +12318,7 @@ async function saveHardwareConfig() {
   const consequences = [];
   if (masterHatChanged) consequences.push('• Master reboot required (servo HAT count change)');
   if (slaveHatChanged)  consequences.push('• Slave service will auto-restart');
-  if (!confirm('Save hardware config?\n\n' + consequences.join('\n'))) return;
+  if (!await confirmDialog('Save hardware config?\n\n' + consequences.join('\n'), { title: 'SAVE HARDWARE CONFIG', okText: 'SAVE' })) return;
 
   // W4 fix 2026-05-16: withSaveFeedback for spinner/checkmark parity
   const btn = document.querySelector('#spanel-hats button.btn-primary');
@@ -12319,7 +12450,7 @@ async function loadIconPicker() {
     // Right-click → delete
     btn.addEventListener('contextmenu', async e => {
       e.preventDefault();
-      if (!confirm(`Delete icon "${fname}"?`)) return;
+      if (!await confirmDialog(`Delete icon "${fname}"?`, { title: 'DELETE ICON', okText: 'DELETE', danger: true })) return;
       const r = await api('/settings/icons/delete', 'POST', { filename: fname });
       if (r?.status === 'ok') {
         btn.remove();
@@ -15006,9 +15137,10 @@ const choreoEditor = (() => {
     // load() itself doesn't run the check (it's also called from
     // delete/save flows that have their own state-management) — only
     // the dropdown path goes through _switchTo.
-    _switchTo(name) {
+    async _switchTo(name) {
       if (_dirty && _chor && _chor.meta && _chor.meta.name) {
-        if (!confirm(`"${_chor.meta.name}" has unsaved changes. Switch anyway and lose them?`)) {
+        if (!await confirmDialog(`"${_chor.meta.name}" has unsaved changes. Switch anyway and lose them?`,
+                                 { title: 'UNSAVED CHANGES', okText: 'SWITCH', cancelText: 'STAY', danger: true })) {
           // Revert the dropdown selection to the current choreo
           const sel = document.getElementById('chor-select');
           if (sel && _chor.meta.name) sel.value = _chor.meta.name;
@@ -15091,7 +15223,7 @@ const choreoEditor = (() => {
       }
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       const name = _chor.meta.name;
-      if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+      if (!await confirmDialog(`Are you sure you want to delete "${name}"?`, { title: 'DELETE CHOREO', okText: 'DELETE', danger: true })) return;
       // Audit findings CR-4 + CR-5 2026-05-15: was using raw fetch
       // which bypasses adminGuard's X-Admin-Pw header injection → every
       // delete 401'd silently. Now goes through api() (header attached
@@ -15133,7 +15265,7 @@ const choreoEditor = (() => {
       }
       if (!_chor) { toast('No choreography loaded', 'error'); return; }
       const oldName = _chor.meta.name;
-      const newName = (prompt('New filename (without .chor):', oldName) || '').trim();
+      const newName = ((await promptDialog('New filename (without .chor):', oldName, { title: 'RENAME CHOREO', okText: 'RENAME' })) || '').trim();
       if (!newName || newName === oldName) return;
       // apiDetail so we can surface 409 "already exists" + 401 "admin
       // expired" + 503 separately. Was using api() which collapsed
@@ -15162,8 +15294,8 @@ const choreoEditor = (() => {
       toast(`Renamed: ${oldName} → ${newName}`, 'ok');
     },
 
-    newChor() {
-      const name = prompt('Choreography name:', 'my_show');
+    async newChor() {
+      const name = await promptDialog('Choreography name:', 'my_show', { title: 'NEW CHOREO', okText: 'CREATE' });
       if (!name) return;
       _chor = {
         meta:   { name, version:'1.0', duration:0, created:new Date().toISOString().slice(0,10), author:'AstromechOS' },
@@ -15342,7 +15474,7 @@ const choreoEditor = (() => {
         // the existing file with no warning.
         const existing = await api('/choreo/list');
         if (Array.isArray(existing) && existing.some(e => (e.name || e) === chor.meta.name)) {
-          if (!confirm(`"${chor.meta.name}" already exists. Overwrite it?`)) {
+          if (!await confirmDialog(`"${chor.meta.name}" already exists. Overwrite it?`, { title: 'OVERWRITE CHOREO', okText: 'OVERWRITE', danger: true })) {
             toast('Import cancelled', 'info');
             return;
           }

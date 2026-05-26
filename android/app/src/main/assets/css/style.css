@@ -6430,6 +6430,41 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .lock-childlock-sep { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; margin-top: 6px; }
 .lock-sep-line { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }
 
+/* App dialog (confirmDialog / alertDialog / promptDialog) — themed
+   replacement for native confirm/alert/prompt. Reuses .admin-modal
+   for the backdrop + card; adds a readable left-aligned message body
+   and a normal-weight text input (the .admin-pwd-input style is tuned
+   for password dots and is unsuitable for filenames/labels). */
+.admin-modal-card.app-dialog-card { width: 360px; }
+.app-dialog-msg {
+  font-size: 12.5px;
+  color: var(--text);
+  text-align: left;
+  white-space: pre-line;     /* honour the \n in the legacy messages */
+  line-height: 1.55;
+  letter-spacing: 0.3px;
+  width: 100%;
+}
+.app-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--input-bg, rgba(var(--blue-rgb), 0.06));
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--input-text, var(--text));
+  font-family: var(--font);
+  font-size: 14px;
+  letter-spacing: 1px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.app-dialog-input:focus { border-color: var(--blue); box-shadow: 0 0 8px rgba(var(--blue-rgb), 0.2); }
+.app-dialog-input::placeholder { color: var(--text-dim); }
+.app-dialog-input.hidden { display: none; }
+.app-dialog-card.app-dialog-danger .admin-modal-icon { color: var(--red); opacity: 0.85; }
+.app-dialog-card.app-dialog-danger .admin-modal-title { color: var(--red); text-shadow: 0 0 10px var(--red); }
+
 /* Shake animation — mauvais mot de passe */
 @keyframes shake {
   0%,100% { transform: translateX(0); }
