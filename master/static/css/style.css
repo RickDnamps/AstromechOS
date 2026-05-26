@@ -932,6 +932,24 @@ body.drive-custom-layout .drive-main > .shortcut-btn.dl-free {
   min-height: 0;
   padding: 2px;
   overflow: hidden;
+  /* Legibility over the live camera: dense fill + crisp border + drop shadow so
+     the button reads clearly whatever the video shows behind it. */
+  opacity: 1;
+  background: rgba(8, 16, 40, 0.82);
+  border: 1.5px solid var(--blue);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+/* High-contrast white text/icon with an outline so labels pop over the video. */
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free .shortcut-icon,
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free .shortcut-label {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 3px rgba(0, 0, 0, 0.85);
+}
+/* Keep the playing/on accent visible over the dense dark fill (green border + glow). */
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.is-on,
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free.is-playing {
+  border-color: var(--green);
+  box-shadow: 0 0 10px var(--green), 0 2px 8px rgba(0, 0, 0, 0.55);
 }
 
 /* Item 3: in Custom mode the joysticks go semi-transparent + blurred so the
@@ -942,21 +960,41 @@ body.drive-custom-layout .joystick-ring {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
-/* Item 5: optional full-bleed camera. body.drive-cam-full (Custom mode only)
-   makes the camera fill the whole .drive-main and sit BEHIND the transparent
-   joysticks (z:6); without it the camera keeps its standard centered size. */
-body.drive-custom-layout.drive-cam-full .drive-center {
+/* Item 5: in Custom mode the camera is a RESIZABLE panel anchored top-left of
+   .drive-main, sized by --cam-w/--cam-h (% of .drive-main, default full) and
+   sitting BEHIND the transparent joysticks (z:6). A corner handle resizes it. */
+body.drive-custom-layout .drive-center {
   position: absolute;
-  inset: 0;
+  left: 0; top: 0;
+  width:  var(--cam-w, 100%);
+  height: var(--cam-h, 100%);
   z-index: 0;
 }
+/* Resize handle — child of .drive-main (sibling of the joysticks) so its z-index
+   can sit ABOVE them; tracks the camera's bottom-right corner via the same vars. */
+.dl-cam-resize {
+  position: absolute;
+  display: none;
+  left: calc(var(--cam-w, 100%) - 22px);
+  top:  calc(var(--cam-h, 100%) - 22px);
+  width: 22px; height: 22px;
+  z-index: 7;
+  cursor: nwse-resize;
+  touch-action: none;
+  border-right: 3px solid var(--blue);
+  border-bottom: 3px solid var(--blue);
+  border-bottom-right-radius: 5px;
+  background: rgba(10, 24, 64, 0.55);
+}
+body.drive-layout-editing .dl-cam-resize { display: block; }
 
-/* Item 4: edit-mode snap grid — subtle bluish 5% lines to align by finger. */
+/* Item 4: edit-mode snap grid — bluish lines spaced at the (adjustable) snap
+   step (--snap-step, default 5%) so the grid always matches the snap granularity. */
 body.drive-layout-editing .drive-main {
   background-image:
     linear-gradient(rgba(var(--blue-rgb), .14) 1px, transparent 1px),
     linear-gradient(90deg, rgba(var(--blue-rgb), .14) 1px, transparent 1px);
-  background-size: 5% 5%;
+  background-size: var(--snap-step, 5%) var(--snap-step, 5%);
 }
 /* Item 2: free-placement (SNAP OFF) hides the snap grid — pixel-precise drag. */
 body.drive-layout-editing.drive-snap-off .drive-main { background-image: none; }
@@ -1020,6 +1058,10 @@ body.drive-layout-editing .dl-editbar { display: flex; }
 }
 body.drive-layout-editing.master-offline .dl-offline-badge { display: inline-flex; align-items: center; }
 body.master-offline .dl-editbar .btn.btn-primary { color: var(--orange); border-color: var(--orange); }
+/* Snap toggle + step (+/-) group in the editor banner. */
+.dl-snap-group { display: inline-flex; align-items: center; gap: 4px; }
+.dl-snap-step { font-size: 10px; color: var(--text); min-width: 28px; text-align: center; font-family: var(--font); }
+.dl-editbar .btn.dl-step-btn { padding: 4px 8px; min-width: 26px; }
 
 .shortcut-btn {
   pointer-events: auto;

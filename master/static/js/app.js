@@ -11244,6 +11244,8 @@ const driveLayout = {
   _editing: false,
   _drag: null,
   _snap: true,
+  _snapStep: 5,              // snap granularity in % (adjustable via +/- in the banner)
+  _camResize: null,
   _online: true,             // Master reachability (fed by StatusPoller._setOffline)
   _idleTimer: null,
   _IDLE_MS: 5 * 60 * 1000,   // auto-close the editor after 5 min of inactivity
@@ -11295,7 +11297,8 @@ const driveLayout = {
       });
       this._detachFreeShortcuts();
       if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
-      document.body.classList.remove('drive-cam-full');   // full-bleed camera is Custom-only
+      const m = this._main();   // clear the camera-size vars (Custom-only)
+      if (m) { m.style.removeProperty('--cam-w'); m.style.removeProperty('--cam-h'); }
     }
     const r = document.querySelector(`input[name="drive-layout-mode"][value="${custom ? 'custom' : 'standard'}"]`);
     if (r) r.checked = true;
@@ -11317,8 +11320,13 @@ const driveLayout = {
         if (btn) { btn.classList.add('dl-free'); main.appendChild(btn); this._setPt(btn, saved[scid]); }
       });
     }
-    document.body.classList.toggle('drive-cam-full', !!lay.camFull);   // item 5: full-bleed cam
-    this._updateCamBtn();
+    // Camera panel size (% of .drive-main, default full). Vars on .drive-main so
+    // both .drive-center and the resize handle inherit them.
+    const cam = lay.cam || { w: 100, h: 100 };
+    if (main) {
+      main.style.setProperty('--cam-w', (Number.isFinite(cam.w) ? cam.w : 100) + '%');
+      main.style.setProperty('--cam-h', (Number.isFinite(cam.h) ? cam.h : 100) + '%');
+    }
   },
 
   _draggables() {
@@ -11333,6 +11341,8 @@ const driveLayout = {
       e.removeEventListener('pointerdown', this._onDown);
       if (on) e.addEventListener('pointerdown', this._onDown);
     });
+    const rh = el('dl-cam-resize');   // camera resize handle
+    if (rh) { rh.removeEventListener('pointerdown', this._onCamDown); if (on) rh.addEventListener('pointerdown', this._onCamDown); }
   },
   enterEdit() {
     // Safety: editing the layout requires an active admin session…
@@ -11348,6 +11358,7 @@ const driveLayout = {
     if (!this.isCustom()) this.setMode('custom');
     this._editing = true;
     this._snap = _lsGet('astromech-drive-snap') !== '0';   // default ON, remembered
+    this._snapStep = Math.min(20, Math.max(1, parseInt(_lsGet('astromech-drive-snapstep'), 10) || 5));
     document.body.classList.add('drive-layout-editing');
     this._applySnapUI();
     this._bindEdit(true);
@@ -11400,19 +11411,45 @@ const driveLayout = {
     document.querySelectorAll('.drive-main > .shortcut-btn.dl-free').forEach(b => {
       if (b.dataset.scid) lay.shortcuts[b.dataset.scid] = this._pctOf(b);
     });
-    lay.camFull = document.body.classList.contains('drive-cam-full');   // item 5
+    const m = this._main();   // camera panel size (% of .drive-main)
+    const cw = m ? parseFloat(m.style.getPropertyValue('--cam-w')) : NaN;
+    const ch = m ? parseFloat(m.style.getPropertyValue('--cam-h')) : NaN;
+    lay.cam = { w: Number.isFinite(cw) ? cw : 100, h: Number.isFinite(ch) ? ch : 100 };
     return lay;
   },
-  // Item 5: toggle full-bleed camera (Custom mode only). Persisted in the layout
-  // (camFull) via _collect on Save; applied on load by apply().
-  toggleCam() {
+  // Camera: reset to full size (the 🎥 FULL button). The blue corner handle
+  // resizes it; geometry is persisted per-device as layout.cam {w,h}.
+  resetCam() {
     if (!this.isCustom()) return;
-    document.body.classList.toggle('drive-cam-full');
-    this._updateCamBtn();
+    const m = this._main();
+    if (m) { m.style.setProperty('--cam-w', '100%'); m.style.setProperty('--cam-h', '100%'); }
   },
-  _updateCamBtn() {
-    const b = el('dl-cam-toggle');
-    if (b) b.classList.toggle('btn-active', document.body.classList.contains('drive-cam-full'));
+  // Camera resize drag (corner handle) — sets --cam-w/--cam-h on .drive-main,
+  // clamped 25..100%. No setPointerCapture; move/up on document; bumps idle.
+  _onCamDown: (ev) => {
+    if (!driveLayout._editing || !ev.isPrimary) return;
+    ev.preventDefault(); ev.stopPropagation();
+    const m = driveLayout._main(); if (!m) return;
+    driveLayout._camResize = { main: m.getBoundingClientRect() };
+    driveLayout._bumpIdle();
+    document.body.classList.add('dl-dragging');
+    document.addEventListener('pointermove', driveLayout._onCamMove);
+    document.addEventListener('pointerup', driveLayout._onCamUp);
+    document.addEventListener('pointercancel', driveLayout._onCamUp);
+  },
+  _onCamMove: (ev) => {
+    const r = driveLayout._camResize; if (!r) return;
+    const w = Math.min(100, Math.max(25, (ev.clientX - r.main.left) / r.main.width * 100));
+    const h = Math.min(100, Math.max(25, (ev.clientY - r.main.top) / r.main.height * 100));
+    const m = driveLayout._main();
+    if (m) { m.style.setProperty('--cam-w', w.toFixed(1) + '%'); m.style.setProperty('--cam-h', h.toFixed(1) + '%'); }
+  },
+  _onCamUp: () => {
+    driveLayout._camResize = null;
+    document.body.classList.remove('dl-dragging');
+    document.removeEventListener('pointermove', driveLayout._onCamMove);
+    document.removeEventListener('pointerup', driveLayout._onCamUp);
+    document.removeEventListener('pointercancel', driveLayout._onCamUp);
   },
   // Item 2: snap toggle. OFF = free pixel placement (no 5% rounding) + grid hidden.
   toggleSnap() {
@@ -11424,6 +11461,17 @@ const driveLayout = {
     document.body.classList.toggle('drive-snap-off', !this._snap);
     const b = el('dl-snap-toggle');
     if (b) b.classList.toggle('btn-active', this._snap);
+    // Grid spacing tracks the snap step; label reflects it.
+    const m = this._main();
+    if (m) m.style.setProperty('--snap-step', this._snapStep + '%');
+    const lbl = el('dl-snap-step');
+    if (lbl) lbl.textContent = this._snapStep + '%';
+  },
+  // Adjust the snap granularity (+/- in the banner). Clamped 1..20 %, persisted.
+  snapStep(delta) {
+    this._snapStep = Math.min(20, Math.max(1, this._snapStep + delta));
+    _lsSet('astromech-drive-snapstep', String(this._snapStep));
+    this._applySnapUI();
   },
   // Safety — inactivity auto-close: any edit interaction (tap/drag/key) resets a
   // 5-min timer; on expiry the editor force-closes (cancel) so an unattended
@@ -11538,9 +11586,10 @@ const driveLayout = {
     const maxPy = Math.max(0, (d.main.height - d.h) / d.main.height * 100);
     let px = (x / d.main.width) * 100;
     let py = (y / d.main.height) * 100;
-    if (driveLayout._snap) {                  // 5% snap (toggleable via 🧲 SNAP)
-      px = Math.round(px / 5) * 5;
-      py = Math.round(py / 5) * 5;
+    if (driveLayout._snap) {                  // snap to the adjustable step (🧲 SNAP + / −)
+      const s = driveLayout._snapStep || 5;
+      px = Math.round(px / s) * s;
+      py = Math.round(py / s) * s;
     }
     px = Math.min(maxPx, Math.max(0, px));   // snap can overshoot the clamp → re-clamp in-bounds
     py = Math.min(maxPy, Math.max(0, py));

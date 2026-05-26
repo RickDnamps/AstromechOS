@@ -65,9 +65,18 @@ def _sanitize_layout(raw):
                 cpt = _clamp_pt(pt)
                 if cpt:
                     out['shortcuts'][sid] = cpt
-    # Full-bleed camera flag (Custom Drive Layout item 5) — bool only.
-    if isinstance(raw.get('camFull'), bool):
-        out['camFull'] = raw['camFull']
+    # Camera panel size (Custom Drive Layout) — width/height as % of .drive-main,
+    # clamped 25..100 (top-left anchored). Absent = default full size.
+    cam = raw.get('cam')
+    if isinstance(cam, dict):
+        try:
+            w = float(cam.get('w'))
+            h = float(cam.get('h'))
+            if math.isfinite(w) and math.isfinite(h):
+                out['cam'] = {'w': min(100.0, max(25.0, w)),
+                              'h': min(100.0, max(25.0, h))}
+        except (TypeError, ValueError):
+            pass
     return out
 
 

@@ -54,11 +54,12 @@ def test_sanitize_layout_empty_ok():
     assert out == {"shortcuts": {}}                       # valid, just nothing set
 
 
-def test_sanitize_layout_camfull_bool_only():
-    assert _sanitize_layout({"camFull": True})["camFull"] is True
-    assert _sanitize_layout({"camFull": False})["camFull"] is False
-    assert "camFull" not in _sanitize_layout({"camFull": "yes"})   # non-bool dropped
-    assert "camFull" not in _sanitize_layout({})                   # absent → not added
+def test_sanitize_layout_cam_clamped():
+    assert _sanitize_layout({"cam": {"w": 150, "h": 10}})["cam"] == {"w": 100.0, "h": 25.0}  # clamp 25..100
+    assert _sanitize_layout({"cam": {"w": 60, "h": 80}})["cam"] == {"w": 60.0, "h": 80.0}
+    assert "cam" not in _sanitize_layout({"cam": {"w": "x", "h": 1}})   # non-finite dropped
+    assert "cam" not in _sanitize_layout({"cam": "full"})              # non-dict dropped
+    assert "cam" not in _sanitize_layout({})                          # absent → not added
 
 
 if __name__ == "__main__":

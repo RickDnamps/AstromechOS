@@ -390,12 +390,19 @@
       <div id="dl-editbar" class="dl-editbar">
         <span class="dl-editbar-title">EDIT LAYOUT</span>
         <span id="dl-offline-badge" class="dl-offline-badge">⚠ MASTER OFFLINE</span>
-        <button class="btn btn-xs" id="dl-cam-toggle" onclick="driveLayout.toggleCam()" title="Camera: standard / full-width">🎥 CAM</button>
-        <button class="btn btn-xs" id="dl-snap-toggle" onclick="driveLayout.toggleSnap()" title="Snap to the 5% grid (off = free pixel placement)">🧲 SNAP</button>
+        <button class="btn btn-xs" id="dl-cam-toggle" onclick="driveLayout.resetCam()" title="Reset camera to full size — drag the blue corner handle to resize it">🎥 FULL</button>
+        <span class="dl-snap-group">
+          <button class="btn btn-xs" id="dl-snap-toggle" onclick="driveLayout.toggleSnap()" title="Snap to grid (off = free pixel placement)">🧲 SNAP</button>
+          <button class="btn btn-xs dl-step-btn" onclick="driveLayout.snapStep(-1)" title="Finer snap step">−</button>
+          <span id="dl-snap-step" class="dl-snap-step">5%</span>
+          <button class="btn btn-xs dl-step-btn" onclick="driveLayout.snapStep(1)" title="Coarser snap step">+</button>
+        </span>
         <button class="btn btn-xs btn-primary" onclick="driveLayout.exitEdit(true)">✓ SAVE</button>
         <button class="btn btn-xs" onclick="driveLayout.reset()">RESET</button>
         <button class="btn btn-xs" onclick="driveLayout.exitEdit(false)">✕ CANCEL</button>
       </div>
+      <!-- Camera resize handle (sibling of joysticks so it can sit above them). -->
+      <div id="dl-cam-resize" class="dl-cam-resize" title="Drag to resize the camera"></div>
 
       <!-- Left joystick — Propulsion -->
       <div class="joystick-panel joystick-panel-left">
