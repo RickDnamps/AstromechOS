@@ -905,6 +905,62 @@ body[data-lock-mode="2"] #js-left-ring::after {
 .shortcut-pad-right { justify-self: end; }
 .shortcut-pad:empty { display: none; }
 
+/* ════════════════════════════════════════════════════════════════════════
+   Custom Drive Layout — gated by body classes. Standard mode (neither class)
+   is COMPLETELY unaffected: no rule below applies without .drive-custom-layout.
+   SAFETY: only .drive-main children are ever positioned here — the
+   .drive-bottom-bar (E-STOP, Speed, ALIVE, Camera, Lock, BT) is never touched.
+   ════════════════════════════════════════════════════════════════════════ */
+body.drive-custom-layout .drive-main { position: relative; }
+/* Customizable elements: absolute, anchored at JS-set --lx/--ly (% of .drive-main). */
+body.drive-custom-layout .joystick-panel-left,
+body.drive-custom-layout .joystick-panel-right,
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free {
+  position: absolute;
+  left: var(--lx, 0%);
+  top:  var(--ly, 0%);
+  margin: 0;
+  z-index: 6;
+}
+/* Free shortcut buttons reparented onto .drive-main keep their compact size. */
+body.drive-custom-layout .drive-main > .shortcut-btn.dl-free { width: auto; }
+
+/* Edit sub-mode: faint snap grid + drag affordances + frozen joysticks. */
+body.drive-layout-editing .drive-main {
+  background-image:
+    linear-gradient(rgba(var(--blue-rgb), .10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--blue-rgb), .10) 1px, transparent 1px);
+  background-size: 5% 5%;
+}
+body.drive-layout-editing .joystick-panel-left,
+body.drive-layout-editing .joystick-panel-right,
+body.drive-layout-editing .shortcut-btn.dl-free {
+  outline: 1.5px dashed var(--blue);
+  outline-offset: 2px;
+  cursor: grab;
+  touch-action: none;          /* gesture drags instead of scrolling */
+  user-select: none;
+}
+/* Joysticks are non-operational while arranging — can't drive the robot. */
+body.drive-layout-editing .joystick-ring { pointer-events: none; opacity: .85; }
+body.drive-layout-editing.dl-dragging,
+body.drive-layout-editing.dl-dragging * { cursor: grabbing !important; }
+
+/* Drive-tab edit toolbar (overlay; never in the bottom bar). */
+.dl-editbar {
+  position: absolute;
+  top: 8px; left: 50%; transform: translateX(-50%);
+  display: none;
+  gap: 8px;
+  z-index: 20;
+  background: rgba(0, 0, 0, .55);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  backdrop-filter: blur(4px);
+}
+body.drive-layout-editing .dl-editbar { display: flex; }
+
 .shortcut-btn {
   pointer-events: auto;
   width: 56px;
