@@ -40,7 +40,7 @@ A **complete, production-grade control system** for a 1:1 scale astromech droid 
 
 ## Screenshots
 
-> Captured live on the dashboard at Xiaomi Pad 6 resolution (2880 × 1800). Audio, Sequences and the Choreography editor are shown in **both user and admin mode** — a single password unlocks the editing/upload controls that stay hidden for guests.
+> Captured live on the dashboard at Xiaomi Pad 6 resolution (2880 × 1800), in the **R2-D2 Light** theme. Audio, Sequences and the Choreography editor are shown in **both user and admin mode** — a single password unlocks the editing/upload controls that stay hidden for guests.
 
 <table>
 <tr>
@@ -65,7 +65,7 @@ One-tap real-time snapshot from any tab — heartbeat & UART health, both VESCs,
 <td align="center" width="50%">
 
 ### 🎨 Custom Drive Layout — "Roblox-style" editor
-**Drag the joysticks, every shortcut button, and the camera anywhere.** A live **5 % snap grid** (adjustable 1–20 %, or free pixel mode), a **resizable + movable** camera panel, transparent joysticks so the feed shows through, and a floating Save / Reset / Cancel banner. Saved **per device** (tablet ≠ PC ≠ phone) and included in your backups. _(Shown in the R2-D2 Light theme.)_
+**Drag the joysticks, every shortcut button, and the camera anywhere.** A live **5 % snap grid** (adjustable 1–20 %, or free pixel mode), a **resizable + movable** camera panel, transparent joysticks so the feed shows through, and a floating Save / Reset / Cancel banner. Saved **per device** (tablet ≠ PC ≠ phone) and included in your backups.
 
 ![Custom Drive Layout editor](Screenshots/custom-layout-editor.png)
 
