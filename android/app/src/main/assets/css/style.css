@@ -958,6 +958,8 @@ body.drive-layout-editing .drive-main {
     linear-gradient(90deg, rgba(var(--blue-rgb), .14) 1px, transparent 1px);
   background-size: 5% 5%;
 }
+/* Item 2: free-placement (SNAP OFF) hides the snap grid — pixel-precise drag. */
+body.drive-layout-editing.drive-snap-off .drive-main { background-image: none; }
 body.drive-layout-editing .joystick-panel-left,
 body.drive-layout-editing .joystick-panel-right,
 body.drive-layout-editing .shortcut-btn.dl-free {
@@ -991,7 +993,33 @@ body.drive-layout-editing.dl-dragging * { cursor: grabbing !important; }
   backdrop-filter: blur(6px);
 }
 body.drive-layout-editing .dl-editbar { display: flex; }
-.dl-editbar-title { font-size: 10px; letter-spacing: 1px; color: var(--text-dim); margin-right: 2px; white-space: nowrap; }
+.dl-editbar-title { font-size: 10px; letter-spacing: 1px; color: var(--text); margin-right: 2px; white-space: nowrap; }
+/* Item 1: banner + EACH button fully OPAQUE so the commands stay legible over a
+   live camera feed (the default --btn-bg is translucent → unreadable on video).
+   Solid themed surfaces; semantics shown via a coloured border/text rather than
+   a coloured fill, so contrast holds in every theme (a white or dark fill would
+   fail on some accent colours). */
+.dl-editbar { background: var(--bg2); }
+.dl-editbar .btn {
+  background: var(--bg3);
+  color: var(--text);
+  border: 1px solid var(--border-hi);
+  opacity: 1;
+}
+.dl-editbar .btn:hover { background: var(--bg2); border-color: var(--blue); }
+.dl-editbar .btn.btn-primary { color: var(--green); border-color: var(--green); }   /* SAVE */
+.dl-editbar .btn.btn-active  { color: var(--blue);  border-color: var(--blue);       /* CAM/SNAP ON */
+                               box-shadow: inset 0 0 0 1px var(--blue); }
+/* Offline safety: a clear "MASTER OFFLINE" badge appears in the editor banner
+   while the Pi is unreachable, and SAVE turns amber to signal a local-only,
+   deferred-sync save (the layout is never lost — it syncs on reconnect). */
+.dl-offline-badge {
+  display: none;
+  font-size: 9px; letter-spacing: 1px; white-space: nowrap;
+  color: var(--red); border: 1px solid var(--red); border-radius: 4px; padding: 2px 6px;
+}
+body.drive-layout-editing.master-offline .dl-offline-badge { display: inline-flex; align-items: center; }
+body.master-offline .dl-editbar .btn.btn-primary { color: var(--orange); border-color: var(--orange); }
 
 .shortcut-btn {
   pointer-events: auto;

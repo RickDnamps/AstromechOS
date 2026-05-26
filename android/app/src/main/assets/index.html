@@ -389,7 +389,9 @@
            drive-layout-editing). NEVER placed in the fixed bottom bar. -->
       <div id="dl-editbar" class="dl-editbar">
         <span class="dl-editbar-title">EDIT LAYOUT</span>
+        <span id="dl-offline-badge" class="dl-offline-badge">⚠ MASTER OFFLINE</span>
         <button class="btn btn-xs" id="dl-cam-toggle" onclick="driveLayout.toggleCam()" title="Camera: standard / full-width">🎥 CAM</button>
+        <button class="btn btn-xs" id="dl-snap-toggle" onclick="driveLayout.toggleSnap()" title="Snap to the 5% grid (off = free pixel placement)">🧲 SNAP</button>
         <button class="btn btn-xs btn-primary" onclick="driveLayout.exitEdit(true)">✓ SAVE</button>
         <button class="btn btn-xs" onclick="driveLayout.reset()">RESET</button>
         <button class="btn btn-xs" onclick="driveLayout.exitEdit(false)">✕ CANCEL</button>

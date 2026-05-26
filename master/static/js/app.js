@@ -1872,6 +1872,8 @@ class AdminGuard {
     }
     this._unlocked = false;
     this._token = '';   // B-1: drop the in-memory password on lock
+    // Safety: admin expired/locked → force-close the drive-layout editor.
+    if (typeof driveLayout !== 'undefined' && driveLayout.exitEdit) driveLayout.exitEdit(false);
     clearTimeout(this._timer);
     document.body.classList.remove('admin-unlocked');
     audioBoard?.showUploadZone(false);
@@ -9839,6 +9841,10 @@ class StatusPoller {
     cockpitPanel.updateBtn(data);
     if (cockpitPanel.isOpen) cockpitPanel.update(data);
 
+    // Drive-layout editor safety: force-close the editor if admin access was
+    // revoked or Child Lock engaged (offline is handled gracefully, not closed).
+    if (typeof driveLayout !== 'undefined' && driveLayout._enforceEditGuard) driveLayout._enforceEditGuard(data);
+
     // 7qp: audio-disabled banner on the Audio tab. Only show when the slave
     // is reachable AND explicitly reported audio_ready=false (null = slave
     // offline → the cockpit already surfaces "Slave unreachable", no need to
@@ -9868,6 +9874,9 @@ class StatusPoller {
   _setOffline(offline) {
     const wasOffline = this._offline;
     this._offline = offline;
+    // Feed Master reachability to the drive-layout editor (offline badge +
+    // deferred-save sync on reconnect). Every poll; the method is idempotent.
+    if (typeof driveLayout !== 'undefined' && driveLayout._setOnline) driveLayout._setOnline(!offline);
     const pillOffline = el('pill-offline');
     if (pillOffline) pillOffline.style.display = offline ? '' : 'none';
     const pillSlave = el('pill-slave');
@@ -11234,6 +11243,10 @@ const shortcutsEditor = {
 const driveLayout = {
   _editing: false,
   _drag: null,
+  _snap: true,
+  _online: true,             // Master reachability (fed by StatusPoller._setOffline)
+  _idleTimer: null,
+  _IDLE_MS: 5 * 60 * 1000,   // auto-close the editor after 5 min of inactivity
   _DEFAULTS: { propulsion: { x: 2, y: 28 }, dome: { x: 80, y: 28 } },
 
   deviceKey() {
@@ -11322,14 +11335,33 @@ const driveLayout = {
     });
   },
   enterEdit() {
+    // Safety: editing the layout requires an active admin session…
+    if (typeof adminGuard !== 'undefined' && !adminGuard.unlocked) {
+      if (typeof toast === 'function') toast('Admin access required to edit the layout', 'warn');
+      return;
+    }
+    // …and the drive must not be in Child Lock (poll guard also enforces this).
+    if (typeof lockMgr !== 'undefined' && lockMgr._mode === 2) {
+      if (typeof toast === 'function') toast('Drive is in Child Lock — unlock first to edit the layout', 'warn');
+      return;
+    }
     if (!this.isCustom()) this.setMode('custom');
     this._editing = true;
+    this._snap = _lsGet('astromech-drive-snap') !== '0';   // default ON, remembered
     document.body.classList.add('drive-layout-editing');
+    this._applySnapUI();
     this._bindEdit(true);
+    // Safety: auto-close on inactivity (tablet left unattended on the editor).
+    this._bumpIdle();
+    document.addEventListener('pointerdown', this._onActivity, true);
+    document.addEventListener('keydown', this._onActivity, true);
   },
   async exitEdit(save) {
     if (!this._editing) return;
     this._editing = false;
+    clearTimeout(this._idleTimer); this._idleTimer = null;
+    document.removeEventListener('pointerdown', this._onActivity, true);
+    document.removeEventListener('keydown', this._onActivity, true);
     this._bindEdit(false);
     document.body.classList.remove('drive-layout-editing');
     document.body.classList.remove('dl-dragging');
@@ -11337,12 +11369,14 @@ const driveLayout = {
       const layout = this._collect();
       const all = this._loadMirror();
       all[this.deviceKey()] = layout;
-      this._saveMirror(all);
-      const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
-      if (tok) { try { await api('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout }); } catch {} }
-      else if (typeof toast === 'function') toast('Layout saved on this device (admin login needed to sync + back up)', 'info');
+      this._saveMirror(all);                    // localStorage first — never lost
+      await this._pushToServer(layout, true);   // server backup only if online + admin
     }
-    this.apply();
+    // Rebuild shortcut pads + re-apply saved positions so an unsaved lift on a
+    // cancelled session reverts cleanly (saved ones get re-freed by render→apply).
+    this._detachFreeShortcuts();
+    if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
+    else this.apply();
   },
   async reset() {
     const all = this._loadMirror();
@@ -11380,6 +11414,95 @@ const driveLayout = {
     const b = el('dl-cam-toggle');
     if (b) b.classList.toggle('btn-active', document.body.classList.contains('drive-cam-full'));
   },
+  // Item 2: snap toggle. OFF = free pixel placement (no 5% rounding) + grid hidden.
+  toggleSnap() {
+    this._snap = !this._snap;
+    _lsSet('astromech-drive-snap', this._snap ? '1' : '0');
+    this._applySnapUI();
+  },
+  _applySnapUI() {
+    document.body.classList.toggle('drive-snap-off', !this._snap);
+    const b = el('dl-snap-toggle');
+    if (b) b.classList.toggle('btn-active', this._snap);
+  },
+  // Safety — inactivity auto-close: any edit interaction (tap/drag/key) resets a
+  // 5-min timer; on expiry the editor force-closes (cancel) so an unattended
+  // tablet can't be left in an editable state.
+  _onActivity: () => driveLayout._bumpIdle(),
+  _bumpIdle() {
+    clearTimeout(this._idleTimer);
+    this._idleTimer = setTimeout(() => {
+      if (driveLayout._editing) {
+        driveLayout.exitEdit(false);
+        if (typeof toast === 'function') toast('Layout editor closed — inactivity timeout', 'info');
+      }
+    }, this._IDLE_MS);
+  },
+  // Safety — admin/lock/offline guard: editing is only allowed with an active
+  // admin session, drive unlocked (not Child Lock), and the Master reachable.
+  // Called every /status poll (+ immediately from adminGuard.lock and the
+  // offline path). Force-cancels the editor the moment access is revoked.
+  _enforceEditGuard(data) {
+    if (!this._editing) return;
+    const adminOff  = (typeof adminGuard !== 'undefined' && !adminGuard.unlocked);
+    const childLock = !!(data && data.lock_mode === 2);
+    if (adminOff || childLock) {
+      this.exitEdit(false);
+      if (typeof toast === 'function') toast('Layout editor closed — admin/lock state changed', 'warn');
+    }
+  },
+
+  // Offline safety: the server backup (POST /drive/layouts) is only attempted
+  // when the Master is online AND an admin token is held. Otherwise the layout
+  // stays in localStorage and a 'pending' flag is set so it syncs on reconnect.
+  async _pushToServer(layout, announce) {
+    const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+    if (this._online && tok) {
+      try {
+        const r = await apiDetail('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout });
+        if (r && r.ok) {
+          _lsSet('astromech-drive-pending', '0');
+          if (announce && typeof toast === 'function') toast('Layout saved + backed up to Master ✓', 'ok');
+          return true;
+        }
+      } catch {}
+      _lsSet('astromech-drive-pending', '1');   // server hiccup → defer + retry on reconnect
+      if (announce && typeof toast === 'function') toast('Saved on this device — server backup will retry', 'warn');
+      return false;
+    }
+    // Offline or no admin → local-only, mark for deferred sync.
+    _lsSet('astromech-drive-pending', '1');
+    if (announce && typeof toast === 'function') {
+      toast(this._online ? 'Saved on this device (admin login needed to back up)'
+                         : '⚠ Master offline — saved locally, will sync when back online', 'info');
+    }
+    return false;
+  },
+  // Called by StatusPoller on every poll (online=true on success, false on fail).
+  _setOnline(online) {
+    const was = this._online;
+    this._online = !!online;
+    this._updateOfflineUI();
+    if (this._online && !was) this._trySyncPending();   // reconnected → flush pending backup
+  },
+  _updateOfflineUI() {
+    document.body.classList.toggle('master-offline', !this._online);   // CSS shows badge + degrades SAVE
+  },
+  // On reconnect (or admin unlock): if a save was deferred while offline, push it.
+  async _trySyncPending() {
+    if (_lsGet('astromech-drive-pending') !== '1') return;
+    const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
+    if (!this._online || !tok) return;   // need both the Master and admin
+    const layout = this._loadMirror()[this.deviceKey()];
+    if (!layout) return;   // nothing for this device-key yet → keep pending, retry later
+    try {
+      const r = await apiDetail('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout });
+      if (r && r.ok) {
+        _lsSet('astromech-drive-pending', '0');
+        if (typeof toast === 'function') toast('Layout synced to Master ✓', 'ok');
+      }
+    } catch {}
+  },
 
   // --- Pointer-Events drag (touch + mouse). NEVER setPointerCapture (timeline
   //     lesson 973ecf6); move/up live on document. Clamped to .drive-main. ---
@@ -11413,8 +11536,12 @@ const driveLayout = {
     y = Math.min(d.main.height - d.h, Math.max(0, y));
     const maxPx = Math.max(0, (d.main.width - d.w) / d.main.width * 100);
     const maxPy = Math.max(0, (d.main.height - d.h) / d.main.height * 100);
-    let px = Math.round((x / d.main.width) * 100 / 5) * 5;   // 5% snap
-    let py = Math.round((y / d.main.height) * 100 / 5) * 5;
+    let px = (x / d.main.width) * 100;
+    let py = (y / d.main.height) * 100;
+    if (driveLayout._snap) {                  // 5% snap (toggleable via 🧲 SNAP)
+      px = Math.round(px / 5) * 5;
+      py = Math.round(py / 5) * 5;
+    }
     px = Math.min(maxPx, Math.max(0, px));   // snap can overshoot the clamp → re-clamp in-bounds
     py = Math.min(maxPy, Math.max(0, py));
     d.e.style.setProperty('--lx', px + '%');
