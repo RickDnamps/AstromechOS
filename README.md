@@ -172,8 +172,10 @@ A **servo** block exposes the target panel, the open/close action, duration and 
 <tr>
 <td align="center" width="50%">
 
-### 💡 Lights
+### 💡 Lights `BETA`
 Teeces32 or AstroPixels+ · 22 animations · FLD / RLD / BOTH text targets · PSI sequences · hot-swappable backend without a reboot.
+
+> **🚧 Beta — under active rework.** A full AstroPixels rewrite is planned, plus a dedicated **visual lights editor**. Expect this tab and its API to change.
 
 ![Lights interface](Screenshots/lights.png)
 
