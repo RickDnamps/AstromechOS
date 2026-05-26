@@ -66,6 +66,15 @@ def test_sanitize_layout_cam_clamped():
     assert "cam" not in _sanitize_layout({})                          # absent → not added
 
 
+def test_sanitize_layout_editor_params():
+    out = _sanitize_layout({"mode": "custom", "snap": False, "snapStep": 3})
+    assert out["mode"] == "custom" and out["snap"] is False and out["snapStep"] == 3
+    assert "mode" not in _sanitize_layout({"mode": "bogus"})        # invalid mode dropped
+    assert "snap" not in _sanitize_layout({"snap": "yes"})          # non-bool dropped
+    assert "snapStep" not in _sanitize_layout({"snapStep": 99})     # out-of-range dropped
+    assert "snapStep" not in _sanitize_layout({"snapStep": "x"})    # non-int dropped
+
+
 if __name__ == "__main__":
     funcs = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

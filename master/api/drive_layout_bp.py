@@ -83,6 +83,18 @@ def _sanitize_layout(raw):
                 }
         except (TypeError, ValueError):
             pass
+    # Per-device editor params (mode / snap toggle / snap step) — so they are
+    # per-device AND ride the backup, like the geometry above.
+    if raw.get('mode') in ('standard', 'custom'):
+        out['mode'] = raw['mode']
+    if isinstance(raw.get('snap'), bool):
+        out['snap'] = raw['snap']
+    try:
+        ss = int(raw.get('snapStep'))
+        if 1 <= ss <= 20:
+            out['snapStep'] = ss
+    except (TypeError, ValueError):
+        pass
     return out
 
 

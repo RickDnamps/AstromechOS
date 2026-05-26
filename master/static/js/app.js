@@ -686,8 +686,8 @@ function _initThemes() {
   // layouts from the server (localStorage mirror, like themes). apply() runs
   // inside setMode/syncFromServer and is a no-op in Standard mode.
   if (typeof driveLayout !== 'undefined') {
-    driveLayout.setMode(_lsGet('astromech-drive-mode') === 'custom' ? 'custom' : 'standard');
-    driveLayout.syncFromServer();
+    driveLayout._applyDeviceMode(false);   // mode is per-device (from the mirror); no persist at boot
+    driveLayout.syncFromServer();          // refresh mirror from server → re-applies mode + layout
   }
 }
 
@@ -11281,14 +11281,28 @@ const driveLayout = {
   async syncFromServer() {
     const d = await api('/drive/layouts');
     if (d && typeof d === 'object' && !Array.isArray(d)) this._saveMirror(d);
-    this.apply();
+    this._applyDeviceMode(false);   // re-apply this device's saved mode (+ layout via apply)
+  },
+  // Read this device's saved mode and apply it (persist=false at boot/sync).
+  _applyDeviceMode(persist) {
+    this.setMode(this._current().mode === 'custom' ? 'custom' : 'standard', persist);
+  },
+  // Merge a partial into THIS device's layout entry (mirror + server best-effort).
+  // The per-device editor params (mode/snap/snapStep) live in the layout entry so
+  // they are per-device AND ride the backup, exactly like the geometry.
+  _patchDevice(partial) {
+    const all = this._loadMirror();
+    const merged = { ...(all[this.deviceKey()] || {}), ...partial };
+    all[this.deviceKey()] = merged;
+    this._saveMirror(all);
+    this._pushToServer(merged, false);
   },
 
-  setMode(mode) {
+  setMode(mode, persist = true) {
     const custom = mode === 'custom';
     if (!custom) this.exitEdit(false);
     document.body.classList.toggle('drive-custom-layout', custom);
-    _lsSet('astromech-drive-mode', custom ? 'custom' : 'standard');
+    if (persist) this._patchDevice({ mode: custom ? 'custom' : 'standard' });
     if (custom) {
       this.apply();
     } else {
@@ -11298,8 +11312,8 @@ const driveLayout = {
       });
       this._detachFreeShortcuts();
       if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
-      const m = this._main();   // clear the camera-size vars (Custom-only)
-      if (m) { m.style.removeProperty('--cam-w'); m.style.removeProperty('--cam-h'); }
+      const m = this._main();   // clear the camera geometry vars (Custom-only)
+      if (m) ['--cam-x', '--cam-y', '--cam-w', '--cam-h'].forEach(v => m.style.removeProperty(v));
     }
     const r = document.querySelector(`input[name="drive-layout-mode"][value="${custom ? 'custom' : 'standard'}"]`);
     if (r) r.checked = true;
@@ -11362,8 +11376,9 @@ const driveLayout = {
     }
     if (!this.isCustom()) this.setMode('custom');
     this._editing = true;
-    this._snap = _lsGet('astromech-drive-snap') !== '0';   // default ON, remembered
-    this._snapStep = Math.min(20, Math.max(1, parseInt(_lsGet('astromech-drive-snapstep'), 10) || 5));
+    const cur = this._current();
+    this._snap = cur.snap !== false;   // per-device, default ON
+    this._snapStep = Math.min(20, Math.max(1, parseInt(cur.snapStep, 10) || 5));
     document.body.classList.add('drive-layout-editing');
     this._applySnapUI();
     this._bindEdit(true);
@@ -11419,6 +11434,9 @@ const driveLayout = {
     const m = this._main();   // camera panel geometry (% of .drive-main)
     const g = (v, d) => { const n = m ? parseFloat(m.style.getPropertyValue(v)) : NaN; return Number.isFinite(n) ? n : d; };
     lay.cam = { x: g('--cam-x', 0), y: g('--cam-y', 0), w: g('--cam-w', 100), h: g('--cam-h', 100) };
+    lay.mode = this.isCustom() ? 'custom' : 'standard';   // per-device editor params
+    lay.snap = this._snap;
+    lay.snapStep = this._snapStep;
     return lay;
   },
   // Camera: reset to full size (the 🎥 FULL button). The blue corner handle
@@ -11483,7 +11501,7 @@ const driveLayout = {
   // Item 2: snap toggle. OFF = free pixel placement (no 5% rounding) + grid hidden.
   toggleSnap() {
     this._snap = !this._snap;
-    _lsSet('astromech-drive-snap', this._snap ? '1' : '0');
+    this._patchDevice({ snap: this._snap });   // per-device + backed up
     this._applySnapUI();
   },
   _applySnapUI() {
@@ -11499,7 +11517,7 @@ const driveLayout = {
   // Adjust the snap granularity (+/- in the banner). Clamped 1..20 %, persisted.
   snapStep(delta) {
     this._snapStep = Math.min(20, Math.max(1, this._snapStep + delta));
-    _lsSet('astromech-drive-snapstep', String(this._snapStep));
+    this._patchDevice({ snapStep: this._snapStep });   // per-device + backed up
     this._applySnapUI();
   },
   // Safety — inactivity auto-close: any edit interaction (tap/drag/key) resets a
