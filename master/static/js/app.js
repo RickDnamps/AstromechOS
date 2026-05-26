@@ -11323,8 +11323,10 @@ const driveLayout = {
     }
     // Camera panel size (% of .drive-main, default full). Vars on .drive-main so
     // both .drive-center and the resize handle inherit them.
-    const cam = lay.cam || { w: 100, h: 100 };
+    const cam = lay.cam || {};
     if (main) {
+      main.style.setProperty('--cam-x', (Number.isFinite(cam.x) ? cam.x : 0) + '%');
+      main.style.setProperty('--cam-y', (Number.isFinite(cam.y) ? cam.y : 0) + '%');
       main.style.setProperty('--cam-w', (Number.isFinite(cam.w) ? cam.w : 100) + '%');
       main.style.setProperty('--cam-h', (Number.isFinite(cam.h) ? cam.h : 100) + '%');
     }
@@ -11342,8 +11344,10 @@ const driveLayout = {
       e.removeEventListener('pointerdown', this._onDown);
       if (on) e.addEventListener('pointerdown', this._onDown);
     });
-    const rh = el('dl-cam-resize');   // camera resize handle
-    if (rh) { rh.removeEventListener('pointerdown', this._onCamDown); if (on) rh.addEventListener('pointerdown', this._onCamDown); }
+    const rh = el('dl-cam-resize');   // camera resize handle (bottom-right)
+    if (rh) { rh.removeEventListener('pointerdown', this._onCamResizeDown); if (on) rh.addEventListener('pointerdown', this._onCamResizeDown); }
+    const mh = el('dl-cam-move');     // camera move handle (top-left)
+    if (mh) { mh.removeEventListener('pointerdown', this._onCamMoveDown); if (on) mh.addEventListener('pointerdown', this._onCamMoveDown); }
   },
   enterEdit() {
     // Safety: editing the layout requires an active admin session…
@@ -11412,10 +11416,9 @@ const driveLayout = {
     document.querySelectorAll('.drive-main > .shortcut-btn.dl-free').forEach(b => {
       if (b.dataset.scid) lay.shortcuts[b.dataset.scid] = this._pctOf(b);
     });
-    const m = this._main();   // camera panel size (% of .drive-main)
-    const cw = m ? parseFloat(m.style.getPropertyValue('--cam-w')) : NaN;
-    const ch = m ? parseFloat(m.style.getPropertyValue('--cam-h')) : NaN;
-    lay.cam = { w: Number.isFinite(cw) ? cw : 100, h: Number.isFinite(ch) ? ch : 100 };
+    const m = this._main();   // camera panel geometry (% of .drive-main)
+    const g = (v, d) => { const n = m ? parseFloat(m.style.getPropertyValue(v)) : NaN; return Number.isFinite(n) ? n : d; };
+    lay.cam = { x: g('--cam-x', 0), y: g('--cam-y', 0), w: g('--cam-w', 100), h: g('--cam-h', 100) };
     return lay;
   },
   // Camera: reset to full size (the 🎥 FULL button). The blue corner handle
@@ -11423,34 +11426,59 @@ const driveLayout = {
   resetCam() {
     if (!this.isCustom()) return;
     const m = this._main();
-    if (m) { m.style.setProperty('--cam-w', '100%'); m.style.setProperty('--cam-h', '100%'); }
+    if (m) {
+      m.style.setProperty('--cam-x', '0%'); m.style.setProperty('--cam-y', '0%');
+      m.style.setProperty('--cam-w', '100%'); m.style.setProperty('--cam-h', '100%');
+    }
   },
-  // Camera resize drag (corner handle) — sets --cam-w/--cam-h on .drive-main,
-  // clamped 25..100%. No setPointerCapture; move/up on document; bumps idle.
-  _onCamDown: (ev) => {
-    if (!driveLayout._editing || !ev.isPrimary) return;
+  // Camera move/resize: the top-left handle MOVES (x,y), the bottom-right handle
+  // RESIZES (w,h). Sets --cam-x/y/w/h on .drive-main, clamped in-bounds + snapped
+  // to the active step. No setPointerCapture; move/up on document; bumps idle.
+  _onCamMoveDown:   (ev) => driveLayout._camDragStart(ev, 'move'),
+  _onCamResizeDown: (ev) => driveLayout._camDragStart(ev, 'resize'),
+  _camDragStart(ev, mode) {
+    if (!this._editing || !ev.isPrimary) return;
     ev.preventDefault(); ev.stopPropagation();
-    const m = driveLayout._main(); if (!m) return;
-    driveLayout._camResize = { main: m.getBoundingClientRect() };
-    driveLayout._bumpIdle();
+    const m = this._main(); if (!m) return;
+    const num = (v, d) => { const n = parseFloat(m.style.getPropertyValue(v)); return Number.isFinite(n) ? n : d; };
+    this._camDrag = {
+      mode, main: m.getBoundingClientRect(),
+      x: num('--cam-x', 0), y: num('--cam-y', 0), w: num('--cam-w', 100), h: num('--cam-h', 100),
+    };
+    this._bumpIdle();
     document.body.classList.add('dl-dragging');
-    document.addEventListener('pointermove', driveLayout._onCamMove);
-    document.addEventListener('pointerup', driveLayout._onCamUp);
-    document.addEventListener('pointercancel', driveLayout._onCamUp);
+    document.addEventListener('pointermove', this._onCamPointerMove);
+    document.addEventListener('pointerup', this._onCamPointerUp);
+    document.addEventListener('pointercancel', this._onCamPointerUp);
   },
-  _onCamMove: (ev) => {
-    const r = driveLayout._camResize; if (!r) return;
-    const w = Math.min(100, Math.max(25, (ev.clientX - r.main.left) / r.main.width * 100));
-    const h = Math.min(100, Math.max(25, (ev.clientY - r.main.top) / r.main.height * 100));
+  _onCamPointerMove: (ev) => {
+    const d = driveLayout._camDrag; if (!d) return;
+    const step = driveLayout._snapStep || 5;
+    const snap = (v) => driveLayout._snap ? Math.round(v / step) * step : v;
+    const px = (ev.clientX - d.main.left) / d.main.width * 100;
+    const py = (ev.clientY - d.main.top) / d.main.height * 100;
+    let { x, y, w, h } = d;
+    if (d.mode === 'resize') {                       // bottom-right → size, top-left fixed
+      w = Math.min(100 - x, Math.max(25, snap(px - x)));
+      h = Math.min(100 - y, Math.max(25, snap(py - y)));
+    } else {                                         // top-left → move, size constant
+      x = Math.min(100 - w, Math.max(0, snap(px)));
+      y = Math.min(100 - h, Math.max(0, snap(py)));
+    }
     const m = driveLayout._main();
-    if (m) { m.style.setProperty('--cam-w', w.toFixed(1) + '%'); m.style.setProperty('--cam-h', h.toFixed(1) + '%'); }
+    if (m) {
+      m.style.setProperty('--cam-x', x.toFixed(1) + '%');
+      m.style.setProperty('--cam-y', y.toFixed(1) + '%');
+      m.style.setProperty('--cam-w', w.toFixed(1) + '%');
+      m.style.setProperty('--cam-h', h.toFixed(1) + '%');
+    }
   },
-  _onCamUp: () => {
-    driveLayout._camResize = null;
+  _onCamPointerUp: () => {
+    driveLayout._camDrag = null;
     document.body.classList.remove('dl-dragging');
-    document.removeEventListener('pointermove', driveLayout._onCamMove);
-    document.removeEventListener('pointerup', driveLayout._onCamUp);
-    document.removeEventListener('pointercancel', driveLayout._onCamUp);
+    document.removeEventListener('pointermove', driveLayout._onCamPointerMove);
+    document.removeEventListener('pointerup', driveLayout._onCamPointerUp);
+    document.removeEventListener('pointercancel', driveLayout._onCamPointerUp);
   },
   // Item 2: snap toggle. OFF = free pixel placement (no 5% rounding) + grid hidden.
   toggleSnap() {

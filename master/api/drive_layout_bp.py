@@ -70,11 +70,17 @@ def _sanitize_layout(raw):
     cam = raw.get('cam')
     if isinstance(cam, dict):
         try:
+            x = float(cam.get('x', 0))
+            y = float(cam.get('y', 0))
             w = float(cam.get('w'))
             h = float(cam.get('h'))
-            if math.isfinite(w) and math.isfinite(h):
-                out['cam'] = {'w': min(100.0, max(25.0, w)),
-                              'h': min(100.0, max(25.0, h))}
+            if all(math.isfinite(v) for v in (x, y, w, h)):
+                out['cam'] = {
+                    'x': min(100.0, max(0.0, x)),
+                    'y': min(100.0, max(0.0, y)),
+                    'w': min(100.0, max(25.0, w)),
+                    'h': min(100.0, max(25.0, h)),
+                }
         except (TypeError, ValueError):
             pass
     return out

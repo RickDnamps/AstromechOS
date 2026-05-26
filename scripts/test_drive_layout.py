@@ -55,8 +55,12 @@ def test_sanitize_layout_empty_ok():
 
 
 def test_sanitize_layout_cam_clamped():
-    assert _sanitize_layout({"cam": {"w": 150, "h": 10}})["cam"] == {"w": 100.0, "h": 25.0}  # clamp 25..100
-    assert _sanitize_layout({"cam": {"w": 60, "h": 80}})["cam"] == {"w": 60.0, "h": 80.0}
+    assert _sanitize_layout({"cam": {"x": 10, "y": 20, "w": 60, "h": 80}})["cam"] == {"x": 10.0, "y": 20.0, "w": 60.0, "h": 80.0}
+    # x/y default to 0 when absent; w/h clamp 25..100
+    assert _sanitize_layout({"cam": {"w": 150, "h": 10}})["cam"] == {"x": 0.0, "y": 0.0, "w": 100.0, "h": 25.0}
+    # x/y clamp 0..100
+    c = _sanitize_layout({"cam": {"x": -5, "y": 200, "w": 50, "h": 50}})["cam"]
+    assert c["x"] == 0.0 and c["y"] == 100.0
     assert "cam" not in _sanitize_layout({"cam": {"w": "x", "h": 1}})   # non-finite dropped
     assert "cam" not in _sanitize_layout({"cam": "full"})              # non-dict dropped
     assert "cam" not in _sanitize_layout({})                          # absent → not added

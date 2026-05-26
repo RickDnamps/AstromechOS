@@ -960,32 +960,45 @@ body.drive-custom-layout .joystick-ring {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
-/* Item 5: in Custom mode the camera is a RESIZABLE panel anchored top-left of
-   .drive-main, sized by --cam-w/--cam-h (% of .drive-main, default full) and
-   sitting BEHIND the transparent joysticks (z:6). A corner handle resizes it. */
+/* Item 5: in Custom mode the camera is a MOVABLE + RESIZABLE panel positioned by
+   --cam-x/--cam-y and sized by --cam-w/--cam-h (% of .drive-main, default full),
+   sitting BEHIND the transparent joysticks (z:6). Top-left handle moves it,
+   bottom-right handle resizes it. */
 body.drive-custom-layout .drive-center {
   position: absolute;
-  left: 0; top: 0;
+  left: var(--cam-x, 0%);
+  top:  var(--cam-y, 0%);
   width:  var(--cam-w, 100%);
   height: var(--cam-h, 100%);
   z-index: 0;
 }
-/* Resize handle — child of .drive-main (sibling of the joysticks) so its z-index
-   can sit ABOVE them; tracks the camera's bottom-right corner via the same vars. */
-.dl-cam-resize {
+/* Camera handles — children of .drive-main (siblings of the joysticks) so their
+   z-index can sit ABOVE them; they track the camera's corners via the vars. */
+.dl-cam-move, .dl-cam-resize {
   position: absolute;
   display: none;
-  left: calc(var(--cam-w, 100%) - 22px);
-  top:  calc(var(--cam-h, 100%) - 22px);
   width: 22px; height: 22px;
   z-index: 7;
-  cursor: nwse-resize;
   touch-action: none;
+  background: rgba(10, 24, 64, 0.55);
+}
+.dl-cam-move {
+  left: var(--cam-x, 0%);
+  top:  var(--cam-y, 0%);
+  cursor: move;
+  border-left: 3px solid var(--blue);
+  border-top:  3px solid var(--blue);
+  border-top-left-radius: 5px;
+}
+.dl-cam-resize {
+  left: calc(var(--cam-x, 0%) + var(--cam-w, 100%) - 22px);
+  top:  calc(var(--cam-y, 0%) + var(--cam-h, 100%) - 22px);
+  cursor: nwse-resize;
   border-right: 3px solid var(--blue);
   border-bottom: 3px solid var(--blue);
   border-bottom-right-radius: 5px;
-  background: rgba(10, 24, 64, 0.55);
 }
+body.drive-layout-editing .dl-cam-move,
 body.drive-layout-editing .dl-cam-resize { display: block; }
 
 /* Item 4: edit-mode snap grid — bluish lines spaced at the (adjustable) snap
