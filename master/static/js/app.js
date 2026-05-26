@@ -11250,7 +11250,10 @@ const driveLayout = {
   _online: true,             // Master reachability (fed by StatusPoller._setOffline)
   _idleTimer: null,
   _IDLE_MS: 5 * 60 * 1000,   // auto-close the editor after 5 min of inactivity
-  _DEFAULTS: { propulsion: { x: 2, y: 28 }, dome: { x: 80, y: 28 } },
+  // Default (no saved layout / after Reset) mirrors the STANDARD layout: joysticks
+  // left/right, camera CENTERED between them (not full), shortcuts grouped on the
+  // joysticks. So "Standard → Edit" lands on a standard-looking arrangement.
+  _DEFAULTS: { propulsion: { x: 2, y: 28 }, dome: { x: 80, y: 28 }, cam: { x: 20, y: 0, w: 60, h: 100 } },
 
   deviceKey() {
     const t = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse';
@@ -11337,12 +11340,13 @@ const driveLayout = {
     }
     // Camera panel size (% of .drive-main, default full). Vars on .drive-main so
     // both .drive-center and the resize handle inherit them.
-    const cam = lay.cam || {};
+    const dc = this._DEFAULTS.cam;
+    const cam = lay.cam || dc;   // no saved camera → centered standard-like default (not full)
     if (main) {
-      main.style.setProperty('--cam-x', (Number.isFinite(cam.x) ? cam.x : 0) + '%');
-      main.style.setProperty('--cam-y', (Number.isFinite(cam.y) ? cam.y : 0) + '%');
-      main.style.setProperty('--cam-w', (Number.isFinite(cam.w) ? cam.w : 100) + '%');
-      main.style.setProperty('--cam-h', (Number.isFinite(cam.h) ? cam.h : 100) + '%');
+      main.style.setProperty('--cam-x', (Number.isFinite(cam.x) ? cam.x : dc.x) + '%');
+      main.style.setProperty('--cam-y', (Number.isFinite(cam.y) ? cam.y : dc.y) + '%');
+      main.style.setProperty('--cam-w', (Number.isFinite(cam.w) ? cam.w : dc.w) + '%');
+      main.style.setProperty('--cam-h', (Number.isFinite(cam.h) ? cam.h : dc.h) + '%');
     }
     this._updateOverCam();
   },
