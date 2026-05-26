@@ -137,7 +137,7 @@ Unlocked: rename, set emoji, drag cards between categories, and delete — all g
 <td align="center" width="50%">
 
 ### 🎼 Choreography editor — user
-Multi-track timeline (audio · lights · dome · dome/body/arm servos · drive) with a Digital-Twin dome preview. Guests can browse and PLAY, but cannot alter a sequence.
+Multi-track timeline — **up to 12 simultaneous audio channels** · lights · dome keyframes · dome/body/arm servos · drive — with a Digital-Twin dome preview. Here loaded with the **"Yeah Show2"** demo, packed across every track. Guests can browse and PLAY, but cannot alter a sequence.
 
 ![Choreography editor, user mode](Screenshots/choreo-user.png)
 
@@ -145,7 +145,7 @@ Multi-track timeline (audio · lights · dome · dome/body/arm servos · drive) 
 <td align="center" width="50%">
 
 ### 🎼 Choreography editor — admin
-The same editor unlocked — **RENAME, SAVE, DELETE, EXPORT and IMPORT** appear once the admin password is entered.
+The same editor unlocked — **RENAME, SAVE, DELETE, EXPORT and IMPORT** appear once the admin password is entered. **Shown mid-playback**: the playhead sweeps the timeline while the live dome monitor mirrors the show in real time.
 
 ![Choreography editor, admin mode](Screenshots/choreo-admin.png)
 
@@ -155,7 +155,7 @@ The same editor unlocked — **RENAME, SAVE, DELETE, EXPORT and IMPORT** appear 
 <td align="center" width="50%">
 
 ### 🎚️ Inspector — sound block
-Click any block to edit it. A **sound** block exposes specific-file vs random-by-category, volume, channel and fade — synced to the millisecond against the rest of the timeline.
+Click any block to edit it. A **sound** block exposes specific-file vs random-by-category, **volume, priority**, channel and timing — synced to the millisecond against the rest of the timeline, so a dozen sounds layer cleanly.
 
 ![Choreo sound block inspector](Screenshots/choreo-inspector-sound.png)
 
