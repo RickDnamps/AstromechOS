@@ -14295,7 +14295,7 @@ const choreoEditor = (() => {
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(durPlayback);
     if (Math.abs(_pxPerSec - oldPps) > 0.01) {
-      ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion', 'show'].forEach(t => _renderTrack(t));
+      ['audio', 'lights', 'dome_servos', 'body_servos', 'arm_servos', 'dome', 'propulsion', 'show'].forEach(t => _renderTrack(t));
       _renderMarkers();
     }
   }
@@ -14623,7 +14623,7 @@ const choreoEditor = (() => {
   function _renderAllTracks() {
     if (!_chor) return;
     _fitToScreen();
-    ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion', 'show'].forEach(t => _renderTrack(t));
+    ['audio', 'lights', 'dome_servos', 'body_servos', 'arm_servos', 'dome', 'propulsion', 'show'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const durVisual   = _calcTotalDuration();
     const durPlayback = _calcPlaybackDuration();
@@ -14778,14 +14778,15 @@ const choreoEditor = (() => {
 
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
-    audio:       '#00eeff',
-    lights:      '#ffcc00',
-    dome:        '#cc44ff',
-    dome_servos: '#00ff88',
-    body_servos: '#198754',
-    arm_servos:  '#2da05a',
-    propulsion:  '#ff8800',
-    show:        '#ff5e9e',
+    audio:       '#2ad6ff',
+    audio2:      '#4d7cff',
+    lights:      '#ffb300',
+    dome:        '#b266ff',
+    dome_servos: '#2ecc55',
+    body_servos: '#12d6b4',
+    arm_servos:  '#a6e22e',
+    propulsion:  '#ff3b30',
+    show:        '#ff5ea8',
   };
 
   // Per-track emoji icons — prefixed to palette chips + timeline block labels
@@ -14972,7 +14973,17 @@ const choreoEditor = (() => {
     const lane = _lane('dome');
     if (!lane) return;
     lane.innerHTML = '';
-    if (!keyframes || !keyframes.length) return;
+    // Keep the empty dome lane pixel-identical to every other empty lane
+    // (same formula _renderTrack uses with 0 layers); only grow to fit the
+    // pulse-curve SVG (H=56) when keyframes actually exist. CSS also defaults
+    // .chor-lane-dome/.chor-track-row-dome to 44px so a dome row in an
+    // unloaded editor matches the others instead of sitting ~20px taller.
+    const hasKf  = !!(keyframes && keyframes.length);
+    const emptyH = Math.max(_LANE_MIN_H, _LANE_PAD + _BLOCK_H + _LANE_PAD);
+    const laneH  = hasKf ? 64 : emptyH;
+    lane.style.height = laneH + 'px';
+    _syncTrackRow('dome', laneH);
+    if (!hasKf) return;
 
     const W = _px(_chor.meta.duration + 3), H = 56;
     const NS  = 'http://www.w3.org/2000/svg';
@@ -15035,25 +15046,25 @@ const choreoEditor = (() => {
       // Draw: filled area, glow halo, main stroke
       const d0 = pulsePath(kf);
       const fill = document.createElementNS(NS, 'path');
-      fill.setAttribute('d', d0); fill.setAttribute('fill', 'rgba(204,68,255,0.10)');
+      fill.setAttribute('d', d0); fill.setAttribute('fill', 'rgba(178,102,255,0.10)');
       fill.setAttribute('stroke', 'none');
       svg.appendChild(fill);
 
       const glow = document.createElementNS(NS, 'path');
       glow.setAttribute('d', d0); glow.setAttribute('fill', 'none');
-      glow.setAttribute('stroke', 'rgba(204,68,255,0.2)'); glow.setAttribute('stroke-width', '6');
+      glow.setAttribute('stroke', 'rgba(178,102,255,0.2)'); glow.setAttribute('stroke-width', '6');
       svg.appendChild(glow);
 
       const stroke = document.createElementNS(NS, 'path');
       stroke.setAttribute('d', d0); stroke.setAttribute('fill', 'none');
-      stroke.setAttribute('stroke', '#cc44ff'); stroke.setAttribute('stroke-width', '2');
+      stroke.setAttribute('stroke', '#b266ff'); stroke.setAttribute('stroke-width', '2');
       svg.appendChild(stroke);
 
       // Power % label at the pulse peak
       const lbl = document.createElementNS(NS, 'text');
       lbl.setAttribute('x', xMid); lbl.setAttribute('y', yP - 7);
       lbl.setAttribute('text-anchor', 'middle');
-      lbl.setAttribute('fill', '#cc44ff'); lbl.setAttribute('font-size', '8');
+      lbl.setAttribute('fill', '#b266ff'); lbl.setAttribute('font-size', '8');
       lbl.setAttribute('font-family', 'Courier New');
       lbl.textContent = `${kf.power ?? 0}%`;
       svg.appendChild(lbl);
@@ -15062,7 +15073,7 @@ const choreoEditor = (() => {
       const handle = document.createElementNS(NS, 'circle');
       handle.setAttribute('cx', xMid); handle.setAttribute('cy', yP);
       handle.setAttribute('r', '5');
-      handle.setAttribute('fill', '#cc44ff');
+      handle.setAttribute('fill', '#b266ff');
       handle.setAttribute('stroke', '#060910'); handle.setAttribute('stroke-width', '2');
       handle.style.cursor = 'ns-resize';
       handle.style.touchAction = 'none';   // let a finger drag the keyframe instead of scrolling
@@ -15801,7 +15812,7 @@ const choreoEditor = (() => {
     }
     ctx.beginPath();
     for (let x = 0; x <= W; x++) { const y = H - ease(x/W)*H; x === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); }
-    ctx.strokeStyle = '#00eeff'; ctx.lineWidth = 2; ctx.shadowBlur = 6; ctx.shadowColor = '#00eeff';
+    ctx.strokeStyle = '#2ad6ff'; ctx.lineWidth = 2; ctx.shadowBlur = 6; ctx.shadowColor = '#2ad6ff';
     ctx.stroke(); ctx.shadowBlur = 0;
     document.querySelectorAll('.chor-ease-btn').forEach(btn => {
       const map = { 'LINEAR':'linear', 'EASE IN':'ease-in', 'EASE OUT':'ease-out', 'IN-OUT':'ease-in-out' };

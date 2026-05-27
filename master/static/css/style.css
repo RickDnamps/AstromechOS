@@ -6998,60 +6998,65 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .chor-src-btn:active { cursor: grabbing; opacity: .7; }
 
 /* Per-track neon colours + per-track RGB triple (--blk-rgb), reused for the
-   thematic hover fill below — same model as the timeline .chor-block rules. */
+   thematic hover fill below — same model as the timeline .chor-block rules.
+   Palette is hue-spread for max differentiation so 9 tracks never collide:
+   audio=cyan · audio2=azure · lights=amber · arm_servos=lime ·
+   dome_servos=green · body_servos=teal · dome=violet · propulsion=RED ·
+   show=magenta. Each type uses ONE rgb triple everywhere (chip, block,
+   inspector) — keep this in sync with _TRACK_COLOR in app.js. */
 .chor-src-btn[data-track="audio"] {
-  --blk-rgb: 0,200,255;
-  color: #00eeff;
-  border-color: rgba(0,238,255,.55);
-  box-shadow: 0 0 6px rgba(0,238,255,.25);
+  --blk-rgb: 42,214,255;
+  color: #2ad6ff;
+  border-color: rgba(42,214,255,.55);
+  box-shadow: 0 0 6px rgba(42,214,255,.25);
 }
 .chor-src-btn[data-track="audio2"] {
-  --blk-rgb: 0,123,255;
-  color: #007bff;
-  border-color: rgba(0,123,255,.55);
-  box-shadow: 0 0 6px rgba(0,123,255,.2);
+  --blk-rgb: 77,124,255;
+  color: #4d7cff;
+  border-color: rgba(77,124,255,.55);
+  box-shadow: 0 0 6px rgba(77,124,255,.2);
 }
 .chor-src-btn[data-track="lights"] {
-  --blk-rgb: 255,180,0;
-  color: var(--status-warn);
-  border-color: rgba(255,200,0,.55);
-  box-shadow: 0 0 6px rgba(255,200,0,.2);
+  --blk-rgb: 255,179,0;
+  color: #ffb300;
+  border-color: rgba(255,179,0,.55);
+  box-shadow: 0 0 6px rgba(255,179,0,.2);
 }
 .chor-src-btn[data-track="dome"] {
-  --blk-rgb: 200,60,255;
-  color: #cc44ff;
-  border-color: rgba(200,60,255,.55);
-  box-shadow: 0 0 6px rgba(200,60,255,.2);
+  --blk-rgb: 178,102,255;
+  color: #b266ff;
+  border-color: rgba(178,102,255,.55);
+  box-shadow: 0 0 6px rgba(178,102,255,.2);
 }
 .chor-src-btn[data-track="dome_servos"] {
-  --blk-rgb: 0,255,136;
-  color: var(--status-ok);
-  border-color: rgba(0,255,136,.55);
-  box-shadow: 0 0 6px rgba(0,255,136,.2);
+  --blk-rgb: 46,204,85;
+  color: #2ecc55;
+  border-color: rgba(46,204,85,.55);
+  box-shadow: 0 0 6px rgba(46,204,85,.2);
 }
 .chor-src-btn[data-track="body_servos"] {
-  --blk-rgb: 25,135,84;
-  color: #198754;
-  border-color: rgba(25,135,84,.6);
-  box-shadow: 0 0 6px rgba(25,135,84,.25);
+  --blk-rgb: 18,214,180;
+  color: #12d6b4;
+  border-color: rgba(18,214,180,.6);
+  box-shadow: 0 0 6px rgba(18,214,180,.25);
 }
 .chor-src-btn[data-track="arm_servos"] {
-  --blk-rgb: 45,160,90;
-  color: #2da05a;
-  border-color: rgba(45,160,90,.55);
-  box-shadow: 0 0 6px rgba(45,160,90,.2);
+  --blk-rgb: 166,226,46;
+  color: #a6e22e;
+  border-color: rgba(166,226,46,.55);
+  box-shadow: 0 0 6px rgba(166,226,46,.2);
 }
 .chor-src-btn[data-track="propulsion"] {
-  --blk-rgb: 255,120,0;
-  color: #ff8800;
-  border-color: rgba(255,136,0,.55);
-  box-shadow: 0 0 6px rgba(255,136,0,.2);
+  --blk-rgb: 255,59,48;
+  color: #ff3b30;
+  border-color: rgba(255,59,48,.55);
+  box-shadow: 0 0 6px rgba(255,59,48,.2);
 }
 .chor-src-btn[data-track="show"] {
-  --blk-rgb: 255,94,158;
-  color: #ff5e9e;
-  border-color: rgba(255,94,158,.55);
-  box-shadow: 0 0 6px rgba(255,94,158,.2);
+  --blk-rgb: 255,94,168;
+  color: #ff5ea8;
+  border-color: rgba(255,94,168,.55);
+  box-shadow: 0 0 6px rgba(255,94,168,.2);
 }
 /* Hover: flash the track's own colour instead of the old flat dark fill.
    [data-track] out-ranks the base `.chor-src-btn:hover`, so this wins
@@ -7136,7 +7141,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   flex-shrink: 0;
   transition: height .12s ease;
 }
-.chor-track-row-dome { height: 64px; }
+.chor-track-row-dome { height: 44px; } /* matches base rows when empty; _renderDomeLane grows it to 64px only when the dome has keyframes */
 
 /* ── Scrollable timeline ──────────────────────────────────────── */
 .chor-scroll-wrap {
@@ -7195,7 +7200,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   overflow: hidden;
 }
 .chor-lane-audio { height: 44px; }
-.chor-lane-dome  { height: 64px; }
+.chor-lane-dome  { height: 44px; } /* idem — _renderDomeLane sets 64px inline only when keyframes exist */
 
 /* Waveform canvas (behind blocks in audio lane) */
 .chor-waveform-canvas {
@@ -7231,17 +7236,17 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   outline-offset: 1px;
   box-shadow: 0 0 10px rgba(var(--cyan-rgb),.4);
 }
-.chor-block[data-track="audio"]       { --blk-rgb:0,200,255;  background:rgba(0,200,255,.2);   color:var(--val-color); border-color:rgba(0,200,255,.5); }
-.chor-block[data-track="audio2"]      { --blk-rgb:0,123,255;  background:rgba(0,123,255,.18);  color:#007bff; border-color:rgba(0,123,255,.5); }
-.chor-block[data-track="lights"]      { --blk-rgb:255,180,0;  background:rgba(255,180,0,.18);  color:#ffb800; border-color:rgba(255,180,0,.45); }
+.chor-block[data-track="audio"]       { --blk-rgb:42,214,255;  background:rgba(42,214,255,.2);   color:#2ad6ff; border-color:rgba(42,214,255,.5); }
+.chor-block[data-track="audio2"]      { --blk-rgb:77,124,255;  background:rgba(77,124,255,.18);  color:#4d7cff; border-color:rgba(77,124,255,.5); }
+.chor-block[data-track="lights"]      { --blk-rgb:255,179,0;  background:rgba(255,179,0,.18);  color:#ffb300; border-color:rgba(255,179,0,.45); }
 .chor-block[data-track="lights"][data-mode="alarm"] { --blk-rgb:255,40,80;  background:rgba(255,40,80,.22); color:#ff2855; border-color:rgba(255,40,80,.55); }
 .chor-block[data-track="lights"][data-mode="disco"] { --blk-rgb:160,80,255; background:rgba(160,80,255,.22); color:#b055ff; border-color:rgba(160,80,255,.55); }
-.chor-block[data-track="dome_servos"] { --blk-rgb:0,255,136;  background:rgba(0,255,136,.16);  color:var(--status-ok); border-color:rgba(0,255,136,.4); }
-.chor-block[data-track="body_servos"] { --blk-rgb:25,135,84;  background:rgba(25,135,84,.18);  color:#198754; border-color:rgba(25,135,84,.5); }
-.chor-block[data-track="arm_servos"]  { --blk-rgb:45,160,90;  background:rgba(45,160,90,.16);  color:#2da05a; border-color:rgba(45,160,90,.45); }
-.chor-block[data-track="propulsion"]  { --blk-rgb:255,120,0;  background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
-.chor-block[data-track="dome"]        { --blk-rgb:200,60,255; background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
-.chor-block[data-track="show"]        { --blk-rgb:255,94,158; background:rgba(255,94,158,.18); color:#ff5e9e; border-color:rgba(255,94,158,.5); }
+.chor-block[data-track="dome_servos"] { --blk-rgb:46,204,85;  background:rgba(46,204,85,.16);  color:#2ecc55; border-color:rgba(46,204,85,.4); }
+.chor-block[data-track="body_servos"] { --blk-rgb:18,214,180;  background:rgba(18,214,180,.18);  color:#12d6b4; border-color:rgba(18,214,180,.5); }
+.chor-block[data-track="arm_servos"]  { --blk-rgb:166,226,46;  background:rgba(166,226,46,.16);  color:#a6e22e; border-color:rgba(166,226,46,.45); }
+.chor-block[data-track="propulsion"]  { --blk-rgb:255,59,48;  background:rgba(255,59,48,.2);   color:#ff3b30; border-color:rgba(255,59,48,.5); }
+.chor-block[data-track="dome"]        { --blk-rgb:178,102,255; background:rgba(178,102,255,.16); color:#b266ff; border-color:rgba(178,102,255,.4); }
+.chor-block[data-track="show"]        { --blk-rgb:255,94,168; background:rgba(255,94,168,.18); color:#ff5ea8; border-color:rgba(255,94,168,.5); }
 
 /* Hover: surface the block's OWN track hue strongly. Idle backgrounds sit at
    ~.16-.2 alpha, so on the dark canvas every block read as a faint blue-grey.
@@ -7906,17 +7911,17 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
    v2 readability: Choreo timeline/Inspector legibility on LIGHT themes
    Dark themes are 100% unaffected — every rule is scoped under body.theme-light.
    ══════════════════════════════════════════════════════════════════════ */
-body.theme-light .chor-block[data-track="audio"]      { --blk-rgb:0,110,170;  color:#054a73; background:rgba(0,110,170,.16); border-color:rgba(0,110,170,.55); }
-body.theme-light .chor-block[data-track="audio2"]     { --blk-rgb:0,90,200;   color:#0a4a9c; background:rgba(0,90,200,.15);  border-color:rgba(0,90,200,.5);  }
-body.theme-light .chor-block[data-track="lights"]     { --blk-rgb:200,120,0;  color:#8a5200; background:rgba(200,120,0,.18); border-color:rgba(200,120,0,.55); }
+body.theme-light .chor-block[data-track="audio"]      { --blk-rgb:10,120,150;  color:#08697f; background:rgba(10,120,150,.16); border-color:rgba(10,120,150,.55); }
+body.theme-light .chor-block[data-track="audio2"]     { --blk-rgb:40,80,200;   color:#1f44b0; background:rgba(40,80,200,.15);  border-color:rgba(40,80,200,.5);  }
+body.theme-light .chor-block[data-track="lights"]     { --blk-rgb:190,120,0;  color:#8a5e00; background:rgba(190,120,0,.18); border-color:rgba(190,120,0,.55); }
 body.theme-light .chor-block[data-track="lights"][data-mode="alarm"] { --blk-rgb:200,30,60;  color:#a01028; background:rgba(200,30,60,.18);  border-color:rgba(200,30,60,.55);  }
 body.theme-light .chor-block[data-track="lights"][data-mode="disco"] { --blk-rgb:140,50,200; color:#5a1a9c; background:rgba(140,50,200,.18); border-color:rgba(140,50,200,.55); }
-body.theme-light .chor-block[data-track="dome_servos"]{ --blk-rgb:0,140,80;   color:#0a6a3a; background:rgba(0,140,80,.16);  border-color:rgba(0,140,80,.55);  }
-body.theme-light .chor-block[data-track="body_servos"]{ --blk-rgb:20,120,70;  color:#125a32; background:rgba(20,120,70,.16); border-color:rgba(20,120,70,.55); }
-body.theme-light .chor-block[data-track="arm_servos"] { --blk-rgb:30,140,80;  color:#1a6a3c; background:rgba(30,140,80,.16); border-color:rgba(30,140,80,.55); }
-body.theme-light .chor-block[data-track="propulsion"] { --blk-rgb:210,110,0;  color:#8a4500; background:rgba(210,110,0,.18); border-color:rgba(210,110,0,.55); }
-body.theme-light .chor-block[data-track="dome"]       { --blk-rgb:160,60,220; color:#6a1a9c; background:rgba(160,60,220,.16); border-color:rgba(160,60,220,.55); }
-body.theme-light .chor-block[data-track="show"]       { --blk-rgb:200,30,110; color:#b01060; background:rgba(200,30,110,.16); border-color:rgba(200,30,110,.55); }
+body.theme-light .chor-block[data-track="dome_servos"]{ --blk-rgb:20,150,75;   color:#0c7a33; background:rgba(20,150,75,.16);  border-color:rgba(20,150,75,.55);  }
+body.theme-light .chor-block[data-track="body_servos"]{ --blk-rgb:10,160,135;  color:#087a68; background:rgba(10,160,135,.16); border-color:rgba(10,160,135,.55); }
+body.theme-light .chor-block[data-track="arm_servos"] { --blk-rgb:110,160,25;  color:#557a0e; background:rgba(110,160,25,.16); border-color:rgba(110,160,25,.55); }
+body.theme-light .chor-block[data-track="propulsion"] { --blk-rgb:200,45,35;  color:#b01810; background:rgba(200,45,35,.18); border-color:rgba(200,45,35,.55); }
+body.theme-light .chor-block[data-track="dome"]       { --blk-rgb:150,60,210; color:#6a1f9c; background:rgba(150,60,210,.16); border-color:rgba(150,60,210,.55); }
+body.theme-light .chor-block[data-track="show"]       { --blk-rgb:200,40,120; color:#a31866; background:rgba(200,40,120,.16); border-color:rgba(200,40,120,.55); }
 
 /* Light-theme hover: same track-hue intensification, lower alpha so the dark
    per-track text stays legible on the lighter fill. Higher specificity than the
@@ -7950,15 +7955,15 @@ body.theme-light .chor-tick.major  { color: #0a1840; }
    light chip). The old generic-blue hover is replaced by the thematic fill;
    labels stay dark so text/icons read on the light tinted background. */
 body.theme-light .chor-src-btn { background: rgba(255,255,255,0.82); }
-body.theme-light .chor-src-btn[data-track="audio"]       { --blk-rgb:0,110,170;  color:#054a73; }
-body.theme-light .chor-src-btn[data-track="audio2"]      { --blk-rgb:0,90,200;   color:#0a4a9c; }
-body.theme-light .chor-src-btn[data-track="lights"]      { --blk-rgb:200,120,0;  color:#8a5200; }
-body.theme-light .chor-src-btn[data-track="dome"]        { --blk-rgb:160,60,220; color:#6a1a9c; }
-body.theme-light .chor-src-btn[data-track="dome_servos"] { --blk-rgb:0,140,80;   color:#0a6a3a; }
-body.theme-light .chor-src-btn[data-track="body_servos"] { --blk-rgb:20,120,70;  color:#125a32; }
-body.theme-light .chor-src-btn[data-track="arm_servos"]  { --blk-rgb:30,140,80;  color:#1a6a3c; }
-body.theme-light .chor-src-btn[data-track="propulsion"]  { --blk-rgb:210,110,0;  color:#8a4500; }
-body.theme-light .chor-src-btn[data-track="show"]        { --blk-rgb:200,30,110; color:#b01060; }
+body.theme-light .chor-src-btn[data-track="audio"]       { --blk-rgb:10,120,150;  color:#08697f; }
+body.theme-light .chor-src-btn[data-track="audio2"]      { --blk-rgb:40,80,200;   color:#1f44b0; }
+body.theme-light .chor-src-btn[data-track="lights"]      { --blk-rgb:190,120,0;  color:#8a5e00; }
+body.theme-light .chor-src-btn[data-track="dome"]        { --blk-rgb:150,60,210; color:#6a1f9c; }
+body.theme-light .chor-src-btn[data-track="dome_servos"] { --blk-rgb:20,150,75;   color:#0c7a33; }
+body.theme-light .chor-src-btn[data-track="body_servos"] { --blk-rgb:10,160,135;  color:#087a68; }
+body.theme-light .chor-src-btn[data-track="arm_servos"]  { --blk-rgb:110,160,25;  color:#557a0e; }
+body.theme-light .chor-src-btn[data-track="propulsion"]  { --blk-rgb:200,45,35;  color:#b01810; }
+body.theme-light .chor-src-btn[data-track="show"]        { --blk-rgb:200,40,120; color:#a31866; }
 body.theme-light .chor-src-btn[data-track]:hover {
   background: rgba(var(--blk-rgb, 0,110,170), .20);
   border-color: rgba(var(--blk-rgb, 0,110,170), .85);
