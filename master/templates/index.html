@@ -56,6 +56,12 @@
   🔌 Connexion au Master perdue — modifications gelées · reprise automatique au retour
 </div>
 
+<!-- Slave (body/dome) unreachable while the Master is up (scenario B). Amber:
+     audio/propulsion/body-servos/screen are down; dome + lights still work. -->
+<div id="slave-offline-banner" class="slave-offline-banner" role="status" aria-live="polite" style="display:none">
+  ⚠ <span class="robot-name">R2-D2</span> Slave injoignable — audio · propulsion · servos du corps · écran indisponibles (dôme &amp; lumières restent actifs)
+</div>
+
 <!-- WOW polish I3 2026-05-15: reboot countdown overlay — shown while
      Master reboots, auto-clears when /status comes back online. -->
 <div id="reboot-overlay" class="reboot-overlay">

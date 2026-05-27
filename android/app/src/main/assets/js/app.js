@@ -9606,6 +9606,11 @@ class StatusPoller {
     const pillSlave = el('pill-slave');
     const slaveOffline = !data.uart_ready || data.uart_health == null;
     if (pillSlave) pillSlave.style.display = slaveOffline ? '' : 'none';
+    // P2 resilience: prominent banner when the Slave (body) is unreachable while
+    // the Master is up (scenario B) — the topbar pill alone was too discreet.
+    const slaveBanner = el('slave-offline-banner');
+    if (slaveBanner) slaveBanner.style.display = slaveOffline ? '' : 'none';
+    document.body.classList.toggle('slave-offline', slaveOffline);
 
     // E-STOP overlay — sync from server state (survives page reload)
     if (data.estop_active !== undefined && data.estop_active !== _estopTripped)
@@ -9973,7 +9978,13 @@ class StatusPoller {
     // + STATUS button so they don't keep showing their last healthy (green)
     // state: _pollOnce returns early on the offline path, so without this the
     // APP HB / UART / BT pills freeze green even though the Master is down.
-    if (offline) this._degradeCockpitOffline();
+    if (offline) {
+      this._degradeCockpitOffline();
+      // Master down → the net-breaker (red) banner owns the screen; hide the
+      // amber Slave banner so we never stack two (it refreshes on reconnect).
+      const sb = el('slave-offline-banner'); if (sb) sb.style.display = 'none';
+      document.body.classList.remove('slave-offline');
+    }
     // Reload data when coming back online
     if (wasOffline && !offline) {
       audioBoard.loadCategories();
