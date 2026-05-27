@@ -9343,7 +9343,11 @@ document.addEventListener('click', (e) => {
   if (!cockpitPanel.isOpen) return;
   const panel = el('cockpit-panel');
   const btn   = el('cockpit-btn');
-  if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target))
+  // The topbar .battery-mini also toggles the cockpit (its onclick) — exempt it
+  // like the STATUS button. Otherwise its OPENING click bubbles here and closes
+  // the cockpit again, so the battery indicator "looks clickable but does nothing".
+  if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)
+      && !(e.target.closest && e.target.closest('.battery-mini')))
     cockpitPanel.close();
 });
 
