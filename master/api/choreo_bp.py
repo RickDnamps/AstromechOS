@@ -420,6 +420,71 @@ def _choreo_movement_flags(name, _depth=0, _seen=None):
     return (up, ud)
 
 
+def _cascade_show_refs(old_name, new_name, _already_locked=False):
+    """Update SHOW-track references to old_name across every .chor: rewrite to
+    new_name (rename) or DROP the block (delete, new_name=None) — so a show
+    stays consistent when a referenced choreo is renamed/removed (else the
+    flatten pass would silently skip the dead reference). Atomic per file.
+    Caller passes _already_locked=True if it ALREADY holds _chor_file_lock
+    (choreo_delete does; choreo_rename does not — _chor_file_lock is a plain
+    non-reentrant Lock, re-acquiring it would deadlock). Never raises; returns
+    the number of files changed."""
+    def _sweep():
+        try:
+            files = [f for f in os.listdir(_CHOREO_DIR) if f.endswith('.chor')]
+        except OSError:
+            return 0
+        n = 0
+        for fname in files:
+            if fname[:-5].startswith('__'):
+                continue
+            fpath = os.path.join(_CHOREO_DIR, fname)
+            try:
+                with open(fpath, encoding='utf-8') as f:
+                    ch = json.load(f)
+            except (OSError, ValueError):
+                continue
+            tr = ch.get('tracks') if isinstance(ch, dict) else None
+            if not isinstance(tr, dict):
+                continue
+            show = tr.get('show')
+            if not isinstance(show, list) or not show:
+                continue
+            kept, dirty = [], False
+            for blk in show:
+                if isinstance(blk, dict) and blk.get('choreo') == old_name:
+                    dirty = True
+                    if new_name:
+                        nb = dict(blk)
+                        nb['choreo'] = new_name
+                        kept.append(nb)
+                    # else: drop the block — the referenced choreo was deleted
+                else:
+                    kept.append(blk)
+            if dirty:
+                tr['show'] = kept
+                try:
+                    _atomic_write_chor(fpath, ch)
+                    n += 1
+                except Exception:
+                    log.exception("cascade_show_refs: write failed for %s", fname)
+        return n
+
+    if _already_locked:
+        changed = _sweep()
+    else:
+        with _chor_file_lock:
+            changed = _sweep()
+    if changed:
+        try:
+            with _list_cache_lock:
+                _LIST_CACHE['rows'] = {}
+                _LIST_CACHE['dir_mtime'] = 0.0
+        except Exception:
+            pass
+    return changed
+
+
 # B-16 (audit 2026-05-15): /choreo/list cache. Old code opened all ~48
 # .chor files on EVERY request — multiply by 15s reload × N clients and
 # you get a constant trickle of I/O that competes with motion. Cache by
@@ -923,6 +988,12 @@ def choreo_rename():
         cascade_rename_in_bt('play_choreo', old_name, new_name)
     except Exception:
         log.exception("BT cascade_rename failed for choreo %s → %s", old_name, new_name)
+    # SHOW-track cascade — any .chor whose SHOW lane references the old name
+    # follows the rename (else the flatten pass silently drops the reference).
+    try:
+        _cascade_show_refs(old_name, new_name)
+    except Exception:
+        log.exception("SHOW-ref cascade (rename) failed for %s → %s", old_name, new_name)
     log.info(f"Choreo renamed: {old_name} → {new_name}")
     return jsonify({'status': 'ok', 'old_name': old_name, 'new_name': new_name})
 
@@ -1178,6 +1249,12 @@ def choreo_delete(name: str):
                 cascade_delete_in_bt('play_choreo', name)
             except Exception:
                 log.exception("BT cascade_delete failed for choreo %s", name)
+            # SHOW-track cascade — drop any SHOW block referencing the deleted
+            # choreo across every .chor (already holding _chor_file_lock here).
+            try:
+                _cascade_show_refs(name, None, _already_locked=True)
+            except Exception:
+                log.exception("SHOW-ref cascade (delete) failed for %s", name)
             log.info(f"Choreo deleted: {name}")
             return jsonify({'status': 'ok', 'name': name})
         except OSError as e:

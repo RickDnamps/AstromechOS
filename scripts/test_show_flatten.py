@@ -106,6 +106,22 @@ def run():
         check("flags: missing ref -> (F,F)", C._choreo_movement_flags('nope') == (False, False))
         check("flags: cycle a<->b terminates -> (F,F)", C._choreo_movement_flags('cyca') == (False, False))
 
+        # _cascade_show_refs: rename rewrites the ref; delete drops the block
+        _write(d, 'shp', _chor('shp', {'show': [{'t': 0, 'choreo': 'target1'}, {'t': 5, 'choreo': 'other'}]}, 8))
+        C._cascade_show_refs('target1', 'target2')
+        with open(os.path.join(d, 'shp.chor'), encoding='utf-8') as f:
+            refs = [b.get('choreo') for b in json.load(f)['tracks']['show']]
+        check("cascade rename rewrites ref", refs == ['target2', 'other'])
+        C._cascade_show_refs('target2', None)
+        with open(os.path.join(d, 'shp.chor'), encoding='utf-8') as f:
+            refs2 = [b.get('choreo') for b in json.load(f)['tracks']['show']]
+        check("cascade delete drops block", refs2 == ['other'])
+        # _already_locked path (choreo_delete passes True) must not deadlock
+        C._cascade_show_refs('other', None, _already_locked=True)
+        with open(os.path.join(d, 'shp.chor'), encoding='utf-8') as f:
+            refs3 = [b.get('choreo') for b in json.load(f)['tracks']['show']]
+        check("cascade delete (_already_locked) drops", refs3 == [])
+
         print("\n%s" % ("ALL SHOW-flatten tests PASSED" if not failed else f"{failed} TEST(S) FAILED"))
         return 1 if failed else 0
     finally:
