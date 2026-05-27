@@ -12,8 +12,15 @@
 
 ## 🎭 Showmanship — conventions / foule
 
-- [ ] **🏆 #1 — "Show Director" : séquenceur de spectacle** · 💥💥💥 · 🛠️L
-  Enchaîner plusieurs `.chor` en un SHOW complet (transitions, boucle, minuteur) + écran "▶ NOW / NEXT ⏭" posé face au public. On lance un set de 5 min et le droïde se produit seul. *(étend "Scènes/Presets")*
+- [ ] **🏆 #1 — Piste "SHOW" dans le timeline choreo (bloc-référence-choré)** · 💥💥💥 · 🛠️M
+  **Approche retenue (réflexion 2026-05-26)** : au lieu d'un séquenceur séparé, ajouter une **piste "SHOW"** (sous Drive) où un bloc = une **référence** vers un autre `.chor` (choisi dans l'inspector). Réutilise tout l'éditeur (drag, inspector, save/load) → effort L→M, et ça compose avec les autres pistes (flourish son/lumière entre deux choré).
+  **Décisions d'archi à clouer** :
+  1. **Référence (pointeur), pas snapshot** → expansion au PLAY (la sous-choré reste éditable live).
+  2. **Pas de `safe_play` récursif** → pré-pass "flatten" qui injecte les events de la sous-choré décalés de `T` dans la timeline jouée (player reste mono-choré, safety intacte).
+  3. **Piste séquentielle** (blocs bout-à-bout / warn sur chevauchement) pour éviter les collisions de dôme/servos.
+  4. **Garde anti-cycle** (A→B→A interdit, valider au save+play) + **brancher `cascade_rename`/`cascade_delete`** (le rename/delete d'une choré met à jour les références SHOW, comme les shortcuts).
+  5. **Agréger `uses_propulsion`/`uses_dome`** sur toutes les choré référencées → lockout per-axe correct.
+  - Le bloc s'affiche à la vraie durée de la choré référencée. *(remplace l'ancien "Show Director" séparé ; étend "Scènes/Presets")*
 
 - [ ] **🏆 #2 — Mode "crowd-reactive" via la caméra** · 💥💥💥 · 🛠️L
   La caméra OTG détecte visage/mouvement → le dôme se tourne vers la personne la plus proche + son "curious" + frémissement de panneaux. « Il m'a regardé !! ». *(étend "AI tracking", cadré personnalité réactive)*
