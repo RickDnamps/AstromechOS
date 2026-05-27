@@ -979,6 +979,27 @@ async function withSaveFeedback(btn, asyncFn, opts = {}) {
 // are NEVER gated. Auto-closes on the next reachable /status poll. Fed by
 // StatusPoller._setOffline (which runs every poll).
 // ════════════════════════════════════════════════════════════════════════
+// clientHealth — tell "the Master is unreachable" apart from "THIS browser/PC
+// couldn't keep up" (main-thread CPU starvation, or a backgrounded/throttled
+// tab). A failed /status poll under a local stall is NOT a Master outage, so the
+// banner must say so honestly instead of falsely blaming the Master. Detected via
+// timer drift: a 1s self-check that fires far too late means the event loop was
+// blocked or throttled.
+const clientHealth = {
+  _last: Date.now(),
+  _stallUntil: 0,
+  start() {
+    setInterval(() => {
+      const now = Date.now();
+      if (now - this._last > 3500) this._stallUntil = now + 5000;   // >~2.5s drift = recent local stall
+      this._last = now;
+    }, 1000);
+  },
+  isLocalCause() {
+    return (typeof document !== 'undefined' && document.hidden) || Date.now() < this._stallUntil;
+  },
+};
+
 const netBreaker = {
   _open: false,
   _streak: 0,
@@ -986,6 +1007,9 @@ const netBreaker = {
   get isOpen() { return this._open; },
   feed(online) {
     if (online) { this._streak = 0; if (this._open) this._set(false); return; }
+    // A backgrounded tab is throttled by the browser (its polls stop firing) —
+    // that is NOT a Master outage, so don't let it trip the breaker/banner.
+    if (typeof document !== 'undefined' && document.hidden) return;
     this._streak++;
     if (!this._open && this._streak >= this._THRESHOLD) this._set(true);
   },
@@ -993,8 +1017,19 @@ const netBreaker = {
     this._open = open;
     document.body.classList.toggle('net-breaker-open', open);
     const banner = (typeof el === 'function') && el('net-breaker-banner');
-    if (banner) banner.style.display = open ? '' : 'none';
-    if (open && typeof toast === 'function') toast('🔌 Master hors-ligne — modifications gelées', 'warn');
+    if (!open) { if (banner) banner.style.display = 'none'; return; }
+    // Honest, cause-aware message: a failed /status poll can mean the Master is
+    // unreachable OR that THIS browser/PC couldn't keep up. Don't blame the
+    // Master for a local hiccup.
+    let msg, toastMsg = null;
+    if (typeof clientHealth !== 'undefined' && clientHealth.isLocalCause()) {
+      msg = '⚠ Interface lagging (browser/PC busy) — the master is still responding';
+    } else {
+      msg = '🔌 Link to the master interrupted — changes frozen · auto-resumes';
+      toastMsg = '🔌 Link to the master interrupted — changes frozen';
+    }
+    if (banner) { banner.textContent = msg; banner.style.display = ''; }
+    if (toastMsg && typeof toast === 'function') toast(toastMsg, 'warn');
   },
 };
 
@@ -13607,6 +13642,17 @@ async function init() {
 
   // Heartbeat applicatif vers Master (sécurité watchdog)
   startAppHeartbeat();
+
+  // Client-health monitor (distinguishes a real Master outage from a local
+  // browser/PC stall so the offline banner stays honest) + clear any stale
+  // offline state the instant the operator returns to a backgrounded tab.
+  if (typeof clientHealth !== 'undefined') clientHealth.start();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && typeof netBreaker !== 'undefined') {
+      netBreaker._streak = 0;
+      if (netBreaker._open) netBreaker._set(false);
+    }
+  });
 
   // Lock Manager init (kids speed slider + body data-lock-mode)
   lockMgr.init();
