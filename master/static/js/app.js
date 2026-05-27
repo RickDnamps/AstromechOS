@@ -204,6 +204,13 @@ function applyTheme(id, persist = true) {
   }
   // v2: light-theme flag drives Choreo legibility overrides (body.theme-light)
   document.body.classList.toggle('theme-light', _themeIsLight(id));
+  // Cache this theme's resolved vars per-id so the <head> pre-paint script can
+  // apply them before first paint on the next load — kills the theme flash.
+  try {
+    const _tc = JSON.parse(localStorage.getItem('astromech-theme-vars-cache') || '{}');
+    _tc[id] = { vars: vars || {}, light: _themeIsLight(id) };
+    localStorage.setItem('astromech-theme-vars-cache', JSON.stringify(_tc));
+  } catch (e) {}
   // WOW polish X4 2026-05-15: persist=false for ephemeral hover preview.
   // Only commit to localStorage + flip active state when the change is
   // a real selection (click), not a hover preview.

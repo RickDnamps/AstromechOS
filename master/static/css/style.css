@@ -430,10 +430,15 @@ body::after {
 .tab.active .tab-icon { opacity: 1; filter: drop-shadow(0 0 4px var(--blue)); }
 
 /* Light themes (e.g. R2-D2 Light): the navy topbar/tabbar make the default
-   translucent-blue dividers hard to read. Force the header↔menu separator and the
-   active-tab underline to a crisp white, and thicken the underline for visibility.
-   Scoped under body.theme-light so dark themes are unaffected. */
-body.theme-light .topbar     { border-bottom-color: rgba(255, 255, 255, 0.55); }
+   translucent-blue dividers hard to read. The header↔menu separator is rendered
+   by the STATIC .lock-mode-bar (see lock-mode-bar section), NOT by the topbar's
+   border-bottom — a 1px border on the position:sticky topbar re-snaps between 1
+   and 2 device-px on heavy repaints (the dome-sim canvas starting on the Lights
+   tab) and on the post-load theme swap, which made the white bar visibly
+   "thicken". A static block can't flicker. So we make the topbar border invisible
+   in light and let the lock-mode-bar be the line. The active-tab underline stays
+   a crisp white. Scoped under body.theme-light so dark themes are unaffected. */
+body.theme-light .topbar     { border-bottom-color: transparent; }
 body.theme-light .tab        { border-bottom-width: 3px; }
 body.theme-light .tab.active { border-bottom-color: #ffffff; }
 
@@ -6506,6 +6511,12 @@ body[data-lock-mode="0"] .lock-mode-label { display: none; }
 body[data-lock-mode="0"] .lock-mode-bar { background: transparent; }
 body[data-lock-mode="1"] .lock-mode-bar { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
 body[data-lock-mode="2"] .lock-mode-bar { background: var(--red);    box-shadow: 0 0 8px var(--red);    }
+/* Light theme: this STATIC 2px bar IS the header↔menu separator (the sticky
+   topbar border is transparent in light — see TABBAR section). Mode 0 = crisp
+   white line; modes 1/2 keep the orange/red lock indicator above. Because the
+   bar is in normal flow (not sticky), it never sub-pixel-flickers like the old
+   border did when the Lights tab repainted. */
+body.theme-light[data-lock-mode="0"] .lock-mode-bar { background: rgba(255,255,255,0.55); }
 
 /* Child Lock joystick — see drive tab section for the full override */
 

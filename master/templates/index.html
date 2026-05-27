@@ -35,6 +35,25 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AstromechOS</title>
+  <script>
+  /* Pre-paint theme — runs BEFORE the body renders so a hard reload never
+     flashes the default dark theme. Applies this device's saved theme vars
+     from a cache that applyTheme() writes in app.js. (app.js loads at the
+     bottom of <body>, so without this the UI paints dark first, then swaps.)
+     First load after a deploy may flash once; every load after is clean. */
+  (function () {
+    try {
+      var ptr = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse';
+      var s = window.screen || {};
+      var dk = ptr + '_' + Math.round(s.width || window.innerWidth || 0) + 'x' + Math.round(s.height || window.innerHeight || 0);
+      var hint = JSON.parse(localStorage.getItem('astromech-theme-dev') || '{}');
+      var id = (hint && typeof hint[dk] === 'string') ? hint[dk] : (localStorage.getItem('astromech-theme') || 'default');
+      var cache = JSON.parse(localStorage.getItem('astromech-theme-vars-cache') || '{}');
+      var entry = cache[id], root = document.documentElement;
+      if (entry && entry.vars) Object.keys(entry.vars).forEach(function (k) { root.style.setProperty(k, entry.vars[k]); });
+    } catch (e) {}
+  })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Share+Tech+Mono&family=Audiowide&family=Electrolize&family=Exo+2:wght@400;700&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
