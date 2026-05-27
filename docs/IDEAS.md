@@ -12,7 +12,7 @@
 
 ## 🎭 Showmanship — conventions / foule
 
-- [ ] **🏆 #1 — Piste "SHOW" dans le timeline choreo (bloc-référence-choré)** · 💥💥💥 · 🛠️M
+- [x] **🏆 #1 — Piste "SHOW" dans le timeline choreo (bloc-référence-choré)** · 💥💥💥 · 🛠️M · ✅ **LIVRÉ 2026-05-26** (epic software-gio, commits 72c8052..17c24f8 ; voir `bd memories show-track-feature` + AUDIT_HISTORY phase SHOW)
   **Approche retenue (réflexion 2026-05-26)** : au lieu d'un séquenceur séparé, ajouter une **piste "SHOW"** (sous Drive) où un bloc = une **référence** vers un autre `.chor` (choisi dans l'inspector). Réutilise tout l'éditeur (drag, inspector, save/load) → effort L→M, et ça compose avec les autres pistes (flourish son/lumière entre deux choré).
   **Décisions d'archi à clouer** :
   1. **Référence (pointeur), pas snapshot** → expansion au PLAY (la sous-choré reste éditable live).
