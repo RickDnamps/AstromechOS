@@ -239,12 +239,12 @@ function _persistThemeToServer(entry) {
   // localStorage only (see _syncThemesFromServer).
   const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
   if (!tok) return;
-  try { if (typeof api === 'function') api('/themes/custom', 'POST', { theme: entry }); } catch (e) {}
+  try { if (typeof api === 'function') pendingSync.push('theme:' + (entry && entry.id), () => api('/themes/custom', 'POST', { theme: entry })); } catch (e) {}
 }
 function _deleteThemeOnServer(id) {
   const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
   if (!tok) return;
-  try { if (typeof api === 'function') api('/themes/custom/' + encodeURIComponent(id), 'DELETE'); } catch (e) {}
+  try { if (typeof api === 'function') pendingSync.push('theme-del:' + id, () => api('/themes/custom/' + encodeURIComponent(id), 'DELETE')); } catch (e) {}
 }
 // On load: pull server themes into the local cache (so every device sees the
 // shared themes); first-time migration pushes existing localStorage themes up.
@@ -650,9 +650,9 @@ function onScaleSlider(which, raw) {
   _lsSet(_SCALE_KEYS[which], String(v));
   clearTimeout(_scalePostTimers[which]);
   _scalePostTimers[which] = setTimeout(() => {
-    api('/settings/ui_scale', 'POST', { [which]: v })
-      .then(r => { if (!r) toast('Text size saved locally (server sync failed)', 'warn'); })
-      .catch(() => toast('Text size saved locally (server sync failed)', 'warn'));
+    // P2 deferred-sync: queue so it replays on reconnect (not just a one-shot toast).
+    pendingSync.push('ui_scale:' + which, () => api('/settings/ui_scale', 'POST', { [which]: v }))
+      .then(ok => { if (!ok) toast('Text size saved locally — will sync when back online', 'warn'); });
   }, 350);
 }
 
@@ -1007,6 +1007,27 @@ function _breakerBlocks(endpoint, method) {
   if (/(system\/estop|heartbeat)/.test(endpoint || '')) return false;
   return true;
 }
+
+// pendingSync (P2) — queue local-first mutations (custom themes, UI text-scale)
+// whose server write failed (offline / breaker open) and replay them on reconnect,
+// so the localStorage mirror and the server never silently desync. Reuses the
+// api() failure convention (null / false / {ok:false}). flush() is driven by
+// StatusPoller when the Master comes back. Latest write per key wins.
+const pendingSync = {
+  _q: new Map(),
+  _failed(r) { return r === null || r === false || (r && typeof r === 'object' && r.ok === false); },
+  async push(key, fn) {
+    let r = null; try { r = await fn(); } catch (e) { r = null; }
+    if (this._failed(r)) { this._q.set(key, fn); return false; }
+    this._q.delete(key); return true;
+  },
+  async flush() {
+    if (!this._q.size) return;
+    for (const [key, fn] of [...this._q]) {
+      try { if (!this._failed(await fn())) this._q.delete(key); } catch (e) {}
+    }
+  },
+};
 
 async function api(endpoint, method = 'GET', body = null, timeoutMs = 3000) {
   if (_breakerBlocks(endpoint, method)) return null;   // breaker open → fail fast (P0 → "Failed")
@@ -9987,6 +10008,7 @@ class StatusPoller {
     }
     // Reload data when coming back online
     if (wasOffline && !offline) {
+      if (typeof pendingSync !== 'undefined') pendingSync.flush();   // P2: replay deferred theme/ui_scale writes
       audioBoard.loadCategories();
       scriptEngine.load();
       loadServoSettings();
