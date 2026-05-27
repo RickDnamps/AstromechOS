@@ -1,0 +1,103 @@
+"""Unit tests for the SHOW-track expand/flatten logic (choreo_bp._flatten_show
++ _resolve_chor_path + the schema acceptance of a 'show' track).
+
+Runs standalone. Monkeypatches choreo_bp._CHOREO_DIR to a temp dir so it never
+touches real choreographies. (Import requires master.* deps — run on the Pi or
+any env where master.registry imports.)
+"""
+import os
+import sys
+import json
+import tempfile
+import shutil
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from master.api import choreo_bp as C
+
+
+def _chor(name, tracks, dur):
+    return {'meta': {'name': name, 'duration': dur, 'version': 1}, 'tracks': tracks}
+
+
+def _write(d, name, chor):
+    with open(os.path.join(d, name + '.chor'), 'w', encoding='utf-8') as f:
+        json.dump(chor, f)
+
+
+def run():
+    d = tempfile.mkdtemp(prefix='show_test_')
+    orig = C._CHOREO_DIR
+    C._CHOREO_DIR = d
+    failed = 0
+    try:
+        _write(d, 'child', _chor('child', {
+            'audio':   [{'t': 0, 'action': 'play', 'file': 'BEEP', 'duration': 1}],
+            'dome':    [{'t': 1, 'power': 0.5, 'duration': 500}],
+            'markers': [{'t': 0.5, 'label': 'x'}],
+        }, 3))
+        parent = _chor('parent', {
+            'lights': [{'t': 0, 'mode': 'on', 'duration': 1}],
+            'show':   [{'t': 5, 'choreo': 'child'}],
+        }, 8)
+
+        def check(label, cond):
+            nonlocal failed
+            print(("  PASS " if cond else "  FAIL ") + label)
+            if not cond:
+                failed += 1
+
+        out = C._flatten_show(parent)
+        check("show track stripped", 'show' not in out['tracks'])
+        au = out['tracks'].get('audio', [])
+        check("child audio offset 0->5", len(au) == 1 and abs(au[0]['t'] - 5.0) < 1e-6)
+        dm = out['tracks'].get('dome', [])
+        check("child dome offset 1->6", len(dm) == 1 and abs(dm[0]['t'] - 6.0) < 1e-6)
+        check("child markers NOT merged", not out['tracks'].get('markers'))
+        check("parent lights preserved", len(out['tracks'].get('lights', [])) == 1)
+        check("duration covers tail (>=8)", out['meta']['duration'] >= 8.0)
+        check("parent not mutated (still has show)", 'show' in parent['tracks'])
+
+        # self-reference → skipped, terminates
+        sr = _chor('selfref', {'show': [{'t': 0, 'choreo': 'selfref'}]}, 2)
+        check("self-ref terminates + strips", 'show' not in C._flatten_show(sr)['tracks'])
+
+        # cycle a->b->a → terminates
+        _write(d, 'cyca', _chor('cyca', {'show': [{'t': 0, 'choreo': 'cycb'}]}, 2))
+        _write(d, 'cycb', _chor('cycb', {'show': [{'t': 0, 'choreo': 'cyca'}]}, 2))
+        with open(os.path.join(d, 'cyca.chor'), encoding='utf-8') as f:
+            ca = json.load(f)
+        check("cycle a<->b terminates", 'show' not in C._flatten_show(ca)['tracks'])
+
+        # missing ref → skipped, no crash
+        check("missing ref skipped",
+              'show' not in C._flatten_show(_chor('m', {'show': [{'t': 0, 'choreo': 'nope'}]}, 1))['tracks'])
+
+        # path traversal blocked
+        check("resolve rejects traversal", C._resolve_chor_path('../etc/passwd') is None)
+        check("resolve rejects slash", C._resolve_chor_path('a/b') is None)
+        check("resolve accepts plain name", C._resolve_chor_path('child') is not None)
+        trav = C._flatten_show(_chor('t', {'show': [{'t': 0, 'choreo': '../child'}]}, 1))
+        check("traversal ref does not load", not trav['tracks'].get('audio'))
+
+        # nested show (grandchild) expands with summed offset
+        _write(d, 'mid', _chor('mid', {'show': [{'t': 2, 'choreo': 'child'}]}, 6))
+        gp = _chor('gp', {'show': [{'t': 10, 'choreo': 'mid'}]}, 20)
+        og = C._flatten_show(gp)
+        gau = og['tracks'].get('audio', [])
+        check("nested offset 0+2+10=12", len(gau) == 1 and abs(gau[0]['t'] - 12.0) < 1e-6)
+
+        # schema: accept valid show, reject bad choreo name
+        okv, _ = C._validate_chor_schema(parent)
+        check("schema accepts valid show", okv)
+        badv, _ = C._validate_chor_schema(_chor('b', {'show': [{'t': 0, 'choreo': '../x'}]}, 1))
+        check("schema rejects bad show ref", not badv)
+
+        print("\n%s" % ("ALL SHOW-flatten tests PASSED" if not failed else f"{failed} TEST(S) FAILED"))
+        return 1 if failed else 0
+    finally:
+        C._CHOREO_DIR = orig
+        shutil.rmtree(d, ignore_errors=True)
+
+
+if __name__ == '__main__':
+    sys.exit(run())

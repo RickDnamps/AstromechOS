@@ -266,6 +266,116 @@ def _safe_choreo_path(name):
     return candidate, None
 
 
+def _resolve_chor_path(name):
+    """Pure path resolver for internal loaders (the SHOW flatten pass runs from
+    safe_play, which is also called by the behavior engine / shortcuts — possibly
+    OUTSIDE a Flask request context, so we must NOT build a jsonify Response).
+    Mirrors _safe_choreo_path's allowlist + realpath containment. Returns the
+    absolute path or None. Never raises, never touches Flask."""
+    if not isinstance(name, str):
+        return None
+    raw = name.strip()
+    if raw.endswith('.chor'):
+        raw = raw[:-5]
+    if not raw or raw in ('.', '..') or raw.startswith('__'):
+        return None
+    if not _CHOREO_NAME_RE.match(raw):
+        return None
+    candidate = os.path.realpath(os.path.join(_CHOREO_DIR, raw + '.chor'))
+    base = os.path.realpath(_CHOREO_DIR)
+    return candidate if candidate.startswith(base + os.sep) else None
+
+
+# SHOW-track expansion. A 'show' block { t, choreo } references another .chor;
+# at PLAY time we load it, recursively expand ITS show blocks, offset every
+# event by the block's start t, and merge into this chor's real tracks — so the
+# player runs ONE flat timeline (never recursive playback) and the safety gates
+# + uses_propulsion/uses_dome see the aggregated result. Pure data merge.
+_SHOW_MAX_DEPTH = 8
+
+
+def _flatten_show(chor, _depth=0, _seen=None):
+    """Return a NEW chor with the 'show' track expanded into the real tracks and
+    removed. Cycle-guarded (seen-set + self-ref) and depth-capped; clamps merged
+    tracks to _MAX_EVENTS_PER_TRACK and meta.duration to _MAX_DURATION_SECONDS.
+    Never raises: a missing / unreadable / invalid reference is simply skipped.
+    The output NEVER contains a 'show' track, even on partial failure."""
+    import copy
+    if _seen is None:
+        _seen = set()
+    if not isinstance(chor, dict):
+        return chor
+    out = copy.deepcopy(chor)
+    out_tracks = out.get('tracks')
+    if not isinstance(out_tracks, dict):
+        return out
+    show = out_tracks.pop('show', None)   # always strip the show track
+    if not isinstance(show, list) or _depth >= _SHOW_MAX_DEPTH:
+        return out
+
+    cur_name = (out.get('meta') or {}).get('name')
+    max_end = 0.0
+    try:
+        max_end = float((out.get('meta') or {}).get('duration', 0) or 0)
+    except (TypeError, ValueError):
+        max_end = 0.0
+
+    for blk in show:
+        if not isinstance(blk, dict):
+            continue
+        ref = blk.get('choreo')
+        if not isinstance(ref, str) or not ref:
+            continue
+        if ref == cur_name or ref in _seen:   # cycle guard (direct + transitive)
+            continue
+        try:
+            t0 = float(blk.get('t', 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if t0 < 0:
+            continue
+        p = _resolve_chor_path(ref)
+        if not p or not os.path.exists(p):
+            continue
+        try:
+            with open(p, encoding='utf-8') as f:
+                sub = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(sub, dict):
+            continue
+        sub = _flatten_show(sub, _depth + 1, _seen | {ref} | ({cur_name} if cur_name else set()))
+        sub_tracks = sub.get('tracks') if isinstance(sub.get('tracks'), dict) else {}
+        try:
+            sub_dur = float((sub.get('meta') or {}).get('duration', 0) or 0)
+        except (TypeError, ValueError):
+            sub_dur = 0.0
+        for tname, evs in sub_tracks.items():
+            if tname == 'markers' or not isinstance(evs, list):
+                continue   # markers are editor annotations, not playback events
+            dst = out_tracks.setdefault(tname, [])
+            for ev in evs:
+                if not isinstance(ev, dict):
+                    continue
+                ne = dict(ev)
+                try:
+                    ne['t'] = float(ev.get('t', 0) or 0) + t0
+                except (TypeError, ValueError):
+                    ne['t'] = t0
+                dst.append(ne)
+        max_end = max(max_end, t0 + sub_dur)
+
+    # Sort each merged track by time + clamp event count (defense vs nested-show
+    # event explosion), and extend meta.duration to cover the merged tail.
+    for tname, evs in out_tracks.items():
+        if isinstance(evs, list):
+            evs.sort(key=lambda e: e.get('t', 0) if isinstance(e, dict) else 0)
+            if len(evs) > _MAX_EVENTS_PER_TRACK:
+                del evs[_MAX_EVENTS_PER_TRACK:]
+    out.setdefault('meta', {})['duration'] = min(max(max_end, 0.0), float(_MAX_DURATION_SECONDS))
+    return out
+
+
 # B-16 (audit 2026-05-15): /choreo/list cache. Old code opened all ~48
 # .chor files on EVERY request — multiply by 15s reload × N clients and
 # you get a constant trickle of I/O that competes with motion. Cache by
@@ -805,6 +915,9 @@ def choreo_load():
 _VALID_TRACK_NAMES = {
     'audio', 'lights', 'dome_servos', 'body_servos', 'arm_servos',
     'servos', 'dome', 'propulsion', 'markers',
+    # SHOW track: each block references another .chor by name; expanded into the
+    # real tracks at play time by _flatten_show (never stored expanded).
+    'show',
     # Legacy / accepted for migration:
     'audio2',
 }
@@ -862,6 +975,13 @@ def _validate_chor_schema(chor: dict) -> tuple[bool, str]:
                 f = ev.get('file', '')
                 if f and (not isinstance(f, str) or not _re.match(r'^[A-Za-z0-9_]{1,80}$', f)):
                     return False, f'tracks.{tname}[{i}].file: invalid filename'
+            # SHOW blocks reference another choreo by name — gate the ref with the
+            # same allowlist as choreo names so a traversal value can't be persisted
+            # (defense-in-depth; _flatten_show re-validates at play time).
+            if tname == 'show':
+                ref = ev.get('choreo', '')
+                if not isinstance(ref, str) or not ref or not _CHOREO_NAME_RE.match(ref.strip()):
+                    return False, f'tracks.{tname}[{i}].choreo: invalid choreo name'
     return True, ''
 
 
@@ -1147,6 +1267,21 @@ def safe_play(chor: dict, loop: bool = False, *, log_label: str = 'play') -> boo
     """
     if not reg.choreo:
         return False
+    # SHOW track: expand referenced choreos into the real tracks BEFORE the
+    # safety gates + player read chor['tracks'] (so the Child-Lock propulsion
+    # gate below + uses_propulsion/uses_dome see the aggregated result). Pure,
+    # cycle/depth-guarded, path-safe; the result never contains a 'show' track.
+    try:
+        chor = _flatten_show(chor)
+    except Exception:
+        log.exception("safe_play(%s): show flatten failed — stripping show track", log_label)
+        try:
+            import copy as _copy
+            chor = _copy.deepcopy(chor)
+            if isinstance(chor.get('tracks'), dict):
+                chor['tracks'].pop('show', None)
+        except Exception:
+            pass
     # Audit finding CR-5 (2026-05-15): safe_play() had no E-STOP or
     # stow-in-progress gate, so a scheduled trigger (behavior_engine,
     # shortcut, HTTP race) within the ~50ms window between an E-STOP
