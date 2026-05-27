@@ -6075,10 +6075,9 @@ input.input-error {
 
 /* Lock Mode — batch 3 polish (2026-05-16) */
 
-/* W1 — Drive lock button two-line label */
+/* Drive lock button — single-line current-state label (next-step hint removed) */
 .drive-lock-label { display: flex; flex-direction: column; line-height: 1.1; }
 .drive-lock-status { font-size: 10px; letter-spacing: 1px; font-weight: bold; }
-.drive-lock-hint   { font-size: 7px; letter-spacing: 0.5px; opacity: 0.7; font-style: italic; }
 
 /* W4 — Modal X close button */
 .admin-modal-close {

@@ -1806,15 +1806,15 @@ class LockManager {
     hint.className = 'kids-speed-preview ' + cls;
   }
 
-  // W1 fix 2026-05-16: two-line drive button label so operator sees
-  // status (top) + action hint (bottom). Was: ambiguous LOCK/KIDS/
-  // CHILD with no clue what tap does next.
+  // Drive lock button shows the CURRENT state only (NORMAL / KIDS /
+  // CHILD LOCK). The earlier "→ next step" hint below it was removed —
+  // the current+next combo read as confusing; the lock icon + tooltip
+  // ("Lock mode (Kids / Child Lock)") already convey what a tap does.
   _updateDriveLockLabel() {
     const dlabel = el('drive-lock-label');
     if (!dlabel) return;
-    const STATUS = ['NORMAL',   'KIDS',     'CHILD LOCK'][this._mode];
-    const ACTION = ['→ KIDS',   '→ CHILD',  '→ UNLOCK'  ][this._mode];
-    dlabel.innerHTML = `<span class="drive-lock-status">${STATUS}</span><span class="drive-lock-hint">${ACTION}</span>`;
+    const STATUS = ['NORMAL', 'KIDS', 'CHILD LOCK'][this._mode];
+    dlabel.innerHTML = `<span class="drive-lock-status">${STATUS}</span>`;
     // W16 fix 2026-05-16: timed-out dot on drive button after 5min Kids
     const btn = el('drive-lock-btn');
     if (btn) btn.classList.toggle('kids-timed-out', this._mode === 1 && this._kidsTimedOut);
