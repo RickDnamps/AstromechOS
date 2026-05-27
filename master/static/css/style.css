@@ -7048,6 +7048,11 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   border-color: rgba(255,136,0,.55);
   box-shadow: 0 0 6px rgba(255,136,0,.2);
 }
+.chor-src-btn[data-track="show"] {
+  color: #ff5e9e;
+  border-color: rgba(255,94,158,.55);
+  box-shadow: 0 0 6px rgba(255,94,158,.2);
+}
 
 /* ── Choreo monitor — photorealistic Digital Twin (scoped overrides) ──
    Scale dot sizes so the full RLD (27 cols) fits in the 200px panel.  */
@@ -7227,6 +7232,7 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 .chor-block[data-track="arm_servos"]  { --blk-rgb:45,160,90;  background:rgba(45,160,90,.16);  color:#2da05a; border-color:rgba(45,160,90,.45); }
 .chor-block[data-track="propulsion"]  { --blk-rgb:255,120,0;  background:rgba(255,120,0,.2);   color:#ff8800; border-color:rgba(255,120,0,.5); }
 .chor-block[data-track="dome"]        { --blk-rgb:200,60,255; background:rgba(200,60,255,.16); color:#cc44ff; border-color:rgba(200,60,255,.4); }
+.chor-block[data-track="show"]        { --blk-rgb:255,94,158; background:rgba(255,94,158,.18); color:#ff5e9e; border-color:rgba(255,94,158,.5); }
 
 /* Hover: surface the block's OWN track hue strongly. Idle backgrounds sit at
    ~.16-.2 alpha, so on the dark canvas every block read as a faint blue-grey.
@@ -7901,6 +7907,7 @@ body.theme-light .chor-block[data-track="body_servos"]{ --blk-rgb:20,120,70;  co
 body.theme-light .chor-block[data-track="arm_servos"] { --blk-rgb:30,140,80;  color:#1a6a3c; background:rgba(30,140,80,.16); border-color:rgba(30,140,80,.55); }
 body.theme-light .chor-block[data-track="propulsion"] { --blk-rgb:210,110,0;  color:#8a4500; background:rgba(210,110,0,.18); border-color:rgba(210,110,0,.55); }
 body.theme-light .chor-block[data-track="dome"]       { --blk-rgb:160,60,220; color:#6a1a9c; background:rgba(160,60,220,.16); border-color:rgba(160,60,220,.55); }
+body.theme-light .chor-block[data-track="show"]       { --blk-rgb:200,30,110; color:#b01060; background:rgba(200,30,110,.16); border-color:rgba(200,30,110,.55); }
 
 /* Light-theme hover: same track-hue intensification, lower alpha so the dark
    per-track text stays legible on the lighter fill. Higher specificity than the
@@ -7941,6 +7948,7 @@ body.theme-light .chor-src-btn[data-track="dome_servos"] { color:#0a6a3a; }
 body.theme-light .chor-src-btn[data-track="body_servos"] { color:#125a32; }
 body.theme-light .chor-src-btn[data-track="arm_servos"]  { color:#1a6a3c; }
 body.theme-light .chor-src-btn[data-track="propulsion"]  { color:#8a4500; }
+body.theme-light .chor-src-btn[data-track="show"]        { color:#b01060; }
 
 /* Footer (timecode + SNAP/ZOOM bar) is hardcoded dark too — lighten it and
    darken its text so the whole editor is one coherent light surface. */

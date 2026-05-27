@@ -7250,7 +7250,7 @@ class ScriptEngine {
         if (s.uses_propulsion) {
           const w = document.createElement('span');
           w.className = 'seq-card-lock seq-card-lock-prop';
-          w.textContent = '🚗';
+          w.textContent = '🚀';
           w.title = 'Uses propulsion — joystick will lock';
           flags.appendChild(w);
         }
@@ -13737,6 +13737,7 @@ const choreoEditor = (() => {
   // Cached data for inspector dropdowns — loaded once at init
   let _audioIndex    = {};   // { category: [soundName, …] } — from index
   let _audioScanned  = [];   // [soundName, …] — from full disk scan (authoritative)
+  let _choreoList    = [];   // [{name,label,emoji,duration,…}, …] — from /choreo/list (SHOW track dropdown + block sizing)
   let _servoList     = [];   // ['dome_panel_1', …]
   let _servoSettings = {};   // { 'dome_panel_1': {open:110, close:20, speed:10}, … }
   // Light modes: keyed object { 't1': 'Random', 't6': 'Leia Message', …, 'my_seq': 'my_seq' }
@@ -13974,6 +13975,11 @@ const choreoEditor = (() => {
   // stored (dome → ms, arm_servos → 3 component fields, others → seconds).
   function _eventEffectiveDuration(track, ev) {
     if (!ev) return 0;
+    // SHOW block width derives from the referenced choreo's own duration.
+    if (track === 'show') {
+      const c = _choreoList.find(x => x.name === ev.choreo);
+      return c && c.duration ? c.duration : 2.0;
+    }
     if (track === 'dome')        return (ev.duration || 0) / 1000;
     if (track === 'arm_servos')  return _armBlockTotalDur(ev);
     return ev.duration || 0;
@@ -14024,7 +14030,7 @@ const choreoEditor = (() => {
     const durEl = document.getElementById('chor-duration');
     if (durEl) durEl.textContent = _fmtTime(durPlayback);
     if (Math.abs(_pxPerSec - oldPps) > 0.01) {
-      ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
+      ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion', 'show'].forEach(t => _renderTrack(t));
       _renderMarkers();
     }
   }
@@ -14352,7 +14358,7 @@ const choreoEditor = (() => {
   function _renderAllTracks() {
     if (!_chor) return;
     _fitToScreen();
-    ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion'].forEach(t => _renderTrack(t));
+    ['audio', 'lights', 'dome', 'dome_servos', 'body_servos', 'arm_servos', 'propulsion', 'show'].forEach(t => _renderTrack(t));
     _renderMarkers();
     const durVisual   = _calcTotalDuration();
     const durPlayback = _calcPlaybackDuration();
@@ -14438,7 +14444,7 @@ const choreoEditor = (() => {
       : '';
     block.innerHTML = `<span style="pointer-events:none;overflow:hidden;text-overflow:ellipsis;flex:1">${escapeHtml(_blockLabel(track, item))}</span>
                        ${issueBadge}
-                       ${isAudioLocked ? '' : '<div class="chor-block-resize" data-resize="true" style="touch-action:none"></div>'}`;
+                       ${(isAudioLocked || track === 'show') ? '' : '<div class="chor-block-resize" data-resize="true" style="touch-action:none"></div>'}`;
     _attachBlockEvents(block, track, idx);
     if (track === 'audio' && _audioOverflowIdxs.has(idx)) {
       block.style.outline = '1px solid #ff4444';
@@ -14456,6 +14462,12 @@ const choreoEditor = (() => {
   }
 
   function _blockLabel(track, item) {
+    // Every timeline block is prefixed with its track emoji (set 2026-05-26).
+    const prefix = _TRACK_EMOJI[track] ? _TRACK_EMOJI[track] + ' ' : '';
+    return prefix + _blockLabelText(track, item);
+  }
+
+  function _blockLabelText(track, item) {
     if (track === 'audio') {
       const f = item.file || '?';
       if (f.toUpperCase().startsWith('RANDOM:')) return `🎲 ${f.slice(7).toUpperCase()}`;
@@ -14492,6 +14504,10 @@ const choreoEditor = (() => {
       return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left || 0} R${item.right || 0}`;
+    if (track === 'show') {
+      const c = _choreoList.find(x => x.name === item.choreo);
+      return c ? (c.label || c.name) : (item.choreo || '(pick a choreo)');
+    }
     return '?';
   }
 
@@ -14504,6 +14520,19 @@ const choreoEditor = (() => {
     body_servos: '#198754',
     arm_servos:  '#2da05a',
     propulsion:  '#ff8800',
+    show:        '#ff5e9e',
+  };
+
+  // Per-track emoji icons — prefixed to palette chips + timeline block labels
+  const _TRACK_EMOJI = {
+    audio:       '🔊',
+    lights:      '💡',
+    dome:        '↻',
+    dome_servos: '🛸',
+    body_servos: '🚪',
+    arm_servos:  '🦾',
+    propulsion:  '🚀',
+    show:        '🎬',
   };
 
   // Full label for block tooltip and inspector
@@ -14545,6 +14574,10 @@ const choreoEditor = (() => {
       return `${label} ${item.action || ''}`.trim().toUpperCase();
     }
     if (track === 'propulsion') return `L${item.left ?? '?'} R${item.right ?? '?'}`;
+    if (track === 'show') {
+      const c = _choreoList.find(x => x.name === item.choreo);
+      return c ? (c.label || c.name) : (item.choreo || '(pick a choreo)');
+    }
     return '?';
   }
 
@@ -15318,6 +15351,20 @@ const choreoEditor = (() => {
       if (item.duration !== undefined) html += numRow('DURATION', 'duration', { min: 0.1, step: 0.5 });
       html += numRow('LEFT', 'left',   { min: -1, max: 1, step: 0.05 });
       html += numRow('RIGHT', 'right', { min: -1, max: 1, step: 0.05 });
+
+    } else if (track === 'show') {
+      // SHOW block references another choreography. Build a dropdown from the
+      // cached /choreo/list, excluding the choreo being edited (no self-ref).
+      const map = {};
+      for (const c of _choreoList) {
+        if (c.name === _chor.meta.name) continue;   // avoid trivial self-reference
+        map[c.name] = `${c.emoji || '🎬'} ${c.label || c.name}`;
+      }
+      html += selectRow('CHOREO', 'choreo', map);
+      // Resolved-duration info banner (read-only — width derives from the ref).
+      const ref = _choreoList.find(x => x.name === item.choreo);
+      const dur = ref && ref.duration ? ref.duration : 2.0;
+      html += `<div style="${_BNR_INFO}">▶ ${escapeHtml(String(dur))}s</div>`;
     }
 
     panel.innerHTML = html;
@@ -15330,6 +15377,12 @@ const choreoEditor = (() => {
   // Called after a select changes — handles side-effects (audio duration)
   function _onFieldChange(track, idx, field, value) {
     if (track === 'audio') _validateAudioOverflow();
+    // SHOW: picking a referenced choreo changes the block width (derived from
+    // the ref's duration) and its label — re-render + relayout immediately.
+    if (track === 'show' || field === 'choreo') {
+      _renderTrack('show');
+      _refreshLayout();
+    }
     // Re-validate servo issues when servo assignment changes in inspector
     if (track === 'arm_servos' && field === 'arm') {
       // Migrate legacy event to new arm-slot format when user picks a slot
@@ -15846,6 +15899,7 @@ const choreoEditor = (() => {
       }).catch(() => {});
 
       const names = await api('/choreo/list');
+      _choreoList = names || [];   // cache for SHOW-track dropdown + block sizing
       const sel   = document.getElementById('chor-select');
       if (sel && names) {
         sel.innerHTML = '<option value="">— select choreography —</option>' +
@@ -15918,6 +15972,8 @@ const choreoEditor = (() => {
       if (!_chor.tracks.dome_servos) _chor.tracks.dome_servos = [];
       if (!_chor.tracks.body_servos) _chor.tracks.body_servos = [];
       if (!_chor.tracks.arm_servos)  _chor.tracks.arm_servos  = [];
+      // Ensure the SHOW lane exists so older files get the bottom track
+      if (!_chor.tracks.show) _chor.tracks.show = [];
       // Normalize dome KFs — legacy files may be missing accel or duration
       (_chor.tracks.dome || []).forEach(kf => {
         if (kf.accel == null) kf.accel = 1.0;
@@ -16053,7 +16109,7 @@ const choreoEditor = (() => {
         tracks: {
           audio: [],         lights: [],        dome: [],
           dome_servos: [],   body_servos: [],   arm_servos: [],
-          propulsion: [],    markers: [],
+          propulsion: [],    show: [],          markers: [],
         },
       };
       _setDirty(true); _existsOnDisk = false; _renderAllTracks();
@@ -16279,7 +16335,7 @@ const choreoEditor = (() => {
         field === 'text'     || field === 'file'      || field === 'mode'    ||
         field === 'display'  || field === 'sequence'  || field === 'effect'  ||
         field === 'priority' || field === 'easing'    || field === 'servo'   ||
-        field === 'action'   || field === 'group'     ||
+        field === 'action'   || field === 'group'     || field === 'choreo'  ||
         (field === 'target' && track === 'lights');
       if (isStringField) {
         item[field] = String(rawVal);
