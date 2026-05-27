@@ -1624,7 +1624,7 @@ class LockManager {
       const res = await apiDetail('/lock/unlock', 'POST', { password: pwd, mode: 0 });
       if (res.ok) {
         el('lock-modal').classList.add('hidden');
-        this._applyMode(0);
+        this._applyMode(0, true);   // server already verified the password — don't re-prompt
         return;
       }
       // W3 fix 2026-05-16: 429 lockout — show retry countdown
@@ -1680,11 +1680,15 @@ class LockManager {
     this._lockoutTimer = setInterval(tick, 1000);
   }
 
-  _applyMode(mode) {
-    // W9/B3 fix 2026-05-16: relaxation (going TOWARD less restrictive)
-    // requires the password modal.
+  _applyMode(mode, fromVerifiedUnlock = false) {
+    // W9/B3 fix 2026-05-16: relaxation (toward a less-restrictive mode) requires
+    // the password modal — EXCEPT right after a server-verified /lock/unlock
+    // (fromVerifiedUnlock). Fix 2026-05-26: submitModal() success called
+    // _applyMode(0) with prev still 2, so `0 < 2` RE-OPENED the unlock modal =
+    // the "enter my password twice" bug. The password was already checked
+    // server-side here, so skip the re-prompt.
     const prev = this._mode;
-    if (mode < prev) {
+    if (mode < prev && !fromVerifiedUnlock) {
       this._showUnlockModal();
       return;
     }
