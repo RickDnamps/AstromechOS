@@ -209,7 +209,11 @@ function applyTheme(id, persist = true) {
   // a real selection (click), not a hover preview.
   if (persist) {
     _activeTheme = id;
-    localStorage.setItem('astromech-theme', id);
+    localStorage.setItem('astromech-theme', id);   // global last-applied hint (instant pre-paint apply)
+    // Per-device persistence: store the active theme in this device's drive-layout
+    // entry (mirror + server + backup), so it survives a browser session reset and
+    // each monitor keeps its own theme. driveLayout may not exist yet at boot.
+    if (typeof driveLayout !== 'undefined' && driveLayout.setTheme) driveLayout.setTheme(id);
     document.querySelectorAll('.theme-btn').forEach(b =>
       b.classList.toggle('active', b.dataset.theme === id)
     );
@@ -699,7 +703,21 @@ function _initThemes() {
 
 // Apply saved theme immediately when script loads — before first paint
 ;(function () {
-  const saved = localStorage.getItem('astromech-theme');
+  // Prefer THIS device's saved theme (drive-layout mirror) over the global hint, so a
+  // multi-monitor operator gets the right theme with no flash. deviceKey is inlined
+  // because `driveLayout` isn't defined yet at script-load time; any failure (e.g. the
+  // _lsKey cache not ready) is caught and falls back to the global key below.
+  let saved = null;
+  try {
+    const ptr = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse';
+    const s = window.screen || {};
+    const dk = `${ptr}_${Math.round(s.width || window.innerWidth || 0)}x${Math.round(s.height || window.innerHeight || 0)}`;
+    // Read the dedicated NON-namespaced hint (the namespaced mirror isn't reachable
+    // yet — robot name not cached at script-load). Authoritative store = server entry.
+    const hint = JSON.parse(localStorage.getItem('astromech-theme-dev') || '{}');
+    if (hint && typeof hint[dk] === 'string') saved = hint[dk];
+  } catch (e) {}
+  if (!saved) saved = localStorage.getItem('astromech-theme');
   let id = 'default';
   if (saved) {
     if (_THEMES[saved]) {
@@ -11415,14 +11433,79 @@ const driveLayout = {
   _DEFAULTS: { propulsion: { x: 2, y: 28 }, dome: { x: 80, y: 28 }, cam: { x: 20, y: 0, w: 60, h: 100 } },
   _stdSnapshot: null,   // measured Standard-layout positions (used as the Custom default)
 
+  // Device identity = physical SCREEN resolution + pointer type, NOT window size.
+  // The operator runs the app windowed (often two side-by-side on a 36" ultrawide),
+  // so window.innerWidth/innerHeight change constantly and used to mint a fresh empty
+  // layout on every open. screen.* is constant per monitor AND derived (survives a
+  // localStorage clear). Coords are %, so one layout fits any window width on a screen.
   deviceKey() {
     const t = (window.matchMedia && matchMedia('(pointer: coarse)').matches) ? 'touch' : 'mouse';
-    return `${t}_${Math.round(window.innerWidth)}x${Math.round(window.innerHeight)}`;
+    const s = window.screen || {};
+    const w = Math.round(s.width || window.innerWidth || 0);
+    const h = Math.round(s.height || window.innerHeight || 0);
+    return `${t}_${w}x${h}`;
+  },
+  // Stable per-install backup identity. Survives window resizes; lost only on a full
+  // localStorage clear (then the screen-res key still matches, or the legacy-best
+  // migration recovers the layout). Stamped into every entry so a screen-res change
+  // (display scaling) can still recover this device's layout via a deviceId match.
+  _DEVICE_ID_KEY: 'astromech-device-id',
+  _deviceId() {
+    let id = _lsGet(this._DEVICE_ID_KEY);
+    if (!id || !/^[A-Za-z0-9_-]{1,40}$/.test(id)) {
+      id = 'd' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+      _lsSet(this._DEVICE_ID_KEY, id);
+    }
+    return id;
   },
   _mirrorKey() { return _lsKey('astromech-drive-layouts'); },
   _loadMirror() { try { return JSON.parse(localStorage.getItem(this._mirrorKey()) || '{}') || {}; } catch { return {}; } },
   _saveMirror(o) { try { localStorage.setItem(this._mirrorKey(), JSON.stringify(o)); } catch {} },
-  _current() { const m = this._loadMirror()[this.deviceKey()]; return (m && typeof m === 'object') ? m : { shortcuts: {} }; },
+  _current() {
+    const mirror = this._loadMirror();
+    const exact = mirror[this.deviceKey()];
+    if (exact && typeof exact === 'object') return exact;
+    return this._fallbackEntry(mirror) || { shortcuts: {} };
+  },
+  // Read-only recovery when this screen's key has no entry yet: (1) same stable
+  // deviceId (display-scaling change), else (2) the richest same-pointer legacy entry
+  // (pre-screen-key migration of the old innerWidth keys). Coords are % so any of
+  // these renders correctly. Pure — the boot _consolidate() does the re-save.
+  _fallbackEntry(mirror) {
+    const m = mirror || this._loadMirror();
+    const myId = this._deviceId();
+    const ptrPrefix = this.deviceKey().split('_')[0] + '_';   // 'touch_' | 'mouse_'
+    let byId = null, best = null, bestScore = 0;
+    Object.keys(m).forEach(k => {
+      const e = m[k];
+      if (!e || typeof e !== 'object') return;
+      if (e.deviceId && e.deviceId === myId && !byId) byId = e;
+      if (k.indexOf(ptrPrefix) === 0) {
+        const score = (e.mode === 'custom' ? 100 : 0)
+                    + (e.shortcuts ? Object.keys(e.shortcuts).length : 0);
+        if (score > bestScore) { bestScore = score; best = e; }   // >0 → skip empty stubs
+      }
+    });
+    return byId || best;
+  },
+  // One-shot boot consolidation: if this screen's key is missing, adopt the best
+  // fallback entry under the current key (mirror + server) and stamp the deviceId,
+  // so the layout stops "disappearing" when the window/screen identity drifts.
+  // Idempotent — once the exact entry exists it only backfills a missing deviceId.
+  _consolidate() {
+    const mirror = this._loadMirror();
+    const exact = mirror[this.deviceKey()];
+    if (exact && typeof exact === 'object') {
+      if (!exact.deviceId) this._patchDevice({ deviceId: this._deviceId() });
+      return;
+    }
+    const fb = this._fallbackEntry(mirror);
+    if (fb) {
+      const clone = JSON.parse(JSON.stringify(fb));
+      delete clone.deviceId;                 // _patchDevice re-stamps the current id
+      this._patchDevice(clone);              // writes the recovered layout under this key
+    }
+  },
   isCustom() { return document.body.classList.contains('drive-custom-layout'); },
 
   _main() { return document.querySelector('.drive-main'); },
@@ -11444,18 +11527,55 @@ const driveLayout = {
   async syncFromServer() {
     const d = await api('/drive/layouts');
     if (d && typeof d === 'object' && !Array.isArray(d)) this._saveMirror(d);
+    this._consolidate();            // adopt legacy/deviceId match under the screen key (once)
     this._applyDeviceMode(false);   // re-apply this device's saved mode (+ layout via apply)
+    this._applyDeviceTheme();       // per-device theme from the now-reconciled entry
   },
   // Read this device's saved mode and apply it (persist=false at boot/sync).
   _applyDeviceMode(persist) {
     this.setMode(this._current().mode === 'custom' ? 'custom' : 'standard', persist);
   },
+  // Apply this device's saved theme (per-device, server + mirror). persist=false so
+  // applying it does NOT echo back into the per-device store. No-op if none saved.
+  _applyDeviceTheme() {
+    try {
+      const t = this._current().theme;
+      if (t && typeof applyTheme === 'function') {
+        applyTheme(t, false);
+        _activeTheme = t;
+        document.querySelectorAll('.theme-btn').forEach(b =>
+          b.classList.toggle('active', b.dataset.theme === t));
+        this._saveThemeHint(t);   // keep the pre-paint hint fresh from the server value
+      }
+    } catch (e) {}
+  },
+  // Persist the active theme for THIS device (called from applyTheme on a real
+  // selection). Shape-validated; rides the mirror + server + backup like the layout.
+  setTheme(id) {
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(String(id || ''))) return;
+    this._patchDevice({ theme: id });
+    this._saveThemeHint(id);
+  },
+  // Non-namespaced, screen-keyed theme hint read ONLY by the pre-paint apply. The
+  // pre-paint code runs before StatusPoller caches the robot name, so it can't read
+  // the per-robot namespaced mirror (_lsKey would return the bare key and miss). This
+  // flat map {deviceKey: themeId} prevents a theme flash; the per-device SERVER entry
+  // stays the source of truth (and corrects this on the next poll if they ever differ).
+  _THEME_HINT_KEY: 'astromech-theme-dev',
+  _saveThemeHint(id) {
+    try {
+      const m = JSON.parse(localStorage.getItem(this._THEME_HINT_KEY) || '{}') || {};
+      m[this.deviceKey()] = id;
+      localStorage.setItem(this._THEME_HINT_KEY, JSON.stringify(m));
+    } catch (e) {}
+  },
   // Merge a partial into THIS device's layout entry (mirror + server best-effort).
-  // The per-device editor params (mode/snap/snapStep) live in the layout entry so
-  // they are per-device AND ride the backup, exactly like the geometry.
+  // The per-device editor params (mode/snap/snapStep/theme) live in the layout entry
+  // so they are per-device AND ride the backup, exactly like the geometry. Always
+  // stamps the stable deviceId so the entry stays recoverable across screen changes.
   _patchDevice(partial) {
     const all = this._loadMirror();
-    const merged = { ...(all[this.deviceKey()] || {}), ...partial };
+    const merged = { ...(all[this.deviceKey()] || {}), deviceId: this._deviceId(), ...partial };
     all[this.deviceKey()] = merged;
     this._saveMirror(all);
     this._pushToServer(merged, false);
@@ -11657,10 +11777,20 @@ const driveLayout = {
   },
   async reset() {
     const all = this._loadMirror();
-    delete all[this.deviceKey()];
+    // Write an explicit STANDARD stub instead of deleting the entry. A bare delete
+    // would let the next boot's _consolidate() resurrect a SIBLING monitor's layout
+    // via the deviceId fallback (same install = same deviceId). Keeping an exact
+    // entry makes _consolidate skip the fallback. Preserve the theme (theme ≠ layout).
+    const cur = all[this.deviceKey()];
+    const keepTheme = (cur && typeof cur.theme === 'string') ? cur.theme : null;
+    const stub = { shortcuts: {}, deviceId: this._deviceId(), mode: 'standard' };
+    if (keepTheme) stub.theme = keepTheme;
+    all[this.deviceKey()] = stub;
     this._saveMirror(all);
     const tok = (typeof adminGuard !== 'undefined' && adminGuard.getToken && adminGuard.getToken()) || '';
-    if (tok) { try { await api('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout: null }); } catch {} }
+    if (tok) {
+      try { await api('/drive/layouts', 'POST', { deviceKey: this.deviceKey(), layout: stub }); } catch {}
+    }
     // Reset positions to the standard-like default but STAY in the editor (Save or
     // Cancel ends the session). Clear free positions + rebuild grouped shortcuts.
     [this._propPanel(), this._domePanel()].forEach(e => {
@@ -11675,6 +11805,7 @@ const driveLayout = {
     if (typeof toast === 'function') toast('Layout reset to default', 'info');
   },
   _collect() {
+    const cur = this._loadMirror()[this.deviceKey()];   // EXACT entry only — never import a sibling screen's theme via fallback
     const lay = { shortcuts: {} };
     const pp = this._propPanel(); if (pp) lay.propulsion = this._pctOf(pp);
     const dp = this._domePanel(); if (dp) lay.dome = this._pctOf(dp);
@@ -11687,6 +11818,8 @@ const driveLayout = {
     lay.mode = this.isCustom() ? 'custom' : 'standard';   // per-device editor params
     lay.snap = this._snap;
     lay.snapStep = this._snapStep;
+    lay.deviceId = this._deviceId();                      // stable backup identity
+    if (cur && typeof cur.theme === 'string') lay.theme = cur.theme;   // keep per-device theme
     return lay;
   },
   // Camera: reset to full size (the 🎥 FULL button). The blue corner handle

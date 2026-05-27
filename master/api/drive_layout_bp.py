@@ -29,8 +29,9 @@ _write_lock = threading.Lock()
 # master/config/drive_layouts.json — sits next to this file's parent (master/).
 _CFG = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'drive_layouts.json')
 
-_KEY_RE = re.compile(r'^[A-Za-z0-9_]{1,40}$')    # e.g. touch_834x1194
-_SID_RE = re.compile(r'^[A-Za-z0-9_\-]{1,32}$')   # shortcut slot id
+_KEY_RE = re.compile(r'^[A-Za-z0-9_]{1,40}$')      # e.g. mouse_3440x1440 (screen res)
+_SID_RE = re.compile(r'^[A-Za-z0-9_\-]{1,32}$')    # shortcut slot id
+_TOKEN_RE = re.compile(r'^[A-Za-z0-9_\-]{1,40}$')  # theme id / stable device id (opaque)
 _MAX_DEVICES = 64
 _MAX_SHORTCUTS = 24
 
@@ -101,6 +102,17 @@ def _sanitize_layout(raw):
             out['snapStep'] = ss
     except (TypeError, ValueError):
         pass
+    # Per-device active UI theme. The id is validated client-side against the known
+    # themes (an unknown id falls back to 'default' on apply); here we only shape-check
+    # it. Lets the operator keep e.g. r2d2_light on this screen across reboots/clears.
+    th = raw.get('theme')
+    if isinstance(th, str) and _TOKEN_RE.match(th):
+        out['theme'] = th
+    # Stable per-install device id — backup identity used to recover this device's
+    # layout when the screen resolution changes (display scaling). Opaque token.
+    did = raw.get('deviceId')
+    if isinstance(did, str) and _TOKEN_RE.match(did):
+        out['deviceId'] = did
     return out
 
 
