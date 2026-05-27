@@ -14779,7 +14779,6 @@ const choreoEditor = (() => {
   // Per-track accent colours for the inspector title
   const _TRACK_COLOR = {
     audio:       '#2ad6ff',
-    audio2:      '#4d7cff',
     lights:      '#ffb300',
     dome:        '#b266ff',
     dome_servos: '#2ecc55',
@@ -16232,12 +16231,6 @@ const choreoEditor = (() => {
       const chor = await api(`/choreo/load?name=${encodeURIComponent(name)}`);
       if (!chor) { toast('Failed to load choreography', 'error'); return; }
       _chor = chor;
-      // Migrate legacy audio2 track → unified audio track with ch=1
-      if (_chor.tracks.audio2 && _chor.tracks.audio2.length) {
-        _chor.tracks.audio2.forEach(ev => _chor.tracks.audio.push({ ...ev, ch: 1 }));
-        _chor.tracks.audio.sort((a, b) => (a.t || 0) - (b.t || 0));
-      }
-      delete _chor.tracks.audio2;
       // Migrate legacy generic "servos" track → body_servos
       if (_chor.tracks.servos && _chor.tracks.servos.length) {
         if (!_chor.tracks.body_servos) _chor.tracks.body_servos = [];

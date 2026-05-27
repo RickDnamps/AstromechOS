@@ -1016,11 +1016,7 @@ def choreo_rename():
 
 @choreo_bp.get('/choreo/load')
 def choreo_load():
-    """Read a .chor file. LAN-open (read-only). Audit finding CR-3
-    2026-05-15: the legacy audio2 migration used to write-back to
-    disk from this read endpoint, opening a non-admin side-effect
-    path. The migration now stays in-memory only — the on-disk file
-    is rewritten on the next /choreo/save (admin-gated) instead."""
+    """Read a .chor file. LAN-open (read-only) — no write side-effects."""
     name = request.args.get('name', '')
     if not name:
         return jsonify({'error': 'name required'}), 400
@@ -1039,17 +1035,6 @@ def choreo_load():
         except (OSError, json.JSONDecodeError) as e:
             log.warning("choreo_load(%s) failed: %s", name, e)
             return jsonify({'error': 'load failed'}), 500
-        # Legacy audio2 → audio migration is now IN-MEMORY ONLY. The
-        # client gets the migrated dict and will save it back through
-        # the admin-gated /choreo/save the next time the operator
-        # edits the choreo. No write side-effect on this read path.
-        tracks = chor.get('tracks', {})
-        audio2 = tracks.pop('audio2', [])
-        if audio2:
-            audio = tracks.setdefault('audio', [])
-            for ev in audio2:
-                audio.append({**ev, 'ch': 1})
-            tracks['audio'].sort(key=lambda e: e.get('t', 0))
     return jsonify(chor)
 
 
@@ -1065,8 +1050,6 @@ _VALID_TRACK_NAMES = {
     # SHOW track: each block references another .chor by name; expanded into the
     # real tracks at play time by _flatten_show (never stored expanded).
     'show',
-    # Legacy / accepted for migration:
-    'audio2',
 }
 _MAX_EVENTS_PER_TRACK = 5000
 _MAX_DURATION_SECONDS = 3600  # 1 hour upper bound
@@ -1118,7 +1101,7 @@ def _validate_chor_schema(chor: dict) -> tuple[bool, str]:
             # malicious admin POST can't plant '../../etc/passwd' for
             # later UART forwarding. Allowlist matches _SOUND_NAME_RE
             # used by audio_bp at the read path.
-            if tname == 'audio' or tname == 'audio2':
+            if tname == 'audio':
                 f = ev.get('file', '')
                 if f and (not isinstance(f, str) or not _re.match(r'^[A-Za-z0-9_]{1,80}$', f)):
                     return False, f'tracks.{tname}[{i}].file: invalid filename'

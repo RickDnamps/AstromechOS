@@ -6999,8 +6999,8 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 
 /* Per-track neon colours + per-track RGB triple (--blk-rgb), reused for the
    thematic hover fill below — same model as the timeline .chor-block rules.
-   Palette is hue-spread for max differentiation so 9 tracks never collide:
-   audio=cyan · audio2=azure · lights=amber · arm_servos=lime ·
+   Palette is hue-spread for max differentiation so 8 tracks never collide:
+   audio=cyan · lights=amber · arm_servos=lime ·
    dome_servos=green · body_servos=teal · dome=violet · propulsion=RED ·
    show=magenta. Each type uses ONE rgb triple everywhere (chip, block,
    inspector) — keep this in sync with _TRACK_COLOR in app.js. */
@@ -7009,12 +7009,6 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   color: #2ad6ff;
   border-color: rgba(42,214,255,.55);
   box-shadow: 0 0 6px rgba(42,214,255,.25);
-}
-.chor-src-btn[data-track="audio2"] {
-  --blk-rgb: 77,124,255;
-  color: #4d7cff;
-  border-color: rgba(77,124,255,.55);
-  box-shadow: 0 0 6px rgba(77,124,255,.2);
 }
 .chor-src-btn[data-track="lights"] {
   --blk-rgb: 255,179,0;
@@ -7237,7 +7231,6 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
   box-shadow: 0 0 10px rgba(var(--cyan-rgb),.4);
 }
 .chor-block[data-track="audio"]       { --blk-rgb:42,214,255;  background:rgba(42,214,255,.2);   color:#2ad6ff; border-color:rgba(42,214,255,.5); }
-.chor-block[data-track="audio2"]      { --blk-rgb:77,124,255;  background:rgba(77,124,255,.18);  color:#4d7cff; border-color:rgba(77,124,255,.5); }
 .chor-block[data-track="lights"]      { --blk-rgb:255,179,0;  background:rgba(255,179,0,.18);  color:#ffb300; border-color:rgba(255,179,0,.45); }
 .chor-block[data-track="lights"][data-mode="alarm"] { --blk-rgb:255,40,80;  background:rgba(255,40,80,.22); color:#ff2855; border-color:rgba(255,40,80,.55); }
 .chor-block[data-track="lights"][data-mode="disco"] { --blk-rgb:160,80,255; background:rgba(160,80,255,.22); color:#b055ff; border-color:rgba(160,80,255,.55); }
@@ -7912,7 +7905,6 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
    Dark themes are 100% unaffected — every rule is scoped under body.theme-light.
    ══════════════════════════════════════════════════════════════════════ */
 body.theme-light .chor-block[data-track="audio"]      { --blk-rgb:10,120,150;  color:#08697f; background:rgba(10,120,150,.16); border-color:rgba(10,120,150,.55); }
-body.theme-light .chor-block[data-track="audio2"]     { --blk-rgb:40,80,200;   color:#1f44b0; background:rgba(40,80,200,.15);  border-color:rgba(40,80,200,.5);  }
 body.theme-light .chor-block[data-track="lights"]     { --blk-rgb:190,120,0;  color:#8a5e00; background:rgba(190,120,0,.18); border-color:rgba(190,120,0,.55); }
 body.theme-light .chor-block[data-track="lights"][data-mode="alarm"] { --blk-rgb:200,30,60;  color:#a01028; background:rgba(200,30,60,.18);  border-color:rgba(200,30,60,.55);  }
 body.theme-light .chor-block[data-track="lights"][data-mode="disco"] { --blk-rgb:140,50,200; color:#5a1a9c; background:rgba(140,50,200,.18); border-color:rgba(140,50,200,.55); }
@@ -7956,7 +7948,6 @@ body.theme-light .chor-tick.major  { color: #0a1840; }
    labels stay dark so text/icons read on the light tinted background. */
 body.theme-light .chor-src-btn { background: rgba(255,255,255,0.82); }
 body.theme-light .chor-src-btn[data-track="audio"]       { --blk-rgb:10,120,150;  color:#08697f; }
-body.theme-light .chor-src-btn[data-track="audio2"]      { --blk-rgb:40,80,200;   color:#1f44b0; }
 body.theme-light .chor-src-btn[data-track="lights"]      { --blk-rgb:190,120,0;  color:#8a5e00; }
 body.theme-light .chor-src-btn[data-track="dome"]        { --blk-rgb:150,60,210; color:#6a1f9c; }
 body.theme-light .chor-src-btn[data-track="dome_servos"] { --blk-rgb:20,150,75;   color:#0c7a33; }
