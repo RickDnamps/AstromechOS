@@ -3505,7 +3505,7 @@ const behaviorPanel = (() => {
     const meta = _choreoMeta.find(c => c.name === name);
     if (!meta) return '';
     const icons = [];
-    if (meta.uses_propulsion) icons.push('🚗');
+    if (meta.uses_propulsion) icons.push('🚀');
     if (meta.uses_dome)       icons.push('↻');
     return icons.join('');
   }
@@ -3515,7 +3515,7 @@ const behaviorPanel = (() => {
     const name = _getSelVal('beh-startup-choreo');
     const ic = _locksFor(name);
     wrap.textContent = ic;
-    wrap.title = ic ? 'This choreo moves: ' + (ic.includes('🚗') ? 'propulsion ' : '') + (ic.includes('↻') ? 'dome ' : '') : '';
+    wrap.title = ic ? 'This choreo moves: ' + (ic.includes('🚀') ? 'propulsion ' : '') + (ic.includes('↻') ? 'dome ' : '') : '';
   }
 
   function onModeChange() {
@@ -3538,7 +3538,7 @@ const behaviorPanel = (() => {
         sounds:        '🔊 Audio only — no movement.',
         sounds_lights: '🔊💡 Audio + lights — no movement.',
         lights:        '💡 Lights only — random animation per cycle.',
-        choreo:        '⚠ Selected choreos may move dome, panels, arms, or propulsion. Check the 🚗 / ↻ icons next to choreo names.',
+        choreo:        '⚠ Selected choreos may move dome, panels, arms, or propulsion. Check the 🚀 / ↻ icons next to choreo names.',
       };
       note.textContent = NOTES[mode] || '';
       note.classList.toggle('settings-card-warn', mode === 'choreo');

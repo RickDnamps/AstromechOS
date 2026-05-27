@@ -292,17 +292,25 @@ def _resolve_chor_path(name):
 # player runs ONE flat timeline (never recursive playback) and the safety gates
 # + uses_propulsion/uses_dome see the aggregated result. Pure data merge.
 _SHOW_MAX_DEPTH = 8
+# Hard cap on the TOTAL number of referenced-choreo file loads across one whole
+# expansion (defense vs a wide×deep show graph: depth alone can't bound a tree
+# where each of 5000 blocks references another 5000-block show). Shared, mutable
+# [remaining] counter threaded through the recursion.
+_SHOW_MAX_TOTAL_REFS = 512
 
 
-def _flatten_show(chor, _depth=0, _seen=None):
+def _flatten_show(chor, _depth=0, _seen=None, _budget=None):
     """Return a NEW chor with the 'show' track expanded into the real tracks and
-    removed. Cycle-guarded (seen-set + self-ref) and depth-capped; clamps merged
-    tracks to _MAX_EVENTS_PER_TRACK and meta.duration to _MAX_DURATION_SECONDS.
+    removed. Cycle-guarded (seen-set + self-ref), depth-capped, and globally
+    load-budget-capped (_SHOW_MAX_TOTAL_REFS); clamps merged tracks to
+    _MAX_EVENTS_PER_TRACK and meta.duration to _MAX_DURATION_SECONDS.
     Never raises: a missing / unreadable / invalid reference is simply skipped.
     The output NEVER contains a 'show' track, even on partial failure."""
     import copy
     if _seen is None:
         _seen = set()
+    if _budget is None:
+        _budget = [_SHOW_MAX_TOTAL_REFS]
     if not isinstance(chor, dict):
         return chor
     out = copy.deepcopy(chor)
@@ -334,6 +342,9 @@ def _flatten_show(chor, _depth=0, _seen=None):
             continue
         if t0 < 0:
             continue
+        if _budget[0] <= 0:   # global load budget exhausted — stop expanding
+            break
+        _budget[0] -= 1
         p = _resolve_chor_path(ref)
         if not p or not os.path.exists(p):
             continue
@@ -344,7 +355,7 @@ def _flatten_show(chor, _depth=0, _seen=None):
             continue
         if not isinstance(sub, dict):
             continue
-        sub = _flatten_show(sub, _depth + 1, _seen | {ref} | ({cur_name} if cur_name else set()))
+        sub = _flatten_show(sub, _depth + 1, _seen | {ref} | ({cur_name} if cur_name else set()), _budget)
         sub_tracks = sub.get('tracks') if isinstance(sub.get('tracks'), dict) else {}
         try:
             sub_dur = float((sub.get('meta') or {}).get('duration', 0) or 0)
@@ -376,19 +387,21 @@ def _flatten_show(chor, _depth=0, _seen=None):
     return out
 
 
-def _choreo_movement_flags(name, _depth=0, _seen=None):
+def _choreo_movement_flags(name, _depth=0, _seen=None, _budget=None):
     """Return (uses_propulsion, uses_dome) for a choreo BY NAME, aggregating
     recursively over its SHOW-track references. Lets _build_list_rows mark a
     'show' choreo (whose movement lives in the choreos it references) so the
     Sequences-card lock badges + the optimistic instant-lock fire BEFORE the
-    first /status poll. Cycle/depth-guarded, path-safe, never raises (a bad or
-    missing reference contributes nothing).
+    first /status poll. Cycle/depth/load-budget-guarded, path-safe, never raises
+    (a bad or missing reference contributes nothing).
 
     NOTE: the actual playback lockout does NOT depend on this — it is computed
     from the FLATTENED tracks at play time (_flatten_show → player → /status →
     motion_bp). This is purely the pre-play UI hint."""
     if _seen is None:
         _seen = set()
+    if _budget is None:
+        _budget = [_SHOW_MAX_TOTAL_REFS]
     if not isinstance(name, str) or name in _seen or _depth > _SHOW_MAX_DEPTH:
         return (False, False)
     p = _resolve_chor_path(name)
@@ -412,7 +425,10 @@ def _choreo_movement_flags(name, _depth=0, _seen=None):
                 continue
             ref = blk.get('choreo')
             if isinstance(ref, str) and ref and ref not in seen2:
-                rp, rd = _choreo_movement_flags(ref, _depth + 1, seen2)
+                if _budget[0] <= 0:   # global load budget exhausted
+                    break
+                _budget[0] -= 1
+                rp, rd = _choreo_movement_flags(ref, _depth + 1, seen2, _budget)
                 up = up or rp
                 ud = ud or rd
                 if up and ud:
@@ -1106,12 +1122,16 @@ def _validate_chor_schema(chor: dict) -> tuple[bool, str]:
                 f = ev.get('file', '')
                 if f and (not isinstance(f, str) or not _re.match(r'^[A-Za-z0-9_]{1,80}$', f)):
                     return False, f'tracks.{tname}[{i}].file: invalid filename'
-            # SHOW blocks reference another choreo by name — gate the ref with the
-            # same allowlist as choreo names so a traversal value can't be persisted
-            # (defense-in-depth; _flatten_show re-validates at play time).
+            # SHOW blocks reference another choreo by name. An EMPTY ref is a
+            # not-yet-configured block (the editor seeds blocks with choreo:'')
+            # — allow it so a placeholder block doesn't block the whole save
+            # (the flatten pass skips empty refs). A NON-empty ref must resolve
+            # exactly like at play time — _resolve_chor_path is the single
+            # source of truth (regex + __/. /.. reject + realpath containment),
+            # so save-time rejection matches play-time skipping.
             if tname == 'show':
                 ref = ev.get('choreo', '')
-                if not isinstance(ref, str) or not ref or not _CHOREO_NAME_RE.match(ref.strip()):
+                if ref and (not isinstance(ref, str) or _resolve_chor_path(ref) is None):
                     return False, f'tracks.{tname}[{i}].choreo: invalid choreo name'
     return True, ''
 

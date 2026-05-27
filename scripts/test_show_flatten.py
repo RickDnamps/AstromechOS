@@ -122,6 +122,16 @@ def run():
             refs3 = [b.get('choreo') for b in json.load(f)['tracks']['show']]
         check("cascade delete (_already_locked) drops", refs3 == [])
 
+        # audit #1: an empty (unconfigured) show ref must NOT block the save
+        okempty, _ = C._validate_chor_schema(_chor('e', {'show': [{'t': 0, 'choreo': ''}]}, 1))
+        check("schema allows empty show ref", okempty)
+        # audit #2: global load budget caps total ref expansions
+        _write(d, 'ca', _chor('ca', {'audio': [{'t': 0, 'action': 'play', 'file': 'A', 'duration': 1}]}, 2))
+        _write(d, 'cb', _chor('cb', {'audio': [{'t': 0, 'action': 'play', 'file': 'B', 'duration': 1}]}, 2))
+        budtest = _chor('budtest', {'show': [{'t': 0, 'choreo': 'ca'}, {'t': 1, 'choreo': 'cb'}]}, 3)
+        ob = C._flatten_show(budtest, _budget=[1])   # budget of 1 → only the first ref loads
+        check("budget caps ref loads", len(ob['tracks'].get('audio', [])) == 1)
+
         print("\n%s" % ("ALL SHOW-flatten tests PASSED" if not failed else f"{failed} TEST(S) FAILED"))
         return 1 if failed else 0
     finally:

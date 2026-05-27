@@ -53,13 +53,13 @@
      frozen; mutating controls are disabled meanwhile). pointer-events:none so
      it never blocks the topbar underneath. Auto-hides on reconnect. -->
 <div id="net-breaker-banner" class="net-breaker-banner" role="status" aria-live="polite" style="display:none">
-  🔌 Connexion au Master perdue — modifications gelées · reprise automatique au retour
+  🔌 Master connection lost — changes frozen · auto-resumes on reconnect
 </div>
 
 <!-- Slave (body/dome) unreachable while the Master is up (scenario B). Amber:
      audio/propulsion/body-servos/screen are down; dome + lights still work. -->
 <div id="slave-offline-banner" class="slave-offline-banner" role="status" aria-live="polite" style="display:none">
-  ⚠ <span class="robot-name">R2-D2</span> Slave injoignable — audio · propulsion · servos du corps · écran indisponibles (dôme &amp; lumières restent actifs)
+  ⚠ <span class="robot-name">R2-D2</span> Slave unreachable — audio · propulsion · body servos · screen unavailable (dome &amp; lights still active)
 </div>
 
 <!-- WOW polish I3 2026-05-15: reboot countdown overlay — shown while

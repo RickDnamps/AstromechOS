@@ -4972,6 +4972,14 @@ select.input-text option { background: var(--input-option); }
     rgba(255, 255, 255, 0.12),
     transparent);
 }
+/* R2-D2 light theme: the white divider line vanishes on the light surface —
+   use a dark gradient so the category separator bar stays visible. */
+body.theme-light .settings-nav-section-label::after {
+  background: linear-gradient(to right,
+    rgba(0, 0, 0, 0.22),
+    transparent);
+}
+body.theme-light .settings-nav-section-label { opacity: 0.7; }
 
 /* WOW polish X5 2026-05-15 — REVERTED 2026-05-15: the 350ms
  * unconditional fade made every panel switch feel sluggish even
