@@ -7244,9 +7244,16 @@ class ScriptEngine {
       // that lock joysticks. Operator sees the icon BEFORE tapping play,
       // knows the bot will move. Wheel = propulsion, dome arc = dome
       // motor rotation. Both = scary, gets both icons.
-      if (s.uses_propulsion || s.uses_dome) {
+      if (s.uses_propulsion || s.uses_dome || s.has_show) {
         const flags = document.createElement('span');
         flags.className = 'seq-card-locks';
+        if (s.has_show) {
+          const sh = document.createElement('span');
+          sh.className = 'seq-card-lock seq-card-lock-show';
+          sh.textContent = '🎬';
+          sh.title = 'Show — plays other choreographies';
+          flags.appendChild(sh);
+        }
         if (s.uses_propulsion) {
           const w = document.createElement('span');
           w.className = 'seq-card-lock seq-card-lock-prop';

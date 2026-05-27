@@ -376,6 +376,50 @@ def _flatten_show(chor, _depth=0, _seen=None):
     return out
 
 
+def _choreo_movement_flags(name, _depth=0, _seen=None):
+    """Return (uses_propulsion, uses_dome) for a choreo BY NAME, aggregating
+    recursively over its SHOW-track references. Lets _build_list_rows mark a
+    'show' choreo (whose movement lives in the choreos it references) so the
+    Sequences-card lock badges + the optimistic instant-lock fire BEFORE the
+    first /status poll. Cycle/depth-guarded, path-safe, never raises (a bad or
+    missing reference contributes nothing).
+
+    NOTE: the actual playback lockout does NOT depend on this — it is computed
+    from the FLATTENED tracks at play time (_flatten_show → player → /status →
+    motion_bp). This is purely the pre-play UI hint."""
+    if _seen is None:
+        _seen = set()
+    if not isinstance(name, str) or name in _seen or _depth > _SHOW_MAX_DEPTH:
+        return (False, False)
+    p = _resolve_chor_path(name)
+    if not p or not os.path.exists(p):
+        return (False, False)
+    try:
+        with open(p, encoding='utf-8') as f:
+            ch = json.load(f)
+    except (OSError, ValueError):
+        return (False, False)
+    tr = ch.get('tracks') if isinstance(ch, dict) else None
+    if not isinstance(tr, dict):
+        return (False, False)
+    up = bool(tr.get('propulsion'))
+    ud = bool(tr.get('dome'))
+    show = tr.get('show')
+    if isinstance(show, list) and not (up and ud):
+        seen2 = _seen | {name}
+        for blk in show:
+            if not isinstance(blk, dict):
+                continue
+            ref = blk.get('choreo')
+            if isinstance(ref, str) and ref and ref not in seen2:
+                rp, rd = _choreo_movement_flags(ref, _depth + 1, seen2)
+                up = up or rp
+                ud = ud or rd
+                if up and ud:
+                    break
+    return (up, ud)
+
+
 # B-16 (audit 2026-05-15): /choreo/list cache. Old code opened all ~48
 # .chor files on EVERY request — multiply by 15s reload × N clients and
 # you get a constant trickle of I/O that competes with motion. Cache by
@@ -440,6 +484,21 @@ def _build_list_rows() -> list:
         # the Lights tab can grey out the chips during a lights-using
         # choreo (same pattern as the prop/dome optimistic lock).
         _uses_lights = _count('lights') > 0
+        # SHOW choreos: aggregate movement flags over the referenced choreos so
+        # the Sequences-card lock badges (🚀 / ↻) + the optimistic instant-lock
+        # fire on Play click. The playback lockout is already correct (the
+        # player computes uses_* from the flattened tracks via _flatten_show).
+        _has_show = _count('show') > 0
+        if _has_show and not (_uses_prop and _uses_dome):
+            _sseen = {name}
+            for _blk in (_tracks.get('show') or []):
+                _ref = _blk.get('choreo') if isinstance(_blk, dict) else None
+                if isinstance(_ref, str) and _ref and _ref not in _sseen:
+                    _rp, _rd = _choreo_movement_flags(_ref, 1, _sseen)
+                    _uses_prop = _uses_prop or _rp
+                    _uses_dome = _uses_dome or _rd
+                    if _uses_prop and _uses_dome:
+                        break
         rows.append({
             'name':            name,
             'label':           meta.get('label', '') or '',
@@ -453,6 +512,7 @@ def _build_list_rows() -> list:
             'uses_propulsion': _uses_prop,
             'uses_dome':       _uses_dome,
             'uses_lights':     _uses_lights,
+            'has_show':        _has_show,
         })
     return rows, new_mtimes
 

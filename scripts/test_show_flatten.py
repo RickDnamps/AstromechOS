@@ -92,6 +92,20 @@ def run():
         badv, _ = C._validate_chor_schema(_chor('b', {'show': [{'t': 0, 'choreo': '../x'}]}, 1))
         check("schema rejects bad show ref", not badv)
 
+        # _choreo_movement_flags: aggregate (uses_prop, uses_dome) over show refs
+        _write(d, 'drive1', _chor('drive1', {'propulsion': [{'t': 0, 'left': 0.5, 'right': 0.5, 'duration': 1}]}, 2))
+        _write(d, 'domer',  _chor('domer',  {'dome': [{'t': 0, 'power': 0.5, 'duration': 500}]}, 2))
+        _write(d, 'showprop',   _chor('showprop',   {'show': [{'t': 0, 'choreo': 'drive1'}]}, 2))
+        _write(d, 'shownested', _chor('shownested', {'show': [{'t': 0, 'choreo': 'showprop'}]}, 2))
+        _write(d, 'showdome',   _chor('showdome',   {'show': [{'t': 0, 'choreo': 'domer'}]}, 2))
+        check("flags: direct propulsion", C._choreo_movement_flags('drive1') == (True, False))
+        check("flags: direct dome", C._choreo_movement_flags('domer') == (False, True))
+        check("flags: show->propulsion", C._choreo_movement_flags('showprop') == (True, False))
+        check("flags: nested show->show->prop", C._choreo_movement_flags('shownested') == (True, False))
+        check("flags: show->dome", C._choreo_movement_flags('showdome') == (False, True))
+        check("flags: missing ref -> (F,F)", C._choreo_movement_flags('nope') == (False, False))
+        check("flags: cycle a<->b terminates -> (F,F)", C._choreo_movement_flags('cyca') == (False, False))
+
         print("\n%s" % ("ALL SHOW-flatten tests PASSED" if not failed else f"{failed} TEST(S) FAILED"))
         return 1 if failed else 0
     finally:
