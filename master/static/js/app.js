@@ -974,10 +974,11 @@ async function withSaveFeedback(btn, asyncFn, opts = {}) {
 // netBreaker — global network circuit breaker (P1 resilience). When the Master
 // is unreachable for a couple of polls it OPENS: mutating requests (POST/PUT/
 // DELETE) are short-circuited (instant fail → P0 shows "Failed", no 3-5s hang,
-// no false "Saved ✓"), the UI freezes mutating controls (body.net-breaker-open)
-// and a banner shows. Reads (GET) + safety paths (/system/estop*, /heartbeat)
-// are NEVER gated. Auto-closes on the next reachable /status poll. Fed by
-// StatusPoller._setOffline (which runs every poll).
+// no false "Saved ✓"). NO banner, NO UI freeze (operator feedback 2026-05-26:
+// too invasive) — the topbar pills (#pill-offline / #pill-slave) + ONE gentle
+// toast carry the state. Reads (GET) + safety paths (/system/estop*, /heartbeat)
+// are NEVER gated. Auto-closes on the next reachable /status poll. A backgrounded
+// tab never trips it (throttled polls don't count). Fed by StatusPoller._setOffline.
 // ════════════════════════════════════════════════════════════════════════
 // clientHealth — tell "the Master is unreachable" apart from "THIS browser/PC
 // couldn't keep up" (main-thread CPU starvation, or a backgrounded/throttled
@@ -1015,21 +1016,17 @@ const netBreaker = {
   },
   _set(open) {
     this._open = open;
-    document.body.classList.toggle('net-breaker-open', open);
-    const banner = (typeof el === 'function') && el('net-breaker-banner');
-    if (!open) { if (banner) banner.style.display = 'none'; return; }
-    // Honest, cause-aware message: a failed /status poll can mean the Master is
-    // unreachable OR that THIS browser/PC couldn't keep up. Don't blame the
-    // Master for a local hiccup.
-    let msg, toastMsg = null;
-    if (typeof clientHealth !== 'undefined' && clientHealth.isLocalCause()) {
-      msg = '⚠ Interface lagging (browser/PC busy) — the master is still responding';
-    } else {
-      msg = '🔌 Link to the master interrupted — changes frozen · auto-resumes';
-      toastMsg = '🔌 Link to the master interrupted — changes frozen';
-    }
-    if (banner) { banner.textContent = msg; banner.style.display = ''; }
-    if (toastMsg && typeof toast === 'function') toast(toastMsg, 'warn');
+    // Operator feedback 2026-05-26: NO full-width banner, NO full-UI freeze —
+    // too invasive + falsely alarming on a transient local hiccup. The topbar
+    // pills (#pill-offline + the cockpit header pills, set by _setOffline) carry
+    // the state; we add ONE gentle, cause-aware toast on going offline. The
+    // breaker still SILENTLY fast-fails mutating requests (no 3-5s hang, no
+    // false 'Saved ✓') — it just no longer freezes/greys the whole interface.
+    if (!open || typeof toast !== 'function') return;
+    if (typeof clientHealth !== 'undefined' && clientHealth.isLocalCause())
+      toast('⚠ Interface lagging (browser/PC busy) — the master is still responding', 'info');
+    else
+      toast('🔌 Link to the master interrupted — auto-resumes when it returns', 'warn');
   },
 };
 
@@ -9676,12 +9673,9 @@ class StatusPoller {
     // Conditional topbar pills — visible only when something is wrong
     const pillSlave = el('pill-slave');
     const slaveOffline = !data.uart_ready || data.uart_health == null;
+    // The red #pill-slave topbar pill IS the slave-unreachable signal (operator
+    // feedback 2026-05-26: the prominent banner was redundant + too invasive).
     if (pillSlave) pillSlave.style.display = slaveOffline ? '' : 'none';
-    // P2 resilience: prominent banner when the Slave (body) is unreachable while
-    // the Master is up (scenario B) — the topbar pill alone was too discreet.
-    const slaveBanner = el('slave-offline-banner');
-    if (slaveBanner) slaveBanner.style.display = slaveOffline ? '' : 'none';
-    document.body.classList.toggle('slave-offline', slaveOffline);
 
     // E-STOP overlay — sync from server state (survives page reload)
     if (data.estop_active !== undefined && data.estop_active !== _estopTripped)
@@ -10051,10 +10045,6 @@ class StatusPoller {
     // APP HB / UART / BT pills freeze green even though the Master is down.
     if (offline) {
       this._degradeCockpitOffline();
-      // Master down → the net-breaker (red) banner owns the screen; hide the
-      // amber Slave banner so we never stack two (it refreshes on reconnect).
-      const sb = el('slave-offline-banner'); if (sb) sb.style.display = 'none';
-      document.body.classList.remove('slave-offline');
     }
     // Reload data when coming back online
     if (wasOffline && !offline) {
@@ -11833,7 +11823,7 @@ const driveLayout = {
     _lsSet('astromech-drive-pending', '1');
     if (announce && typeof toast === 'function') {
       toast(this._online ? 'Saved on this device (admin login needed to back up)'
-                         : '⚠ Master offline — saved locally, will sync when back online', 'info');
+                         : '⚠ Offline — saved locally, will sync when reconnected', 'info');
     }
     return false;
   },
