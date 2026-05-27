@@ -2214,6 +2214,7 @@ function switchSettingsPanel(panelId) {
   }
   if (panelId === 'diagnostics') diagPanel.load();
   if (panelId === 'shortcuts')   shortcutsEditor.load();
+  if (panelId === 'interface')   { try { driveLayout._renderBorrowList(); } catch (e) {} }
   if (panelId === 'bluetooth')   { try { btCustomMappings.load(); } catch {} }
   if (panelId === 'battery')     { try { updateBatteryPreview(); } catch {} }
   if (panelId === 'camera')      { try { updateCameraBitrateHint(); } catch {} }
@@ -11505,6 +11506,94 @@ const driveLayout = {
       delete clone.deviceId;                 // _patchDevice re-stamps the current id
       this._patchDevice(clone);              // writes the recovered layout under this key
     }
+  },
+  // Parse the WxH out of a deviceKey ('mouse_3440x1440' -> {w,h}); null if malformed.
+  _dimsOf(key) {
+    const m = /_(\d+)x(\d+)$/.exec(key || '');
+    return m ? { w: parseInt(m[1], 10), h: parseInt(m[2], 10) } : null;
+  },
+  // Borrow a layout already arranged on ANOTHER screen and apply it to THIS screen.
+  // Coords are %, so it fits the current viewport. Copies GEOMETRY ONLY — keeps this
+  // device's own deviceId and theme. The operator then ✎ EDITs to tweak and ✓ SAVEs.
+  borrowLayout(srcKey) {
+    if (typeof adminGuard !== 'undefined' && !adminGuard.unlocked) {
+      if (typeof toast === 'function') toast('Admin access required to borrow a layout', 'warn');
+      return;
+    }
+    const mirror = this._loadMirror();
+    const src = mirror[srcKey];
+    if (!src || typeof src !== 'object') {
+      if (typeof toast === 'function') toast('That layout is no longer available', 'warn');
+      this._renderBorrowList();
+      return;
+    }
+    const clone = JSON.parse(JSON.stringify(src));
+    delete clone.deviceId;                 // keep OUR identity, not the source's
+    delete clone.theme;                    // borrowing a layout is not borrowing a theme
+    clone.mode = 'custom';
+    const cur = mirror[this.deviceKey()];
+    if (cur && typeof cur.theme === 'string') clone.theme = cur.theme;   // preserve our theme
+    clone.deviceId = this._deviceId();
+    mirror[this.deviceKey()] = clone;
+    this._saveMirror(mirror);
+    this._pushToServer(clone, false);
+    // Apply live: custom mode + re-render shortcuts into the borrowed positions.
+    this.setMode('custom', false);         // already persisted above → persist=false
+    if (typeof shortcutsRunner !== 'undefined' && shortcutsRunner._render) shortcutsRunner._render();
+    this.apply();
+    this._renderBorrowList();
+    const d = this._dimsOf(srcKey);
+    if (typeof toast === 'function') {
+      toast('Layout borrowed' + (d ? ' from ' + d.w + '×' + d.h : '') + ' — open ✎ EDIT LAYOUT to tweak, then ✓ SAVE', 'ok');
+    }
+  },
+  // Render the "borrow an existing layout" list in Settings → Interface. Lists every
+  // OTHER saved device entry (skips empty/standard stubs), same pointer type first then
+  // nearest resolution. XSS-safe (createElement + textContent + addEventListener).
+  async _renderBorrowList() {
+    const host = document.getElementById('dl-borrow-list');
+    if (!host) return;
+    let all = this._loadMirror();
+    try {
+      const d = await api('/drive/layouts');
+      if (d && typeof d === 'object' && !Array.isArray(d)) { all = d; this._saveMirror(d); }
+    } catch (e) {}
+    const myKey = this.deviceKey();
+    const myDims = this._dimsOf(myKey);
+    const myPtr = myKey.split('_')[0];
+    const rows = Object.keys(all).filter(k => k !== myKey).map(k => {
+      const e = all[k] || {};
+      const nsc = (e.shortcuts && typeof e.shortcuts === 'object') ? Object.keys(e.shortcuts).length : 0;
+      const isCustom = e.mode === 'custom';
+      const dims = this._dimsOf(k);
+      const dist = (dims && myDims) ? Math.abs(dims.w - myDims.w) + Math.abs(dims.h - myDims.h) : 1e9;
+      const samePtr = k.split('_')[0] === myPtr;
+      return { k, nsc, isCustom, dims, dist, samePtr };
+    }).filter(r => r.isCustom || r.nsc > 0);     // skip empty / standard stubs
+    rows.sort((a, b) => (a.samePtr === b.samePtr) ? (a.dist - b.dist) : (a.samePtr ? -1 : 1));
+    host.replaceChildren();                       // XSS-safe clear (only after fetch → no flicker)
+    if (!rows.length) {
+      const p = document.createElement('div');
+      p.className = 'settings-note';
+      p.textContent = 'No other saved layouts to borrow yet.';
+      host.appendChild(p);
+      return;
+    }
+    rows.forEach((r, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-secondary dl-borrow-row';
+      btn.style.justifyContent = 'flex-start';
+      btn.style.textAlign = 'left';
+      const dims = r.dims ? (r.dims.w + '×' + r.dims.h) : r.k;
+      const ptr = r.k.split('_')[0];
+      const bits = [dims + ' · ' + ptr, r.nsc + ' btn', r.isCustom ? 'custom' : 'standard'];
+      if (i === 0 && r.samePtr && r.dist > 0) bits.push('nearest');
+      btn.textContent = bits.join('   ·   ');
+      btn.title = 'Apply this layout to your screen';
+      btn.addEventListener('click', () => this.borrowLayout(r.k));
+      host.appendChild(btn);
+    });
   },
   isCustom() { return document.body.classList.contains('drive-custom-layout'); },
 
