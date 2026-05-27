@@ -13893,6 +13893,14 @@ async function init() {
     shortcutsRunner.load(),
   ]);
 
+  // Anti-FOUC reveal: everything visual is now in place — theme resolved, the
+  // header icon + robot name from the first /status poll, and the custom drive
+  // joystick layout (applied synchronously from the localStorage mirror in
+  // _initThemes, which ran before init()). Reveal the whole UI at once; see
+  // `body:not(.app-ready)` in style.css. A 3s fallback in DOMContentLoaded
+  // guarantees the page is never left hidden if a boot fetch above rejects.
+  document.body.classList.add('app-ready');
+
   // Start polling
   poller.start(2000);
 
@@ -13930,6 +13938,10 @@ document.addEventListener('DOMContentLoaded', () => {
   _initIconPicker();
   _initThemes();
   _initEditorScale();
+  // Anti-FOUC safety net: init() reveals the UI (adds .app-ready) once the boot
+  // data has loaded; this guarantees we never leave the page hidden if init()
+  // throws or a boot fetch stalls. Harmless no-op once init() already revealed.
+  setTimeout(() => document.body.classList.add('app-ready'), 3000);
   init();
 });
 

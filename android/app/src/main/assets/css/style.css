@@ -129,6 +129,14 @@ body {
   position: relative;
 }
 
+/* Anti-FOUC reveal gate: keep the whole UI hidden until app.js has finished
+   booting (theme resolved + header icon generated + custom joystick layout
+   applied), then reveal it all at once via .app-ready (added right after the
+   boot data loads in init(), with a 3s safety fallback in the DOMContentLoaded
+   handler). No transition = instant reveal, zero flicker. Kills the default-
+   theme / default-layout / default-icon residue that flashed on hard reload. */
+body:not(.app-ready) { opacity: 0; pointer-events: none; }
+
 body::before {
   content: '';
   position: fixed;
@@ -176,7 +184,14 @@ body::after {
   border-bottom: 1px solid var(--border-hi);
   padding: 0 16px;
   height: var(--topbar-h);
-  position: sticky;
+  /* relative, NOT sticky: with body{overflow:hidden} and height-capped tabs,
+     nothing ever scrolls under the topbar, so sticky was a no-op. But a sticky
+     element gets its own compositing layer whose 1px border re-rasters at a
+     varying sub-pixel offset on each paint — that made the white header↔menu
+     separator flicker between 1px and 2px across hard reloads and when the
+     Lights tab's canvases repaint. Relative keeps it in the main raster layer
+     so the hairline renders consistently. */
+  position: relative;
   top: 0;
   z-index: 200;
   backdrop-filter: blur(10px);
@@ -393,8 +408,11 @@ body::after {
   height: var(--tabbar-h);
   overflow-x: auto;
   scrollbar-width: none;
-  position: sticky;
-  top: var(--topbar-h);
+  /* relative, NOT sticky — same reason as .topbar (avoids the sticky layer's
+     sub-pixel 1px-border flicker). top:0 since it already sits in flow below
+     the topbar + lock-mode-bar. */
+  position: relative;
+  top: 0;
   z-index: 190;
   backdrop-filter: blur(8px);
 }
@@ -430,15 +448,19 @@ body::after {
 .tab.active .tab-icon { opacity: 1; filter: drop-shadow(0 0 4px var(--blue)); }
 
 /* Light themes (e.g. R2-D2 Light): the navy topbar/tabbar make the default
-   translucent-blue dividers hard to read. The header↔menu separator is rendered
-   by the STATIC .lock-mode-bar (see lock-mode-bar section), NOT by the topbar's
-   border-bottom — a 1px border on the position:sticky topbar re-snaps between 1
-   and 2 device-px on heavy repaints (the dome-sim canvas starting on the Lights
-   tab) and on the post-load theme swap, which made the white bar visibly
-   "thicken". A static block can't flicker. So we make the topbar border invisible
-   in light and let the lock-mode-bar be the line. The active-tab underline stays
-   a crisp white. Scoped under body.theme-light so dark themes are unaffected. */
-body.theme-light .topbar     { border-bottom-color: transparent; }
+   translucent-blue dividers hard to read, so the header↔menu separator + the
+   active-tab underline are forced to a crisp light colour.
+   IMPORTANT — the separator colour is OPAQUE (no rgba alpha). A *translucent*
+   1px border antialiases across two device rows at fractional DPR and its
+   coverage varies per paint, so this high-contrast white-on-navy line visibly
+   flickered 1px<->2px across hard reloads. An opaque colour snaps crisply —
+   exactly like the already-stable opaque #ffffff active-tab underline below.
+   (Combined with .topbar/.tabbar being position:relative, not sticky, so there
+   is no separate compositing layer to re-raster at a varying offset.) #9197a9
+   is the opaque equivalent of the old rgba(255,255,255,.55) composited over the
+   navy topbar — the look is unchanged, only the rendering is now stable.
+   Scoped under body.theme-light so dark themes are unaffected. */
+body.theme-light .topbar     { border-bottom-color: #9197a9; }
 body.theme-light .tab        { border-bottom-width: 3px; }
 body.theme-light .tab.active { border-bottom-color: #ffffff; }
 
@@ -6511,12 +6533,6 @@ body[data-lock-mode="0"] .lock-mode-label { display: none; }
 body[data-lock-mode="0"] .lock-mode-bar { background: transparent; }
 body[data-lock-mode="1"] .lock-mode-bar { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
 body[data-lock-mode="2"] .lock-mode-bar { background: var(--red);    box-shadow: 0 0 8px var(--red);    }
-/* Light theme: this STATIC 2px bar IS the header↔menu separator (the sticky
-   topbar border is transparent in light — see TABBAR section). Mode 0 = crisp
-   white line; modes 1/2 keep the orange/red lock indicator above. Because the
-   bar is in normal flow (not sticky), it never sub-pixel-flickers like the old
-   border did when the Lights tab repainted. */
-body.theme-light[data-lock-mode="0"] .lock-mode-bar { background: rgba(255,255,255,0.55); }
 
 /* Child Lock joystick — see drive tab section for the full override */
 
