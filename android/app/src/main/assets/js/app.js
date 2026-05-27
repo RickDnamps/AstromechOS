@@ -9728,9 +9728,6 @@ class StatusPoller {
         const pctEl = el('mode-kids-pct');
         if (pctEl) pctEl.textContent = pct;
       }
-      // W6 fix 2026-05-16: quick-exit CTA visible only when locked.
-      const unlockCta = el('mode-unlock-cta');
-      if (unlockCta) unlockCta.style.display = (kids || lock) ? 'inline-flex' : 'none';
       // W16 fix 2026-05-16: refresh the kids-timed-out dot every poll
       // (it's wall-clock-derived; needs periodic re-eval to flip on).
       if (kids && typeof lockMgr !== 'undefined' && lockMgr._updateDriveLockLabel) {

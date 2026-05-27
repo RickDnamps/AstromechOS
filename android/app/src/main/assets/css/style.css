@@ -6110,18 +6110,6 @@ input.input-error {
 .kids-speed-preview.preview-warn { color: var(--amber, #ffaa44); background: rgba(255,170,68,0.10); }
 .kids-speed-preview.preview-err  { color: var(--err, #ff4444); background: rgba(255,68,68,0.10); font-weight: bold; }
 
-/* W6 — Unlock CTA pill in drive mode strip */
-.mode-pill-action {
-  cursor: pointer;
-  background: rgba(0,170,255,0.15);
-  border: 1px solid var(--blue, #00aaff);
-  color: var(--blue, #00aaff);
-  font-weight: bold;
-}
-.mode-pill-action:hover {
-  background: rgba(0,170,255,0.25);
-}
-
 /* W12 — Drive button pulse on external mode change */
 @keyframes lock-external-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255,170,68, 0); }
