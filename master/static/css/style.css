@@ -429,6 +429,14 @@ body::after {
 .tab.active      { color: var(--blue); border-bottom-color: var(--blue); text-shadow: 0 0 8px var(--blue); }
 .tab.active .tab-icon { opacity: 1; filter: drop-shadow(0 0 4px var(--blue)); }
 
+/* Light themes (e.g. R2-D2 Light): the navy topbar/tabbar make the default
+   translucent-blue dividers hard to read. Force the header↔menu separator and the
+   active-tab underline to a crisp white, and thicken the underline for visibility.
+   Scoped under body.theme-light so dark themes are unaffected. */
+body.theme-light .topbar     { border-bottom-color: rgba(255, 255, 255, 0.55); }
+body.theme-light .tab        { border-bottom-width: 3px; }
+body.theme-light .tab.active { border-bottom-color: #ffffff; }
+
 /* ================================================================
    TAB CONTENT
 ================================================================ */
