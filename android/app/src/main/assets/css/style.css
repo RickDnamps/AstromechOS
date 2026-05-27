@@ -6997,51 +6997,70 @@ body.admin-unlocked .admin-toggle-btn { color: var(--orange); border-color: rgba
 }
 .chor-src-btn:active { cursor: grabbing; opacity: .7; }
 
-/* Per-track neon colours */
+/* Per-track neon colours + per-track RGB triple (--blk-rgb), reused for the
+   thematic hover fill below — same model as the timeline .chor-block rules. */
 .chor-src-btn[data-track="audio"] {
+  --blk-rgb: 0,200,255;
   color: #00eeff;
   border-color: rgba(0,238,255,.55);
   box-shadow: 0 0 6px rgba(0,238,255,.25);
 }
 .chor-src-btn[data-track="audio2"] {
+  --blk-rgb: 0,123,255;
   color: #007bff;
   border-color: rgba(0,123,255,.55);
   box-shadow: 0 0 6px rgba(0,123,255,.2);
 }
 .chor-src-btn[data-track="lights"] {
+  --blk-rgb: 255,180,0;
   color: var(--status-warn);
   border-color: rgba(255,200,0,.55);
   box-shadow: 0 0 6px rgba(255,200,0,.2);
 }
 .chor-src-btn[data-track="dome"] {
+  --blk-rgb: 200,60,255;
   color: #cc44ff;
   border-color: rgba(200,60,255,.55);
   box-shadow: 0 0 6px rgba(200,60,255,.2);
 }
 .chor-src-btn[data-track="dome_servos"] {
+  --blk-rgb: 0,255,136;
   color: var(--status-ok);
   border-color: rgba(0,255,136,.55);
   box-shadow: 0 0 6px rgba(0,255,136,.2);
 }
 .chor-src-btn[data-track="body_servos"] {
+  --blk-rgb: 25,135,84;
   color: #198754;
   border-color: rgba(25,135,84,.6);
   box-shadow: 0 0 6px rgba(25,135,84,.25);
 }
 .chor-src-btn[data-track="arm_servos"] {
+  --blk-rgb: 45,160,90;
   color: #2da05a;
   border-color: rgba(45,160,90,.55);
   box-shadow: 0 0 6px rgba(45,160,90,.2);
 }
 .chor-src-btn[data-track="propulsion"] {
+  --blk-rgb: 255,120,0;
   color: #ff8800;
   border-color: rgba(255,136,0,.55);
   box-shadow: 0 0 6px rgba(255,136,0,.2);
 }
 .chor-src-btn[data-track="show"] {
+  --blk-rgb: 255,94,158;
   color: #ff5e9e;
   border-color: rgba(255,94,158,.55);
   box-shadow: 0 0 6px rgba(255,94,158,.2);
+}
+/* Hover: flash the track's own colour instead of the old flat dark fill.
+   [data-track] out-ranks the base `.chor-src-btn:hover`, so this wins
+   without !important — same trick the .chor-block hover uses. */
+.chor-src-btn[data-track]:hover {
+  background: rgba(var(--blk-rgb, 0,200,255), .32);
+  border-color: rgba(var(--blk-rgb, 0,200,255), .95);
+  box-shadow: 0 0 14px rgba(var(--blk-rgb, 0,200,255), .55),
+              inset 0 0 8px rgba(var(--blk-rgb, 0,200,255), .22);
 }
 
 /* ── Choreo monitor — photorealistic Digital Twin (scoped overrides) ──
@@ -7926,19 +7945,25 @@ body.theme-light .chor-ruler       { background: rgba(200,216,240,0.98); border-
 body.theme-light .chor-label-spacer { background: rgba(200,216,240,0.98); border-bottom-color: rgba(8,73,214,0.18); }
 body.theme-light .chor-tick        { color: rgba(8,73,214,0.65); }
 body.theme-light .chor-tick.major  { color: #0a1840; }
-/* Palette "add track" chips → light surface + per-track darkened labels
-   (mirrors the timeline block colors so every track reads on a light chip). */
+/* Palette "add track" chips → light surface + per-track darkened labels + a
+   per-track hover fill (mirrors the timeline blocks so every track reads on a
+   light chip). The old generic-blue hover is replaced by the thematic fill;
+   labels stay dark so text/icons read on the light tinted background. */
 body.theme-light .chor-src-btn { background: rgba(255,255,255,0.82); }
-body.theme-light .chor-src-btn:hover { background: rgba(8,73,214,0.12); }
-body.theme-light .chor-src-btn[data-track="audio"]       { color:#054a73; }
-body.theme-light .chor-src-btn[data-track="audio2"]      { color:#0a4a9c; }
-body.theme-light .chor-src-btn[data-track="lights"]      { color:#8a5200; }
-body.theme-light .chor-src-btn[data-track="dome"]        { color:#6a1a9c; }
-body.theme-light .chor-src-btn[data-track="dome_servos"] { color:#0a6a3a; }
-body.theme-light .chor-src-btn[data-track="body_servos"] { color:#125a32; }
-body.theme-light .chor-src-btn[data-track="arm_servos"]  { color:#1a6a3c; }
-body.theme-light .chor-src-btn[data-track="propulsion"]  { color:#8a4500; }
-body.theme-light .chor-src-btn[data-track="show"]        { color:#b01060; }
+body.theme-light .chor-src-btn[data-track="audio"]       { --blk-rgb:0,110,170;  color:#054a73; }
+body.theme-light .chor-src-btn[data-track="audio2"]      { --blk-rgb:0,90,200;   color:#0a4a9c; }
+body.theme-light .chor-src-btn[data-track="lights"]      { --blk-rgb:200,120,0;  color:#8a5200; }
+body.theme-light .chor-src-btn[data-track="dome"]        { --blk-rgb:160,60,220; color:#6a1a9c; }
+body.theme-light .chor-src-btn[data-track="dome_servos"] { --blk-rgb:0,140,80;   color:#0a6a3a; }
+body.theme-light .chor-src-btn[data-track="body_servos"] { --blk-rgb:20,120,70;  color:#125a32; }
+body.theme-light .chor-src-btn[data-track="arm_servos"]  { --blk-rgb:30,140,80;  color:#1a6a3c; }
+body.theme-light .chor-src-btn[data-track="propulsion"]  { --blk-rgb:210,110,0;  color:#8a4500; }
+body.theme-light .chor-src-btn[data-track="show"]        { --blk-rgb:200,30,110; color:#b01060; }
+body.theme-light .chor-src-btn[data-track]:hover {
+  background: rgba(var(--blk-rgb, 0,110,170), .20);
+  border-color: rgba(var(--blk-rgb, 0,110,170), .85);
+  box-shadow: 0 0 10px rgba(var(--blk-rgb, 0,110,170), .4);
+}
 
 /* Footer (timecode + SNAP/ZOOM bar) is hardcoded dark too — lighten it and
    darken its text so the whole editor is one coherent light surface. */
