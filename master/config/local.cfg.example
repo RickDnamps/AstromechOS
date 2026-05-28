@@ -4,6 +4,20 @@
 # Puis éditer les valeurs ci-dessous.
 #
 # Les valeurs ici ont PRIORITÉ sur main.cfg.
+# /boot/astromech_init.cfg (AstromechOS Imager bootstrap) a priorité sur ce
+# fichier — il est lu par les scripts d'install au premier boot et fusionné
+# ici, puis effacé du /boot.
+
+[system]
+# Identité Linux du robot — partagée entre le Master et le Slave par design
+# (même utilisateur OS, même mot de passe → un seul jeu de clés SSH, install
+# simplifié). Écrit automatiquement par scripts/setup_master.sh + setup_slave.sh
+# à partir de $SUDO_USER ou de /boot/astromech_init.cfg si présent.
+# Si toute la section est absente, le runtime utilise pwd.getpwuid(os.getuid()).
+# user        = pi
+# home        = /home/pi
+# repo_path   = /home/pi/astromechos
+# service_uid = 1000
 
 [github]
 # URL de ton repo GitHub (ou fork)
@@ -39,7 +53,9 @@ password = r2d2droid
 # button_pin = 17
 
 [slave]
-# Hostname du Slave sur le hotspot (username: artoo)
+# Hostname/IP du Slave sur le hotspot. Le user SSH est dérivé automatiquement
+# par shared/identity.py — Master et Slave utilisent toujours le même user
+# Linux par design (voir [system] user au-dessus). Seul l'hôte diffère.
 host = astromech-slave.local
 
 [admin]
