@@ -38,8 +38,14 @@ class FakeSMBus:
     and refuses writes, but we also catch any path that bypassed the
     wrapper by registering counters here)."""
 
-    def __init__(self, mem: dict[int, dict[int, int]] | None = None):
+    def __init__(self, mem: dict[int, dict[int, int]] | None = None,
+                 collision: dict | None = None):
         self.mem = mem or {}
+        # collision: dict[addr][reg] = (val1, val2). Reads alternate
+        # between v1 and v2 per (addr, reg) call counter — models two
+        # devices fighting for SDA arbitration across samples.
+        self.collision = collision or {}
+        self._collision_counter: dict = {}
         self.calls: list[tuple] = []
         self.closed = False
 
@@ -49,6 +55,13 @@ class FakeSMBus:
         device = self.mem.get(addr)
         if device is None:
             raise OSError(121, 'Remote I/O error')   # EREMOTEIO
+        coll = self.collision.get(addr, {})
+        if reg in coll:
+            v1, v2 = coll[reg]
+            key = (addr, reg)
+            n = self._collision_counter.get(key, 0)
+            self._collision_counter[key] = n + 1
+            return (v1 if n % 2 == 0 else v2) & 0xFF
         if reg not in device:
             # Real PCA9685 would return SOMETHING for any reg — model
             # that by returning 0 for unmapped regs of a present device.
@@ -335,6 +348,72 @@ class TestDetectEndToEnd(unittest.TestCase):
 # ─────────────────────────────────────────────────────────────────────
 # Host role resolution
 # ─────────────────────────────────────────────────────────────────────
+class TestCollisionDetection(unittest.TestCase):
+    """Address-collision detection via multi-read consistency check.
+
+    Two PCA9685s wired to the same I2C address (jumpers mis-soldered)
+    cause bus arbitration to elect different responders across samples.
+    The check reads MODE1/SUBADR1/SUBADR2/ALLCALLADR 5x each; any
+    divergence flags the addr as ADDRESS_COLLISION."""
+
+    def test_stable_device_no_collision(self):
+        bus = D.ReadOnlySMBus(FakeSMBus({0x40: _pca9685_default_regs()}))
+        detected, evidence = D.detect_collision(bus, 0x40)
+        self.assertFalse(detected)
+        self.assertEqual(evidence, {})
+
+    def test_alternating_mode1_flags_collision(self):
+        inner = FakeSMBus(
+            mem       = {0x40: _pca9685_default_regs()},
+            collision = {0x40: {D.REG_MODE1: (0x00, 0x10)}},
+        )
+        bus = D.ReadOnlySMBus(inner)
+        detected, evidence = D.detect_collision(bus, 0x40)
+        self.assertTrue(detected)
+        self.assertIn('mode1', evidence)
+        self.assertEqual([c for c in inner.calls if c[0].startswith('write')], [])
+
+    def test_collision_in_subadr(self):
+        inner = FakeSMBus(
+            mem       = {0x40: _pca9685_default_regs()},
+            collision = {0x40: {D.REG_SUBADR1: (0xE2, 0xAA)}},
+        )
+        detected, evidence = D.detect_collision(D.ReadOnlySMBus(inner), 0x40)
+        self.assertTrue(detected)
+        self.assertIn('subadr1', evidence)
+
+    def test_fingerprint_flags_chip_collision(self):
+        inner = FakeSMBus(
+            mem       = {0x40: _pca9685_default_regs()},
+            collision = {0x40: {D.REG_MODE1: (0x00, 0x10)}},
+        )
+        fp = D.fingerprint_pca9685(D.ReadOnlySMBus(inner), 0x40)
+        self.assertTrue(fp['present'])
+        self.assertEqual(fp['chip'], 'collision')
+        self.assertEqual(fp['confidence'], 'none')
+        self.assertTrue(fp['collision'])
+        self.assertIn('collision_samples', fp['evidence'])
+
+    def test_detect_end_to_end_records_collision_in_errors(self):
+        inner = FakeSMBus(
+            mem       = {0x40: _pca9685_default_regs()},
+            collision = {0x40: {D.REG_MODE1: (0x00, 0x10)}},
+        )
+        result = D.detect(D.ReadOnlySMBus(inner), host='master')
+        self.assertEqual(len(result['hats']), 1)
+        hat = result['hats'][0]
+        self.assertEqual(hat['chip'], 'collision')
+        self.assertEqual(hat['role'], 'unknown')
+        self.assertTrue(hat['collision'])
+        self.assertEqual(len(result['errors']), 1)
+        err = result['errors'][0]
+        self.assertEqual(err['addr'], '0x40')
+        self.assertEqual(err['error'], 'ADDRESS_COLLISION')
+        self.assertIn('hardware jumpers', err['detail'])
+        write_calls = [c for c in inner.calls if c[0].startswith('write')]
+        self.assertEqual(write_calls, [])
+
+
 class TestHostRoleResolve(unittest.TestCase):
 
     def test_explicit_wins(self):

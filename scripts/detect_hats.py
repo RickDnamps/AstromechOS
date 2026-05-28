@@ -109,6 +109,15 @@ PCA9685_MODE2_DEFAULT = 0x04
 DEFAULT_ADDR_START = 0x40
 DEFAULT_ADDR_END   = 0x47   # inclusive; project never uses 0x48+
 
+# Number of consecutive reads used for collision detection. A single
+# PCA9685 returns the same byte on every read (stateless registers; no
+# internal mutation on read). Two devices fighting at the same address
+# cause bus arbitration to elect different responders per sample → divergent
+# values. 5 strikes a balance between sensitivity and scan duration
+# (~5 × 4 × ~1ms ≈ 20ms extra per ACK'd address).
+COLLISION_PROBE_READS = 5
+COLLISION_PROBE_REGS  = (REG_MODE1, REG_SUBADR1, REG_SUBADR2, REG_ALLCALLADR)
+
 # Default I2C bus on Raspberry Pi 4B / 5.
 DEFAULT_BUS = 1
 
@@ -279,6 +288,57 @@ def probe_present(bus: ReadOnlySMBus, addr: int) -> bool:
     return _safe_read(bus, addr, REG_MODE1) is not None
 
 
+def detect_collision(bus: ReadOnlySMBus, addr: int,
+                     n_reads: int = COLLISION_PROBE_READS,
+                     ) -> tuple[bool, dict[str, Any]]:
+    """Best-effort I2C address collision detection.
+
+    Read each of COLLISION_PROBE_REGS `n_reads` times. A healthy single
+    PCA9685 returns the same byte on every read (registers are stateless;
+    no state mutates from a read). Two devices fighting at the same
+    address cause bus arbitration to randomly elect different responders
+    per sample, producing divergent register values across reads.
+
+    Returns (collision_detected, evidence) where evidence is a dict of
+    {register_name: [val1, val2, ...]} for every register that showed
+    divergence — empty when no collision was detected. The evidence dict
+    is recorded in the JSON output so the operator can see WHY the
+    detection fired (and pass it back to a maintainer for diagnosis).
+
+    Limitations — false negatives possible when:
+      - Both devices have IDENTICAL internal state (both fresh POR, both
+        untouched by any driver init). Reads merge cleanly to the same
+        byte, indistinguishable from a single device.
+      - Bus arbitration consistently elects the same responder (one HAT
+        has stronger pull-ups). Divergence requires occasional swaps.
+    Such edge cases fall through to DEGRADED-style handling — driver
+    will boot and may glitch, prompting the operator to investigate.
+    """
+    evidence: dict[str, Any] = {}
+    detected = False
+    reg_to_name = {
+        REG_MODE1:      'mode1',
+        REG_SUBADR1:    'subadr1',
+        REG_SUBADR2:    'subadr2',
+        REG_ALLCALLADR: 'allcall',
+    }
+    for reg in COLLISION_PROBE_REGS:
+        samples: list[int] = []
+        for _ in range(n_reads):
+            v = _safe_read(bus, addr, reg)
+            if v is None:
+                # Device dropped mid-scan — that's an unstable device, not
+                # a collision. Bail with no collision signal; the caller's
+                # fingerprint will record absent/low-confidence anyway.
+                return False, {'aborted_at': reg_to_name[reg]}
+            samples.append(v)
+        unique = set(samples)
+        if len(unique) > 1:
+            detected = True
+            evidence[reg_to_name[reg]] = [f'0x{v:02X}' for v in samples]
+    return detected, evidence
+
+
 def fingerprint_pca9685(bus: ReadOnlySMBus, addr: int) -> dict[str, Any]:
     """Read the PCA9685 register signature at <addr> and score the
     match against the chip's power-on defaults.
@@ -300,6 +360,7 @@ def fingerprint_pca9685(bus: ReadOnlySMBus, addr: int) -> dict[str, Any]:
         'confidence': 'none',
         'evidence':   {},
         'score':      0,
+        'collision':  False,
     }
 
     mode1 = _safe_read(bus, addr, REG_MODE1)
@@ -307,6 +368,21 @@ def fingerprint_pca9685(bus: ReadOnlySMBus, addr: int) -> dict[str, Any]:
         return out
     out['present'] = True
     out['evidence']['mode1'] = f'0x{mode1:02X}'
+
+    # Collision check BEFORE the rest of the fingerprint — a contested
+    # bus invalidates EVERY register value (we can't trust SUBADR / MODE2
+    # / PRESCALE when two devices fight per-read), so we return early
+    # with chip='collision' to signal "do not use this HAT, drivers must
+    # refuse to initialise". This is intentionally distinct from
+    # chip='absent' (DEGRADED mode, driver continues without this HAT)
+    # vs chip='collision' (CRITICAL mode, driver refuses to start).
+    collision, collision_evidence = detect_collision(bus, addr)
+    if collision:
+        out['chip']       = 'collision'
+        out['confidence'] = 'none'
+        out['collision']  = True
+        out['evidence']['collision_samples'] = collision_evidence
+        return out
 
     mode2 = _safe_read(bus, addr, REG_MODE2)
     if mode2 is not None:
@@ -519,6 +595,29 @@ def detect(bus: ReadOnlySMBus, *,
             continue
         if not fp['present']:
             continue
+        # ADDRESS_COLLISION: distinct from absent. Surface in BOTH the
+        # per-hat entry (chip='collision') AND the top-level errors list
+        # so an operator scanning the JSON sees the alarm at a glance.
+        if fp.get('collision'):
+            out['errors'].append({
+                'addr':   f'0x{addr:02X}',
+                'error':  'ADDRESS_COLLISION',
+                'detail': 'Two or more devices respond at this address. '
+                          'Check hardware jumpers (A0/A1/A2 on PCA9685 boards). '
+                          'Drivers will refuse to initialise this HAT.',
+                'evidence': fp['evidence'].get('collision_samples', {}),
+            })
+            out['hats'].append({
+                'addr':       f'0x{addr:02X}',
+                'chip':       'collision',
+                'role':       'unknown',
+                'evidence':   fp['evidence'],
+                'confidence': 'none',
+                'score':      0,
+                'collision':  True,
+                'source':     'collision-check',
+            })
+            continue
         role, role_src = assign_role(host, addr, fp['chip'], motor_override)
         out['hats'].append({
             'addr':       f'0x{addr:02X}',
@@ -527,6 +626,7 @@ def detect(bus: ReadOnlySMBus, *,
             'evidence':   fp['evidence'],
             'confidence': fp['confidence'],
             'score':      fp['score'],
+            'collision':  False,
             'source':     f'fingerprint+{role_src}',
         })
     return out
