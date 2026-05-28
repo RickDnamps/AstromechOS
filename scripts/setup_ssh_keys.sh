@@ -36,8 +36,11 @@
 
 set -e
 
-SLAVE_USER="artoo"
-SLAVE_HOST="astromech-slave.local"
+REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
+# shellcheck source=lib_config.sh
+. "$REPO_PATH/scripts/lib_config.sh"
+SLAVE_USER="${SLAVE_USER:-$(slave_user)}"
+SLAVE_HOST="${SLAVE_HOST:-$(slave_host)}"
 
 echo "=== SSH key generation (if absent) ==="
 if [ ! -f ~/.ssh/id_ed25519 ]; then

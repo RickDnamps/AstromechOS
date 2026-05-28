@@ -41,9 +41,15 @@
 #   6. Verify that services are active
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-# Slave host: env override → local.cfg [slave] host (works for any hostname/IP) → generic default.
-SLAVE_HOST="${SLAVE_HOST:-$(awk -F= '/^\[/{s=$0} s=="[slave]" && /^[[:space:]]*host[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$REPO/master/config/local.cfg" 2>/dev/null)}"
-SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
+# Slave SSH endpoint resolves via shared/lib_config.sh — both the user AND
+# the host come from cfg ([deploy] slave_user → [system] user → $SUDO_USER
+# → 'artoo' legacy) instead of being hardcoded. Env overrides still work
+# (export SLAVE_USER=… SLAVE_HOST=… before running this script).
+# shellcheck source=lib_config.sh
+. "$REPO/scripts/lib_config.sh"
+SLAVE_HOST="${SLAVE_HOST:-$(slave_host)}"
+SLAVE_USER="${SLAVE_USER:-$(slave_user)}"
+SLAVE="$SLAVE_USER@$SLAVE_HOST"
 SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10"
 VERSION_FILE=$REPO/VERSION
 ERRORS=0
@@ -78,7 +84,7 @@ echo "  ────────────────────────
 # labels). They're now untracked, but we still backup as a safety net
 # in case anything else (rsync --delete, a future regression) overwrites
 # them. Restored AFTER git pull below.
-ANGLES_BACKUP="/home/artoo/angles_backup"
+ANGLES_BACKUP="${HOME:-/tmp}/angles_backup"
 step "0b/7" "Backup servo angle calibrations"
 mkdir -p "$ANGLES_BACKUP"
 if [ -f "$REPO/master/config/dome_angles.json" ]; then

@@ -38,10 +38,12 @@
 set -e
 
 REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE_USER="artoo"
-# Slave host: env override → local.cfg [slave] host (works for any hostname/IP) → generic default.
-SLAVE_HOST="${SLAVE_HOST:-$(awk -F= '/^\[/{s=$0} s=="[slave]" && /^[[:space:]]*host[[:space:]]*=/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' "$REPO_PATH/master/config/local.cfg" 2>/dev/null)}"
-SLAVE_HOST="${SLAVE_HOST:-astromech-slave.local}"
+# Slave SSH endpoint via shared/lib_config.sh — no more hardcoded 'artoo'.
+# Env overrides still work (export SLAVE_USER=… SLAVE_HOST=… before run).
+# shellcheck source=lib_config.sh
+. "$REPO_PATH/scripts/lib_config.sh"
+SLAVE_USER="${SLAVE_USER:-$(slave_user)}"
+SLAVE_HOST="${SLAVE_HOST:-$(slave_host)}"
 SLAVE_REPO="$REPO_PATH"
 VERSION_FILE="$REPO_PATH/VERSION"
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
@@ -193,8 +195,12 @@ if [ "$FIRST_INSTALL" = true ]; then
             echo "  → pulseaudio already present"
         fi
 
-        # Route ALSA through pulseaudio (fallback to 3.5mm jack when no BT)
-        cat > /home/artoo/.asoundrc << 'ASOUNDRC'
+        # Route ALSA through pulseaudio (fallback to 3.5mm jack when no BT).
+        # $HOME / $USER auto-resolve on the SLAVE side to the SSH login user
+        # (the quoted 'REMOTE' heredoc keeps them literal until remote bash
+        # interprets them) — so the audio config now lands in the right place
+        # regardless of whether the slave user is 'artoo', 'pi', or anything.
+        cat > "$HOME/.asoundrc" << 'ASOUNDRC'
 pcm.!default {
   type pulse
 }
@@ -208,19 +214,19 @@ ASOUNDRC
         echo "  → ALSA → pulseaudio routing configured, volume 100%"
 
         # PulseAudio BT modules + bluetooth group
-        sudo usermod -aG bluetooth artoo
-        mkdir -p /home/artoo/.config/pulse
-        cat > /home/artoo/.config/pulse/default.pa << 'PULSECONF'
+        sudo usermod -aG bluetooth "$USER"
+        mkdir -p "$HOME/.config/pulse"
+        cat > "$HOME/.config/pulse/default.pa" << 'PULSECONF'
 .include /etc/pulse/default.pa
 load-module module-bluetooth-policy
 load-module module-bluetooth-discover
 PULSECONF
-        chown -R artoo:artoo /home/artoo/.config
+        chown -R "$USER:$USER" "$HOME/.config"
 
         # Allow pulseaudio to run without active login session
-        sudo loginctl enable-linger artoo
-        ARTOO_UID=$(id -u artoo)
-        sudo -u artoo XDG_RUNTIME_DIR="/run/user/$ARTOO_UID" \
+        sudo loginctl enable-linger "$USER"
+        THIS_UID=$(id -u "$USER")
+        sudo -u "$USER" XDG_RUNTIME_DIR="/run/user/$THIS_UID" \
             systemctl --user enable pulseaudio.service pulseaudio.socket 2>/dev/null || true
         echo "  → PulseAudio BT configured"
 REMOTE

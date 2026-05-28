@@ -55,7 +55,8 @@ set -e
 
 REPO_URL="https://github.com/RickDnamps/AstromechOS.git"
 REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
-USER="artoo"
+# USER + HOME_DIR are set by capture_user below (after err()/info() helpers
+# are defined and lib_config.sh is sourced).
 
 # Colors
 RED='\033[0;31m'
@@ -78,8 +79,16 @@ if [ "$HOSTNAME" = "astromech-slave" ]; then
     err "This script must be run on the R2-MASTER, not on the Slave! (hostname: $HOSTNAME)"
 fi
 
-# Check that the user exists
-id "$USER" &>/dev/null || err "User '$USER' does not exist — reconfigure via Raspberry Pi Imager"
+# Capture the install target user — $SUDO_USER (run with sudo from a regular
+# login), /boot/astromech_init.cfg [system] user (future Imager bootstrap),
+# interactive prompt, or legacy 'artoo'. Sets TARGET_USER + TARGET_HOME and
+# refuses root + non-existent users.
+# shellcheck source=lib_config.sh
+. "$REPO_PATH/scripts/lib_config.sh"
+capture_user || err "Could not determine install user. Run via 'sudo bash $0' from a regular login (so \$SUDO_USER is set), or provide [system] user in /boot/astromech_init.cfg."
+USER="$TARGET_USER"
+HOME_DIR="$TARGET_HOME"
+info "Installing AstromechOS for user: $USER (home: $HOME_DIR)"
 
 echo ""
 echo "============================================================"
@@ -191,7 +200,7 @@ bash "$REPO_PATH/scripts/setup_master_network.sh"
 # STEP 7b — Ed25519 SSH key (for automatic Master → Slave rsync)
 # =============================================================================
 info "Step 7b/8 — Generating Ed25519 SSH key..."
-SSH_KEY="/home/$USER/.ssh/id_ed25519"
+SSH_KEY="$HOME_DIR/.ssh/id_ed25519"
 if [ -f "$SSH_KEY" ]; then
     ok "SSH key already present: $SSH_KEY"
 else
@@ -200,7 +209,7 @@ else
 fi
 echo ""
 echo -e "  ${YEL}Public key to copy to the Slave (after Slave installation):${NC}"
-echo "    ssh-copy-id artoo@astromech-slave.local"
+echo "    ssh-copy-id $(slave_target)"
 echo "  (or via setup_ssh_keys.sh once the Slave is connected to the hotspot)"
 echo ""
 
@@ -227,7 +236,7 @@ echo "  Version : $(cat $REPO_PATH/VERSION)"
 echo ""
 echo "  After reboot:"
 echo "    → Connect to the hotspot (Astromech_Control_XXXX, unique per robot)"
-echo "    → SSH: ssh artoo@192.168.4.1"
+echo "    → SSH: ssh $USER@192.168.4.1"
 echo "    → Check: sudo systemctl status astromech-master"
 echo ""
 echo "  Next step: install the Slave"

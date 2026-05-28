@@ -57,7 +57,7 @@ set -e
 [ -t 0 ] || exec < /dev/tty
 
 REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
-USER="artoo"
+# USER + HOME_DIR are set by capture_user below (after helpers + EUID checks).
 GITHUB_RAW="https://raw.githubusercontent.com/RickDnamps/AstromechOS/main"
 
 # Colors
@@ -81,8 +81,15 @@ if [ "$HOSTNAME" = "astromech-master" ]; then
     err "This script must be run on the R2-SLAVE, not on the Master! (hostname: $HOSTNAME)"
 fi
 
-# Check that the artoo user exists
-id "$USER" &>/dev/null || err "User '$USER' does not exist — reconfigure via Raspberry Pi Imager"
+# Capture the install target user via shared lib_config.sh (waterfall:
+# /boot/astromech_init.cfg → $SUDO_USER → logname → interactive prompt →
+# legacy 'artoo'). Refuses root + non-existent users.
+# shellcheck source=lib_config.sh
+. "$REPO_PATH/scripts/lib_config.sh"
+capture_user || err "Could not determine install user. Run via 'sudo bash $0' from a regular login (so \$SUDO_USER is set), or provide [system] user in /boot/astromech_init.cfg."
+USER="$TARGET_USER"
+HOME_DIR="$TARGET_HOME"
+info "Installing AstromechOS Slave for user: $USER (home: $HOME_DIR)"
 
 echo ""
 echo "============================================================"
