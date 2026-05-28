@@ -1,0 +1,28 @@
+[Unit]
+Description=AstromechOS first-boot provisioning (Imager bootstrap)
+# Run after the network manager is up but BEFORE the master/slave services
+# start (firstboot may swap origin + reboot before they should ever launch).
+After=network-online.target
+Wants=network-online.target
+Before=astromech-master.service astromech-slave.service
+# Only fire when the Imager has placed the trigger marker. Two paths to
+# cover Pi OS Bullseye (/boot) vs Bookworm+ (/boot/firmware).
+ConditionPathExists=|/boot/ASTROMECH_FIRSTBOOT_READY
+ConditionPathExists=|/boot/firmware/ASTROMECH_FIRSTBOOT_READY
+
+[Service]
+Type=oneshot
+# Run as root — the script writes /etc/hostname, /var/log, touches
+# /boot, and disables itself via systemctl.
+User=root
+WorkingDirectory=__REPO_PATH__
+ExecStart=/bin/bash __REPO_PATH__/scripts/firstboot_setup.sh
+# Allow the script to take its time on a slow SD card.
+TimeoutStartSec=600
+RemainAfterExit=yes
+StandardOutput=journal+console
+StandardError=journal+console
+SyslogIdentifier=astromech-firstboot
+
+[Install]
+WantedBy=multi-user.target
