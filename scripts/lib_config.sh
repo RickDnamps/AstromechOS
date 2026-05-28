@@ -31,6 +31,21 @@
 : "${LOCAL_CFG:=$REPO/master/config/local.cfg}"
 : "${MAIN_CFG:=$REPO/master/config/main.cfg}"
 
+# Find a working Python 3 interpreter. Raspbian / Pi OS ships `python3`
+# only; Windows Git Bash (dev) ships `python` only. This helper hides
+# the difference so write_local_cfg / dna_validate / future Python
+# bridges work uniformly. Forwards all args + stdin to the interpreter.
+_python() {
+    if command -v python3 >/dev/null 2>&1; then
+        python3 "$@"
+    elif command -v python >/dev/null 2>&1; then
+        python "$@"
+    else
+        echo "[ERR] no python interpreter found in PATH" >&2
+        return 127
+    fi
+}
+
 # Candidate paths for the Imager bootstrap (Bookworm moved /boot → /boot/firmware).
 ASTRO_BOOT_INIT_CANDIDATES=(
     "/boot/astromech_init.cfg"
@@ -188,4 +203,78 @@ install_service_template_remote() {
             "$SRC" | sudo tee "/etc/systemd/system/$DEST" > /dev/null
         sudo systemctl daemon-reload
 REMOTE
+}
+
+# ──────────────────────────────────────────────────────────────────
+# write_local_cfg <section> <key> <value>
+# Atomically write a key/value into local.cfg via configparser, so
+# sections are created/preserved correctly and concurrent writes can't
+# corrupt the file (uses tmp + os.replace under the hood).
+# Used by firstboot_setup.sh to persist the values the AstromechOS
+# Imager wrote into /boot/astromech_init.cfg.
+# ──────────────────────────────────────────────────────────────────
+write_local_cfg() {
+    local section="$1" key="$2" value="$3"
+    local cfg="${LOCAL_CFG:-}"
+    if [ -z "$cfg" ]; then
+        echo "[ERR] write_local_cfg: LOCAL_CFG env var not set" >&2
+        return 1
+    fi
+    [ -f "$cfg" ] || { mkdir -p "$(dirname "$cfg")"; : > "$cfg"; }
+    _python - "$cfg" "$section" "$key" "$value" << 'PYEOF'
+import configparser, os, sys, tempfile
+cfg_path, section, key, value = sys.argv[1:5]
+c = configparser.ConfigParser()
+try:
+    c.read(cfg_path, encoding='utf-8')
+except Exception:
+    c = configparser.ConfigParser()
+if not c.has_section(section):
+    c.add_section(section)
+c.set(section, key, value)
+# Atomic write: tmp file in the same directory + os.replace
+d = os.path.dirname(os.path.abspath(cfg_path)) or '.'
+fd, tmp = tempfile.mkstemp(dir=d, prefix='.cfgtmp.')
+try:
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        c.write(f)
+    os.replace(tmp, cfg_path)
+    # Mirror the chmod 0o600 pattern the project uses for cfg writes
+    try: os.chmod(cfg_path, 0o600)
+    except Exception: pass
+except Exception:
+    try: os.unlink(tmp)
+    except Exception: pass
+    raise
+PYEOF
+}
+
+# ──────────────────────────────────────────────────────────────────
+# dna_validate <url> [branch]
+# Bash wrapper for shared/git_provenance.validate_paternity. Returns
+# 0 if the URL is a legitimate fork of AstromechOS (its main branch
+# descends from the official initial commit), non-zero otherwise.
+# Prints the validator's reason to stderr in either case.
+# Used by firstboot_setup.sh BEFORE switching origin to a candidate URL.
+# ──────────────────────────────────────────────────────────────────
+dna_validate() {
+    local url="$1" branch="${2:-main}"
+    if [ -z "$url" ]; then
+        echo "[ERR] dna_validate: empty URL" >&2
+        return 1
+    fi
+    : "${REPO:=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+    _python - "$url" "$branch" "$REPO" << 'PYEOF'
+import sys
+url, branch, repo = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, repo)
+try:
+    from shared.git_provenance import validate_paternity
+except Exception as e:
+    print(f'[ERR] cannot import shared.git_provenance: {e}', file=sys.stderr)
+    sys.exit(2)
+ok, msg = validate_paternity(repo, url, branch)
+print(msg, file=sys.stderr)
+sys.exit(0 if ok else 1)
+PYEOF
 }
