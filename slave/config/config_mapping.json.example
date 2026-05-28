@@ -1,0 +1,34 @@
+{
+  "_comment_1": "AstromechOS hardware mapping — Slave side. Phase G chantier 2026-05-28.",
+  "_comment_2": "Same schema as master/config/config_mapping.json.example —",
+  "_comment_3": "see that file for full field documentation.",
+  "_comment_4": "",
+  "_comment_5": "Note: Motor_HAT_A has no alias_prefix because the motor HAT is",
+  "_comment_6": "driven via UART D: commands (not by servo-style name lookups).",
+  "_comment_7": "Body_HAT_A starts at Servo_S0 (alias_base 0); a second body HAT",
+  "_comment_8": "(Body_HAT_B) would start at Servo_S16 (alias_base 16) so existing",
+  "_comment_9": ".chor / shortcuts referencing Servo_S0..S15 keep working.",
+
+  "schema_version": 1,
+  "host": "slave",
+  "updated_at": "2026-05-28T00:00:00Z",
+
+  "hats": [
+    {
+      "id":           "Motor_HAT_A",
+      "role":         "motor_drive",
+      "address":      "0x40",
+      "channels":     16,
+      "alias_prefix": null,
+      "alias_base":   null
+    },
+    {
+      "id":           "Body_HAT_A",
+      "role":         "servo_body",
+      "address":      "0x41",
+      "channels":     16,
+      "alias_prefix": "Servo_S",
+      "alias_base":   0
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "_comment_1": "AstromechOS hardware mapping — Phase G chantier 2026-05-28.",
+  "_comment_2": "Binds I2C addresses to STABLE HAT IDENTITIES (Dome_HAT_A,",
+  "_comment_3": "Body_HAT_A, etc.). Labels + calibrations in dome_angles.json /",
+  "_comment_4": "servo_angles.json are keyed by HAT IDENTITY — so re-jumpering a",
+  "_comment_5": "HAT from 0x41 to 0x42 just updates the 'address' field below and",
+  "_comment_6": "every label / open / close / speed value follows automatically.",
+  "_comment_7": "",
+  "_comment_8": "External names (Servo_M0..M15, Servo_S0..Sn) used by .chor files,",
+  "_comment_9": "shortcuts and arms config remain BACKWARDS-COMPATIBLE: they resolve",
+  "_comment_10": "to (HAT identity, channel) via the helper shared/hw_mapping.py.",
+  "_comment_11": "",
+  "_comment_12": "Each entry has:",
+  "_comment_13": "  id       — stable identity string. Pattern: <Role>_HAT_<Letter>",
+  "_comment_14": "             Dome_HAT_A / Body_HAT_A / Motor_HAT_A / Body_HAT_B ...",
+  "_comment_15": "  role     — servo_dome | servo_body | motor_drive",
+  "_comment_16": "  address  — '0x40' .. '0x77' (PCA9685 range).",
+  "_comment_17": "  channels — count (always 16 for PCA9685; reserved for future ICs).",
+  "_comment_18": "  alias_prefix — flat-name prefix used for backwards-compat",
+  "_comment_19": "                 (Servo_M for Dome_HAT_*, Servo_S for Body_HAT_*,",
+  "_comment_20": "                 absent for Motor_HAT_*).",
+  "_comment_21": "  alias_base — first index in the flat namespace this HAT covers.",
+  "_comment_22": "               Dome_HAT_A.S0 = Servo_M0; Dome_HAT_B.S0 = Servo_M16; etc.",
+  "_comment_23": "",
+  "_comment_24": "This file is written by scripts/detect_hats.py + Settings UI; on a",
+  "_comment_25": "fresh boot without the file, the driver synthesises one from",
+  "_comment_26": "hw_layout.json + the legacy cfg [i2c_servo_hats] (Phase G2).",
+
+  "schema_version": 1,
+  "host": "master",
+  "updated_at": "2026-05-28T00:00:00Z",
+
+  "hats": [
+    {
+      "id":           "Dome_HAT_A",
+      "role":         "servo_dome",
+      "address":      "0x40",
+      "channels":     16,
+      "alias_prefix": "Servo_M",
+      "alias_base":   0
+    }
+  ]
+}

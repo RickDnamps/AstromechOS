@@ -30,6 +30,8 @@ master/config/custom_themes.json
 master/config/drive_layouts.json
 master/config/hw_layout.json
 slave/config/hw_layout.json
+master/config/config_mapping.json
+slave/config/config_mapping.json
 
 # Mémoire locale Claude Code
 .claude/
