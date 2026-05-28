@@ -382,6 +382,84 @@ becomes a logged degradation, not a crash.
 
 ---
 
+## 4. Mapping persistence layer (chantier G, 2026-05-28)
+
+> Once a HAT is detected, the **identity layer** (Phase G of the chantier
+> series) makes calibration data immune to address changes. This is the
+> dedicated companion to `docs/MAPPING.md` — read that first, this
+> section recaps the security-relevant aspects only.
+
+### What the mapping layer adds to deploy security
+
+- `config_mapping.json` (`master/config/` + `slave/config/`, gitignored)
+  is **included in the `.bck` archive** alongside `dome_angles.json` and
+  `servo_angles.json`. A backup now carries the entire HAT identity
+  binding so a restore can be aligned with arbitrary hardware.
+- Restore flow runs `validate_mapping_against_layout` between the
+  staged mapping and the live `hw_layout.json` BEFORE moving files
+  into place. Each address mismatch becomes a warning entry attached
+  to the restore job state — visible to the operator at the Restore
+  panel, never silently lost.
+- Labels and calibrations are keyed by stable HAT identity
+  (`Body_HAT_A`), not by I2C address. Restoring onto hardware whose
+  jumpers are wired differently leaves data 100 % intact; the
+  operator clicks Settings → HATs → RE-MAP to align the identities
+  with the new physical addresses, then the driver hot-reloads.
+
+### `POST /hats/remap` — the only address-mutation surface
+
+```
+POST /hats/remap                @require_admin
+{ "host": "master" | "slave",
+  "hats": [{"id": "Body_HAT_A", "address": "0x42"}, ...] }
+```
+
+Server-side rules (defense-in-depth alongside the UI guard):
+
+1. Host enum (`master` | `slave`).
+2. Every identity must **already exist** in the current mapping. No
+   create / no rename via this endpoint — those are an Imager-UI job.
+3. Every address must be in `0x40..0x77` (the validator range from
+   `master/api/settings_bp.py:_PCA9685_MIN/MAX`).
+4. **Address uniqueness within the side** — no two identities at the
+   same physical address. The atomic refusal returns HTTP 400 with
+   `"address 0xNN assigned to more than one HAT; each physical
+   address must be unique"`.
+
+On success: atomic tmp + `os.replace` write of `config_mapping.json` +
+in-process driver `_mapping` swap + `.reload()` so the change takes
+effect without a service restart. The legacy `/settings/config`
+endpoint **rejects** any `i2c_servo_hats.*` key — that namespace is
+zero-config now, the only mutation path is `/hats/remap`.
+
+### UI guard — the three-layer anti-collision
+
+| Layer | What it does | Failure mode |
+|---|---|---|
+| **Dropdown filtering** | Only addresses actually detected by the live scan appear in the dropdown. Operator literally cannot pick a fictional address. | Stale UI → falls through to layer 2. |
+| **Live collision check** | `_checkRemapCollisions` runs on every dropdown change AND at panel open; duplicate selections highlight red + SAVE button disabled + pulsing red banner `Collision d'adresse détectée`. | Operator bypasses disabled button → falls through to layer 3. |
+| **Backend refusal** | `seen_addrs` set check in `/hats/remap` returns HTTP 400 atomically. No partial write possible. | (none — atomic write only after every check passes) |
+
+### Files added / changed under deploy security
+
+```
+shared/hw_mapping.py                                  ← NEW (G1)
+master/config/config_mapping.json.example             ← NEW (schema doc)
+slave/config/config_mapping.json.example              ← NEW
+master/api/backup_core.py                             ← + import json (latent bug fix)
+                                                        + config_mapping in BACKUP_FILESET
+                                                        + validate_mapping_against_layout
+master/api/backup_bp.py                               ← restore validation hook
+master/api/hats_bp.py                                 ← POST /hats/remap
+master/api/servo_bp.py                                ← HardwareOfflineError
+scripts/detect_hats.py                                ← --write-mapping flag + atomic sync
+```
+
+Architecture, all 6 phases, operator workflow, tests inventory →
+**[docs/MAPPING.md](MAPPING.md)**.
+
+---
+
 ## 4.5. I2C troubleshooting — Dépannage des conflits d'adresses
 
 When two HATs respond at the same I2C address, the bus electrically goes

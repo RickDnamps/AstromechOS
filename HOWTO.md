@@ -8,6 +8,10 @@ Everything is automated. The full installation is **3 commands + 2 reboots**.
 
 > **🛡️ Deploy Security & First-Boot Imager (2026-05-28)** — the Settings → Deploy panel runs a Git **DNA paternity check** before letting `origin` point at any repo that isn't a fork of RickDnamps/AstromechOS — blocks typos, hostile URLs, mis-pasted clones, all the way upstream of `git pull`. The same primitive runs at first boot of an Imager-prepared SD card (`scripts/firstboot_setup.sh` + the oneshot `astromech-firstboot.service`), which atomically injects SSH keys, sets the hostname + role, and DNA-validates the configured remote — fully headless provisioning. Architecture, threat model, recovery procedures → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
 
+> **🧬 Industrialisation HAT Mapping (chantier G, 2026-05-28)** — labels and calibrations now anchor to a **stable HAT identity** (`Body_HAT_A`, `Dome_HAT_A`, ...) instead of an I2C address. Re-soldering a PCA9685 jumper to change an address never wipes calibration: a 3-click re-map in Settings → HATs moves the identity to the new address with a driver hot-reload. Dropdowns filter to **only addresses physically detected** by the I2C scan; **anti-collision blindage** disables the SAVE button with a red pulsing banner if two identities target the same address. 6 phases (G1→G6) + 111 unit tests. Full architecture → **[docs/MAPPING.md](docs/MAPPING.md)**.
+
+> **🛰️ Per-node SSH MOTD (2026-05-28)** — SSHing into either Pi displays an instant ANSI dashboard: node identity (cyan = MASTER / green = SLAVE — impossible to mistake terminals), git status, system info (CPU temp with traffic-light pip 🟢/🟡/🔴, disk, RAM, load), bidirectional Master ↔ Slave cross-ping, live HAT state from `config_mapping.json` + `hw_layout.json`, systemd service status. Renders in ~570ms. Install via `sudo bash scripts/install_motd.sh` (idempotent).
+
 ---
 
 ## Hardware prerequisites
@@ -238,6 +242,27 @@ Connect your device to Wi-Fi **`Astromech_Control_XXXX`**, then open: **http://1
 ---
 
 ## Daily use
+
+### 🧬 Re-jumpering a HAT without losing calibration
+
+A signature feature of AstromechOS — added by chantier G (2026-05-28). If you ever need to change a PCA9685's I2C address (because you're adding a second HAT, or solved a hardware collision), you do **NOT** have to re-tune all your servos. Calibration is anchored to a **stable HAT identity** (`Body_HAT_A`, `Dome_HAT_A`...), not to the I2C address. Workflow:
+
+1. **Power OFF** the robot.
+2. **Solder** the A0/A1/A2 jumper on the PCA9685 board (see [docs/DEPLOY_SECURITY.md §4.5](docs/DEPLOY_SECURITY.md) for the truth table).
+3. **Power back ON**. The robot boots; the affected HAT shows up as "Hardware Not Found" in the Calibration panel (Settings → Hardware → Calibration).
+4. **Settings → HATs → 🔄 RESCAN HARDWARE** — runs `scripts/detect_hats.py` and rewrites `hw_layout.json`. The new physical address is now detected.
+5. **Settings → HATs → RE-MAP HAT IDENTITIES** — for the affected identity, pick the new address from the dropdown (the dropdown only shows addresses **actually detected** on the bus). Click **💾 SAVE MAPPING**. The driver hot-reloads. Calibration data is intact.
+
+If you accidentally pick an address already assigned to another identity, both rows turn red and the SAVE button is disabled with a red banner *"Collision d'adresse détectée"*. Defense-in-depth: even if you bypass the UI and POST directly, the backend `/hats/remap` endpoint returns HTTP 400. Architecture + tests → **[docs/MAPPING.md](docs/MAPPING.md)**.
+
+### 🛰️ SSH MOTD per-node
+
+When you SSH into either Pi, you see an instant snapshot of the node's state — colour-coded so you can never confuse the Master and Slave terminals.
+
+- **Master** boots a banner in **bright cyan** with `╣ DOME · MASTER ╠`.
+- **Slave** boots in **tactical green** with `╣ BODY · SLAVE ╠`.
+
+Each MOTD shows: git status (sha + branch + ahead/behind vs origin OR `rsync synced` on Slave), system info (time/uptime/CPU temp with traffic-light pip/disk/RAM/load), network (this node's IPs + peer status via cross-ping, 1s timeout), hardware inventory live-read from `config_mapping.json` + `hw_layout.json` (`Body_HAT_A @ 0x41 ● CONNECTED`), and service status. Renders in ~570ms on the Master, ~500ms on the Slave. Installed by `scripts/install_motd.sh` (idempotent — re-run after any deploy without harm).
 
 ### Admin mode
 

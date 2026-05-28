@@ -8,6 +8,10 @@ Tout est automatisé. L'installation complète = **3 commandes + 2 reboots**.
 
 > **🛡️ Sécurité Déploiement & First-Boot Imager (2026-05-28)** — le panneau Settings → Deploy lance un **test ADN Git** (paternité) avant d'autoriser `origin` à pointer vers un repo qui n'est pas un fork de RickDnamps/AstromechOS — bloque les fautes de frappe, les URLs hostiles, les clones mal collés, tout en amont du `git pull`. La même primitive tourne au premier boot d'une carte SD préparée par l'Imager (`scripts/firstboot_setup.sh` + le service oneshot `astromech-firstboot.service`), qui injecte atomiquement les clés SSH, configure hostname + rôle, et valide l'ADN du remote — provisioning 100% headless. Architecture, modèle de menace, procédures de recovery → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
 
+> **🧬 Industrialisation Mapping HAT (chantier G, 2026-05-28)** — labels et calibrations sont maintenant **ancrés à une identité HAT stable** (`Body_HAT_A`, `Dome_HAT_A`, ...) et non plus à l'adresse I2C. Re-souder un jumper A0/A1/A2 pour changer une adresse n'écrase **aucune calibration** : un re-map en 3 clics dans Settings → HATs déplace l'identité vers la nouvelle adresse, le driver reload à chaud, tout suit automatiquement. Les listes déroulantes filtrent à **uniquement les adresses physiquement détectées** par le scan I2C ; **blindage anti-collision** désactive le bouton SAVE avec une bannière rouge pulsante si deux identités pointent vers la même adresse. 6 phases (G1→G6) + 111 tests unitaires. Architecture complète → **[docs/MAPPING.md](docs/MAPPING.md)**.
+
+> **🛰️ MOTD SSH per-node (2026-05-28)** — en te connectant SSH sur l'un des deux Pis, un bandeau ANSI coloré t'affiche instantanément : identité du noeud (cyan = MASTER / vert = SLAVE — impossible de te tromper de terminal), statut git, infos système (CPU temp avec pip de couleur 🟢/🟡/🔴, disque, RAM, load), cross-ping bidirectionnel des deux Pis, état HAT live depuis `config_mapping.json`+`hw_layout.json`, status systemd. Rendu en ~570ms. Installation via `sudo bash scripts/install_motd.sh` (idempotent).
+
 ---
 
 ## Prérequis matériel

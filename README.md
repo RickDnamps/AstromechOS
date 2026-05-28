@@ -195,6 +195,8 @@ Tap the **ADMIN** icon from any tab to unlock editing/upload across Settings and
 
 Everything tunable lives in the **Settings** tab, organised into five nav sections — **Operator · Hardware · Connectivity · Appearance · System**. As a taste, here's the **Shortcuts** editor: build up to 12 Drive-overlay macro buttons (toggle arms/panels, play a choreo/sound/random-by-mood), each auto-balanced half over the left propulsion joystick and half over the right dome joystick — with a live preview of exactly where every button lands on the Drive tab.
 
+> 🧬 **Zero-config hardware (chantier G, 2026-05-28)** — the **HATs** sub-panel is now fully **auto-discovered**: no manual I2C address inputs, dropdowns populated only with addresses **actually detected** on the bus, anti-collision blindage that disables the SAVE button + shows a red pulsing banner if two HAT identities map to the same address. Labels + calibrations are anchored to stable HAT identities (`Body_HAT_A`, `Dome_HAT_A`, ...) — re-jumpering a PCA9685 from `0x41` to `0x42` is a 3-click re-map in the UI; every label and calibration follows automatically. Full architecture, the 6 phases (G1→G6), backup/restore semantics → **[docs/MAPPING.md](docs/MAPPING.md)**.
+
 <div align="center">
 
 ![Settings — Shortcuts editor](Screenshots/settings-shortcuts.png)
