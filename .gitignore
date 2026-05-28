@@ -28,6 +28,8 @@ master/config/bt_config.json
 master/config/shortcuts.json
 master/config/custom_themes.json
 master/config/drive_layouts.json
+master/config/hw_layout.json
+slave/config/hw_layout.json
 
 # Mémoire locale Claude Code
 .claude/
