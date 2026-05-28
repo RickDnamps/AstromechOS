@@ -88,10 +88,10 @@ from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, DOME_AN
 
 
 def _slave_host() -> str:
-    """Read Slave host from local.cfg [slave] host — configurable per installation."""
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return 'artoo@' + cfg.get('slave', 'host', fallback='astromech-slave.local')
+    """Return 'user@host' for SSH/SCP to the Slave — both user AND host
+    are resolved by shared.identity (was hardcoded 'artoo@')."""
+    from shared.identity import slave_ssh_target
+    return slave_ssh_target()
 
 def _read_hat_addresses() -> tuple[list, list]:
     """Returns (master_hat_addrs, slave_hat_addrs) from local.cfg [i2c_servo_hats].

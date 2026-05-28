@@ -63,14 +63,17 @@ _deploy_lock = threading.Lock()
 
 class DeployController:
     def __init__(self, cfg: configparser.ConfigParser, uart_controller, teeces_controller):
-        self._repo_path      = cfg.get('master', 'repo_path')
-        self._slave_user     = cfg.get('deploy', 'slave_user')
-        # B2/E3 fix 2026-05-16: read from cfg at INIT only for default,
-        # but reload from disk on every operation that uses these fields
-        # (reload_cfg). Was: cached at init → operator's /settings/config
-        # change to slave_host / repo_url / branch silently ignored until
-        # Master reboot.
-        self._slave_path     = cfg.get('deploy', 'slave_path')
+        # Portability chantier 2026-05-28: repo / slave paths + user now
+        # come from shared.identity (single source of truth). main.cfg
+        # values still work as a layer in the same waterfall.
+        from shared.identity import system_repo_path, slave_user as _id_slave_user, slave_repo_path
+        self._repo_path      = system_repo_path()
+        self._slave_user     = _id_slave_user()
+        # B2/E3 fix 2026-05-16: slave_host / repo_url / branch are reloaded
+        # from disk in reload_cfg() below so operator /settings/config
+        # changes take effect immediately. repo_path + slave_path stay
+        # stable per process (install location doesn't change at runtime).
+        self._slave_path     = slave_repo_path()
         self._internet_iface = cfg.get('network', 'internet_interface')
         self._uart    = uart_controller
         self._teeces  = teeces_controller
@@ -82,7 +85,8 @@ class DeployController:
         operator's /settings/config changes take effect immediately."""
         c = configparser.ConfigParser()
         c.read([MAIN_CFG, LOCAL_CFG])
-        self._slave_host    = c.get('slave',  'host',     fallback='astromech-slave.local')
+        from shared.identity import slave_host as _id_slave_host
+        self._slave_host    = _id_slave_host()
         self._github_url    = c.get('github', 'repo_url', fallback='')
         self._github_branch = c.get('github', 'branch',   fallback='main')
 

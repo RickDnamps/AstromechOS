@@ -106,7 +106,9 @@ def _iface_ip(iface: str) -> str | None:
 
 
 def _slave_host() -> str:
-    return _cached_cfg().get('slave', 'host', fallback='astromech-slave.local')
+    """Slave hostname via shared.identity (single source of truth)."""
+    from shared.identity import slave_host
+    return slave_host()
 
 
 def _battery_cells() -> int:

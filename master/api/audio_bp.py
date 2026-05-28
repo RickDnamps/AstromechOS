@@ -56,34 +56,27 @@ from master.api.audio_reconcile import reconcile_index, should_abort_reconcile
 
 
 def _slave_host() -> str:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('slave', 'host', fallback='astromech-slave.local')
+    """Slave hostname (no user prefix) via shared.identity."""
+    from shared.identity import slave_host
+    return slave_host()
 
 
 def _slave_sftp_creds() -> dict:
-    """Read slave SFTP credentials from cfg. Replaces the hardcoded
-    `192.168.4.171 / artoo / deetoo` previously baked into _sftp_sync_*
-    — that broke every install except the original one (violated project
-    rule feedback_no_hardcoded_install_values).
+    """paramiko.SSHClient.connect() kwargs for the Slave — delegates to
+    shared.identity (user / host / optional password all resolved via
+    the same waterfall: [deploy] → [system] → current_user → legacy).
 
-    Returns a dict suitable for paramiko.SSHClient.connect():
-      { 'hostname': str, 'username': str,
-        'password': str | None, 'timeout': float }
+    Password is None when key-based auth is configured (the normal
+    post-install state — setup_ssh_keys.sh pushes Master's pubkey to
+    the Slave). paramiko falls back to the SSH agent in that case.
 
-    Falls back to the configured deploy.slave_user. Password is read
-    from local.cfg [deploy] slave_password if set — kept OUT of main.cfg
-    so it never ships to git. If no password is provided, paramiko falls
-    back to key-based auth (the project's normal Pi-to-Pi SSH path)."""
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    host = cfg.get('slave', 'host', fallback=None) \
-        or cfg.get('deploy', 'slave_host', fallback='astromech-slave.local')
-    user = cfg.get('deploy', 'slave_user', fallback='artoo')
-    pwd  = cfg.get('deploy', 'slave_password', fallback=None) or None
-    creds = {'hostname': host, 'username': user, 'timeout': 8.0}
-    if pwd:
-        creds['password'] = pwd
+    Replaces the hardcoded `192.168.4.171 / artoo / deetoo` previously
+    baked into _sftp_sync_* (violated feedback_no_hardcoded_install_values)."""
+    from shared.identity import slave_user, slave_host, slave_password
+    creds = {'hostname': slave_host(), 'username': slave_user(), 'timeout': 8.0}
+    p = slave_password()
+    if p:
+        creds['password'] = p
     return creds
 
 

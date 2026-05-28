@@ -68,9 +68,9 @@ _SECRET_RE = re.compile(
 
 
 def _slave_host() -> str:
-    cfg = configparser.ConfigParser()
-    cfg.read([_MAIN_CFG, _LOCAL_CFG])
-    return cfg.get('slave', 'host', fallback='astromech-slave.local')
+    """Slave hostname via shared.identity (single source of truth)."""
+    from shared.identity import slave_host
+    return slave_host()
 
 
 @diagnostics_bp.get('/diagnostics/logs')

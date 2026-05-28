@@ -59,15 +59,14 @@ settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
 
 from shared.paths import LOCAL_CFG, SLAVE_CFG as _SLAVE_CFG
-# B-61 (audit 2026-05-15): read slave host from local.cfg [slave] host
-# instead of hardcoding. The hardcode broke any installation that used
-# a different IP / mDNS name (the user has hit this exact problem
-# before — see feedback_no_hardcoded_install_values memory).
+# B-61 (audit 2026-05-15) + portability chantier 2026-05-28: both the
+# slave HOST (from local.cfg [slave] host) and the SSH USER (from
+# [deploy] slave_user / [system] user / current OS user) are resolved
+# centrally by shared.identity — no more hardcoded 'artoo@' here.
 def _resolve_slave_ssh_target() -> str:
-    """Return 'artoo@<host>' where <host> comes from local.cfg, or a
-    sensible default if the config is missing."""
-    host = _read_cfg().get('slave', 'host', fallback='astromech-slave.local')
-    return f'artoo@{host}'
+    """Return 'user@host' for SSH/SCP/rsync to the Slave."""
+    from shared.identity import slave_ssh_target
+    return slave_ssh_target()
 _ICONS_DIR   = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'icons')
 # User-reported 2026-05-15: post-B-82 the pre-shipped SVG icons
 # (bb8.svg, c3po.svg, ig11.svg, k2so.svg, r2d2_blue.svg, r5d4.svg)
@@ -480,11 +479,9 @@ def get_settings():
     _mask_ssid = lambda s: s if is_admin else (('•' * min(len(s), 8)) if s else '')
     # Real Linux user the service runs as — NOT hardcoded, so the admin-password
     # note shows the actual SSH login user (artoo / C3PO / pi / …) per install.
-    try:
-        import pwd as _pwd_mod
-        _sys_user = _pwd_mod.getpwuid(os.getuid()).pw_name
-    except Exception:
-        _sys_user = 'artoo'
+    # Delegated to shared.identity (single source of truth, Windows-safe).
+    from shared.identity import current_user as _id_current_user
+    _sys_user = _id_current_user()
     return jsonify({
         'system_user': _sys_user if is_admin else '',
         'local_cfg_path': LOCAL_CFG if is_admin else '',
