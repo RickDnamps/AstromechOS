@@ -226,6 +226,77 @@ if [ -n "$ROLE" ]; then
     fi
 fi
 
+# ─── 4.5. I2C HAT layout (read-only detection + Imager override) ────────
+# Resilience philosophy (chantier 2026-05-28): the detect step OBSERVES
+# (it writes hw_layout.json) but never DECIDES. If the bus is unreachable,
+# smbus2 is missing, or no HAT is present, this step LOGS the failure and
+# moves on — the master/slave services treat hw_layout.json as a dynamic
+# reference and will boot in degraded mode rather than crash. Bricking a
+# robot because a single PCA9685 is unresponsive is unacceptable.
+#
+# Order of preference:
+#   1. /boot/hw_layout.json (Imager-provided override — wins, no scan)
+#   2. scripts/detect_hats.py --output ... (read-only smbus2 scan)
+#   3. silent fallback: no JSON written, services will see absence and
+#      log a warning at startup (handled in commit 3+, not here)
+log "Step 4.5: I2C HAT layout ..."
+if [ "$ROLE" = "slave" ]; then
+    HW_LAYOUT_OUT="$REPO_PATH/slave/config/hw_layout.json"
+else
+    HW_LAYOUT_OUT="$REPO_PATH/master/config/hw_layout.json"
+fi
+mkdir -p "$(dirname "$HW_LAYOUT_OUT")"
+
+BOOT_HW_LAYOUT="$BOOT_DIR/hw_layout.json"
+HW_LAYOUT_SOURCE=""
+
+if [ -f "$BOOT_HW_LAYOUT" ]; then
+    # Imager-provided override wins — copy it verbatim, no scan.
+    if cp "$BOOT_HW_LAYOUT" "$HW_LAYOUT_OUT" 2>>"$LOGFILE"; then
+        chmod 0644 "$HW_LAYOUT_OUT" 2>>"$LOGFILE" || true
+        chown "$TARGET_USER:$TARGET_USER" "$HW_LAYOUT_OUT" 2>>"$LOGFILE" || true
+        HW_LAYOUT_SOURCE="imager-override"
+        log_ok "HW layout: Imager-provided $BOOT_HW_LAYOUT → $HW_LAYOUT_OUT"
+    else
+        log_warn "HW layout: cp $BOOT_HW_LAYOUT failed — falling through to scan"
+    fi
+fi
+
+if [ -z "$HW_LAYOUT_SOURCE" ]; then
+    # Run the read-only detector. Capture rc separately so we can log the
+    # specific failure mode (no /dev/i2c-1, no smbus2, bus held by another
+    # process) without aborting the boot. The script is GUARANTEED not to
+    # write to the I2C bus (ReadOnlySMBus wrapper raises AssertionError on
+    # any write attempt + the test suite spies on that contract).
+    DETECT_RC=0
+    python3 "$REPO_PATH/scripts/detect_hats.py" \
+        --output "$HW_LAYOUT_OUT" \
+        --role "$ROLE" \
+        --verbose 2>&1 | tee -a "$LOGFILE" || DETECT_RC=$?
+    if [ "$DETECT_RC" -eq 0 ] && [ -s "$HW_LAYOUT_OUT" ]; then
+        chmod 0644 "$HW_LAYOUT_OUT" 2>>"$LOGFILE" || true
+        chown "$TARGET_USER:$TARGET_USER" "$HW_LAYOUT_OUT" 2>>"$LOGFILE" || true
+        HW_LAYOUT_SOURCE="scan"
+        log_ok "HW layout: scan completed → $HW_LAYOUT_OUT"
+    else
+        # DEGRADED — do NOT abort. Surface the rc so the operator can
+        # diagnose via journalctl -u astromech-firstboot.
+        # Exit code map (detect_hats.py::main):
+        #   2 = smbus2 not installed         3 = /dev/i2c-N missing
+        #   4 = permission denied            5 = bus lock held
+        case "$DETECT_RC" in
+            2) DETAIL="smbus2 not installed (apt install python3-smbus)" ;;
+            3) DETAIL="/dev/i2c-1 missing (enable I2C in raspi-config)" ;;
+            4) DETAIL="permission denied (user not in i2c group?)" ;;
+            5) DETAIL="bus lock held (master.service running?)" ;;
+            *) DETAIL="rc=$DETECT_RC, see log above" ;;
+        esac
+        log_warn "HW layout: detection failed — $DETAIL"
+        log_warn "HW layout: services will boot in DEGRADED mode (no hw_layout.json)"
+        log_warn "HW layout: review later with: journalctl -u astromech-firstboot"
+    fi
+fi
+
 # ─── 5. DNA-validate + switch origin if a custom repo URL is set ────────
 # Reads [github] repo_url from /boot/astromech_init.cfg first (the Imager's
 # choice), falls back to local.cfg if already populated. Only swaps origin

@@ -1,0 +1,51 @@
+{
+  "_comment_1": "AstromechOS hardware layout — emitted by scripts/detect_hats.py.",
+  "_comment_2": "This file is the OBSERVATION (what the I2C bus reports).",
+  "_comment_3": "Services (master/slave) READ it and decide how to react — strict",
+  "_comment_4": "separation between detection (this file) and policy (services).",
+  "_comment_5": "",
+  "_comment_6": "Imager workflow: the AstromechOS Imager (PC tool) can drop a",
+  "_comment_7": "pre-filled hw_layout.json into the SD card's /boot partition.",
+  "_comment_8": "firstboot_setup.sh step 4.5 prefers /boot/hw_layout.json over",
+  "_comment_9": "a fresh I2C scan — useful for headless installs where the",
+  "_comment_10": "Imager knows the hardware before the Pi has ever booted.",
+  "_comment_11": "",
+  "_comment_12": "On the running Pi the working file is master/config/hw_layout.json",
+  "_comment_13": "(or slave/config/hw_layout.json) — gitignored, atomic-written.",
+
+  "schema_version": 1,
+  "host":           "master",
+  "bus":            1,
+  "scanned_at":     "2026-05-28T00:00:00Z",
+  "method":         "smbus_probe+pca9685_fingerprint+role_heuristic",
+  "source":         "scan",
+
+  "eeprom": {
+    "present":  false,
+    "vendor":   null,
+    "product":  null,
+    "source":   null
+  },
+
+  "hats": [
+    {
+      "addr":       "0x40",
+      "chip":       "pca9685",
+      "role":       "servo_dome",
+      "evidence": {
+        "mode1":    "0x11",
+        "mode2":    "0x04",
+        "subadr1":  "0xE2",
+        "subadr2":  "0xE4",
+        "subadr3":  "0xE8",
+        "allcall":  "0xE0",
+        "prescale": "0x1E"
+      },
+      "confidence": "high",
+      "score":      4,
+      "source":     "fingerprint+master-convention"
+    }
+  ],
+
+  "errors": []
+}
