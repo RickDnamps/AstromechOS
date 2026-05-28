@@ -104,6 +104,15 @@ class DomeServoDriver(BaseDriver):
         self._ready      = False
         self._lock       = threading.Lock()
         self._error_cnt  = [0] * len(self._addresses)
+        # Per-HAT resilience state — populated by setup() from
+        # shared/hw_layout.py. STATUS_READY → init normally.
+        # STATUS_DEGRADED → HAT absent from hw_layout.json → log WARN,
+        # skip init for this HAT, keep driver alive for other HATs.
+        # STATUS_CRITICAL → ADDRESS_COLLISION → log CRITICAL, refuse
+        # to init this HAT (operating against a contested bus produces
+        # unpredictable hardware behaviour).
+        self._hat_status = ['ready'] * len(self._addresses)
+        self._offline    = [False]   * len(self._addresses)
         self._angles     = {}
         self._pos        = {}
         # Freeze flag — when True, in-flight ramps abort immediately and any
@@ -127,16 +136,73 @@ class DomeServoDriver(BaseDriver):
 
     def setup(self) -> bool:
         try:
+            # Consult hw_layout.json BEFORE touching the bus. Maps each
+            # cfg-target HAT address to one of:
+            #   ready    → init normally
+            #   degraded → log WARN, leave bus[i] = None (driver alive)
+            #   critical → log CRITICAL (ADDRESS_COLLISION), refuse init
+            # Detection-vs-decision split (chantier 2026-05-28): the
+            # detection module observes (writes JSON); we (the driver)
+            # decide. If the JSON is absent (None), every HAT defaults
+            # to STATUS_DEGRADED — the driver tries to init via cfg and
+            # the existing exception handler catches genuine failures.
+            try:
+                from shared import hw_layout as _hwl
+                layout = _hwl.load_for('master')
+            except Exception as e:
+                log.warning("hw_layout import failed (%s) — proceeding without it", e)
+                layout = None
+                _hwl = None
+
             import smbus2
             self._angles = _load_dome_angles()
             bus = smbus2.SMBus(1)
             # Share one SMBus instance — I2C bus is shared, addresses differ
+            init_count = 0
             for i, addr in enumerate(self._addresses):
-                self._buses[i] = bus
-                self._init_chip(i)
-            self._ready = True
-            log.info("DomeServoDriver ready — %d HAT(s) %s, %d servos",
-                     len(self._addresses),
+                status = (_hwl.hat_status(layout, addr) if _hwl
+                          else 'degraded')  # No layout → fall through to cfg-only init
+                self._hat_status[i] = status
+
+                if status == 'critical':
+                    # ADDRESS_COLLISION — refuse net. Distinct from DEGRADED:
+                    # the driver does NOT attempt to init this HAT because
+                    # PWM writes against a contested bus may drive unintended
+                    # outputs (e.g. servo cmd → motor HAT inputs).
+                    log.critical(_hwl.critical_log_message(addr))
+                    self._buses[i]  = None
+                    self._offline[i] = True
+                    continue
+
+                if status == 'degraded' and layout is not None:
+                    # JSON exists and explicitly does NOT contain this addr.
+                    # Skip init for THIS HAT (other HATs continue normally).
+                    log.warning(_hwl.degraded_log_message(addr))
+                    self._buses[i]  = None
+                    self._offline[i] = True
+                    continue
+
+                # Either status == 'ready' OR (layout is None and we fall
+                # through to cfg-only init for backwards-compat). In both
+                # cases, attempt the bus init and rely on the existing
+                # exception handler if the hardware is genuinely missing.
+                try:
+                    self._buses[i] = bus
+                    self._init_chip(i)
+                    init_count += 1
+                except Exception as e:
+                    # Per-HAT init failure DEGRADES this HAT only — keep
+                    # going so the other HATs (if any) still come up.
+                    log.warning("Init failed for HAT @ 0x%02X: %s — DEGRADED", addr, e)
+                    self._buses[i]  = None
+                    self._offline[i] = True
+                    self._hat_status[i] = 'degraded'
+
+            self._ready = True   # driver is alive even if 0/N HATs initialised
+            log.info("DomeServoDriver ready — %d/%d HAT(s) initialised "
+                     "(%d offline) %s, %d servos",
+                     init_count, len(self._addresses),
+                     sum(self._offline),
                      [hex(a) for a in self._addresses],
                      len(self._servo_map))
             return True
@@ -173,12 +239,21 @@ class DomeServoDriver(BaseDriver):
         log.info("DomeServoDriver: angles reloaded (%d entries)", len(self._angles))
 
     def hat_health(self) -> list:
-        """Returns per-HAT status: [{addr, ok, errors}]"""
+        """Returns per-HAT status: [{addr, ok, errors, status, offline}].
+
+        New fields (chantier 2026-05-28):
+          status  : 'ready' | 'degraded' | 'critical' (from hw_layout.json)
+          offline : True when the driver is NOT operating this HAT
+                    (collision-refused OR absent-from-scan).
+        """
         return [
             {
-                'addr':   f'0x{addr:02X}',
-                'ok':     self._buses[i] is not None and self._error_cnt[i] < 3,
-                'errors': self._error_cnt[i],
+                'addr':    f'0x{addr:02X}',
+                'ok':      self._buses[i] is not None and self._error_cnt[i] < 3
+                           and not self._offline[i],
+                'errors':  self._error_cnt[i],
+                'status':  self._hat_status[i],
+                'offline': self._offline[i],
             }
             for i, addr in enumerate(self._addresses)
         ]
@@ -234,6 +309,11 @@ class DomeServoDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def _init_chip(self, hat_idx: int) -> None:
+        # Guard: setup() already filters offline HATs, but defensive
+        # check here protects _try_reinit() callers and any future path.
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            log.debug("_init_chip skipped for HAT %d (offline)", hat_idx)
+            return
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
         bus.write_byte_data(addr, MODE1_REG, 0x00)
@@ -257,6 +337,8 @@ class DomeServoDriver(BaseDriver):
         log.info("PCA9685 @ 0x%02X initialized 50Hz — servos → calibrated close_angle", addr)
 
     def _ensure_awake(self, hat_idx: int) -> None:
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            return
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
         try:
@@ -269,6 +351,8 @@ class DomeServoDriver(BaseDriver):
             log.warning("_ensure_awake 0x%02X: %s", addr, e)
 
     def _full_off(self, hat_idx: int, channel: int) -> None:
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            return
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
         base = 0x06 + 4 * channel
@@ -278,6 +362,11 @@ class DomeServoDriver(BaseDriver):
         bus.write_byte_data(addr, base + 3, 0x10)
 
     def _try_reinit(self, hat_idx: int) -> None:
+        if self._offline[hat_idx]:
+            # CRITICAL/DEGRADED HATs are intentionally not auto-recovered.
+            # Operator must re-run detect_hats + restart the service.
+            log.debug("_try_reinit refused for HAT %d (offline by hw_layout)", hat_idx)
+            return
         try:
             import smbus2
             if self._buses[hat_idx]:
@@ -293,6 +382,12 @@ class DomeServoDriver(BaseDriver):
             log.error("Failed to reinitialize PCA9685 @ 0x%02X: %s", self._addresses[hat_idx], e)
 
     def _set_pulse(self, hat_idx: int, channel: int, pulse_us: float) -> None:
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            # Servo command silently dropped — driver is in DEGRADED/CRITICAL
+            # mode for this HAT. The startup log already announced this
+            # loudly; per-call logs would flood the journal during a
+            # choreography or arms-toggle sequence.
+            return
         tick = _pulse_to_tick(pulse_us)
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
