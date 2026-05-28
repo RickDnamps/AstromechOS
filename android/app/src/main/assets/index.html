@@ -2398,43 +2398,37 @@
         </section>
       </div>
 
-      <!-- 🎩 HATs (extracted from System panel 2026-05-15) -->
+      <!-- 🎩 HATs (zero-config — chantier 2026-05-28) -->
       <div class="settings-panel" id="spanel-hats">
         <section class="card settings-card">
           <h2 class="card-title">I2C HATs</h2>
-          <p class="settings-note admin-only">
-            <b>Master servo HAT</b> change → requires Master reboot.<br>
-            <b>Slave servo / motor HAT</b> change → Slave service auto-restarts (~5s).
+          <p class="settings-note">
+            Hardware is <b>auto-discovered</b> by <code>scripts/detect_hats.py</code> —
+            addresses are no longer configurable by hand. Re-jumper the
+            PCA9685 board (A0/A1/A2 solder pads) to change an address,
+            then click <b>RESCAN HARDWARE</b> below.
+            See <code>docs/DEPLOY_SECURITY.md §4.5</code> for the jumper truth table.
           </p>
-          <div class="settings-row admin-only">
-            <label class="settings-label">Master servo HAT addresses (I2C)</label>
-            <input type="text" id="master-hats-input" class="settings-input" placeholder="0x40, 0x42, ..." maxlength="60"
-                   oninput="validateHatField('master-hats-input')">
-            <!-- W1+W2 fix 2026-05-16: HAT-health live status + servo count preview -->
-            <div class="hat-row-meta" id="master-hats-meta"></div>
+          <div id="hats-aggregate-row" style="display:flex;gap:10px;align-items:center;margin:8px 0">
+            <span style="color:var(--text-dim);font-size:0.9em">Hardware health:</span>
+            <span id="hats-aggregate-badge" class="hat-status-badge hat-status-unknown">…</span>
+            <span id="hats-aggregate-detail" style="color:var(--text-dim);font-size:0.85em"></span>
           </div>
-          <div class="settings-row admin-only">
-            <label class="settings-label">Slave servo HAT addresses (I2C)</label>
-            <input type="text" id="slave-hats-input" class="settings-input" placeholder="0x41, 0x42, ..." maxlength="60"
-                   oninput="validateHatField('slave-hats-input')">
-            <div class="hat-row-meta" id="slave-hats-meta"></div>
+          <div id="hats-table-wrapper" style="margin-top:6px"></div>
+          <div id="hats-critical-banner" class="hat-critical-banner" style="display:none">
+            <b>⚠ CRITICAL: I2C Address Conflict detected</b>
+            <div style="margin-top:4px;font-size:0.9em">
+              Two HATs are responding at the same address. The driver
+              will refuse to operate them until the conflict is resolved.
+              Check the A0/A1/A2 solder jumpers on the PCA9685 boards.
+              See <code>docs/DEPLOY_SECURITY.md §4.5</code> for the truth table.
+            </div>
+            <div id="hats-critical-addrs" style="margin-top:4px;font-family:var(--font-data);font-size:0.85em"></div>
           </div>
-          <div class="settings-row admin-only">
-            <label class="settings-label">Slave Motor HAT address (I2C)</label>
-            <input type="text" id="slave-motor-hat-input" class="settings-input" placeholder="0x40" maxlength="10"
-                   oninput="validateHatField('slave-motor-hat-input', true)">
-            <div class="hat-row-meta" id="slave-motor-hat-meta"></div>
-          </div>
-          <p class="settings-note admin-only">⚠️ Never put the Motor HAT address in Slave servo HATs — this protects the motor driver from servo commands.</p>
-          <!-- W9 fix 2026-05-16: defaults always visible + Reset button -->
-          <p class="settings-note settings-note-dim admin-only">
-            Defaults: Master <code>0x40</code> · Slave HATs <code>0x41</code> · Slave Motor <code>0x40</code>
-            <button class="btn btn-sm" style="margin-left:8px" onclick="resetHatDefaults()">↺ Reset</button>
-          </p>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">
-            <button class="btn btn-primary admin-only" onclick="saveHardwareConfig()">SAVE HARDWARE CONFIG</button>
-            <!-- W14 fix 2026-05-16: i2cdetect scan button -->
-            <button class="btn btn-sm admin-only" onclick="scanI2cBus()" title="Detect physically-present HATs on Master I2C">🔍 SCAN I2C</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px">
+            <button class="btn btn-primary admin-only" onclick="rescanHardware()" title="Re-run detect_hats.py on Master + Slave">
+              🔄 RESCAN HARDWARE
+            </button>
           </div>
           <div class="settings-status" id="hardware-config-status"></div>
           <div id="i2c-scan-result" class="settings-status" style="margin-top:6px"></div>
