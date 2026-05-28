@@ -88,12 +88,43 @@ def _pulse_to_tick(pulse_us: float) -> int:
     return max(0, min(4095, int(pulse_us / 20000.0 * 4096)))
 
 
-def _load_dome_angles() -> dict:
+def _load_dome_angles_raw() -> dict:
+    """Read dome_angles.json from disk, no format normalisation.
+    Returns {} on absence/corruption. Used internally — callers should
+    pass the result through hw_mapping.normalise_calibration(raw, mapping)
+    to get the canonical nested-by-identity form."""
     try:
         with open(DOME_ANGLES_FILE) as f:
             return json.load(f)
     except Exception:
         return {}
+
+
+def _load_dome_angles(mapping: 'dict | None' = None) -> dict:
+    """Load + normalise dome_angles.json to NESTED-by-identity format.
+
+    Phase G3 chantier 2026-05-28: the on-disk file may be in either
+    legacy FLAT format ({"Servo_M0": {...}}) or new NESTED format
+    ({"Dome_HAT_A": {"0": {...}}}). hw_mapping.normalise_calibration()
+    detects which and converts to nested. The first save by the driver
+    after upgrade rewrites the file in nested format (migration-on-save).
+
+    If mapping is None (no config_mapping.json yet), the function falls
+    back to synthesize_from_layout('master') so flat-keyed entries can
+    still be resolved to a HAT identity for the in-memory translation.
+    """
+    raw = _load_dome_angles_raw()
+    if not raw:
+        return {}
+    try:
+        from shared import hw_mapping as _hwm
+        if mapping is None:
+            mapping = _hwm.load_for('master') or _hwm.synthesize_from_layout(
+                'master', cfg_paths=[str(_MAIN_CFG), str(_LOCAL_CFG)])
+        return _hwm.normalise_calibration(raw, mapping)
+    except Exception as e:
+        log.warning("dome calibration normalisation failed (%s) — using raw", e)
+        return raw if isinstance(raw, dict) else {}
 
 
 class DomeServoDriver(BaseDriver):
@@ -104,6 +135,18 @@ class DomeServoDriver(BaseDriver):
         self._ready      = False
         self._lock       = threading.Lock()
         self._error_cnt  = [0] * len(self._addresses)
+        # Phase G3 chantier 2026-05-28: stable HAT identity mapping
+        # (Dome_HAT_A, Body_HAT_A, ...). Loaded at __init__ so
+        # _get_angle()/_get_close_angle() can resolve flat-name servos
+        # (Servo_M3) to (identity, channel) for nested calibration lookup.
+        try:
+            from shared import hw_mapping as _hwm
+            self._mapping = _hwm.load_for('master') or _hwm.synthesize_from_layout(
+                'master', cfg_paths=[str(_MAIN_CFG), str(_LOCAL_CFG)])
+        except Exception as e:
+            log.warning("hw_mapping load failed (%s) — calibration falls back "
+                        "to legacy flat-key behaviour", e)
+            self._mapping = None
         # Per-HAT resilience state — populated by setup() from
         # shared/hw_layout.py. STATUS_READY → init normally.
         # STATUS_DEGRADED → HAT absent from hw_layout.json → log WARN,
@@ -129,7 +172,30 @@ class DomeServoDriver(BaseDriver):
         }
 
     def _get_angle(self, name: str, key: str, default: float) -> float:
-        return float(self._angles.get(name, {}).get(key, default))
+        """Read a calibration value for a flat-name servo (e.g. 'Servo_M3').
+
+        Phase G3 chantier 2026-05-28: storage is NESTED by HAT identity
+        on disk + in self._angles. We resolve the flat name to
+        (identity, channel) via hw_mapping.identity_for, then look up
+        self._angles[identity][str(channel)][key]. Fallback to the legacy
+        flat-key shape if the mapping fails (defensive — handles the
+        boot window before config_mapping.json is synthesised)."""
+        # Legacy flat shape (back-compat read in case the in-memory dict
+        # still carries top-level Servo_* keys, e.g. before first save).
+        if isinstance(self._angles.get(name), dict):
+            return float(self._angles[name].get(key, default))
+        # New nested shape — resolve via mapping.
+        try:
+            from shared import hw_mapping as _hwm
+            pair = _hwm.identity_for(getattr(self, '_mapping', None), name)
+        except Exception:
+            pair = None
+        if pair is not None:
+            identity, ch = pair
+            entry = self._angles.get(identity, {}).get(str(ch))
+            if isinstance(entry, dict):
+                return float(entry.get(key, default))
+        return float(default)
 
     def _get_close_angle(self, name: str) -> float:
         return self._get_angle(name, 'close', DEFAULT_CLOSE_DEG)

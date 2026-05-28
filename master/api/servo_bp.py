@@ -248,14 +248,56 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
                 f"angles file corrupted; quarantined to {broken_path}. "
                 f"Restore from backup or restart Master to regenerate defaults."
             )
+    # Phase G3 chantier 2026-05-28: normalise the on-disk format to
+    # NESTED-by-identity before applying updates. Accepts legacy flat
+    # OR new nested input; always writes nested out. The mapping is
+    # loaded from config_mapping.json with fallback to synthesise — so
+    # this works on first boot before G2 has run.
+    role = 'slave' if 'slave/' in filepath.replace('\\', '/') else 'master'
+    try:
+        from shared import hw_mapping as _hwm
+        from shared.paths import MAIN_CFG as _MC, LOCAL_CFG as _LC, SLAVE_CFG as _SC
+        _cfg_paths = [str(_SC)] if role == 'slave' else [str(_MC), str(_LC)]
+        mapping = _hwm.load_for(role) or _hwm.synthesize_from_layout(role, cfg_paths=_cfg_paths)
+        existing = _hwm.normalise_calibration(existing, mapping)
+    except Exception as e:
+        log.warning("hw_mapping unavailable (%s) — keeping legacy flat format", e)
+        mapping = None
+
+    def _identity_ch(flat_name: str):
+        if mapping is None:
+            return None
+        try:
+            from shared import hw_mapping as _hwm  # noqa: F811
+            return _hwm.identity_for(mapping, flat_name)
+        except Exception:
+            return None
+
     for name, vals in subset.items():
-        prev = existing.get(name) if isinstance(existing.get(name), dict) else {}
-        existing[name] = {
-            'label': str(vals.get('label', prev.get('label', name)))[:40],
-            'open':  _clamp(_safe_int(vals.get('open',  prev.get('open',  110)), 110)),
-            'close': _clamp(_safe_int(vals.get('close', prev.get('close',  20)),  20)),
-            'speed': _clamp_speed(_safe_int(vals.get('speed', prev.get('speed', 10)), 10)),
-        }
+        pair = _identity_ch(name)
+        if pair is not None:
+            identity, ch = pair
+            existing.setdefault(identity, {})
+            prev = existing[identity].get(str(ch)) \
+                if isinstance(existing[identity].get(str(ch)), dict) else {}
+            existing[identity][str(ch)] = {
+                'label': str(vals.get('label', prev.get('label', name)))[:40],
+                'open':  _clamp(_safe_int(vals.get('open',  prev.get('open',  110)), 110)),
+                'close': _clamp(_safe_int(vals.get('close', prev.get('close',  20)),  20)),
+                'speed': _clamp_speed(_safe_int(vals.get('speed', prev.get('speed', 10)), 10)),
+            }
+        else:
+            # Mapping unavailable or name unresolvable — fall back to
+            # legacy flat layout so we never lose data due to a missing
+            # config_mapping.json. The next save with a healthy mapping
+            # will migrate this entry.
+            prev = existing.get(name) if isinstance(existing.get(name), dict) else {}
+            existing[name] = {
+                'label': str(vals.get('label', prev.get('label', name)))[:40],
+                'open':  _clamp(_safe_int(vals.get('open',  prev.get('open',  110)), 110)),
+                'close': _clamp(_safe_int(vals.get('close', prev.get('close',  20)),  20)),
+                'speed': _clamp_speed(_safe_int(vals.get('speed', prev.get('speed', 10)), 10)),
+            }
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     # User-reported 2026-05-16: rotate 3 .bak generations BEFORE writing
     # so an unintended mutation (audit script, cascade label revert,

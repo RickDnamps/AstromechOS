@@ -103,12 +103,33 @@ def _pulse_to_tick(pulse_us: float) -> int:
     return max(0, min(4095, int(pulse_us / 20000.0 * 4096)))
 
 
-def _load_servo_angles() -> dict:
+def _load_servo_angles_raw() -> dict:
     try:
         with open(SERVO_ANGLES_FILE) as f:
             return json.load(f)
     except Exception:
         return {}
+
+
+def _load_servo_angles(mapping: 'dict | None' = None) -> dict:
+    """Load + normalise servo_angles.json to NESTED-by-identity format.
+
+    Phase G3 chantier 2026-05-28: same contract as the Master's
+    _load_dome_angles — supports legacy FLAT and new NESTED on disk,
+    returns nested. Falls back to synthesize_from_layout('slave') when
+    config_mapping.json isn't on disk yet (boot before G2 ran)."""
+    raw = _load_servo_angles_raw()
+    if not raw:
+        return {}
+    try:
+        from shared import hw_mapping as _hwm
+        if mapping is None:
+            mapping = _hwm.load_for('slave') or _hwm.synthesize_from_layout(
+                'slave', cfg_paths=[str(_SLAVE_CFG)])
+        return _hwm.normalise_calibration(raw, mapping)
+    except Exception as e:
+        log.warning("body calibration normalisation failed (%s) — using raw", e)
+        return raw if isinstance(raw, dict) else {}
 
 
 class BodyServoDriver(BaseDriver):
@@ -133,6 +154,18 @@ class BodyServoDriver(BaseDriver):
         #                   critical_log_message, refuse to init this HAT.
         self._hat_status = ['ready'] * len(self._addresses)
         self._offline    = [False]   * len(self._addresses)
+        # Phase G3 chantier 2026-05-28: stable HAT identity mapping
+        # (Body_HAT_A, Body_HAT_B, ...). Loaded at __init__ so
+        # _get_angle()/_get_close_angle() can resolve flat-name servos
+        # (Servo_S3) to (identity, channel) for nested calibration lookup.
+        try:
+            from shared import hw_mapping as _hwm
+            self._mapping = _hwm.load_for('slave') or _hwm.synthesize_from_layout(
+                'slave', cfg_paths=[str(_SLAVE_CFG)])
+        except Exception as e:
+            log.warning("hw_mapping load failed (%s) — calibration falls back "
+                        "to legacy flat-key behaviour", e)
+            self._mapping = None
         # Freeze flag — same semantics as Master DomeServoDriver. Set via UART
         # FREEZE:1 from Master (E-STOP), cleared via FREEZE:0 (Reset E-STOP).
         # While set, in-flight ramps abort and new SRV commands are rejected
@@ -147,7 +180,26 @@ class BodyServoDriver(BaseDriver):
         }
 
     def _get_angle(self, name: str, key: str, default: float) -> float:
-        return float(self._angles.get(name, {}).get(key, default))
+        """Read a calibration value for a flat-name servo (e.g. 'Servo_S3').
+
+        Phase G3 chantier 2026-05-28: storage is NESTED by HAT identity
+        on disk + in self._angles. Resolve flat name → (identity, ch)
+        via hw_mapping.identity_for. Legacy fallback handles the boot
+        window before config_mapping.json is synthesised."""
+        # Legacy flat shape — kept for the boot window before first save.
+        if isinstance(self._angles.get(name), dict):
+            return float(self._angles[name].get(key, default))
+        try:
+            from shared import hw_mapping as _hwm
+            pair = _hwm.identity_for(getattr(self, '_mapping', None), name)
+        except Exception:
+            pair = None
+        if pair is not None:
+            identity, ch = pair
+            entry = self._angles.get(identity, {}).get(str(ch))
+            if isinstance(entry, dict):
+                return float(entry.get(key, default))
+        return float(default)
 
     def _get_close_angle(self, name: str) -> float:
         return self._get_angle(name, 'close', DEFAULT_CLOSE_DEG)

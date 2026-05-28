@@ -699,6 +699,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument('--no-lock', action='store_true',
                     help="Skip the /run/astromech-i2c.lock acquisition "
                          "(use only when the master service is stopped)")
+    # Phase G2 (chantier 2026-05-28): if config_mapping.json is absent for
+    # the role, synthesise one from the legacy cfg + the freshly-detected
+    # layout and write it atomically. Default ON; use --no-write-mapping
+    # in tests or when the operator wants to keep the file under manual
+    # control without auto-generation.
+    ap.add_argument('--write-mapping',
+                    dest='write_mapping', action='store_true',
+                    default=True,
+                    help="When config_mapping.json is absent, synthesise + write it "
+                         "(default: enabled).")
+    ap.add_argument('--no-write-mapping',
+                    dest='write_mapping', action='store_false',
+                    help="Skip the config_mapping.json synthesis even if the file is absent.")
     ap.add_argument('-v', '--verbose', action='store_true')
     args = ap.parse_args(argv)
 
@@ -755,7 +768,78 @@ def main(argv: Optional[list[str]] = None) -> int:
         log.info("Wrote %s (host=%s, %d HAT%s detected)",
                  args.output, host, len(layout['hats']),
                  '' if len(layout['hats']) == 1 else 's')
+        # Phase G2: also synthesise config_mapping.json when absent.
+        # The operator's existing file is never overwritten — only a
+        # brand-new install (or one whose mapping file was deleted) gets
+        # the auto-synthesised version. Subsequent re-mapping is done
+        # via the Settings UI (Phase G6 — separate chantier).
+        if args.write_mapping and host in ('master', 'slave'):
+            _maybe_write_mapping(host, cfg_paths, args.output)
     return 0
+
+
+def _maybe_write_mapping(role: str, cfg_paths: list[str],
+                         layout_output: str) -> None:
+    """Synthesise + write <repo>/{role}/config/config_mapping.json IF the
+    file does not already exist. Uses shared.hw_mapping to build the
+    skeleton from the legacy cfg [i2c_servo_hats] section; the operator
+    can then edit it via the Settings UI later (Phase G6).
+
+    Atomic write via the same tmp+os.replace pattern as write_layout(),
+    so a crash mid-write never leaves a half-formed file. Never raises
+    — failure to write a mapping is non-fatal (services fall back to
+    the synthesise-from-layout in-memory path)."""
+    try:
+        from shared import hw_mapping as _hwm
+    except Exception as e:
+        log.warning("config_mapping: hw_mapping import failed (%s) — skipping", e)
+        return
+
+    # Derive output path next to the layout file for parity.
+    # <repo>/{master|slave}/config/config_mapping.json
+    repo = Path(__file__).resolve().parent.parent
+    out_path = repo / role / 'config' / 'config_mapping.json'
+
+    if out_path.is_file():
+        log.info("config_mapping: %s already exists — leaving operator's file untouched", out_path)
+        return
+
+    try:
+        mapping = _hwm.synthesize_from_layout(role, cfg_paths=cfg_paths)
+    except Exception as e:
+        log.warning("config_mapping: synthesis failed (%s) — skipping write", e)
+        return
+
+    # Stamp the timestamp so it's not None on disk.
+    mapping['updated_at'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    # The 'synthesised' flag is informational — kept so the UI can show
+    # "auto-generated, please review" if it wants.
+
+    # Atomic write via tmpfile + os.replace + chmod 0o644 — same pattern
+    # as write_layout(). Never leaves a half-formed file even on crash.
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(out_path.parent),
+                                   prefix='.config_mapping.')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(mapping, f, indent=2, sort_keys=False)
+                f.write('\n')
+            os.replace(tmp, str(out_path))
+            try:
+                os.chmod(str(out_path), 0o644)
+            except Exception:
+                pass
+            log.info("Wrote %s (synthesised from cfg, %d HAT(s))",
+                     out_path, len(mapping.get('hats', [])))
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+            raise
+    except Exception as e:
+        log.warning("config_mapping: write %s failed (%s) — non-fatal", out_path, e)
 
 
 class _NullCtx:

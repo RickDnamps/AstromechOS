@@ -231,5 +231,90 @@ class TestSynthesizeFromLayout(unittest.TestCase):
         self.assertEqual(M.flat_name(m, 'Body_HAT_A', 0), 'Servo_S0')
 
 
+class TestCalibrationFormats(unittest.TestCase):
+    """Format helpers: flat<->nested + normalise_calibration."""
+
+    def test_is_nested_format_recognises_new(self):
+        d = {'Body_HAT_A': {'0': {'label': 'x', 'open': 110}}}
+        self.assertTrue(M.is_nested_format(d))
+
+    def test_is_nested_format_rejects_flat(self):
+        d = {'Servo_S0': {'label': 'x', 'open': 110}}
+        self.assertFalse(M.is_nested_format(d))
+
+    def test_is_nested_format_rejects_empty(self):
+        self.assertFalse(M.is_nested_format({}))
+        self.assertFalse(M.is_nested_format(None))
+
+    def test_flat_to_nested_roundtrip(self):
+        m = _slave_mapping()
+        flat = {
+            'Servo_S0': {'label': 'Body_Panel_1', 'open': 110, 'close': 20, 'speed': 10},
+            'Servo_S5': {'label': 'Body_Panel_6', 'open': 100, 'close': 30, 'speed':  8},
+            'Servo_S16':{'label': 'Body_Panel_X', 'open':  90, 'close': 40, 'speed':  6},
+        }
+        nested = M.flat_calibration_to_nested(flat, m)
+        self.assertEqual(nested['Body_HAT_A']['0']['label'], 'Body_Panel_1')
+        self.assertEqual(nested['Body_HAT_A']['5']['label'], 'Body_Panel_6')
+        self.assertEqual(nested['Body_HAT_B']['0']['label'], 'Body_Panel_X')
+        # Reverse
+        back = M.nested_calibration_to_flat(nested, m)
+        self.assertEqual(back['Servo_S0']['label'], 'Body_Panel_1')
+        self.assertEqual(back['Servo_S5']['label'], 'Body_Panel_6')
+        self.assertEqual(back['Servo_S16']['label'], 'Body_Panel_X')
+
+    def test_flat_to_nested_drops_unmapped(self):
+        m = _slave_mapping()
+        flat = {
+            'Servo_S0':   {'label': 'ok'},
+            'Servo_X99':  {'label': 'unmapped'},   # bogus prefix
+            'NotAServo':  {'label': 'unmapped'},
+            'Servo_S999': {'label': 'unmapped'},   # out of range
+        }
+        nested = M.flat_calibration_to_nested(flat, m)
+        # Only the valid entry survives.
+        self.assertIn('Body_HAT_A', nested)
+        self.assertEqual(len(nested['Body_HAT_A']), 1)
+        self.assertNotIn('NotAServo', nested)
+
+    def test_flat_to_nested_passes_through_already_nested(self):
+        m = _slave_mapping()
+        mixed = {
+            'Body_HAT_A':   {'0': {'label': 'already nested'}},
+            'Servo_S1':     {'label': 'legacy', 'open': 110},
+        }
+        nested = M.flat_calibration_to_nested(mixed, m)
+        self.assertEqual(nested['Body_HAT_A']['0']['label'], 'already nested')
+        self.assertEqual(nested['Body_HAT_A']['1']['label'], 'legacy')
+
+    def test_normalise_calibration_flat_input(self):
+        m = _slave_mapping()
+        flat = {'Servo_S0': {'label': 'x'}}
+        result = M.normalise_calibration(flat, m)
+        self.assertTrue(M.is_nested_format(result))
+        self.assertEqual(result['Body_HAT_A']['0']['label'], 'x')
+
+    def test_normalise_calibration_nested_input(self):
+        m = _slave_mapping()
+        nested = {'Body_HAT_A': {'0': {'label': 'x'}}}
+        result = M.normalise_calibration(nested, m)
+        self.assertEqual(result, nested)
+
+    def test_normalise_calibration_empty(self):
+        self.assertEqual(M.normalise_calibration({}, _slave_mapping()), {})
+        self.assertEqual(M.normalise_calibration(None, _slave_mapping()), {})
+
+    def test_nested_to_flat_only_mapped(self):
+        # nested has an identity NOT in the mapping → silently dropped.
+        m = _slave_mapping()
+        nested = {
+            'Body_HAT_A': {'0': {'label': 'kept'}},
+            'Ghost_HAT_Z': {'0': {'label': 'unmapped'}},
+        }
+        flat = M.nested_calibration_to_flat(nested, m)
+        self.assertEqual(flat['Servo_S0']['label'], 'kept')
+        self.assertEqual(len(flat), 1)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

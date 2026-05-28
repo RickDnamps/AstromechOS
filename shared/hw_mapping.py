@@ -206,6 +206,101 @@ def identity_for(mapping: Optional[dict], flat: str) -> Optional[tuple]:
 # at the driver setup() so existing installs keep working without
 # any operator action.
 # ─────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Calibration JSON format helpers (Phase G3 chantier 2026-05-28)
+# ─────────────────────────────────────────────────────────────────────
+# Two formats coexist on disk during the migration window:
+#   FLAT (legacy):  {"Servo_M0": {"label":..,"open":..,"close":..,"speed":..}, ...}
+#   NESTED (new):   {"Dome_HAT_A": {"0": {"label":..,...}, "1": {...}, ...}, ...}
+# The new format anchors data to the HAT IDENTITY so re-jumpering an
+# I2C address leaves every label / open / close / speed value intact.
+# Driver reads NESTED first, falls back to FLAT for legacy files,
+# writes NESTED only (migration-on-save).
+
+def is_nested_format(d: Any) -> bool:
+    """True iff `d` looks like the new nested-by-identity calibration.
+    Heuristic: at least one top-level key matches _ID_RE and its value
+    is a dict whose keys are numeric strings (channel indices)."""
+    if not isinstance(d, dict) or not d:
+        return False
+    for k, v in d.items():
+        if not isinstance(k, str) or not _ID_RE.match(k):
+            continue
+        if not isinstance(v, dict):
+            continue
+        # First channel-keyed sub-entry confirms nested format.
+        for ch_key, ch_val in v.items():
+            if isinstance(ch_key, str) and ch_key.isdigit() and isinstance(ch_val, dict):
+                return True
+    return False
+
+
+def flat_calibration_to_nested(flat: dict, mapping: Optional[dict]) -> dict:
+    """Convert legacy flat calibration ({"Servo_S0": {...}}) to nested
+    by HAT identity ({"Body_HAT_A": {"0": {...}}}).
+
+    Entries whose flat name can't be resolved by the mapping are
+    DROPPED (logged at debug). This is intentional — a stale entry from
+    a HAT that no longer exists shouldn't pollute the new file.
+    Callers can pass synthesize_from_layout() output if config_mapping
+    isn't on disk yet."""
+    out: dict[str, dict] = {}
+    if not isinstance(flat, dict):
+        return out
+    for name, entry in flat.items():
+        if not isinstance(entry, dict):
+            continue
+        # Skip already-nested entries (defensive — caller may pass mixed).
+        if isinstance(name, str) and _ID_RE.match(name):
+            out.setdefault(name, {}).update(
+                {k: v for k, v in entry.items()
+                 if isinstance(k, str) and k.isdigit()}
+            )
+            continue
+        pair = identity_for(mapping, name)
+        if pair is None:
+            log.debug("flat_calibration_to_nested: dropping unmapped %r", name)
+            continue
+        identity, ch = pair
+        out.setdefault(identity, {})[str(ch)] = dict(entry)
+    return out
+
+
+def nested_calibration_to_flat(nested: dict, mapping: Optional[dict]) -> dict:
+    """Inverse of flat_calibration_to_nested — used by servo_bp GET
+    endpoints that still return flat names to the UI / API for
+    backwards compatibility. Unmappable entries (HATs not present in
+    mapping) are silently skipped."""
+    out: dict[str, dict] = {}
+    if not isinstance(nested, dict):
+        return out
+    for identity, channels in nested.items():
+        if not isinstance(channels, dict):
+            continue
+        for ch_key, entry in channels.items():
+            if not (isinstance(ch_key, str) and ch_key.isdigit()
+                    and isinstance(entry, dict)):
+                continue
+            flat = flat_name(mapping, identity, int(ch_key))
+            if flat is None:
+                continue
+            out[flat] = dict(entry)
+    return out
+
+
+def normalise_calibration(raw: Any, mapping: Optional[dict]) -> dict:
+    """Return raw as NESTED format regardless of input shape.
+
+    Accepts FLAT (legacy), NESTED (new), or empty/None. Used by every
+    consumer (driver + servo_bp) so each one reads ONE format
+    internally without worrying which was on disk."""
+    if not isinstance(raw, dict) or not raw:
+        return {}
+    if is_nested_format(raw):
+        return raw
+    return flat_calibration_to_nested(raw, mapping)
+
+
 def synthesize_from_layout(role: str,
                            cfg_paths: Optional[list[str]] = None
                            ) -> dict:
