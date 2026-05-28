@@ -9782,6 +9782,11 @@ class StatusPoller {
         validateHatField('slave-motor-hat-input', true);
         // Phase D 2026-05-28: zero-config status table refresh.
         if (typeof renderHatsStatus === 'function') renderHatsStatus();
+        // Phase G6 2026-05-28: re-mapping editor (paints once;
+        // re-render is triggered on save + on rescan).
+        if (typeof renderRemapEditor === 'function' && !el('hats-remap-wrapper')?.children.length) {
+          renderRemapEditor();
+        }
       } catch {}
     }
     // W1 fix 2026-05-16: refresh battery preview NOW voltage every
@@ -13367,6 +13372,138 @@ function _renderHatRow(host, hat) {
 
   tr.append(tdHost, tdAddr, tdRole, tdChip, tdStatus, tdConf);
   return tr;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Phase G6 2026-05-28 — Re-mapping panel: editable Identity ↔ Address
+// table per side. Pulls from /hats/layout + the existing config_mapping
+// on disk (via /hats/layout's master.hats / slave.hats arrays which
+// already carry chip + addr + confidence). Submits to POST /hats/remap.
+// ─────────────────────────────────────────────────────────────────
+async function _fetchCurrentMapping(host) {
+  // We don't yet expose a GET /hats/mapping endpoint — derive the
+  // identity list from the layout's hats[] (which carries role) by
+  // also asking the legacy /servo/settings response (already contains
+  // identity per HAT after G5).
+  try {
+    const data = await api('/servo/settings');
+    if (!data) return [];
+    const key = host === 'master' ? 'dome_hats' : 'body_hats';
+    return (data[key] || []).filter(h => !!h.identity).map(h => ({
+      identity: h.identity, address: h.addr, role: (host === 'master' ? 'servo_dome' : 'servo_body'),
+    }));
+  } catch { return []; }
+}
+
+function _renderRemapRow(host, entry, addrChoices) {
+  // entry = { identity, address, role }
+  const tr = document.createElement('tr');
+  tr.dataset.identity = entry.identity;
+  const tdHost = document.createElement('td'); tdHost.textContent = host;
+  const tdId   = document.createElement('td'); tdId.textContent   = entry.identity;
+  const tdRole = document.createElement('td'); tdRole.textContent = _hatRoleLabel(entry.role);
+  const tdAddr = document.createElement('td');
+  const sel    = document.createElement('select');
+  sel.className = 'hat-remap-select';
+  sel.dataset.identity = entry.identity;
+  addrChoices.forEach(addr => {
+    const opt = document.createElement('option');
+    opt.value = addr; opt.textContent = addr;
+    if (addr.toLowerCase() === (entry.address || '').toLowerCase()) {
+      opt.selected = true;
+    }
+    sel.appendChild(opt);
+  });
+  tdAddr.appendChild(sel);
+  tr.append(tdHost, tdId, tdRole, tdAddr);
+  return tr;
+}
+
+async function renderRemapEditor() {
+  const wrap = el('hats-remap-wrapper');
+  if (!wrap) return;
+  wrap.replaceChildren();
+  // Choices = 0x40..0x77 (matches settings_bp::_PCA9685_MIN/MAX).
+  const choices = [];
+  for (let i = 0x40; i <= 0x77; i++) choices.push('0x' + i.toString(16));
+
+  for (const host of ['master', 'slave']) {
+    const rows = await _fetchCurrentMapping(host);
+    if (!rows.length) continue;
+    const sec = document.createElement('section');
+    sec.className = 'card settings-card';
+    sec.style.marginTop = '8px';
+    const h2 = document.createElement('h2');
+    h2.className = 'card-title';
+    h2.textContent = host.toUpperCase() + ' — RE-MAP HAT IDENTITIES';
+    sec.appendChild(h2);
+    const note = document.createElement('p');
+    note.className = 'settings-note';
+    note.textContent = 'Pick the I2C address each HAT identity should bind to. ' +
+                        'Calibration data is anchored to the IDENTITY, so labels + ' +
+                        'open/close angles follow automatically.';
+    sec.appendChild(note);
+
+    const table = document.createElement('table');
+    table.className = 'hat-status-table';
+    const thead = document.createElement('thead');
+    const thr = document.createElement('tr');
+    ['Host', 'Identity', 'Role', 'Address'].forEach(t => {
+      const th = document.createElement('th'); th.textContent = t; thr.appendChild(th);
+    });
+    thead.appendChild(thr); table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    rows.forEach(r => tbody.appendChild(_renderRemapRow(host, r, choices)));
+    table.appendChild(tbody);
+    sec.appendChild(table);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px';
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-primary admin-only';
+    saveBtn.textContent = '💾 SAVE MAPPING (' + host.toUpperCase() + ')';
+    saveBtn.addEventListener('click', () => saveRemap(host, table));
+    btnRow.appendChild(saveBtn);
+    sec.appendChild(btnRow);
+    wrap.appendChild(sec);
+  }
+}
+
+async function saveRemap(host, table) {
+  const selects = table.querySelectorAll('select.hat-remap-select');
+  const hats = Array.from(selects).map(s => ({
+    id:      s.dataset.identity,
+    address: s.value,
+  }));
+  // Client-side dedupe check so we don't bother the backend.
+  const addrs = hats.map(h => h.address.toLowerCase());
+  if (new Set(addrs).size !== addrs.length) {
+    toast('Each address must be unique within this side.', 'error');
+    return;
+  }
+  const out = el('hardware-config-status');
+  if (out) { out.textContent = 'Saving mapping…'; out.className = 'settings-status'; }
+  try {
+    const res = await apiDetail('/hats/remap', 'POST', { host, hats });
+    const d = res?.data || res || {};
+    if (!res?.ok || d.error) {
+      const msg = d.error || 'remap failed';
+      if (out) { out.textContent = '✗ ' + msg; out.className = 'settings-status error'; }
+      toast(msg, 'error');
+      return;
+    }
+    toast(`Mapping saved for ${host}`, 'ok');
+    if (out) { out.textContent = '✓ Mapping saved'; out.className = 'settings-status ok'; }
+    // Refresh both the status table + the remap editor + the calibration
+    // panel so disabled rows flip back to enabled when the address now
+    // matches a detected HAT.
+    if (typeof renderHatsStatus === 'function') renderHatsStatus();
+    if (typeof loadServoSettings === 'function') loadServoSettings();
+    renderRemapEditor();
+  } catch (e) {
+    if (out) { out.textContent = '✗ ' + (e?.message || 'remap error'); out.className = 'settings-status error'; }
+    toast('Remap failed', 'error');
+  }
 }
 
 async function renderHatsStatus() {

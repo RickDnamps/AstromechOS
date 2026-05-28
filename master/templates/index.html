@@ -2435,6 +2435,10 @@
                by renderHatsStatus() consuming /hats/layout. Empty until
                first render; placeholder text shown on degraded states. -->
           <div id="hats-table-wrapper" style="margin-top:6px"></div>
+          <!-- Phase G6 2026-05-28 — Re-map editor: change which I2C address
+               each HAT identity binds to. Calibration data follows the
+               identity so labels + open/close angles survive the swap. -->
+          <div id="hats-remap-wrapper" style="margin-top:10px"></div>
           <!-- CRITICAL banner — appears only when collision detected.
                Stays visible until the next rescan resolves. -->
           <div id="hats-critical-banner" class="hat-critical-banner" style="display:none">

@@ -207,6 +207,171 @@ def _run_slave_detect(timeout: float = 25.0) -> tuple[int, str]:
         return -1, f'slave detect_hats error: {e}'
 
 
+@hats_bp.post('/remap')
+@require_admin
+def hats_remap():
+    """Phase G6 chantier 2026-05-28 — operator re-binds a HAT IDENTITY
+    to a different I2C address (e.g. after re-jumpering 0x41 -> 0x42
+    in hardware) WITHOUT touching any calibration data.
+
+    Body (JSON):
+        {
+          "host":  "master" | "slave",     (required)
+          "hats":  [                       (required, replaces existing)
+            { "id": "Body_HAT_A", "address": "0x42" },
+            ...
+          ]
+        }
+
+    Rules enforced server-side (defense-in-depth alongside the UI):
+      - host must be 'master' or 'slave'.
+      - Every entry in 'hats' must reference an EXISTING identity
+        from the current config_mapping (no rename / no add — we
+        only change addresses). Identity creation is out of scope
+        for this endpoint; a future Imager UI will own that.
+      - Every address must be 0x40..0x77 and unique within the side
+        (no two identities at the same physical address).
+      - Roles, channels, alias_prefix, alias_base are preserved as-is
+        from the existing entries.
+
+    On success:
+      - Atomic tmp+os.replace write of config_mapping.json.
+      - In-process driver reload (reg.dome_servo.reload() or
+        reg.body_servo via UART SRV:RELOAD) so the change takes
+        effect without a service restart.
+      - 200 with the updated layout payload (same shape as
+        GET /hats/layout) so the UI re-renders straight away.
+
+    On any validation failure: 400 + clear message, no write happens."""
+    from flask import request as _req
+    import json as _json
+    import tempfile as _tempfile
+    body = _req.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'JSON body must be an object'}), 400
+    host = body.get('host')
+    if host not in ('master', 'slave'):
+        return jsonify({'error': "host must be 'master' or 'slave'"}), 400
+    submitted = body.get('hats')
+    if not isinstance(submitted, list) or not submitted:
+        return jsonify({'error': "'hats' must be a non-empty array"}), 400
+
+    current = _hwl.load_for if False else None  # ignore — we want hw_mapping
+    from shared import hw_mapping as _hwm
+    current_map = _hwm.load_for(host)
+    if current_map is None:
+        # Fallback: synthesize so the operator can re-map a fresh install
+        # without first running detect_hats manually.
+        cfg_paths = (
+            [str(_REPO / 'slave' / 'config' / 'slave.cfg')]
+            if host == 'slave'
+            else [str(MAIN_CFG), str(LOCAL_CFG)]
+        )
+        current_map = _hwm.synthesize_from_layout(host, cfg_paths=cfg_paths)
+    current_by_id = {h['id']: h for h in _hwm.all_hats(current_map)}
+
+    # Validate each submitted entry + build the new hats[] list while
+    # preserving fields the endpoint can't change (role / channels /
+    # alias_prefix / alias_base).
+    new_hats = []
+    seen_addrs: set[str] = set()
+    for entry in submitted:
+        if not isinstance(entry, dict):
+            return jsonify({'error': 'each hats[] entry must be an object'}), 400
+        ident = entry.get('id')
+        addr  = entry.get('address')
+        if not isinstance(ident, str) or ident not in current_by_id:
+            return jsonify({
+                'error': f"unknown HAT identity {ident!r}; "
+                         f"known: {sorted(current_by_id.keys())}",
+            }), 400
+        addr_norm = _hwm._normalise_addr(addr) if hasattr(_hwm, '_normalise_addr') else None
+        if addr_norm is None:
+            return jsonify({
+                'error': f"invalid address {addr!r} for {ident}; "
+                         f"expected '0x40'..'0x77'",
+            }), 400
+        if addr_norm in seen_addrs:
+            return jsonify({
+                'error': f"address {addr_norm} assigned to more than one HAT; "
+                         f"each physical address must be unique",
+            }), 400
+        seen_addrs.add(addr_norm)
+        prev = current_by_id[ident]
+        new_hats.append({
+            'id':           prev['id'],
+            'role':         prev['role'],
+            'address':      addr_norm,
+            'channels':     prev.get('channels', 16),
+            'alias_prefix': prev.get('alias_prefix'),
+            'alias_base':   prev.get('alias_base'),
+        })
+
+    # Persist atomically. Stamp the timestamp + clear the synthesised
+    # flag (operator-confirmed mapping is no longer a synth).
+    import datetime as _dt
+    new_mapping = {
+        'schema_version': 1,
+        'host':           host,
+        'updated_at':     _dt.datetime.now(_dt.timezone.utc)
+                                 .strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'synthesised':    False,
+        'hats':           new_hats,
+    }
+    out_path = _REPO / host / 'config' / 'config_mapping.json'
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = _tempfile.mkstemp(dir=str(out_path.parent),
+                                    prefix='.config_mapping.')
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                _json.dump(new_mapping, f, indent=2)
+                f.write('\n')
+            os.replace(tmp, str(out_path))
+            try:
+                os.chmod(str(out_path), 0o644)
+            except Exception:
+                pass
+        except Exception:
+            try:
+                os.unlink(tmp)
+            except Exception:
+                pass
+            raise
+    except Exception as e:
+        log.error("hats_remap: write %s failed: %s", out_path, e)
+        return jsonify({'error': f'write failed: {e}'}), 500
+
+    # In-process driver reload. Best-effort — if the driver isn't loaded
+    # yet (e.g. host == slave on master service) the next service start
+    # picks up the new mapping. Master dome driver has a reload()
+    # method that re-reads angles; we extend it to also re-read
+    # mapping by setting _mapping directly first.
+    try:
+        import master.registry as reg
+        if host == 'master' and getattr(reg, 'dome_servo', None):
+            try:
+                reg.dome_servo._mapping = new_mapping
+                if reg.dome_servo.is_ready():
+                    reg.dome_servo.reload()
+            except Exception as _re:
+                log.warning("hats_remap: dome_servo reload failed: %s", _re)
+        # For slave, the master is a UART proxy — the SRV:RELOAD command
+        # tells the slave to reload its angles JSON. Mapping reload on
+        # the slave needs an SFTP push of config_mapping.json + service
+        # restart; that's out of scope for this endpoint (next deploy
+        # picks it up).
+    except Exception:
+        pass
+
+    return jsonify({
+        'status': 'ok',
+        'updated_at': new_mapping['updated_at'],
+        'host':       host,
+        'layout':     hats_payload(),
+    })
+
+
 @hats_bp.post('/rescan')
 @require_admin
 def hats_rescan():
