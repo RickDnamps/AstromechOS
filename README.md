@@ -429,6 +429,31 @@ bash /home/artoo/astromechos/scripts/update.sh
 
 Or press the physical dome button (short press). Updates itself over-the-air — no SSH required.
 
+### 🧹 Production-ready imaging (`clean_for_imager.sh`)
+
+Before pulling the SD card to clone a distributable image, run the
+industrial cleanup script. It stops every `astromech-*` service, purges
+caches (pip / npm / `.cache`), wipes `/tmp/` + shell history + the
+security snapshot, vacuums systemd journal + truncates active `/var/log`
+files (NEVER `rm -rf` — daemons keep writing), `apt-get clean +
+autoremove`, and resets `/etc/machine-id` so every cloned Pi boots with
+its own unique identity. Before/after disk usage is reported so you see
+exactly how much was reclaimed.
+
+```bash
+# First time only — copy the script to /usr/local/bin/ (so it lives on
+# the imaged card and any future operator can run it without cd-ing
+# to the repo first):
+sudo bash /home/artoo/astromechos/scripts/clean_for_imager.sh --install
+
+# Then, whenever you want to produce a clean image:
+sudo clean_for_imager.sh           # interactive — type 'yes' to confirm
+sudo clean_for_imager.sh --yes     # scripted / CI mode (no prompt)
+sudo shutdown now                   # pull the SD card and dd it.
+```
+
+Safety: the script refuses to run if you're not root, if `/proc/device-tree/model` is not a Raspberry Pi, or if no AstromechOS repo is found under `/home/*/astromechos`. No `rm -rf /var/log/*`, no recursive `node_modules` purge across `$HOME` — destructive actions are bounded to the AstromechOS repo + known cache directories only.
+
 ---
 
 ## Development Roadmap
