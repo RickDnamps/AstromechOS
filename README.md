@@ -383,6 +383,8 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 
 ### Installation — Two Scripts, Fully Automated
 
+> **Portable across any Pi username** — `setup_master.sh` / `setup_slave.sh` auto-capture via `$SUDO_USER`. The Master and Slave **must share the same Linux user** (same password too — simplifies SSH + first-contact auth). `~` and `$(slave_target)` below resolve to your install dir and SSH target automatically; the AstromechOS Imager (coming) will inject the choices into `/boot/astromech_init.cfg` so no SSH login is needed at all.
+
 ```bash
 # Step 1 — Master Pi (SSH into it, then run:)
 curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_master.sh | sudo bash
@@ -391,8 +393,8 @@ curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts
 curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
 
 # Step 3 — First deploy (from Master, once:)
-ssh-copy-id artoo@astromech-slave.local
-bash /home/artoo/astromechos/scripts/deploy.sh --first-install
+bash ~/astromechos/scripts/setup_ssh_keys.sh         # pushes Master pubkey to the Slave (target read from local.cfg)
+bash ~/astromechos/scripts/deploy.sh --first-install
 ```
 
 **Done.** Open **`http://192.168.4.1:5000`** on any device connected to the robot hotspot (`Astromech_Control_XXXX`).

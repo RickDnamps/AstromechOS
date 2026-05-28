@@ -4,6 +4,8 @@
 
 Everything is automated. The full installation is **3 commands + 2 reboots**.
 
+> **Portability (2026-05-28)** — AstromechOS no longer assumes your Pi user is named `artoo`. The setup scripts auto-detect your user via `$SUDO_USER` (or read `/boot/astromech_init.cfg` if the AstromechOS Imager — coming soon — has written one), and all systemd unit files + SSH targets + repo paths are derived at runtime via `shared/identity.py` + `scripts/lib_config.sh`. Examples in this guide use `artoo` as a placeholder — **replace it with your Pi username** if you imaged your SD card under a different name. Master and Slave **must share the same Linux user** (and the same password — simplifies SSH key distribution and first-contact auth).
+
 ---
 
 ## Hardware prerequisites
