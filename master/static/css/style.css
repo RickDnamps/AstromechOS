@@ -6050,6 +6050,27 @@ body[data-lock-mode="2"] .drive-wrapper {
   letter-spacing: 0.3px;
 }
 
+/* Phase G5 2026-05-28 — Calibration card greyed out when its parent
+   HAT is configured but not detected on the live I2C scan. */
+.hat-block-offline {
+  opacity: 0.55;
+  position: relative;
+  border-color: var(--err, #e74c3c);
+}
+.hat-block-offline .card-title {
+  color: var(--err, #e74c3c);
+}
+.hat-block-offline .servo-grid {
+  pointer-events: none;
+}
+.servo-grid-offline {
+  pointer-events: none;
+}
+.hat-block-offline .btn:disabled,
+.hat-block-offline .btn[disabled] {
+  cursor: not-allowed;
+}
+
 /* W9 — dim variant of settings-note for defaults reference */
 .settings-note.settings-note-dim { opacity: 0.65; }
 .settings-note code {

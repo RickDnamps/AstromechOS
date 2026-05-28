@@ -254,14 +254,33 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
     # loaded from config_mapping.json with fallback to synthesise — so
     # this works on first boot before G2 has run.
     role = 'slave' if 'slave/' in filepath.replace('\\', '/') else 'master'
+    offline_identities: set[str] = set()
     try:
         from shared import hw_mapping as _hwm
+        from shared import hw_layout as _hwl
         from shared.paths import MAIN_CFG as _MC, LOCAL_CFG as _LC, SLAVE_CFG as _SC
         _cfg_paths = [str(_SC)] if role == 'slave' else [str(_MC), str(_LC)]
         mapping = _hwm.load_for(role) or _hwm.synthesize_from_layout(role, cfg_paths=_cfg_paths)
         existing = _hwm.normalise_calibration(existing, mapping)
+        # Phase G5 chantier 2026-05-28: cross-reference live hw_layout
+        # to find HATs that are physically MISSING. Updates targeting
+        # those HATs are refused (defense-in-depth alongside the UI
+        # disable). Operator gets a clear 503 with the missing
+        # identity in the payload instead of a silent partial save.
+        _layout = _hwl.load_for(role)
+        if _layout is not None:
+            _detected = _hwl.detected_addresses(_layout)
+            for _hat in _hwm.all_hats(mapping):
+                if _hat.get('alias_prefix') is None:
+                    continue   # motor HAT has no servo namespace
+                try:
+                    _addr_int = int(_hat['address'], 16)
+                except (ValueError, KeyError):
+                    continue
+                if f'0x{_addr_int:02x}' not in _detected:
+                    offline_identities.add(_hat['id'])
     except Exception as e:
-        log.warning("hw_mapping unavailable (%s) — keeping legacy flat format", e)
+        log.warning("hw_mapping/hw_layout unavailable (%s) — keeping legacy flat format", e)
         mapping = None
 
     def _identity_ch(flat_name: str):
@@ -273,8 +292,17 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
         except Exception:
             return None
 
+    refused: list[str] = []
     for name, vals in subset.items():
         pair = _identity_ch(name)
+        if pair is not None and pair[0] in offline_identities:
+            # G5 hardware-gate: this HAT is in config_mapping but absent
+            # from the live hw_layout. Refuse the update — the UI should
+            # have prevented it via .servo-row-offline, but a malicious
+            # client or stale UI could still POST. Aggregate and raise
+            # once at the end so the operator sees ALL refused names.
+            refused.append(name)
+            continue
         if pair is not None:
             identity, ch = pair
             existing.setdefault(identity, {})
@@ -298,6 +326,16 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
                 'close': _clamp(_safe_int(vals.get('close', prev.get('close',  20)),  20)),
                 'speed': _clamp_speed(_safe_int(vals.get('speed', prev.get('speed', 10)), 10)),
             }
+
+    # Phase G5: surface ALL refused names at once so the operator sees
+    # the full impact of a stale UI / offline HAT, not just the first.
+    if refused:
+        raise HardwareOfflineError(
+            f"Calibration update refused for {len(refused)} servo(s) on "
+            f"offline HAT(s): {', '.join(sorted(refused))}. Re-run "
+            f"Settings -> HATs -> RESCAN HARDWARE or check the physical "
+            f"PCA9685 wiring."
+        )
     os.makedirs(os.path.dirname(filepath), exist_ok=True)
     # User-reported 2026-05-16: rotate 3 .bak generations BEFORE writing
     # so an unintended mutation (audit script, cascade label revert,
@@ -331,6 +369,16 @@ class AnglesCorruptedError(RuntimeError):
     pass
 
 
+class HardwareOfflineError(RuntimeError):
+    """Phase G5 chantier 2026-05-28: raised by _update_angles_file when
+    the caller tries to update calibration for one or more servos
+    whose parent HAT is configured but ABSENT from the live I2C scan.
+    The save endpoint surfaces this as HTTP 503 + message so the
+    operator can act (rescan or fix wiring) without silently losing
+    edits to a HAT that the driver can't operate anyway."""
+    pass
+
+
 def _sync_angles_json(panels: dict) -> None:
     """Writes dome_angles.json (Master) and servo_angles.json (Slave via scp).
     Notifies both drivers to reload angles immediately — no service restart needed.
@@ -349,6 +397,8 @@ def _sync_angles_json(panels: dict) -> None:
                 reg.dome_servo.reload()
         except OSError as e:
             log.warning("Failed to write dome_angles.json: %s", e)
+        except HardwareOfflineError:
+            raise   # Phase G5: surface unchanged to save endpoint.
         except RuntimeError as e:
             raise AnglesCorruptedError(str(e)) from e
         try:
@@ -356,6 +406,8 @@ def _sync_angles_json(panels: dict) -> None:
         except OSError as e:
             log.warning("Failed to write servo_angles.json: %s", e)
             return
+        except HardwareOfflineError:
+            raise   # Phase G5: surface unchanged.
         except RuntimeError as e:
             raise AnglesCorruptedError(str(e)) from e
     # B-225 (remaining tabs audit 2026-05-15): SCP runs in a daemon
@@ -1034,16 +1086,65 @@ def _servo_settings_version() -> str:
 @servo_bp.get('/settings')
 def servo_settings_get():
     data = _read_panels_cfg()
-    data['dome_hats'] = [
-        {'hat': i + 1, 'addr': hex(_master_hat_addrs[i]),
-         'servos': [f'Servo_M{i * 16 + j}' for j in range(16)]}
-        for i in range(len(_master_hat_addrs))
-    ]
-    data['body_hats'] = [
-        {'hat': i + 1, 'addr': hex(_slave_hat_addrs[i]),
-         'servos': [f'Servo_S{i * 16 + j}' for j in range(16)]}
-        for i in range(len(_slave_hat_addrs))
-    ]
+    # Phase G5 chantier 2026-05-28: enrich each HAT entry with the
+    # STABLE IDENTITY from config_mapping.json + the per-HAT
+    # `available` flag (intersected with hw_layout.json detected
+    # addresses). The frontend uses these to (a) display the
+    # identity above each card and (b) grey out commands +
+    # show "Hardware Not Found" when available==False.
+    try:
+        from shared import hw_mapping as _hwm
+        from shared import hw_layout as _hwl
+        from shared.paths import SLAVE_CFG as _SCpath
+        m_map = _hwm.load_for('master') or _hwm.synthesize_from_layout(
+            'master', cfg_paths=[str(_MAIN_CFG), str(_LOCAL_CFG)])
+        s_map = _hwm.load_for('slave') or _hwm.synthesize_from_layout(
+            'slave', cfg_paths=[str(_SCpath)])
+        m_layout = _hwl.load_for('master')
+        s_layout = _hwl.load_for('slave')
+        m_present = _hwl.detected_addresses(m_layout)
+        s_present = _hwl.detected_addresses(s_layout)
+    except Exception as e:
+        log.warning("servo_settings: hw_mapping/layout unavailable (%s) — defaulting available=True", e)
+        m_map = s_map = None
+        m_present = s_present = set()
+        m_layout = s_layout = None
+
+    def _enrich(side_map, addr_int, present_set, layout_known):
+        try:
+            from shared import hw_mapping as _hwm  # noqa: F811
+            hat = _hwm.hat_by_address(side_map, addr_int)
+        except Exception:
+            hat = None
+        identity = hat['id'] if hat else None
+        # available = True only when we have a layout AND the address
+        # is in the detected set. If no layout (None), default to True
+        # so legacy boots before hw_layout is written never grey out
+        # the whole calibration UI.
+        available = True if layout_known is None \
+            else (f'0x{addr_int:02x}' in present_set)
+        return identity, available
+
+    data['dome_hats'] = []
+    for i, addr in enumerate(_master_hat_addrs):
+        identity, avail = _enrich(m_map, addr, m_present, m_layout)
+        data['dome_hats'].append({
+            'hat': i + 1,
+            'addr': hex(addr),
+            'identity': identity,
+            'available': avail,
+            'servos': [f'Servo_M{i * 16 + j}' for j in range(16)],
+        })
+    data['body_hats'] = []
+    for i, addr in enumerate(_slave_hat_addrs):
+        identity, avail = _enrich(s_map, addr, s_present, s_layout)
+        data['body_hats'].append({
+            'hat': i + 1,
+            'addr': hex(addr),
+            'identity': identity,
+            'available': avail,
+            'servos': [f'Servo_S{i * 16 + j}' for j in range(16)],
+        })
     resp = jsonify(data)
     resp.headers['X-Servo-Version'] = _servo_settings_version()
     return resp
@@ -1102,6 +1203,14 @@ def servo_settings_save():
         # E12: file was quarantined, refuse the save instead of writing
         # a fresh dict that would have wiped non-edited servos.
         return jsonify({'error': str(e), 'recoverable': False}), 503
+    except HardwareOfflineError as e:
+        # G5: one or more servos belong to a HAT that is configured
+        # but not detected on the live I2C scan. The UI should have
+        # disabled those rows; this server-side check catches stale
+        # UI / malicious POSTs. Operator gets a clear retry hint
+        # (rescan or fix wiring) instead of a silent save.
+        return jsonify({'error': str(e), 'reason': 'hardware_offline',
+                        'recoverable': True}), 503
     # E10 fix 2026-05-16: response itself can't include SCP result because
     # SCP runs async in a thread that's still in-flight when this returns.
     # Frontend polls /servo/sync_status ~1.5s after save to verify Slave

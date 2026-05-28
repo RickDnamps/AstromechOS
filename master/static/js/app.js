@@ -5230,9 +5230,18 @@ function _renderHatBlocks(container, hats, apiPrefix, side) {
   hats.forEach(hat => {
     const gridId  = `${side}-servo-hat${hat.hat}-list`;
     const loc   = (side === 'dome' ? _masterLocation : _slaveLocation).toUpperCase();
-    const label = hats.length > 1 ? `${loc} SERVOS ${hat.hat} (${hat.addr})` : `${loc} SERVOS`;
+    // Phase G5 chantier 2026-05-28: HAT identity displayed alongside
+    // the address so the operator knows the STABLE name that carries
+    // their labels + calibrations across re-jumpering. Available flag
+    // drives the disabled-state styling — see `.hat-block-offline`.
+    const idTag = hat.identity ? ` · ${hat.identity}` : '';
+    const baseLabel = hats.length > 1
+      ? `${loc} SERVOS ${hat.hat} (${hat.addr}${idTag})`
+      : `${loc} SERVOS${idTag ? ' ('+hat.identity+')' : ''}`;
+    const isOffline = hat.available === false;
+    const label = isOffline ? `${baseLabel} — HARDWARE NOT FOUND` : baseLabel;
     const section = document.createElement('section');
-    section.className = 'card systems-card';
+    section.className = 'card systems-card' + (isOffline ? ' hat-block-offline' : '');
 
     const title = document.createElement('h2');
     title.className = 'card-title';
@@ -5242,7 +5251,13 @@ function _renderHatBlocks(container, hats, apiPrefix, side) {
     const note = document.createElement('div');
     note.className = 'settings-note';
     note.style.marginBottom = '6px';
-    note.textContent = 'O° = open  |  C° = close  |  S = speed (1=slow…10=instant)';
+    if (isOffline) {
+      note.textContent = '⚠ HAT '+(hat.identity||hat.addr)+' configured but not detected on I2C scan. ' +
+                         'Calibration disabled — open Settings → HATs → RESCAN HARDWARE or check wiring.';
+      note.style.color = 'var(--err, #e74c3c)';
+    } else {
+      note.textContent = 'O° = open  |  C° = close  |  S = speed (1=slow…10=instant)';
+    }
     section.appendChild(note);
 
     const grid = document.createElement('div');
@@ -5282,10 +5297,25 @@ function _renderHatBlocks(container, hats, apiPrefix, side) {
       if (panel) panel.saveAngles();
     });
     btnRow.append(openAllBtn, closeAllBtn, saveBtn);
+    // Phase G5: disable command + save buttons when the HAT is offline.
+    // The server-side guard (servo_bp HardwareOfflineError → 503) is
+    // the source of truth; this UI gate is the early bounce.
+    if (isOffline) {
+      [openAllBtn, closeAllBtn, saveBtn].forEach(b => {
+        b.disabled = true;
+        b.title = 'Hardware Not Found — re-detect via Settings → HATs';
+      });
+    }
     section.appendChild(btnRow);
 
     container.appendChild(section);
     _hatPanels[gridId] = new ServoPanel(gridId, hat.servos, `/servo/${side}`);
+    // Phase G5: greyed-out class on the whole grid so individual
+    // servo rows inherit the disabled cursor + opacity.
+    if (isOffline) {
+      const g = el(gridId);
+      if (g) g.classList.add('servo-grid-offline');
+    }
   });
 }
 
