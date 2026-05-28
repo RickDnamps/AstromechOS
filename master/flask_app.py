@@ -89,6 +89,7 @@ def create_app() -> Flask:
     from master.api.light_bp        import light_bp
     from master.api.drive_layout_bp import drive_layout_bp
     from master.api.deploy_bp       import deploy_bp
+    from master.api.hats_bp         import hats_bp
 
     app.register_blueprint(audio_bp)
     app.register_blueprint(motion_bp)
@@ -107,6 +108,7 @@ def create_app() -> Flask:
     app.register_blueprint(light_bp)
     app.register_blueprint(drive_layout_bp)
     app.register_blueprint(deploy_bp)
+    app.register_blueprint(hats_bp)
 
     # Audit finding Schema M-3 2026-05-15: sweep orphan .chor.tmp
     # files left over from interrupted atomic writes. Cheap (single

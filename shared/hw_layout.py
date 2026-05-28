@@ -129,6 +129,47 @@ def collision_addresses(layout: Optional[dict]) -> set[int]:
     return out
 
 
+def worst_status(layout: Optional[dict]) -> str:
+    """Return the highest-priority status across all HATs in <layout>.
+
+    Priority: STATUS_CRITICAL > STATUS_DEGRADED > STATUS_READY.
+
+    Used by hats_bp's /hats/layout aggregator + /status enrichment to
+    present a single "is the hardware healthy?" badge in the UI.
+    Empty / missing layout → STATUS_DEGRADED (no detection run yet).
+
+    Single helper so the master's hats_bp and the cockpit poller never
+    re-implement the priority logic — guaranteed consistent ranking
+    across the codebase."""
+    if not layout:
+        return STATUS_DEGRADED
+    hats = layout.get('hats') or []
+    if not hats:
+        # JSON exists but reports no HATs → the bus is empty, which is
+        # degraded (no hardware to operate) — distinct from collision.
+        return STATUS_DEGRADED
+    has_critical = False
+    has_degraded = False
+    has_ready    = False
+    for h in hats:
+        if not isinstance(h, dict):
+            continue
+        if h.get('collision') or h.get('chip') == 'collision':
+            has_critical = True
+        elif h.get('chip') == 'pca9685':
+            has_ready = True
+        else:
+            # 'unknown' / 'absent' / anything else → degraded.
+            has_degraded = True
+    if has_critical:
+        return STATUS_CRITICAL
+    if has_degraded:
+        return STATUS_DEGRADED
+    if has_ready:
+        return STATUS_READY
+    return STATUS_DEGRADED
+
+
 def hat_status(layout: Optional[dict], addr: int) -> str:
     """Return STATUS_READY | STATUS_DEGRADED | STATUS_CRITICAL for <addr>.
 

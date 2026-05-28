@@ -158,6 +158,46 @@ class TestHatStatus(unittest.TestCase):
         self.assertEqual(H.hat_status(layout, 0x40), H.STATUS_DEGRADED)
 
 
+class TestWorstStatus(unittest.TestCase):
+    """Top-level aggregator: highest-priority status across all HATs.
+    Used by hats_bp + /status enrichment for a single 'is HW healthy?'
+    badge in the UI."""
+
+    def test_none_layout_is_degraded(self):
+        self.assertEqual(H.worst_status(None), H.STATUS_DEGRADED)
+
+    def test_empty_hats_list_is_degraded(self):
+        self.assertEqual(H.worst_status(_make_layout([])), H.STATUS_DEGRADED)
+
+    def test_all_ready_is_ready(self):
+        layout = _make_layout([
+            {'addr': '0x40', 'chip': 'pca9685', 'collision': False},
+            {'addr': '0x41', 'chip': 'pca9685', 'collision': False},
+        ])
+        self.assertEqual(H.worst_status(layout), H.STATUS_READY)
+
+    def test_one_collision_overrides_all(self):
+        layout = _make_layout([
+            {'addr': '0x40', 'chip': 'pca9685',   'collision': False},
+            {'addr': '0x41', 'chip': 'collision', 'collision': True},
+        ])
+        self.assertEqual(H.worst_status(layout), H.STATUS_CRITICAL)
+
+    def test_unknown_chip_yields_degraded(self):
+        layout = _make_layout([
+            {'addr': '0x40', 'chip': 'unknown'},
+        ])
+        self.assertEqual(H.worst_status(layout), H.STATUS_DEGRADED)
+
+    def test_mixed_ready_degraded_is_degraded(self):
+        layout = _make_layout([
+            {'addr': '0x40', 'chip': 'pca9685', 'collision': False},
+            {'addr': '0x41', 'chip': 'unknown'},
+        ])
+        # Mixed = degraded (something needs operator attention).
+        self.assertEqual(H.worst_status(layout), H.STATUS_DEGRADED)
+
+
 class TestLogMessages(unittest.TestCase):
 
     def test_critical_message_actionable(self):
