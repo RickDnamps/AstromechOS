@@ -9059,7 +9059,62 @@ const cockpitPanel = {
     this._updateServices(data);
     this._updateActivity(data);
     this._updateNetwork(data);
+    this._updateHardwareHealth(data);
     this._updateAlerts(data);
+  },
+
+  // Phase E 2026-05-28 — Hardware Health widget. Reads /status.hats
+  // (single source of truth, populated by hats_bp.hats_payload()).
+  // Green / amber / red badge + concise summary. CRITICAL pulses.
+  _updateHardwareHealth(data) {
+    const badge   = el('ck-hw-badge');
+    const summary = el('ck-hw-summary');
+    const wrap    = el('ck-hardware-health');
+    if (!badge || !summary || !wrap) return;
+    const h = data.hats;
+    if (!h || typeof h !== 'object') {
+      badge.textContent = 'unknown';
+      badge.className   = 'hat-status-badge hat-status-unknown';
+      summary.textContent = 'No HAT data yet — open Settings → HATs to rescan.';
+      wrap.classList.remove('cockpit-hw-critical');
+      return;
+    }
+    const agg = h.aggregate_status || 'unknown';
+    badge.textContent = agg;
+    badge.className   = 'hat-status-badge hat-status-' + agg;
+
+    const mCount = (h.master && h.master.hats || []).length;
+    const sCount = (h.slave  && h.slave.hats  || []).length;
+    const mPresent = !!(h.master && h.master.present);
+    const sPresent = !!(h.slave  && h.slave.present);
+
+    // Collisions list for the summary line (high-signal info).
+    const collisions = [];
+    for (const side of ['master', 'slave']) {
+      for (const hat of ((h[side] && h[side].hats) || [])) {
+        if (hat.collision || hat.chip === 'collision') collisions.push(`${side} ${hat.addr}`);
+      }
+    }
+    if (collisions.length) {
+      summary.textContent = `⚠ Collision @ ${collisions.join(', ')} — re-jumper PCA9685 (A0/A1/A2).`;
+      wrap.classList.add('cockpit-hw-critical');
+    } else if (agg === 'ready') {
+      summary.textContent = `Master ${mCount} HAT${mCount === 1 ? '' : 's'} · Slave ${sCount} HAT${sCount === 1 ? '' : 's'} — all healthy.`;
+      wrap.classList.remove('cockpit-hw-critical');
+    } else if (agg === 'degraded') {
+      const parts = [];
+      if (!mPresent) parts.push('Master: no scan');
+      else if (!mCount) parts.push('Master: no HAT detected');
+      if (!sPresent) parts.push('Slave: no scan');
+      else if (!sCount) parts.push('Slave: no HAT detected');
+      summary.textContent = parts.length
+        ? parts.join(' · ') + ' — open Settings → HATs to rescan.'
+        : 'Degraded — open Settings → HATs to investigate.';
+      wrap.classList.remove('cockpit-hw-critical');
+    } else {
+      summary.textContent = 'Hardware status unknown.';
+      wrap.classList.remove('cockpit-hw-critical');
+    }
   },
 
   _updateVitals(data) {
@@ -9357,6 +9412,23 @@ const cockpitPanel = {
       alerts.push({ cls: 'warn', msg: 'Body servos not ready' });
     if (data.camera_found === false)
       alerts.push({ cls: 'warn', msg: 'Camera not found — check USB' });
+    // Phase E 2026-05-28 — surface HAT health into the existing alerts
+    // stream so the topbar STATUS chip turns red/amber on collision/missing.
+    if (data.hats) {
+      const agg = data.hats.aggregate_status;
+      if (agg === 'critical') {
+        alerts.push({ cls: 'err',  msg: 'I2C HAT collision — check A0/A1/A2 jumpers' });
+      } else if (agg === 'degraded') {
+        // Suppress the noisy 'degraded' alert if every side reported zero HATs
+        // (= bus genuinely empty, which the ck-hardware-health widget already
+        //  surfaces); only fire when something WAS expected but isn't there.
+        const mAbs = !data.hats.master?.present;
+        const sAbs = !data.hats.slave?.present;
+        if (!(mAbs && sAbs)) {
+          alerts.push({ cls: 'warn', msg: 'I2C HAT degraded — see Settings → HATs' });
+        }
+      }
+    }
     // B-238 (remaining tabs audit 2026-05-15): surface a "Stream
     // offline" alert when the USB camera is detected but mjpg_streamer
     // hasn't actually been streaming for 5+ minutes. Track first-seen
