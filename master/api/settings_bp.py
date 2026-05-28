@@ -930,6 +930,25 @@ def set_config():
     """Updates general parameters in local.cfg."""
     data = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
 
+    # Phase C zero-config gate (chantier 2026-05-28): the I2C HAT
+    # addresses are now AUTO-DISCOVERED by scripts/detect_hats.py and
+    # consumed via shared/hw_layout.py. Manual address edits via this
+    # endpoint are NO LONGER permitted — the operator must run
+    # POST /hats/rescan instead. Rejecting BEFORE any cfg parse so a
+    # malformed/forged POST can't even smuggle the keys through.
+    _zero_config_keys = [k for k in data.keys()
+                         if isinstance(k, str)
+                         and k.startswith('i2c_servo_hats.')]
+    if _zero_config_keys:
+        return jsonify({
+            'error': 'I2C HAT addresses are auto-discovered (zero-config).',
+            'rejected_keys': sorted(_zero_config_keys),
+            'hint': 'Run POST /hats/rescan to refresh the hardware layout, '
+                    'or physically re-jumper the HAT (A0/A1/A2). '
+                    'See docs/DEPLOY_SECURITY.md §4.5 for the jumper '
+                    'truth table.',
+        }), 400
+
     # Allowed keys (section.key)
     _SLAVE_HAT_KEYS = {'i2c_servo_hats.slave_hats', 'i2c_servo_hats.slave_motor_hat'}
     allowed = {
