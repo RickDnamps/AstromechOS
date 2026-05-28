@@ -829,6 +829,10 @@ const _appDialog = {
     e.title.textContent = opts.title || (this._kind === 'alert' ? 'NOTICE' : 'CONFIRM');
     e.msg.textContent   = opts.message || '';
     e.card.classList.toggle('app-dialog-danger', !!opts.danger);
+    // UI refactoring 2026-05-28: monospace variant for technical-reference
+    // dialogs (jumper truth table, register dumps). pre-wrap + Share Tech
+    // Mono preserve newlines + column alignment. Class removed in _finish.
+    e.card.classList.toggle('app-dialog-monospace', !!opts.monospace);
 
     if (this._kind === 'prompt') {
       e.input.classList.remove('hidden');
@@ -880,6 +884,9 @@ const _appDialog = {
   _finish(ok, value = '') {
     const e = this._els();
     if (e.overlay) e.overlay.classList.add('hidden');
+    // Clean up the monospace class so the NEXT dialog (a normal alert /
+    // confirm / prompt) doesn't inherit pre-wrap + console font.
+    if (e.card) e.card.classList.remove('app-dialog-monospace');
     if (this._onKey) { document.removeEventListener('keydown', this._onKey, true); this._onKey = null; }
     const r = this._resolve; this._resolve = null;
     if (r) r({ ok: !!ok, value });
@@ -894,6 +901,49 @@ function confirmDialog(message, opts = {}) {
 }
 function alertDialog(message, opts = {}) {
   return _appDialog.show({ kind: 'alert', message, ...opts }).then(() => undefined);
+}
+
+// UI refactoring 2026-05-28 — console-style JUMPER_REF dialog. Triggered
+// from the Settings -> HATs panel via [ JUMPER_REF ] button. Renders the
+// PCA9685 jumper truth table in monospace so the address column lines up
+// vertically. Content is plain text (textContent on the dialog), so the
+// existing XSS-safe contract is preserved. Updating the truth table is a
+// one-line edit here — the docs counterpart is docs/DEPLOY_SECURITY.md §4.5.
+function showJumperRef() {
+  const body =
+    'Each PCA9685 board has solder pads A0..A5 on the back.\n' +
+    'Factory ships every board at 0x40 (all pads open / LOW).\n' +
+    '\n' +
+    'Final address = 0x40 + (A5*32 + A4*16 + A3*8 + A2*4 + A1*2 + A0*1)\n' +
+    '\n' +
+    'Address  | Pads to SOLDER closed (jumper SHORT)\n' +
+    '---------+------------------------------------\n' +
+    '  0x40   | none (factory default)\n' +
+    '  0x41   | A0\n' +
+    '  0x42   | A1\n' +
+    '  0x43   | A0 + A1\n' +
+    '  0x44   | A2\n' +
+    '  0x45   | A0 + A2\n' +
+    '  0x46   | A1 + A2\n' +
+    '  0x47   | A0 + A1 + A2\n' +
+    '\n' +
+    'Re-jumper procedure:\n' +
+    '  1. Power OFF the robot.\n' +
+    '  2. Solder the appropriate pads.\n' +
+    '  3. Power back ON.\n' +
+    '  4. Settings -> HATs -> RESCAN HARDWARE.\n' +
+    '  5. Settings -> HATs -> SAVE MAPPING (pick the new address).\n' +
+    '\n' +
+    'Calibration data follows the HAT identity automatically -\n' +
+    'no re-tuning needed.\n' +
+    '\n' +
+    'Note: do NOT solder pads to reach 0x70..0x77 - those addresses\n' +
+    'are reserved by the PCA9685 spec for All-Call / Sub-Address replies.';
+  return alertDialog(body, {
+    title:     'PCA9685 JUMPER REFERENCE',
+    monospace: true,
+    okText:    'CLOSE',
+  });
 }
 function promptDialog(message, defaultValue = '', opts = {}) {
   return _appDialog.show({ kind: 'prompt', message, value: defaultValue, ...opts })

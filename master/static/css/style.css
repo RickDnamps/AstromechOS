@@ -6084,6 +6084,52 @@ body[data-lock-mode="2"] .drive-wrapper {
   color: var(--amber, #ffaa44);
 }
 
+/* UI refactoring 2026-05-28 — Console-style tag button. Industrial
+   minimalist look (square corners, monospace, subtle border, no rounded
+   web-style icon) for inline technical-reference triggers in Settings.
+   The bracketed label is part of the textContent — no ::before/after
+   pseudo-elements so the SAME text is what a screen reader announces. */
+.btn-console-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border: 1px solid var(--text-dim, #788);
+  background: transparent;
+  color: var(--text-dim, #788);
+  font-family: var(--font-data, 'Share Tech Mono', monospace);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border-radius: 0;             /* explicit — overrides .btn defaults */
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease,
+              background 0.12s ease, box-shadow 0.12s ease;
+  vertical-align: baseline;
+  line-height: 1.4;
+}
+.btn-console-tag:hover,
+.btn-console-tag:focus-visible {
+  color: var(--accent, #00d4ff);
+  border-color: var(--accent, #00d4ff);
+  background: rgba(0, 212, 255, 0.06);
+  box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.18) inset;
+  outline: none;
+}
+
+/* Themed alert dialog — monospace variant for technical reference
+   tables (jumper truth table, register dumps, …). Toggled by passing
+   {monospace:true} to alertDialog/show. Keeps newlines + alignment
+   visible without breaking the default text-wrap behaviour for normal
+   alerts. */
+.app-dialog-monospace #app-dialog-msg {
+  white-space: pre-wrap;
+  font-family: var(--font-data, 'Share Tech Mono', monospace);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-align: left;
+  color: var(--text, #e8eef5);
+}
+
 /* Phase G5 2026-05-28 — Calibration card greyed out when its parent
    HAT is configured but not detected on the live I2C scan. */
 .hat-block-offline {

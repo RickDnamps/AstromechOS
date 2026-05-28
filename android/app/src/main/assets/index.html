@@ -2414,11 +2414,9 @@
         <section class="card settings-card">
           <h2 class="card-title">I2C HATs</h2>
           <p class="settings-note">
-            Hardware is <b>auto-discovered</b> by <code>scripts/detect_hats.py</code> —
-            addresses are no longer configurable by hand. Re-jumper the
-            PCA9685 board (A0/A1/A2 solder pads) to change an address,
-            then click <b>RESCAN HARDWARE</b> below.
-            See <code>docs/DEPLOY_SECURITY.md §4.5</code> for the jumper truth table.
+            I2C HATs are auto-discovered. Update physical jumpers on your
+            hardware to change addresses, then click <b>RESCAN HARDWARE</b>.
+            <button class="btn-console-tag" type="button" onclick="showJumperRef()">[ JUMPER_REF ]</button>
           </p>
           <div id="hats-aggregate-row" style="display:flex;gap:10px;align-items:center;margin:8px 0">
             <span style="color:var(--text-dim);font-size:0.9em">Hardware health:</span>
