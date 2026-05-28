@@ -6,6 +6,8 @@ Tout est automatisé. L'installation complète = **3 commandes + 2 reboots**.
 
 > **Portabilité (2026-05-28)** — AstromechOS n'impose plus que l'utilisateur du Pi s'appelle `artoo`. Les scripts d'installation détectent automatiquement ton user via `$SUDO_USER` (ou lisent `/boot/astromech_init.cfg` si l'AstromechOS Imager — à venir — en a écrit un), et tous les fichiers systemd + cibles SSH + chemins du repo sont dérivés au runtime via `shared/identity.py` + `scripts/lib_config.sh`. Les exemples utilisent `artoo` comme placeholder — **remplace-le par ton username Pi** si tu as imagé ta carte SD sous un autre nom. Le Master et le Slave **doivent partager le même utilisateur Linux** (et le même mot de passe — ça simplifie la distribution des clés SSH et l'auth de premier contact).
 
+> **🛡️ Sécurité Déploiement & First-Boot Imager (2026-05-28)** — le panneau Settings → Deploy lance un **test ADN Git** (paternité) avant d'autoriser `origin` à pointer vers un repo qui n'est pas un fork de RickDnamps/AstromechOS — bloque les fautes de frappe, les URLs hostiles, les clones mal collés, tout en amont du `git pull`. La même primitive tourne au premier boot d'une carte SD préparée par l'Imager (`scripts/firstboot_setup.sh` + le service oneshot `astromech-firstboot.service`), qui injecte atomiquement les clés SSH, configure hostname + rôle, et valide l'ADN du remote — provisioning 100% headless. Architecture, modèle de menace, procédures de recovery → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+
 ---
 
 ## Prérequis matériel

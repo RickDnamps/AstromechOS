@@ -399,6 +399,10 @@ bash ~/astromechos/scripts/deploy.sh --first-install
 
 **Done.** Open **`http://192.168.4.1:5000`** on any device connected to the robot hotspot (`Astromech_Control_XXXX`).
 
+> 🛡️ **Git DNA paternity check** — the Settings → Deploy panel (and the `/api/deploy/save-config` endpoint) now refuse to point `origin` at any repo that isn't a legitimate fork of RickDnamps/AstromechOS. A `git merge-base --is-ancestor` test against a frozen anchor commit blocks typos and malicious URLs *before* `git pull` can touch the working tree. Architecture detail → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+>
+> ⚡ **First-boot Imager workflow** *(in progress)* — a planned AstromechOS Imager PC tool will drop SSH keys, hostname, role + Wi-Fi credentials directly on the SD card's `/boot` partition. The robot's `scripts/firstboot_setup.sh` runs once at first boot, injects everything atomically, DNA-validates the configured remote, and self-destructs. Fully headless provisioning. Same doc → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+
 📖 **[Full installation guide →](HOWTO.md)** (recommended — covers reconnecting after reboot, network options, and daily use)
 
 ### Updates
