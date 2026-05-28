@@ -45,10 +45,13 @@ case "$HOSTNAME_RAW" in
         ;;
 esac
 
-# Repo path autodetect — searches every home dir for an astromechos checkout.
+# Repo path autodetect — searches every home dir for an astromechos
+# checkout. The MASTER has a real .git checkout; the SLAVE receives the
+# tree via rsync (no .git) so we accept any directory containing a
+# master/ or slave/ subtree as a valid repo root.
 REPO=""
 for CAND in /home/*/astromechos; do
-    if [ -d "$CAND/.git" ]; then
+    if [ -d "$CAND/.git" ] || [ -d "$CAND/master" ] || [ -d "$CAND/slave" ]; then
         REPO="$CAND"
         break
     fi
@@ -120,28 +123,39 @@ print_banner() {
 
 # ─── Git status line ─────────────────────────────────────────────────
 git_status_line() {
-    if [ -z "$REPO" ] || [ ! -d "$REPO/.git" ]; then
-        printf "${GRAY}AstromechOS · git N/A${RESET}"
+    # Master path: real .git tree → full status (sha + branch + sync).
+    if [ -n "$REPO" ] && [ -d "$REPO/.git" ]; then
+        local sha branch
+        sha=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
+        branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+        local upstream behind=0 ahead=0
+        upstream=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null)
+        if [ -n "$upstream" ]; then
+            read -r behind ahead < <(git -C "$REPO" rev-list --left-right --count "$upstream"...HEAD 2>/dev/null || echo "0 0")
+        fi
+        local pill
+        if [ "${behind:-0}" -gt 0 ]; then
+            pill="${YELLOW}⟳ pull required (${behind} behind)${RESET}"
+        elif [ "${ahead:-0}" -gt 0 ]; then
+            pill="${YELLOW}↑ ahead by ${ahead}${RESET}"
+        else
+            pill="${GREEN}✓ up-to-date${RESET}"
+        fi
+        printf "${BOLD}AstromechOS${RESET} ${DIM}v.${RESET}${WHITE}${sha}${RESET} ${DIM}(${branch})${RESET}  ${pill}"
         return
     fi
-    local sha branch
-    sha=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
-    branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
-    # Check ahead/behind vs origin/<branch> WITHOUT a fetch (instant).
-    local upstream behind=0 ahead=0
-    upstream=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null)
-    if [ -n "$upstream" ]; then
-        read -r behind ahead < <(git -C "$REPO" rev-list --left-right --count "$upstream"...HEAD 2>/dev/null || echo "0 0")
+    # Slave path: rsync target — read VERSION file (written by update.sh
+    # via `git rev-parse --short HEAD`). No ahead/behind possible without
+    # .git, but knowing the deployed commit is what matters.
+    if [ -n "$REPO" ] && [ -f "$REPO/VERSION" ]; then
+        local ver
+        ver=$(head -1 "$REPO/VERSION" 2>/dev/null | tr -d '[:space:]')
+        if [ -n "$ver" ]; then
+            printf "${BOLD}AstromechOS${RESET} ${DIM}v.${RESET}${WHITE}${ver}${RESET} ${DIM}(rsync)${RESET}  ${GREEN}✓ synced${RESET}"
+            return
+        fi
     fi
-    local pill
-    if [ "${behind:-0}" -gt 0 ]; then
-        pill="${YELLOW}⟳ pull required (${behind} behind)${RESET}"
-    elif [ "${ahead:-0}" -gt 0 ]; then
-        pill="${YELLOW}↑ ahead by ${ahead}${RESET}"
-    else
-        pill="${GREEN}✓ up-to-date${RESET}"
-    fi
-    printf "${BOLD}AstromechOS${RESET} ${DIM}v.${RESET}${WHITE}${sha}${RESET} ${DIM}(${branch})${RESET}  ${pill}"
+    printf "${GRAY}AstromechOS · version N/A${RESET}"
 }
 
 # ─── System box ──────────────────────────────────────────────────────
