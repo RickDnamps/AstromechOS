@@ -212,6 +212,12 @@ firstboot_setup.sh
         → role (master|slave)            → write_local_cfg [system] role
         → hostname                       → hostnamectl + /etc/hosts
                                               (RFC-1123 charset filter)
+  4.5 I2C HAT layout detection (read-only, never bricks boot):
+        /boot/hw_layout.json exists  →  cp verbatim (Imager wins)
+        else                         →  detect_hats.py --output ...
+                                          (smbus2, READ-ONLY, locked)
+        on failure                   →  log WARN + continue
+                                          (services boot DEGRADED)
   5. If [github] repo_url differs from current `origin`:
         dna_validate  → DNA OK   → git remote set-url + fetch + reset --hard
                      → DNA FAIL → KEEP origin pointing at the official URL,
@@ -237,6 +243,263 @@ systemd journal (`journalctl -u astromech-firstboot`).
   boot: condition fails → service skipped → done.
 - If the script crashes mid-way (rare — disk full, SD corruption),
   the marker remains → next boot retries automatically.
+
+---
+
+## 3.5. Hardware layout detection — `scripts/detect_hats.py`
+
+> Chantier: `e40e376` (core + tests) → `0ec59df` (firstboot wiring).
+> Module: `scripts/detect_hats.py` (~470 LOC) + `scripts/test_detect_hats.py`
+> (28 tests, all green). Output: `master/config/hw_layout.json` (gitignored)
+> or `slave/config/hw_layout.json`. Imager override at `/boot/hw_layout.json`.
+
+### Why a separate detection pass
+
+Every prior chantier in the deploy security stack defends the SOFTWARE supply
+chain (Git DNA, signed Imager bootstrap, SSH key injection). This pass defends
+the HARDWARE side — what HATs are physically attached, in what role.
+
+The Settings → HATs panel in the existing UI takes the operator's word for
+which I2C address is a servo controller vs a motor controller. The cfg
+validator (`master/api/settings_bp.py:_parse_hat_addr/_parse_hat_list`)
+checks ranges + uniqueness but not the actual hardware. A typo (`slave_hats
+= 0x40` collides with `slave_motor_hat`) ships PWM commands to the TB6612
+motor inputs and damages the H-bridge. `detect_hats.py` closes that gap by
+observing the bus and emitting a JSON record of what's actually there.
+
+### Read-only safety contract
+
+The hardware is allowed to be in any state when we scan — including mid-PWM,
+servos under tension, a live choreography. THREE independent layers enforce
+that detect_hats can never glitch a live PCA9685:
+
+1. **`ReadOnlySMBus` wrapper** (`detect_hats.py:114`). Wraps an `smbus2.SMBus`
+   and refuses every write API with `AssertionError` — `write_byte_data`,
+   `write_byte`, `write_word_data`, `write_block_data`, `write_i2c_block_data`,
+   `process_call`, `block_process_call`. The detection code literally cannot
+   write through this object.
+2. **`/run/astromech-i2c.lock`** (fcntl flock, non-blocking by default).
+   Coordinates with the in-process `_i2c_scan_lock` in
+   `master/api/diagnostics_bp.py` so a parallel `/diagnostics/i2c_scan`
+   request, or a live PCA9685 PWM burst from the dome driver, cannot race
+   the scan. `--no-lock` available for emergency bypass.
+3. **Test-suite spy**. Every `detect()` test asserts that the underlying
+   `FakeSMBus.calls` contains zero `write_*` entries. A future regression
+   that bypasses the wrapper would still trip this spy.
+
+Live evidence (commit `0ec59df` deploy): the test ran against the production
+Master Pi WHILE `astromech-master.service` was active and holding the dome
+panels in their closed positions. Bus read of 0x40 returned the expected
+PCA9685 signature (`prescale=0x79`=50 Hz, `subadr1=0xE2`/`subadr2=0xE4`/
+`subadr3=0xE8`/`allcall=0xE0` POR defaults intact). Zero glitches, zero
+service log errors.
+
+### Algorithm — 4 layers, fail-closed
+
+```
+detect()
+  Layer A (best-effort)  /proc/device-tree/hat/{vendor,product}
+                         /sys/bus/i2c/devices/0-0050/eeprom
+                         → almost always absent (Waveshare clones don't
+                           ship the Pi HAT spec EEPROM); recorded as
+                           context for the operator but not load-bearing
+
+  Layer B (presence)     for addr in 0x40..0x47:
+                              read_byte_data(addr, REG_MODE1)
+                         → ACK = device present
+                         → NACK / EREMOTEIO = empty slot
+
+  Layer C (fingerprint)  for each present address, sweep:
+                              MODE1, MODE2, SUBADR1, SUBADR2,
+                              SUBADR3, ALLCALLADR, PRESCALE
+                         Score 0..4 against PCA9685 power-on defaults
+                         (SUBADR1=0xE2, SUBADR2=0xE4, SUBADR3=0xE8,
+                          ALLCALLADR=0xE0 — survive our driver init).
+                         4/4 → high confidence,  3/4 → medium,
+                         1-2 → low (matched MODE2 default),
+                         0   → "unknown" chip
+
+  Layer D (role)         host = master  → every PCA9685 = servo_dome
+                         host = slave   → 0x40 = motor_drive (Waveshare
+                                                 convention from ELECTRONICS.md)
+                                          0x41+ = servo_body
+                         If [i2c_servo_hats] slave_motor_hat is set in cfg,
+                         that wins over the 0x40 convention default.
+```
+
+`detect()` writes a JSON dictionary (`schema_version: 1`) with an entry per
+detected HAT — `addr`, `chip`, `role`, `confidence`, `evidence` (the per-
+register hex values that justified the decision), `score`, and `source`
+(the inference trail, e.g. `"fingerprint+master-convention"`).
+
+### Imager workflow — `/boot/hw_layout.json` override
+
+The PC Imager that prepares an SD card knows the hardware layout BEFORE
+the Pi ever boots (the operator picks "R2-D2 Master with 1 servo HAT at
+0x40" in the GUI, or scans the Imager's own HAT inventory). It can drop a
+pre-filled `hw_layout.json` into `/boot/`:
+
+```
+/boot/hw_layout.json     ← Imager-provided, wins over a fresh scan
+```
+
+`scripts/firstboot_setup.sh` step 4.5:
+
+1. If `/boot/hw_layout.json` exists → `cp` verbatim to
+   `<repo>/master/config/hw_layout.json` (or `slave/config/hw_layout.json`
+   depending on role), `chmod 0644`, `chown TARGET_USER`. **No scan runs.**
+2. Else: `python3 scripts/detect_hats.py --output <path> --role $ROLE
+   --verbose`, output tee'd to the firstboot log.
+3. On failure: log a precise WARN with the exit-code translation, **never
+   abort**. The boot must not brick because a single HAT is unresponsive.
+
+### Failure modes table
+
+| Symptom | Detected as | Behaviour |
+|---|---|---|
+| `/dev/i2c-1` missing | exit code 3 | WARN `/dev/i2c-1 missing (enable I2C in raspi-config)`; services boot DEGRADED. |
+| `smbus2` not installed | exit code 2 | WARN `smbus2 not installed (apt install python3-smbus)`. |
+| Permission denied on `/dev/i2c-1` | exit code 4 | WARN `permission denied (user not in i2c group?)`. |
+| Lock held by another process | exit code 5 | WARN `bus lock held (master.service running?)`. Operator can retry with `--no-lock` after stopping the service. |
+| Empty bus (no HATs) | exit code 0, `hats: []` | JSON written with empty array; services log "DEGRADED: no HATs detected" at startup. |
+| Non-PCA9685 device at 0x40-0x47 | `chip: "unknown"` | JSON records the read evidence; role still assigned by convention; services treat as best-effort. |
+| Bus jammed mid-scan | `errors: [{addr, error}]` | Per-address error captured in JSON; remaining addresses still scanned. |
+
+### Read-only contract enforcement summary
+
+Every layer of the chain is closed:
+- The scanner (`detect_hats.py`) cannot write — the wrapper class refuses.
+- The firstboot caller (`firstboot_setup.sh`) cannot bypass — it invokes
+  the same Python script, same wrapper.
+- The Imager (eventual PC tool) cannot inject writes — the JSON it drops at
+  `/boot/hw_layout.json` is parsed-only, never executed.
+- The service consumers (`master/drivers/*`, planned commits) READ the JSON
+  and decide to operate or to enter degraded mode — they do not delegate
+  writes to the detection code.
+
+The principle: **detection observes; services decide**. A missing HAT
+becomes a logged degradation, not a crash.
+
+---
+
+## 4.5. I2C troubleshooting — Dépannage des conflits d'adresses
+
+When two HATs respond at the same I2C address, the bus electrically goes
+into contention: both devices ACK the address byte, both attempt to drive
+SDA on read, and the master sees a merged value that doesn't correspond
+to either device's actual state. PWM commands meant for the dome servos
+might also drive the motor HAT's TB6612 inputs — destructive. This
+section documents how `detect_hats.py` surfaces the problem and how to
+fix it physically.
+
+### How collisions are detected
+
+`detect_hats.py` runs a **multi-read consistency check** on every address
+that ACKs the initial presence probe. For each candidate PCA9685 it reads
+MODE1, SUBADR1, SUBADR2, and ALLCALLADR five times each. A single healthy
+PCA9685 returns the same value on every read (registers are stateless,
+no internal mutation). Two devices fighting on the bus produce arbitrary
+SDA dominance per read → inconsistent values across samples.
+
+```
+collision check (per address):
+  for reg in [MODE1, SUBADR1, SUBADR2, ALLCALLADR]:
+      seen = { read_byte_data(addr, reg) for _ in range(5) }
+      if len(seen) >= 2:
+          → ADDRESS_COLLISION flagged for this addr
+          → JSON entry: {addr: '0x40', collision: true,
+                         error: 'ADDRESS_COLLISION', ...}
+```
+
+The check is **best-effort, not bulletproof**. Two identical PCA9685s
+freshly powered up (both at POR defaults, both untouched by any
+driver init) may return the same value on every read because they
+literally have the same internal state. The check catches the most
+common real-world case: one running HAT vs one fresh HAT at the same
+address, where prescale / MODE1 differ. False negatives default to
+the DEGRADED mode (driver init proceeds and may glitch — investigation
+prompt: weird servo behaviour after a recent hardware swap).
+
+### Service behaviour on collision
+
+When the master/slave driver loads `hw_layout.json` and sees a HAT
+entry with `collision: true`, the driver refuses to initialise that
+HAT and emits a CRITICAL log:
+
+```
+CRITICAL: I2C Address Conflict at 0x40. Check hardware jumpers
+(A0/A1/A2 — solder pads on the back of the PCA9685 board).
+Detection ran <N> reads; values diverged across samples.
+The driver will NOT operate any servo on 0x40 until the conflict
+is resolved.
+```
+
+This is **distinct from DEGRADED mode** (HAT simply absent). DEGRADED
+lets other subsystems run; CRITICAL on a conflict refuses the whole
+HAT because operating against a conflicted bus produces unpredictable
+hardware behaviour — a servo command might fire a motor PWM, a "close"
+might "open", etc.
+
+### Physical resolution — how to fix the jumpers
+
+PCA9685 / Waveshare HAT boards have solder pads labelled A0–A5 on the
+back. Each pad is a 1-bit address selector. The chip's I2C address is:
+
+```
+base address = 0x40
+final address = 0x40 + (A5*32 + A4*16 + A3*8 + A2*4 + A1*2 + A0*1)
+```
+
+Factory ships every board at 0x40 (A0–A5 all open / pulled LOW). To
+move a second HAT to 0x41, **solder the A0 pad closed** (jumper SHORT).
+0x42 → solder A1. 0x43 → solder A0 + A1. Etc.
+
+| Desired addr | Pads to solder closed (jumper SHORT) |
+|---|---|
+| 0x40 | none (factory default) |
+| 0x41 | A0 |
+| 0x42 | A1 |
+| 0x43 | A0 + A1 |
+| 0x44 | A2 |
+| 0x45 | A0 + A2 |
+| 0x46 | A1 + A2 |
+| 0x47 | A0 + A1 + A2 |
+
+> ⚠️ **Don't** solder ALL pads — the upper range 0x70-0x77 is reserved
+> by the PCA9685 spec for All-Call / Sub-Address replies. The cfg
+> validator (`master/api/settings_bp.py:_PCA9685_MAX = 0x77`) accepts
+> them anyway because some clones permit it, but it's discouraged.
+
+### After a physical fix — operator workflow
+
+1. Power the robot OFF (UPS / 12 V bench supply). Never re-jumper a
+   live HAT — you can short Vcc to GND on the PCA9685 supply pin and
+   destroy the regulator.
+2. Solder the appropriate A0/A1/A2 pads per the table above.
+3. Power back ON. The master service comes up, the dome servo driver
+   loads `hw_layout.json`. If the JSON is stale (still reflects the
+   pre-fix collision), the driver will still log CRITICAL.
+4. Re-run detection — either:
+   - Stop the master service: `sudo systemctl stop astromech-master`
+   - Run: `python3 scripts/detect_hats.py --role auto --verbose`
+   - Start it back up: `sudo systemctl start astromech-master`
+5. Verify in the journal:
+   `journalctl -u astromech-master -n 50 | grep -i hat`
+   Look for `DomeServoDriver ready — N HAT(s) ...` (READY state) instead
+   of `CRITICAL: I2C Address Conflict ...`.
+
+### When the conflict comes from the cfg, not the hardware
+
+A different failure mode the validator already catches: the operator
+sets `slave_motor_hat = 0x40` AND `slave_hats = 0x40` (typo). The
+Master `/settings/config` POST returns HTTP 400 with
+`"slave_motor_hat 0x40 cannot also be in slave_hats — motor + servo
+at same I2C address corrupts both."` — see
+`master/api/settings_bp.py` collision check. This kicks in before
+the change ever lands in `slave.cfg`. The cfg-side guard fires
+PRE-write; the hardware-side guard documented here fires POST-write
+(when the operator manually edits the cfg via SSH or restores a
+backup with a conflict, etc.).
 
 ---
 
