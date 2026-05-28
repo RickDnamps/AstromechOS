@@ -1,8 +1,11 @@
 """Diagnostic: walk every .mp3 in slave/sounds and verify our duration
 estimator agrees with mutagen's frame-accurate decode on every file."""
 import os, sys, glob
+from pathlib import Path
 
-sys.path.insert(0, '/home/artoo/astromechos')
+# Derive the repo root from THIS file's location — works for any install dir.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 from master.api.audio_bp import _estimate_duration_ms, _HAVE_MUTAGEN
 
 print(f'mutagen available in audio_bp: {_HAVE_MUTAGEN}')
@@ -13,7 +16,7 @@ except ImportError:
     print('mutagen not installed — re-run scripts/update.sh')
     sys.exit(1)
 
-SOUNDS = '/home/artoo/astromechos/slave/sounds'
+SOUNDS = str(REPO_ROOT / 'slave' / 'sounds')
 files = sorted(glob.glob(os.path.join(SOUNDS, '*.mp3')))
 print(f'Total .mp3 files: {len(files)}')
 

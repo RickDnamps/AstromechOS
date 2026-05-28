@@ -1,7 +1,9 @@
 """One-shot test for _resolve_device_mac on the Pi.
    Probes evdev devices + simulates resolution with empty uniq."""
 import sys
-sys.path.insert(0, '/home/artoo/astromechos')
+from pathlib import Path
+# Derive the repo root from THIS file's location — works for any install dir.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 print("=== EVDEV PROBE ===")
 try:

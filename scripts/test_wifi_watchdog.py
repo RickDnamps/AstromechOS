@@ -31,8 +31,9 @@
 # -*- coding: utf-8 -*-
 """
 Test WiFi Watchdog — non-destructive validation.
-Run from the Master via SSH on the Slave:
-  ssh artoo@astromech-slave.local "python3 /home/artoo/astromechos/scripts/test_wifi_watchdog.py"
+Run from the Master via SSH on the Slave (target resolved via lib_config.sh):
+  ssh "$(. ~/astromechos/scripts/lib_config.sh && slave_target)" \
+      "python3 ~/astromechos/scripts/test_wifi_watchdog.py"
 
 Steps:
   1. Verify that the Slave is connected to the Master hotspot (pre-condition)
