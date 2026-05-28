@@ -6026,6 +6026,30 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .hat-critical-banner b { font-size: 14px; }
 
+/* Phase E — Cockpit Hardware Health widget. Mirrors the badge palette
+   used in Settings; clickable to jump straight to the full table. */
+.cockpit-hardware-health {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  border: 1px solid transparent;
+}
+.cockpit-hardware-health:hover { background: rgba(255,255,255,0.04); }
+.cockpit-hardware-health.cockpit-hw-critical {
+  border-color: var(--err, #e74c3c);
+  background: rgba(231, 76, 60, 0.08);
+  animation: hat-critical-pulse 1.6s ease-in-out infinite;
+}
+.cockpit-hw-summary {
+  font-size: 12px;
+  color: var(--text-dim, #888);
+  letter-spacing: 0.3px;
+}
+
 /* W9 — dim variant of settings-note for defaults reference */
 .settings-note.settings-note-dim { opacity: 0.65; }
 .settings-note code {
