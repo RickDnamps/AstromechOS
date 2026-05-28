@@ -350,6 +350,33 @@ def _compute_next_idle_s():
         return None
 
 
+def _hats_status_summary() -> dict:
+    """Phase B: cheap helper called from get_status() so the Cockpit
+    poller gets HAT health on every tick without a second HTTP request.
+
+    Delegates to master.api.hats_bp.hats_payload() — single source of
+    truth for the shape. If the import fails (legacy boot before the
+    Phase A commit landed) the function returns a safe fallback so
+    /status never breaks.
+
+    Read cost: two json.load() calls on small files (~1 KB each) per
+    /status invocation. /status is polled ~1 Hz; the OS page cache
+    absorbs repeated reads. No additional caching layer added yet —
+    if profiling later shows a hot spot, add a TTL cache here."""
+    try:
+        from master.api.hats_bp import hats_payload
+        return hats_payload()
+    except Exception:
+        # Defensive: never let HAT-status assembly take down /status.
+        return {
+            'master': {'host': 'master', 'present': False,
+                       'status': 'degraded', 'hats': []},
+            'slave':  {'host': 'slave',  'present': False,
+                       'status': 'degraded', 'hats': []},
+            'aggregate_status': 'degraded',
+        }
+
+
 @status_bp.get('/status')
 def get_status():
     """Full AstromechOS system state."""
@@ -517,6 +544,11 @@ def get_status():
         'slave_cpu':         (reg.slave_uart_health or {}).get('cpu_pct'),
         'slave_mem':         (reg.slave_uart_health or {}).get('mem'),
         'slave_disk':        (reg.slave_uart_health or {}).get('disk'),
+        # Phase B (chantier 2026-05-28): HAT health surfaced in /status
+        # so the Cockpit poller gets the aggregate badge without a second
+        # round-trip to /hats/layout. Same payload helper used by
+        # GET /hats/layout — no duplicated logic.
+        'hats':              _hats_status_summary(),
         **bt_status,
     })
 
