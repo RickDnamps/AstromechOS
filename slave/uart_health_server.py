@@ -87,12 +87,15 @@ import os as _os
 import pwd as _pwd
 
 
-def _artoo_env() -> dict:
-    """Environment for commands that need the artoo user's pulseaudio session."""
-    try:
-        uid = _pwd.getpwnam('artoo').pw_uid
-    except Exception:
-        uid = _os.getuid()
+def _session_env() -> dict:
+    """Environment for commands that need this service user's PulseAudio /
+    BlueZ session (bluetoothctl, pactl, etc.).
+
+    Uses os.getuid() — the UID systemd launched the slave service with —
+    so the session paths resolve correctly regardless of the OS username
+    (artoo / pi / astromech / …). Portability chantier 2026-05-28: was
+    pwd.getpwnam('artoo'), which broke any install whose user wasn't 'artoo'."""
+    uid = _os.getuid()
     env = dict(_os.environ)
     env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'
     env['PULSE_RUNTIME_PATH'] = f'/run/user/{uid}/pulse'
@@ -101,7 +104,7 @@ def _artoo_env() -> dict:
 
 def _bt_run(cmd: list, timeout: float = 10.0, pa_env: bool = False) -> tuple[bool, str]:
     try:
-        env = _artoo_env() if pa_env else None
+        env = _session_env() if pa_env else None
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
         return r.returncode == 0, (r.stdout + r.stderr).strip()
     except Exception as e:
