@@ -269,6 +269,7 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
         # identity in the payload instead of a silent partial save.
         _layout = _hwl.load_for(role)
         if _layout is not None:
+            # detected_addresses returns set[int] — compare as int.
             _detected = _hwl.detected_addresses(_layout)
             for _hat in _hwm.all_hats(mapping):
                 if _hat.get('alias_prefix') is None:
@@ -277,7 +278,7 @@ def _update_angles_file(filepath: str, panels: dict, names: list) -> None:
                     _addr_int = int(_hat['address'], 16)
                 except (ValueError, KeyError):
                     continue
-                if f'0x{_addr_int:02x}' not in _detected:
+                if _addr_int not in _detected:
                     offline_identities.add(_hat['id'])
     except Exception as e:
         log.warning("hw_mapping/hw_layout unavailable (%s) — keeping legacy flat format", e)
@@ -1120,9 +1121,10 @@ def servo_settings_get():
         # available = True only when we have a layout AND the address
         # is in the detected set. If no layout (None), default to True
         # so legacy boots before hw_layout is written never grey out
-        # the whole calibration UI.
+        # the whole calibration UI. hw_layout.detected_addresses returns
+        # set[int], so compare as int (NOT 0xNN string).
         available = True if layout_known is None \
-            else (f'0x{addr_int:02x}' in present_set)
+            else (addr_int in present_set)
         return identity, available
 
     data['dome_hats'] = []
