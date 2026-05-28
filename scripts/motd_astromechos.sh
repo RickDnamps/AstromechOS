@@ -202,15 +202,29 @@ print_system() {
 }
 
 # ─── Network box + cross-ping ────────────────────────────────────────
+# Pad <label> with dim trailing dots to a fixed visual width so the
+# colon separator + value column align across rows. Width 15 chars
+# covers the longest label this box prints: "Peer (MASTER)" (13) plus
+# 1 space + 1 dot. Anything shorter gets more dots.
+_motd_pad_dots() {
+    local label="$1" target=15 dots
+    local need=$(( target - ${#label} - 1 ))
+    [ "$need" -lt 0 ] && need=0
+    printf -v dots '%*s' "$need" ''
+    dots=${dots// /.}
+    printf "%s ${GRAY}%s${RESET}" "$label" "$dots"
+}
+
 print_network() {
-    local this_ip peer_ip peer_role peer_label ping_status
+    local this_ip peer_ip peer_role_caps peer_label local_label ping_status
     # All non-loopback IPv4 addresses (could be multiple on master with WiFi+hotspot).
     this_ip=$(hostname -I 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i !~ /^(127\.|::)/) {printf "%s%s", (n++? " · " : ""), $i}}')
     [ -z "$this_ip" ] && this_ip="N/A"
 
     # Cross-ping target — master pings slave, slave pings master.
     if [ "$ROLE" = "master" ]; then
-        peer_role="SLAVE"
+        local_label="Master IP"
+        peer_role_caps="SLAVE"
         # [slave] host from master local.cfg
         if [ -n "$REPO" ] && [ -f "$REPO/master/config/local.cfg" ]; then
             peer_ip=$(awk -F= '
@@ -221,12 +235,13 @@ print_network() {
         fi
         [ -z "$peer_ip" ] && peer_ip="192.168.4.171"   # legacy default
     else
-        peer_role="MASTER"
+        local_label="Slave IP"
+        peer_role_caps="MASTER"
         # Slave's default gateway = Master (hotspot mode).
         peer_ip=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
         [ -z "$peer_ip" ] && peer_ip="192.168.4.1"
     fi
-    peer_label="$peer_role"
+    peer_label="Peer (${peer_role_caps})"
 
     # Sub-second ping. -W 1 = max 1s wait; on healthy LAN, ~1ms RTT.
     if ping -c 1 -W 1 -q "$peer_ip" >/dev/null 2>&1; then
@@ -236,8 +251,8 @@ print_network() {
     fi
 
     printf "${MAGENTA}${BOLD}┌─[ NETWORK ]${RESET}${GRAY}────────────────────────────────────────────────────────────${RESET}\n"
-    printf "  ${WHITE}This node${RESET}  %s ${GRAY}(this=%s)${RESET}\n" "$this_ip" "$ROLE"
-    printf "  ${WHITE}Peer (%s)${RESET} ${BOLD}%s${RESET}  %b\n" "$peer_label" "$peer_ip" "$ping_status"
+    printf "  ${WHITE}%b${RESET} ${GRAY}:${RESET} %s\n" "$(_motd_pad_dots "$local_label")" "$this_ip"
+    printf "  ${WHITE}%b${RESET} ${GRAY}:${RESET} ${BOLD}%s${RESET}  %b\n" "$(_motd_pad_dots "$peer_label")" "$peer_ip" "$ping_status"
 }
 
 # ─── Hardware box (config_mapping + hw_layout) ───────────────────────
