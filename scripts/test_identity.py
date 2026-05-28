@@ -76,21 +76,21 @@ class TestSlaveTarget(unittest.TestCase):
         self.assertEqual(h, I.slave_host())
         self.assertTrue(len(u) > 0 and len(h) > 0)
 
-    def test_priority_deploy_slave_user_wins(self):
-        """[deploy] slave_user must beat [system] user."""
+    def test_slave_user_equals_current_user(self):
+        """AstromechOS rule: slave SSH user ALWAYS matches the Master's
+        current process user. [deploy] slave_user + [system] user cfg
+        keys are intentionally ignored (same user enforced by design)."""
         self._set_cfg(
-            '[system]\nuser = systemuser\n\n'
-            '[deploy]\nslave_user = deployuser\n'
+            '[system]\nuser = totallydifferent\n\n'
+            '[deploy]\nslave_user = anotheruser\n'
             'slave_host = test-slave.local\n'
         )
-        self.assertEqual(I.slave_user(), 'deployuser')
+        self.assertEqual(I.slave_user(), I.current_user())
+        self.assertNotEqual(I.slave_user(), 'totallydifferent')
+        self.assertNotEqual(I.slave_user(), 'anotheruser')
+        # slave_host is still cfg-driven (different concern: same user,
+        # but distinct hosts on the network).
         self.assertEqual(I.slave_host(), 'test-slave.local')
-        self.assertEqual(I.slave_ssh_target(), 'deployuser@test-slave.local')
-
-    def test_priority_system_user_when_no_deploy(self):
-        """[system] user must beat current_user() and the legacy fallback."""
-        self._set_cfg('[system]\nuser = systemuser\n')
-        self.assertEqual(I.slave_user(), 'systemuser')
 
     def test_slave_host_canonical_key_wins(self):
         """[slave] host beats [deploy] slave_host."""

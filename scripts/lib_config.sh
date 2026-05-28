@@ -116,12 +116,14 @@ capture_user() {
 # slave_user / slave_host / slave_target — SSH endpoint for Master→Slave.
 # ──────────────────────────────────────────────────────────────────
 slave_user() {
-    local u
-    u=$(cfg_get deploy slave_user "")
-    [ -z "$u" ] && u=$(cfg_get system user "")
-    [ -z "$u" ] && u="${TARGET_USER:-}"
+    # AstromechOS architecture rule (2026-05-28): the Master and the Slave
+    # always run as the SAME Linux user. So the slave SSH user is just
+    # whichever user is invoking us / was captured by capture_user — never
+    # a separate cfg key. Matches shared/identity.py::slave_user.
+    local u="${TARGET_USER:-}"
     [ -z "$u" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && u="$SUDO_USER"
-    [ -z "$u" ] && u=$(logname 2>/dev/null || whoami 2>/dev/null || echo "")
+    [ -z "$u" ] && u=$(logname 2>/dev/null || true)
+    [ -z "$u" ] && u=$(whoami 2>/dev/null || true)
     [ -z "$u" ] && u="artoo"
     echo "$u"
 }

@@ -144,20 +144,20 @@ def current_home() -> str:
 def slave_user() -> str:
     """SSH user on the Slave.
 
-    Order: [deploy] slave_user → [system] user → current_user() →
-    legacy 'artoo'. The legacy literal exists ONLY because some early
-    R2-D2 local.cfg files predate the [system] section — a freshly-
-    imaged Pi never reaches it."""
-    c = _cfg()
-    # current_user() already handles the Windows fallback ($USERNAME) and
-    # always returns a non-empty string; the trailing 'artoo' is a safety
-    # net for impossible-to-reach edge cases and a legacy-deploy hint.
-    return (
-        c.get('deploy', 'slave_user', fallback=None)
-        or c.get('system', 'user', fallback=None)
-        or current_user()
-        or 'artoo'
-    )
+    AstromechOS architecture rule (2026-05-28): the Master and the Slave
+    always run as the SAME Linux user (and the same password). This is
+    a hard design invariant — the Imager + setup scripts create
+    identical accounts on both Pis, which lets ssh-copy-id target the
+    same username, lets the same password unlock both at first contact,
+    and removes a whole class of "which-user-is-which" bugs.
+
+    Therefore the slave SSH user is just current_user() — no separate
+    cfg key, no waterfall, no per-host divergence.
+
+    (The previously-supported `[deploy] slave_user` cfg key is now
+    intentionally ignored. Legacy R2-D2 installs are unaffected because
+    their current_user() == 'artoo' anyway.)"""
+    return current_user()
 
 
 def slave_host() -> str:
