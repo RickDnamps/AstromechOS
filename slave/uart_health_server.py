@@ -66,15 +66,42 @@ def _read_motor_hat_addr() -> int:
 
 
 def _probe_motor_hat(addr: int) -> dict:
-    """Probe motor HAT presence via a single I2C read. Non-destructive."""
+    """Probe motor HAT presence + report layout-derived resilience state.
+
+    Consults shared/hw_layout.py FIRST (single source of truth for
+    READY/DEGRADED/CRITICAL across the fleet). On collision we skip
+    the I2C probe entirely — no point reading a contested bus. On
+    DEGRADED we still probe (best-effort) so the operator sees whether
+    the hardware physically responds. The return dict mirrors the
+    BodyServoDriver.hat_health() shape so the front-end can render
+    motor + servo HATs in the same component.
+
+    Non-destructive: read_byte_data only, no writes."""
+    out = {'addr': f'0x{addr:02X}', 'ok': False,
+           'status': 'degraded', 'offline': False}
+    try:
+        from shared import hw_layout as _hwl
+        layout = _hwl.load_for('slave')
+        out['status'] = _hwl.hat_status(layout, addr)
+    except Exception as e:
+        log.debug("hw_layout consultation failed: %s", e)
+
+    if out['status'] == 'critical':
+        # Refuse the probe — bus is contested, any read merges two
+        # devices' responses. Surface CRITICAL via the same channel.
+        out['offline'] = True
+        return out
+
     try:
         import smbus2
         bus = smbus2.SMBus(1)
         bus.read_byte_data(addr, 0x00)
         bus.close()
-        return {'addr': f'0x{addr:02X}', 'ok': True}
+        out['ok'] = True
     except Exception:
-        return {'addr': f'0x{addr:02X}', 'ok': False}
+        out['ok']      = False
+        out['offline'] = True
+    return out
 
 # BT scan state (module-level — shared across requests)
 _scan_active = False

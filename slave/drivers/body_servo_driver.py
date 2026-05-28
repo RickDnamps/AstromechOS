@@ -122,6 +122,17 @@ class BodyServoDriver(BaseDriver):
         self._angles    = {}
         self._pos       = {}
         self._error_cnt = [0] * len(self._addresses)
+        # Per-HAT resilience state — populated by setup() from
+        # shared/hw_layout.py (same contract as Master DomeServoDriver).
+        # STATUS_READY    → init normally.
+        # STATUS_DEGRADED → HAT absent from slave/config/hw_layout.json →
+        #                   log WARNING via canonical degraded_log_message,
+        #                   skip init for this HAT, keep driver alive for
+        #                   other HATs.
+        # STATUS_CRITICAL → ADDRESS_COLLISION → log CRITICAL via canonical
+        #                   critical_log_message, refuse to init this HAT.
+        self._hat_status = ['ready'] * len(self._addresses)
+        self._offline    = [False]   * len(self._addresses)
         # Freeze flag — same semantics as Master DomeServoDriver. Set via UART
         # FREEZE:1 from Master (E-STOP), cleared via FREEZE:0 (Reset E-STOP).
         # While set, in-flight ramps abort and new SRV commands are rejected
@@ -143,15 +154,64 @@ class BodyServoDriver(BaseDriver):
 
     def setup(self) -> bool:
         try:
+            # Consult hw_layout.json BEFORE touching the bus. Same contract
+            # as master/drivers/dome_servo_driver.py — single source of
+            # truth in shared/hw_layout.py, no duplicated decision logic.
+            # If the JSON file is absent (None), every HAT defaults to
+            # STATUS_DEGRADED but the loop falls through to cfg-only init
+            # for backwards-compat (existing exception handler is still the
+            # last line of defence).
+            try:
+                from shared import hw_layout as _hwl
+                layout = _hwl.load_for('slave')
+            except Exception as e:
+                log.warning("hw_layout import failed (%s) — proceeding without it", e)
+                layout = None
+                _hwl = None
+
             import smbus2
             self._angles = _load_servo_angles()
             bus = smbus2.SMBus(1)
+            init_count = 0
             for i, addr in enumerate(self._addresses):
-                self._buses[i] = bus
-                self._init_chip(i)
-            self._ready = True
-            log.info("BodyServoDriver ready — %d HAT(s) %s, %d servos",
-                     len(self._addresses),
+                status = (_hwl.hat_status(layout, addr) if _hwl
+                          else 'degraded')
+                self._hat_status[i] = status
+
+                if status == 'critical':
+                    # ADDRESS_COLLISION — refuse net. Operating against a
+                    # contested bus would route servo PWM to the motor HAT
+                    # inputs (or vice versa) — destructive.
+                    log.critical(_hwl.critical_log_message(addr))
+                    self._buses[i]  = None
+                    self._offline[i] = True
+                    continue
+
+                if status == 'degraded' and layout is not None:
+                    # JSON exists and does NOT contain this addr.
+                    # Skip init for THIS HAT; other HATs continue.
+                    log.warning(_hwl.degraded_log_message(addr))
+                    self._buses[i]  = None
+                    self._offline[i] = True
+                    continue
+
+                # Either status == 'ready' OR (layout is None — backwards-compat
+                # fallback path: try init via cfg + degrade per-HAT on failure).
+                try:
+                    self._buses[i] = bus
+                    self._init_chip(i)
+                    init_count += 1
+                except Exception as e:
+                    log.warning("Init failed for HAT @ 0x%02X: %s — DEGRADED", addr, e)
+                    self._buses[i]  = None
+                    self._offline[i] = True
+                    self._hat_status[i] = 'degraded'
+
+            self._ready = True   # driver is alive even if 0/N HATs initialised
+            log.info("BodyServoDriver ready — %d/%d HAT(s) initialised "
+                     "(%d offline) %s, %d servos",
+                     init_count, len(self._addresses),
+                     sum(self._offline),
                      [hex(a) for a in self._addresses],
                      len(self._servo_map))
             return True
@@ -188,12 +248,19 @@ class BodyServoDriver(BaseDriver):
         log.info("BodyServoDriver: angles reloaded (%d entries)", len(self._angles))
 
     def hat_health(self) -> list:
-        """Returns per-HAT status: [{addr, ok, errors}]"""
+        """Returns per-HAT status: [{addr, ok, errors, status, offline}].
+
+        New fields (chantier 2026-05-28): status (ready|degraded|critical
+        from hw_layout.json) + offline (True when driver is NOT operating
+        this HAT — collision-refused OR absent-from-scan)."""
         return [
             {
-                'addr':   f'0x{addr:02X}',
-                'ok':     self._buses[i] is not None and self._error_cnt[i] < 3,
-                'errors': self._error_cnt[i],
+                'addr':    f'0x{addr:02X}',
+                'ok':      self._buses[i] is not None and self._error_cnt[i] < 3
+                           and not self._offline[i],
+                'errors':  self._error_cnt[i],
+                'status':  self._hat_status[i],
+                'offline': self._offline[i],
             }
             for i, addr in enumerate(self._addresses)
         ]
@@ -261,6 +328,11 @@ class BodyServoDriver(BaseDriver):
     # ------------------------------------------------------------------
 
     def _init_chip(self, hat_idx: int) -> None:
+        # Guard: setup() already filters offline HATs, defensive guard
+        # protects any future caller (re-init, hot-reload, etc.).
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            log.debug("_init_chip skipped for HAT %d (offline)", hat_idx)
+            return
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
         bus.write_byte_data(addr, MODE1_REG, 0x00)
@@ -284,6 +356,8 @@ class BodyServoDriver(BaseDriver):
         log.info("PCA9685 @ 0x%02X initialized 50Hz — servos → calibrated close_angle", addr)
 
     def _ensure_awake(self, hat_idx: int) -> None:
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            return
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
         try:
@@ -296,6 +370,8 @@ class BodyServoDriver(BaseDriver):
             log.warning("_ensure_awake 0x%02X: %s", addr, e)
 
     def _full_off(self, hat_idx: int, channel: int) -> None:
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            return
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
         base = 0x06 + 4 * channel
@@ -305,6 +381,10 @@ class BodyServoDriver(BaseDriver):
         bus.write_byte_data(addr, base + 3, 0x10)
 
     def _set_pulse(self, hat_idx: int, channel: int, pulse_us: float) -> None:
+        if self._offline[hat_idx] or self._buses[hat_idx] is None:
+            # Silently drop — per-call WARN would flood the log during
+            # a choreography. Startup log already announced DEGRADED/CRITICAL.
+            return
         tick = _pulse_to_tick(pulse_us)
         addr = self._addresses[hat_idx]
         bus  = self._buses[hat_idx]
