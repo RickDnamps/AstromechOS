@@ -195,7 +195,21 @@ Tap the **ADMIN** icon from any tab to unlock editing/upload across Settings and
 
 Everything tunable lives in the **Settings** tab, organised into five nav sections — **Operator · Hardware · Connectivity · Appearance · System**. As a taste, here's the **Shortcuts** editor: build up to 12 Drive-overlay macro buttons (toggle arms/panels, play a choreo/sound/random-by-mood), each auto-balanced half over the left propulsion joystick and half over the right dome joystick — with a live preview of exactly where every button lands on the Drive tab.
 
-> 🧬 **Zero-config hardware (chantier G, 2026-05-28)** — the **HATs** sub-panel is now fully **auto-discovered**: no manual I2C address inputs, dropdowns populated only with addresses **actually detected** on the bus, anti-collision blindage that disables the SAVE button + shows a red pulsing banner if two HAT identities map to the same address. Labels + calibrations are anchored to stable HAT identities (`Body_HAT_A`, `Dome_HAT_A`, ...) — re-jumpering a PCA9685 from `0x41` to `0x42` is a 3-click re-map in the UI; every label and calibration follows automatically. Full architecture, the 6 phases (G1→G6), backup/restore semantics → **[docs/MAPPING.md](docs/MAPPING.md)**.
+> 🧬 **Zero-config hardware (chantier G, 2026-05-28)** — the **HATs** sub-panel is now fully **auto-discovered**. The old generic `0x40..0x77` dropdowns are gone: every address selector lists **only the addresses that `scripts/detect_hats.py` actually found on the bus** during the last scan. Labels + calibrations are anchored to stable HAT identities (`Body_HAT_A`, `Dome_HAT_A`, ...) — re-jumpering a PCA9685 from `0x41` to `0x42` is a 3-click re-map in the UI; every label and calibration follows automatically. **Strict uniqueness rule, defense-in-depth**: if you ever pick the same physical address for two identities, *(a)* both rows turn red instantly, *(b)* a pulsing red banner reads **« Collision d'adresse détectée »**, *(c)* the SAVE button is disabled, and *(d)* if anything bypasses the UI guards the backend `POST /hats/remap` refuses the write with HTTP 400 + `"address 0xNN assigned to more than one HAT; each physical address must be unique"`. Full architecture, the 6 phases (G1→G6), backup/restore semantics, 111 unit tests → **[docs/MAPPING.md](docs/MAPPING.md)**.
+
+<details>
+<summary><b>🛟 Troubleshooting — HATs panel</b> — click to expand</summary>
+
+<br>
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Amber note **« ⚠ No HATs detected on this side. Click 🔄 RESCAN HARDWARE then return to re-map. »** in a Re-Map section. | The live `hw_layout.json` is empty for that side — either the scan never ran or the wiring/power changed since the last scan. | Click **🔄 RESCAN HARDWARE** in the same panel. `detect_hats.py` re-runs in read-only mode, rewrites `hw_layout.json`, the dropdown re-populates with whatever the bus reports. |
+| Red banner **« ⚠ Collision d'adresse détectée »** and the SAVE button is grey. | Two HAT identities are pointing at the same physical address. The UI catches it client-side before any POST. | Pick a different address in one of the two highlighted rows. The check re-runs on every dropdown change — the banner disappears + SAVE re-enables the moment the conflict is gone. |
+| Calibration row greyed out with **HARDWARE NOT FOUND** in the **Calibration** sub-panel. | The HAT identity exists in `config_mapping.json` but its bound address is not in the live `hw_layout.json` detected set (e.g. operator re-jumpered but didn't re-map yet). | Settings → HATs → **🔄 RESCAN HARDWARE**, then in the same panel pick the new address from the dropdown for the affected identity and **💾 SAVE MAPPING**. Driver hot-reloads; calibration data is preserved by identity. |
+| Backend returns **HTTP 400** `"address 0xNN assigned to more than one HAT"` from a script / curl. | Defense-in-depth — the same uniqueness rule that the UI enforces also guards `POST /hats/remap`. | Adjust the payload so every `address` is unique within the side, then retry. |
+
+</details>
 
 <div align="center">
 
@@ -215,7 +229,7 @@ Everything tunable lives in the **Settings** tab, organised into five nav sectio
 <td align="center" width="33%"><b>⚡ VESC</b><br><sub>Telemetry · power · faults · invert · bench mode</sub><br><img src="Screenshots/settings-vesc.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🎩 HATs</b><br><sub>I2C servo/motor HAT addresses · UART latency</sub><br><img src="Screenshots/settings-hats.png"></td>
+<td align="center"><b>🎩 HATs</b><br><sub>Zero-config · auto-discovered · Re-Map identity ↔ address</sub><br><img src="Screenshots/settings-hats.png"></td>
 <td align="center"><b>🦾 Arms</b><br><sub>Arm/panel mapping · per-arm open delays</sub><br><img src="Screenshots/settings-arms.png"></td>
 <td align="center"><b>🔧 Calibration</b><br><sub>Per-servo label · open/close angle · speed</sub><br><img src="Screenshots/settings-calibration.png"></td>
 </tr>
