@@ -789,6 +789,12 @@ def _maybe_write_mapping(role: str, cfg_paths: list[str],
     so a crash mid-write never leaves a half-formed file. Never raises
     — failure to write a mapping is non-fatal (services fall back to
     the synthesise-from-layout in-memory path)."""
+    # When invoked via `python3 scripts/detect_hats.py …`, only the
+    # scripts/ dir is on sys.path by default — the repo root must be
+    # injected manually so `from shared import …` resolves. Idempotent.
+    _repo_root = str(Path(__file__).resolve().parent.parent)
+    if _repo_root not in sys.path:
+        sys.path.insert(0, _repo_root)
     try:
         from shared import hw_mapping as _hwm
     except Exception as e:
