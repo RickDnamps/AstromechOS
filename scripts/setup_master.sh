@@ -222,9 +222,16 @@ info "Step 8/8 — Installing systemd services..."
 # units portable to any Pi user (artoo / pi / astromech / ...).
 install_service_template "$REPO_PATH/master/services/astromech-master.service.template"  astromech-master.service
 install_service_template "$REPO_PATH/master/services/astromech-monitor.service.template" astromech-monitor.service
+# astromech-firstboot.service is a oneshot guarded by ConditionPathExists
+# on /boot/ASTROMECH_FIRSTBOOT_READY — it does nothing on a normal boot,
+# but if the AstromechOS Imager (or a manual provisioning operator) drops
+# the marker file at /boot, the next boot will trigger firstboot_setup.sh.
+# We install + enable it here so the trigger path exists post-install.
+install_service_template "$REPO_PATH/master/services/astromech-firstboot.service.template" astromech-firstboot.service
 systemctl daemon-reload
-systemctl enable astromech-master astromech-monitor
+systemctl enable astromech-master astromech-monitor astromech-firstboot
 ok "systemd services installed and enabled (templated for $USER)"
+ok "  astromech-firstboot.service installed — fires when /boot/ASTROMECH_FIRSTBOOT_READY is dropped by the Imager"
 
 # =============================================================================
 # Summary
