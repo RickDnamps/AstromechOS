@@ -6050,6 +6050,40 @@ body[data-lock-mode="2"] .drive-wrapper {
   letter-spacing: 0.3px;
 }
 
+/* Anti-collision blindage 2026-05-28 — Re-mapping UI. The .hat-remap-
+   collision class is toggled on rows whose dropdown picked an address
+   already assigned to another identity. Highlighted red so the operator
+   sees the conflict at a glance + the SAVE button is disabled while
+   any row has the class. */
+.hat-remap-table { width: 100%; }
+.hat-remap-collision td {
+  background: rgba(231, 76, 60, 0.18) !important;
+  color: var(--err, #e74c3c);
+  font-weight: bold;
+}
+.hat-remap-collision select {
+  border-color: var(--err, #e74c3c);
+  color: var(--err, #e74c3c);
+}
+.hat-remap-error-banner {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid var(--err, #e74c3c);
+  border-radius: 4px;
+  color: var(--err, #e74c3c);
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 0.3px;
+  animation: hat-critical-pulse 1.6s ease-in-out infinite;
+}
+.hat-remap-empty-note {
+  background: rgba(255, 170, 68, 0.10);
+  border-left: 3px solid var(--amber, #ffaa44);
+  padding: 6px 10px;
+  color: var(--amber, #ffaa44);
+}
+
 /* Phase G5 2026-05-28 — Calibration card greyed out when its parent
    HAT is configured but not detected on the live I2C scan. */
 .hat-block-offline {

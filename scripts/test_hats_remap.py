@@ -158,6 +158,55 @@ class TestRemapValidation(unittest.TestCase):
         self.assertIn('more than one HAT', msg)
 
 
+class TestAntiCollisionBlindage(unittest.TestCase):
+    """Anti-collision blindage 2026-05-28 — the SAME validation the UI
+    enforces client-side must also be enforced server-side as defense-
+    in-depth. A malicious client that bypasses the dropdown filter
+    + the disabled SAVE button must still hit 400 here."""
+
+    def test_three_hat_collision_pairs(self):
+        # Mapping with 2 HATs; operator submits both at the same address.
+        m = _master_mapping()
+        status, msg = _validate_remap(m, {
+            'host': 'master',
+            'hats': [
+                {'id': 'Dome_HAT_A', 'address': '0x40'},
+                {'id': 'Dome_HAT_B', 'address': '0x40'},
+            ],
+        })
+        self.assertEqual(status, 400)
+        self.assertIn('more than one HAT', msg)
+        self.assertIn('0x40', msg)
+
+    def test_collision_with_case_variants_detected(self):
+        # Operator submits '0x40' for one + '0X40' (uppercase X) for the
+        # other. Both must normalise to the same canonical form so the
+        # collision check catches them.
+        m = _master_mapping()
+        status, msg = _validate_remap(m, {
+            'host': 'master',
+            'hats': [
+                {'id': 'Dome_HAT_A', 'address': '0x40'},
+                {'id': 'Dome_HAT_B', 'address': '0X40'},
+            ],
+        })
+        self.assertEqual(status, 400)
+        self.assertIn('more than one HAT', msg)
+
+    def test_legitimate_swap_no_collision(self):
+        # The blindage must NOT block a legitimate swap of two
+        # addresses — at no point do two identities share a value.
+        m = _master_mapping()
+        status, result = _validate_remap(m, {
+            'host': 'master',
+            'hats': [
+                {'id': 'Dome_HAT_A', 'address': '0x42'},
+                {'id': 'Dome_HAT_B', 'address': '0x40'},
+            ],
+        })
+        self.assertEqual(status, 200)
+
+
 class TestRemapPreservesMetadata(unittest.TestCase):
 
     def test_role_channels_alias_unchanged(self):

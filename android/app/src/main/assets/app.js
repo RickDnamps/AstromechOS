@@ -13423,13 +13423,26 @@ async function renderRemapEditor() {
   const wrap = el('hats-remap-wrapper');
   if (!wrap) return;
   wrap.replaceChildren();
-  // Choices = 0x40..0x77 (matches settings_bp::_PCA9685_MIN/MAX).
-  const choices = [];
-  for (let i = 0x40; i <= 0x77; i++) choices.push('0x' + i.toString(16));
+
+  // Phase G6 + Anti-Collision Blindage 2026-05-28:
+  // dropdown choices come from the LIVE detect_hats scan — never the
+  // generic 0x40..0x77 range. The operator cannot pick an address
+  // the scan didn't actually report. Sub-second fetch of /hats/layout
+  // for the detected set per side.
+  let layoutData = null;
+  try { layoutData = await api('/hats/layout'); } catch {}
 
   for (const host of ['master', 'slave']) {
     const rows = await _fetchCurrentMapping(host);
     if (!rows.length) continue;
+
+    const sideLayout = (layoutData && layoutData[host]) || {};
+    const detected = (sideLayout.hats || [])
+      .map(h => (h && h.addr ? String(h.addr).toLowerCase() : ''))
+      .filter(a => /^0x[0-9a-f]{2}$/.test(a));
+    // De-duplicate + sort so dropdown is in a stable order.
+    const choices = Array.from(new Set(detected)).sort();
+
     const sec = document.createElement('section');
     sec.className = 'card settings-card';
     sec.style.marginTop = '8px';
@@ -13440,12 +13453,25 @@ async function renderRemapEditor() {
     const note = document.createElement('p');
     note.className = 'settings-note';
     note.textContent = 'Pick the I2C address each HAT identity should bind to. ' +
-                        'Calibration data is anchored to the IDENTITY, so labels + ' +
-                        'open/close angles follow automatically.';
+                        'Choices below are the addresses CURRENTLY detected by the I2C scan — ' +
+                        'no fictional options. Calibration data is anchored to the IDENTITY, ' +
+                        'so labels + open/close angles follow automatically.';
     sec.appendChild(note);
 
+    // Empty-detected case: operator must rescan first.
+    if (!choices.length) {
+      const empty = document.createElement('p');
+      empty.className = 'settings-note hat-remap-empty-note';
+      empty.textContent = '⚠ No HATs detected on this side. Click ' +
+                           '🔄 RESCAN HARDWARE above, then return to re-map.';
+      sec.appendChild(empty);
+      wrap.appendChild(sec);
+      continue;
+    }
+
     const table = document.createElement('table');
-    table.className = 'hat-status-table';
+    table.className = 'hat-status-table hat-remap-table';
+    table.dataset.host = host;
     const thead = document.createElement('thead');
     const thr = document.createElement('tr');
     ['Host', 'Identity', 'Role', 'Address'].forEach(t => {
@@ -13457,16 +13483,68 @@ async function renderRemapEditor() {
     table.appendChild(tbody);
     sec.appendChild(table);
 
+    // Inline collision banner — shown ONLY when a duplicate address is
+    // picked. The text is the canonical 'Collision d'adresse détectée'
+    // string demanded by the chantier spec.
+    const banner = document.createElement('div');
+    banner.className = 'hat-remap-error-banner';
+    banner.dataset.host = host;
+    banner.style.display = 'none';
+    banner.textContent = "⚠ Collision d'adresse détectée — two identities cannot bind to the same physical address.";
+    sec.appendChild(banner);
+
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:6px;margin-top:8px';
     const saveBtn = document.createElement('button');
     saveBtn.className = 'btn btn-primary admin-only';
+    saveBtn.dataset.host = host;
     saveBtn.textContent = '💾 SAVE MAPPING (' + host.toUpperCase() + ')';
     saveBtn.addEventListener('click', () => saveRemap(host, table));
     btnRow.appendChild(saveBtn);
     sec.appendChild(btnRow);
     wrap.appendChild(sec);
+
+    // Wire change events for collision detection on every dropdown,
+    // then run an initial check so the user immediately sees the
+    // state of their current saved mapping.
+    table.querySelectorAll('select.hat-remap-select').forEach(s => {
+      s.addEventListener('change', () => _checkRemapCollisions(table, banner, saveBtn));
+    });
+    _checkRemapCollisions(table, banner, saveBtn);
   }
+}
+
+// Anti-collision check — scans every dropdown in <table>, flags rows
+// whose address appears more than once with the .hat-remap-collision
+// class, toggles the banner + SAVE button accordingly. Returns the set
+// of conflicting addresses (empty when all unique). Called on every
+// dropdown change AND once at initial render so the operator sees the
+// state of their existing saved mapping right away.
+function _checkRemapCollisions(table, banner, saveBtn) {
+  const selects = table.querySelectorAll('select.hat-remap-select');
+  const counts = {};
+  selects.forEach(s => {
+    const v = (s.value || '').toLowerCase();
+    counts[v] = (counts[v] || 0) + 1;
+  });
+  const dupes = new Set(Object.keys(counts).filter(k => counts[k] > 1));
+  selects.forEach(s => {
+    const row = s.closest('tr');
+    if (!row) return;
+    if (dupes.has((s.value || '').toLowerCase())) {
+      row.classList.add('hat-remap-collision');
+    } else {
+      row.classList.remove('hat-remap-collision');
+    }
+  });
+  if (banner) banner.style.display = dupes.size ? '' : 'none';
+  if (saveBtn) {
+    saveBtn.disabled = dupes.size > 0;
+    saveBtn.title = dupes.size
+      ? "Collision d'adresse détectée — fix the duplicate before saving."
+      : '';
+  }
+  return dupes;
 }
 
 async function saveRemap(host, table) {
@@ -13475,10 +13553,15 @@ async function saveRemap(host, table) {
     id:      s.dataset.identity,
     address: s.value,
   }));
-  // Client-side dedupe check so we don't bother the backend.
-  const addrs = hats.map(h => h.address.toLowerCase());
-  if (new Set(addrs).size !== addrs.length) {
-    toast('Each address must be unique within this side.', 'error');
+  // Anti-collision blindage 2026-05-28: hard-block save when the
+  // helper detects duplicate selections. The banner + button-disabled
+  // state are already in place from _checkRemapCollisions on every
+  // dropdown change, but we re-check here as a final safety net.
+  const banner = table.parentElement?.querySelector('.hat-remap-error-banner');
+  const btn    = table.parentElement?.querySelector('button[data-host]');
+  const dupes  = _checkRemapCollisions(table, banner, btn);
+  if (dupes.size > 0) {
+    toast("Collision d'adresse détectée — corrige le doublon avant de sauvegarder.", 'error');
     return;
   }
   const out = el('hardware-config-status');
