@@ -4,6 +4,7 @@ No Flask, no paramiko, no filesystem side effects beyond path math — kept
 dependency-free so it is unit-testable in isolation (see scripts/test_backup_core.py).
 """
 from __future__ import annotations
+import json
 import math
 import os
 import posixpath
@@ -94,10 +95,18 @@ BACKUP_FILESET = {
         'master/config/shortcuts.json', 'master/config/bt_config.json',
         'master/config/dome_angles.json', 'master/config/camera.env',
         'master/config/custom_themes.json', 'master/config/drive_layouts.json',
+        # Phase G4 chantier 2026-05-28: HAT identity mapping. Anchor for
+        # labels + calibrations across re-jumpering / hardware changes.
+        # Restored alongside angles so the (identity, channel) keys in
+        # the calibration JSON keep resolving to the same physical servos.
+        'master/config/config_mapping.json',
         'master/choreographies/', 'master/light_sequences/',
     ],
     'slave': [
-        'slave/config/slave.cfg', 'slave/config/servo_angles.json', 'slave/sounds/',
+        'slave/config/slave.cfg', 'slave/config/servo_angles.json',
+        # Phase G4: same rationale as master side.
+        'slave/config/config_mapping.json',
+        'slave/sounds/',
     ],
 }
 
@@ -145,6 +154,78 @@ def classify_member(member_name: str):
 # These local.cfg sections are kept from the LIVE machine on restore (never the
 # backup's) so a restore never severs master<->slave WiFi / SSH.
 NETWORK_PRESERVE_SECTIONS = {'home_wifi', 'hotspot', 'deploy', 'slave', 'github'}
+
+
+def validate_mapping_against_layout(mapping_path: str, layout_path: str) -> list:
+    """Phase G4 chantier 2026-05-28 — compare a config_mapping.json file
+    against an hw_layout.json file. Returns the list of HAT-identity
+    mismatches.
+
+    A mismatch happens when the backup was taken on hardware whose I2C
+    addresses differ from the current robot — typical when the operator
+    restores a backup onto a new SD card / new Pi after re-jumpering.
+    The restore still succeeds (calibration data is preserved by HAT
+    identity), but the operator needs to know they will land in
+    DEGRADED mode for any HAT whose mapped address doesn't match a
+    detected one — and that they should use the Settings -> HATs
+    re-map wizard (Phase G6) to fix the assignment without touching
+    the calibration JSON.
+
+    Returns a list of warning dicts:
+        [{
+          'identity':       'Body_HAT_A',
+          'role':           'servo_body',
+          'expected_addr':  '0x41',  # from config_mapping
+          'detected_addrs': ['0x42'], # from hw_layout
+          'message':        'HAT identity Body_HAT_A expected at 0x41 ...'
+        }, ...]
+    Empty list = perfect match (or one of the two files absent, in which
+    case validation is a no-op — restore continues silently). Never
+    raises; backup_bp surfaces the list in the restore job status."""
+    warnings: list = []
+    if not (os.path.isfile(mapping_path) and os.path.isfile(layout_path)):
+        return warnings   # one of them absent → skip validation, never warn
+    try:
+        with open(mapping_path, encoding='utf-8') as f:
+            mapping = json.load(f)
+        with open(layout_path, encoding='utf-8') as f:
+            layout = json.load(f)
+    except Exception:
+        return warnings   # malformed → skip; the existing restore flow
+                          # already handles bad JSON for these files
+
+    detected = set()
+    for h in (layout or {}).get('hats') or []:
+        if not isinstance(h, dict):
+            continue
+        addr = (h.get('addr') or '').strip().lower()
+        if addr.startswith('0x'):
+            detected.add(addr)
+
+    for h in (mapping or {}).get('hats') or []:
+        if not isinstance(h, dict):
+            continue
+        ident   = h.get('id')
+        expect  = (h.get('address') or '').strip().lower()
+        role    = h.get('role')
+        if not (isinstance(ident, str) and expect.startswith('0x')):
+            continue
+        if expect in detected:
+            continue   # in sync
+        warnings.append({
+            'identity':       ident,
+            'role':           role,
+            'expected_addr':  expect,
+            'detected_addrs': sorted(detected),
+            'message': (
+                f"HAT identity {ident} ({role}) expected at {expect} per "
+                f"restored config_mapping.json, but the live I2C scan "
+                f"detected {sorted(detected) or 'no HATs'}. The driver "
+                f"will boot DEGRADED for this HAT. Use Settings -> HATs "
+                f"to re-assign the address without losing calibration."
+            ),
+        })
+    return warnings
 
 
 def is_allowed_restore_member(side: str, rel: str) -> bool:

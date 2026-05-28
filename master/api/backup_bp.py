@@ -20,7 +20,8 @@ from flask import Blueprint, request, jsonify, send_file, after_this_request
 from master.api._admin_auth import require_admin, get_json_object
 from master.api.backup_core import (validate_theme, BACKUP_FILESET, build_manifest,
                                      is_safe_member, validate_manifest, merge_local_cfg,
-                                     classify_member, is_allowed_restore_member)
+                                     classify_member, is_allowed_restore_member,
+                                     validate_mapping_against_layout)
 from shared.paths import SLAVE_SOUNDS as _SLAVE_SOUNDS
 
 log = logging.getLogger(__name__)
@@ -316,6 +317,26 @@ def _run_restore(bck_path):
                 merged_local_cfg = None
 
         from master.api.audio_bp import _slave_sftp_creds, _sftp_atomic_put
+
+        # Phase G4 chantier 2026-05-28 — mapping vs hardware validation.
+        # Before files move, compare the restored config_mapping.json with
+        # the LIVE hw_layout.json for both master and slave (the master
+        # has a reverse-rsynced copy of slave's hw_layout for the
+        # zero-config UI). Mismatches don't abort the restore — calibration
+        # data is anchored to HAT identity not address, so it survives
+        # — but the operator MUST know they will land DEGRADED until
+        # they re-map via Settings -> HATs.
+        mapping_warnings = []
+        for _side in ('master', 'slave'):
+            _staged_map = os.path.join(stage, _side, 'config', 'config_mapping.json')
+            _live_layout = os.path.join(_REPO, _side, 'config', 'hw_layout.json')
+            mapping_warnings.extend(
+                validate_mapping_against_layout(_staged_map, _live_layout)
+            )
+        if mapping_warnings:
+            log.warning("restore: %d HAT mapping mismatch(es) detected — "
+                        "surfacing in job status for operator", len(mapping_warnings))
+        job.update(mapping_warnings=mapping_warnings)
 
         # 1) Master files FIRST (controller; allow-listed; staged tmp+replace).
         job.update(phase='Restoring master', pct=35)
