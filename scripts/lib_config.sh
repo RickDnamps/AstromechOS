@@ -139,3 +139,53 @@ slave_host() {
 slave_target() {
     echo "$(slave_user)@$(slave_host)"
 }
+
+# ──────────────────────────────────────────────────────────────────
+# install_service_template <src.template> <dest_name>
+# Substitutes __USER__/__HOME__/__UID__/__REPO_PATH__ from the LOCAL
+# capture_user state (or the current process owner if capture_user
+# wasn't called) and installs to /etc/systemd/system/<dest_name> via
+# 'sudo tee'. Used by setup_master.sh / update.sh for MASTER services.
+# ──────────────────────────────────────────────────────────────────
+install_service_template() {
+    local src="$1" dest_name="$2"
+    [ -f "$src" ] || { echo "[ERR] service template not found: $src" >&2; return 1; }
+    local U H UD R
+    U="${TARGET_USER:-$(whoami)}"
+    H="${TARGET_HOME:-$(getent passwd "$U" 2>/dev/null | cut -d: -f6)}"
+    [ -z "$H" ] && H="/home/$U"
+    UD=$(id -u "$U" 2>/dev/null) || UD=1000
+    R="${REPO_PATH:-$H/astromechos}"
+    sed -e "s|__USER__|$U|g" \
+        -e "s|__HOME__|$H|g" \
+        -e "s|__UID__|$UD|g" \
+        -e "s|__REPO_PATH__|$R|g" \
+        "$src" | sudo tee "/etc/systemd/system/$dest_name" > /dev/null
+}
+
+# ──────────────────────────────────────────────────────────────────
+# install_service_template_remote <relpath> <dest_name> <ssh_target>
+# Same as above but executes the substitution on the REMOTE side, so
+# __USER__/__HOME__/__UID__/__REPO_PATH__ resolve to the SLAVE's local
+# values (which, per the Master-==-Slave-user rule, match the Master's
+# but the home directory could still differ on edge-case installs).
+# <relpath> is relative to the slave's REPO root (e.g.
+# slave/services/astromech-slave.service.template). The template must
+# already have been rsynced to the slave before this is called.
+# ──────────────────────────────────────────────────────────────────
+install_service_template_remote() {
+    local relpath="$1" dest_name="$2" target="$3"
+    ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 "$target" \
+        bash -s -- "$relpath" "$dest_name" << 'REMOTE'
+        REL="$1"; DEST="$2"
+        U=$(whoami); H="$HOME"; UD=$(id -u); R="$H/astromechos"
+        SRC="$R/$REL"
+        [ -f "$SRC" ] || { echo "[ERR] template not found on slave: $SRC" >&2; exit 1; }
+        sed -e "s|__USER__|$U|g" \
+            -e "s|__HOME__|$H|g" \
+            -e "s|__UID__|$UD|g" \
+            -e "s|__REPO_PATH__|$R|g" \
+            "$SRC" | sudo tee "/etc/systemd/system/$DEST" > /dev/null
+        sudo systemctl daemon-reload
+REMOTE
+}

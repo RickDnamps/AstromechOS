@@ -171,12 +171,19 @@ fi
 if [ "$FIRST_INSTALL" = true ]; then
     echo "[4/5] Installation services systemd + audio + BT sur le Slave..."
     ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" SLAVE_REPO="$SLAVE_REPO" bash << 'REMOTE'
-        # Services systemd
-        sudo cp "$SLAVE_REPO/slave/services/astromech-slave.service"   /etc/systemd/system/
-        sudo cp "$SLAVE_REPO/slave/services/astromech-version.service" /etc/systemd/system/
+        # Services systemd — substitute the .service.template files using THIS
+        # Pi's user / home / uid (matches the Master's by design but home dir
+        # could in theory differ on exotic installs).
+        U=$(whoami); H="$HOME"; UD=$(id -u); R="$SLAVE_REPO"
+        for svc in astromech-slave astromech-version; do
+            sed -e "s|__USER__|$U|g" -e "s|__HOME__|$H|g" \
+                -e "s|__UID__|$UD|g" -e "s|__REPO_PATH__|$R|g" \
+                "$R/slave/services/${svc}.service.template" \
+            | sudo tee "/etc/systemd/system/${svc}.service" > /dev/null
+        done
         sudo systemctl daemon-reload
         sudo systemctl enable astromech-version astromech-slave
-        echo "  → systemd services installed"
+        echo "  → systemd services installed (templated for $U)"
 
         # mpg123 (MP3 player)
         if ! which mpg123 > /dev/null 2>&1; then

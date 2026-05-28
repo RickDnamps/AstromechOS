@@ -5,9 +5,9 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=artoo
-WorkingDirectory=/home/artoo/astromechos
-ExecStart=/usr/bin/python3 /home/artoo/astromechos/master/main.py
+User=__USER__
+WorkingDirectory=__REPO_PATH__
+ExecStart=/usr/bin/python3 __REPO_PATH__/master/main.py
 Restart=always
 RestartSec=3
 StandardOutput=journal

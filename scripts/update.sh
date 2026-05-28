@@ -238,21 +238,21 @@ if [ -f "$CAM_SCRIPT" ]; then
         || warn "Camera script install failed"
 fi
 
-# Install/update the camera service file (Restart=always + watchdog script)
-CAM_SVC="$REPO/master/services/astromech-camera.service"
-if [ -f "$CAM_SVC" ]; then
-    sudo tee /etc/systemd/system/astromech-camera.service > /dev/null < "$CAM_SVC" \
+# Install/update the camera service file (templated — Restart=always + watchdog)
+CAM_TPL="$REPO/master/services/astromech-camera.service.template"
+if [ -f "$CAM_TPL" ]; then
+    install_service_template "$CAM_TPL" astromech-camera.service \
         && sudo systemctl daemon-reload \
-        && ok "Camera service file updated" \
+        && ok "Camera service file updated (templated for $(whoami))" \
         || warn "Camera service file install failed"
 fi
 
-# Install the service file on the Slave (PYTHONPATH + config up to date)
-SERVICE_SRC="$REPO/slave/services/astromech-slave.service"
-if [ -f "$SERVICE_SRC" ]; then
-    $SSH $SLAVE "sudo tee /etc/systemd/system/astromech-slave.service > /dev/null" < "$SERVICE_SRC" \
-        && $SSH $SLAVE "sudo systemctl daemon-reload" \
-        && ok "Service file installed (PYTHONPATH OK)" \
+# Install the service file on the Slave (templated — substitution happens on
+# the SLAVE side so __USER__/__HOME__/__UID__ resolve to the slave's view).
+SERVICE_TPL_REL="slave/services/astromech-slave.service.template"
+if [ -f "$REPO/$SERVICE_TPL_REL" ]; then
+    install_service_template_remote "$SERVICE_TPL_REL" astromech-slave.service "$SLAVE" \
+        && ok "Service file installed (PYTHONPATH OK, templated)" \
         || warn "Service file: sudo install failed — check sudoers"
 fi
 

@@ -217,11 +217,14 @@ echo ""
 # STEP 8 — systemd services
 # =============================================================================
 info "Step 8/8 — Installing systemd services..."
-cp "$REPO_PATH/master/services/astromech-master.service"  /etc/systemd/system/
-cp "$REPO_PATH/master/services/astromech-monitor.service" /etc/systemd/system/
+# Service files are now TEMPLATES (.service.template) — install_service_template
+# substitutes __USER__/__HOME__/__UID__/__REPO_PATH__ at install time. Makes the
+# units portable to any Pi user (artoo / pi / astromech / ...).
+install_service_template "$REPO_PATH/master/services/astromech-master.service.template"  astromech-master.service
+install_service_template "$REPO_PATH/master/services/astromech-monitor.service.template" astromech-monitor.service
 systemctl daemon-reload
 systemctl enable astromech-master astromech-monitor
-ok "systemd services installed and enabled"
+ok "systemd services installed and enabled (templated for $USER)"
 
 # =============================================================================
 # Summary

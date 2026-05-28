@@ -3,7 +3,7 @@ Description=AstromechOS Camera Stream (mjpg-streamer)
 After=network.target
 
 [Service]
-User=artoo
+User=__USER__
 ExecStart=/usr/local/bin/astromech-camera-start.sh
 Restart=always
 RestartSec=5

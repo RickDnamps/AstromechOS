@@ -5,12 +5,12 @@ Wants=astromech-version.service
 
 [Service]
 Type=simple
-User=artoo
-WorkingDirectory=/home/artoo/astromechos
-Environment=PYTHONPATH=/home/artoo/astromechos
-Environment=XDG_RUNTIME_DIR=/run/user/1000
-Environment=PULSE_RUNTIME_PATH=/run/user/1000/pulse
-ExecStart=/usr/bin/python3 /home/artoo/astromechos/slave/main.py
+User=__USER__
+WorkingDirectory=__REPO_PATH__
+Environment=PYTHONPATH=__REPO_PATH__
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+Environment=PULSE_RUNTIME_PATH=/run/user/__UID__/pulse
+ExecStart=/usr/bin/python3 __REPO_PATH__/slave/main.py
 Restart=always
 RestartSec=3
 StandardOutput=journal
