@@ -58,7 +58,7 @@ from master.api._admin_auth import require_admin
 settings_bp = Blueprint('settings', __name__)
 log = logging.getLogger(__name__)
 
-from shared.paths import LOCAL_CFG, SLAVE_CFG as _SLAVE_CFG
+from shared.paths import LOCAL_CFG, MAIN_CFG, SLAVE_CFG as _SLAVE_CFG
 # B-61 (audit 2026-05-15) + portability chantier 2026-05-28: both the
 # slave HOST (from local.cfg [slave] host) and the SSH USER (from
 # [deploy] slave_user / [system] user / current OS user) are resolved
@@ -1078,6 +1078,59 @@ def set_config():
     rejected = []
     # First pass: validate all HAT keys + canonicalise, then collision-check
     hat_canonical: dict[str, str] = {}
+
+    # ── Pre-flight DNA paternity check for `github.repo_url` change ──
+    # If the operator is changing the GitHub URL, verify the candidate
+    # repo is a legitimate fork of RickDnamps/AstromechOS (its branch
+    # descends from shared.git_provenance.OFFICIAL_INITIAL_COMMIT)
+    # BEFORE we write ANYTHING to local.cfg. The check is slow
+    # (involves a `git fetch`) so we only run it when the URL
+    # actually changes — never when the operator is just editing the
+    # branch / slave host / unrelated field. On DNA fail we return
+    # 400 + a clear reason and leave BOTH local.cfg AND the live
+    # `origin` remote untouched ("never half-swap origin").
+    if 'github.repo_url' in data:
+        _candidate = _normalise('github.repo_url', data['github.repo_url'])
+        if _candidate is not None:
+            _cur_cfg = configparser.ConfigParser()
+            _cur_cfg.read([MAIN_CFG, LOCAL_CFG])
+            _current_url = _cur_cfg.get('github', 'repo_url', fallback='')
+            if _candidate != _current_url:
+                # Target branch = new branch if also in this POST, else
+                # the current cfg branch. Avoids a false reject when the
+                # operator coordinates URL + branch in a single save.
+                _target_branch = _cur_cfg.get('github', 'branch', fallback='main') or 'main'
+                if 'github.branch' in data:
+                    _nb = _normalise('github.branch', data['github.branch'])
+                    if _nb:
+                        _target_branch = _nb
+                try:
+                    from shared.git_provenance import validate_paternity
+                    from shared.identity import system_repo_path
+                    _ok, _reason = validate_paternity(
+                        system_repo_path(), _candidate, _target_branch, timeout=30
+                    )
+                except Exception as _e:
+                    log.error("set_config: DNA check threw %s — refusing", _e)
+                    return jsonify({
+                        'error': 'Repository validation failed (internal error).',
+                        'detail': str(_e),
+                        'official_remote_preserved': True,
+                    }), 500
+                if not _ok:
+                    log.warning("set_config: DNA validation rejected repo_url=%r: %s",
+                                _candidate, _reason)
+                    return jsonify({
+                        'error': 'Repository validation failed (paternity check).',
+                        'detail': _reason,
+                        'hint': 'The candidate repo must be a fork of '
+                                'RickDnamps/AstromechOS — its history must '
+                                'descend from the official initial commit.',
+                        'official_remote_preserved': True,
+                    }), 400
+                log.info("set_config: DNA OK for repo_url=%r (branch=%r)",
+                         _candidate, _target_branch)
+
     for dotkey, value in data.items():
         if dotkey not in allowed:
             continue
