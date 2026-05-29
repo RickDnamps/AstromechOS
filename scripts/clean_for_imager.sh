@@ -155,8 +155,10 @@ fi
 # state with no value on a distributable image. find -maxdepth 1
 # bounds the sweep to TARGET_HOME itself — never recurses.
 declare -a ORPHAN_PATTERNS=(
-    'migration_backup_*'            # seed-working chantier-a (2026-05-21)
+    'migration_backup_*'            # seed-working chantier-a — Master copy
+    'slave_premigration_*'          # seed-working chantier-a — Slave copy
     'legacy_*_decommissioned_*'     # legacy .scr→.chor migration (2026-05-22)
+    'astromechos_oldflat_backup'    # old slave dir structure pre-refactor
     'angles_backup'                 # pre-rotation manual backup (early days)
 )
 ORPHAN_REMOVED=0
