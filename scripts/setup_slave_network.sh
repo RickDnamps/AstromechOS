@@ -60,8 +60,15 @@
 
 set -e
 
-# Reopen stdin from the terminal if the script is run via pipe (curl | bash)
-[ -t 0 ] || exec < /dev/tty
+# Reopen stdin from the terminal if the script is run via pipe (curl | bash).
+# `[ -r /dev/tty ]` is not enough on Git Bash / restricted shells (the path can
+# exist but raise EIO on open). The reliable probe is a group-redirect: the
+# `:` no-op forces bash to actually open /dev/tty; if that fails the error is
+# captured by 2>/dev/null inside the group and the `&&` short-circuits before
+# we ever reach the real `exec`. Firstboot (systemd, no tty) falls through.
+if [ ! -t 0 ] && { : < /dev/tty; } 2>/dev/null; then
+    exec < /dev/tty
+fi
 
 HOTSPOT_CON="astromech-master-hotspot"
 
@@ -77,17 +84,46 @@ ok()    { echo -e "${GRN}[ OK ]${NC}  $*"; }
 warn()  { echo -e "${YEL}[WARN]${NC}  $*"; }
 die()   { echo -e "${RED}[ERR ]${NC}  $*" >&2; exit 1; }
 
+# ─── CLI arg parsing (non-interactive mode for firstboot orchestration) ──
+# When --non-interactive is set, prompts are skipped and SSID/PSK come from
+# --ssid / --psk flags. firstboot_setup.sh passes the bootstrap SSID/PSK
+# pre-baked by the Imager into /boot/astromech_init.cfg [hotspot].
+NON_INTERACTIVE=""
+SSID_FLAG=""
+PSK_FLAG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --non-interactive) NON_INTERACTIVE=1 ;;
+        --ssid)        SSID_FLAG="${2:-}"; shift ;;
+        --psk)         PSK_FLAG="${2:-}"; shift ;;
+        -h|--help)
+            echo "Usage: $0 [--non-interactive --ssid X --psk Y]"
+            exit 0 ;;
+        *) die "unknown flag: $1" ;;
+    esac
+    shift
+done
+if [ -n "$NON_INTERACTIVE" ]; then
+    [ -n "$SSID_FLAG" ] || die "--non-interactive requires --ssid"
+    [ -n "$PSK_FLAG" ]  || die "--non-interactive requires --psk"
+    [ "${#PSK_FLAG}" -ge 8 ] || die "--psk too short (WPA requires >=8 chars)"
+fi
+
 # =============================================================================
 echo ""
 echo -e "${BLU}========================================${NC}"
 echo -e "${BLU}  AstromechOS Slave — Network configuration${NC}"
 echo -e "${BLU}========================================${NC}"
 echo ""
-echo -e "  ${YEL}⚠  The R2-Master must be configured and rebooted before continuing.${NC}"
-echo    "     (setup_master_network.sh must have been run on the Master)"
-echo ""
-read -r -p "  Is the Master ready and its hotspot active? [y/N] " READY
-[[ "$READY" =~ ^[Oo] ]] || die "Configure the Master first, then re-run this script."
+if [ -n "$NON_INTERACTIVE" ]; then
+    info "Non-interactive mode (firstboot): target SSID='$SSID_FLAG'"
+else
+    echo -e "  ${YEL}⚠  The R2-Master must be configured and rebooted before continuing.${NC}"
+    echo    "     (setup_master_network.sh must have been run on the Master)"
+    echo ""
+    read -r -p "  Is the Master ready and its hotspot active? [y/N] " READY
+    [[ "$READY" =~ ^[Oo] ]] || die "Configure the Master first, then re-run this script."
+fi
 
 # --- Root check ---
 [[ $EUID -eq 0 ]] || die "This script must be run with sudo"
@@ -140,23 +176,29 @@ echo ""
 HOTSPOT_SSID=""
 HOTSPOT_PASS=""
 
-# Each Master now has a per-robot SSID (Astromech_Control_XXXX). Enter the EXACT
-# SSID shown during the Master network setup (or in master/config/local.cfg
-# [hotspot] ssid). The default is only the base name in case it was overridden.
-read -r -p "  Master hotspot SSID [Astromech_Control]: " INPUT
-HOTSPOT_SSID="${INPUT:-Astromech_Control}"
+if [ -n "$NON_INTERACTIVE" ]; then
+    HOTSPOT_SSID="$SSID_FLAG"
+    HOTSPOT_PASS="$PSK_FLAG"
+    info "Non-interactive: SSID='$HOTSPOT_SSID' (PSK from --psk)"
+else
+    # Each Master now has a per-robot SSID (Astromech_Control_XXXX). Enter the EXACT
+    # SSID shown during the Master network setup (or in master/config/local.cfg
+    # [hotspot] ssid). The default is only the base name in case it was overridden.
+    read -r -p "  Master hotspot SSID [Astromech_Control]: " INPUT
+    HOTSPOT_SSID="${INPUT:-Astromech_Control}"
 
-while true; do
-    read -r -s -p "  Hotspot password                  : " HOTSPOT_PASS
-    echo ""
-    if [[ -z "$HOTSPOT_PASS" ]]; then
-        warn "Empty password — try again (default: r2d2droid if unchanged)"
+    while true; do
         read -r -s -p "  Hotspot password                  : " HOTSPOT_PASS
         echo ""
-        [[ -n "$HOTSPOT_PASS" ]] || HOTSPOT_PASS="r2d2droid"
-    fi
-    break
-done
+        if [[ -z "$HOTSPOT_PASS" ]]; then
+            warn "Empty password — try again (default: r2d2droid if unchanged)"
+            read -r -s -p "  Hotspot password                  : " HOTSPOT_PASS
+            echo ""
+            [[ -n "$HOTSPOT_PASS" ]] || HOTSPOT_PASS="r2d2droid"
+        fi
+        break
+    done
+fi
 
 echo ""
 ok "Target hotspot: SSID='${HOTSPOT_SSID}'"

@@ -97,11 +97,46 @@ ok()    { echo -e "${GRN}[ OK ]${NC}  $*"; }
 warn()  { echo -e "${YEL}[WARN]${NC}  $*"; }
 die()   { echo -e "${RED}[ERR ]${NC}  $*" >&2; exit 1; }
 
+# ─── CLI arg parsing (non-interactive mode for firstboot orchestration) ──
+# When --non-interactive is set, every `read -r -p` block below is gated and
+# values come from --ssid / --psk / --home-ssid / --home-psk flags or from
+# wlan0 auto-detection (home WiFi only). firstboot_setup.sh passes the
+# bootstrap SSID/PSK that the Imager pre-baked into /boot/astromech_init.cfg.
+NON_INTERACTIVE=""
+SSID_FLAG=""
+PSK_FLAG=""
+HOME_SSID_FLAG=""
+HOME_PSK_FLAG=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --non-interactive) NON_INTERACTIVE=1 ;;
+        --ssid)        SSID_FLAG="${2:-}"; shift ;;
+        --psk)         PSK_FLAG="${2:-}"; shift ;;
+        --home-ssid)   HOME_SSID_FLAG="${2:-}"; shift ;;
+        --home-psk)    HOME_PSK_FLAG="${2:-}"; shift ;;
+        -h|--help)
+            echo "Usage: $0 [--non-interactive [--ssid X --psk Y] [--home-ssid Z --home-psk W]]"
+            exit 0 ;;
+        *) die "unknown flag: $1" ;;
+    esac
+    shift
+done
+# Apply CLI overrides BEFORE we hit any prompt blocks. PSK length check happens
+# in the same place the interactive validator runs (>=8 chars per WPA-PSK).
+if [ -n "$SSID_FLAG" ]; then HOTSPOT_SSID="$SSID_FLAG"; fi
+if [ -n "$PSK_FLAG" ]; then
+    [ "${#PSK_FLAG}" -ge 8 ] || die "--psk too short (WPA requires >=8 chars)"
+    HOTSPOT_PASS="$PSK_FLAG"
+fi
+
 # =============================================================================
 echo ""
 echo -e "${BLU}========================================${NC}"
 echo -e "${BLU}  AstromechOS Master — Network configuration${NC}"
 echo -e "${BLU}========================================${NC}"
+if [ -n "$NON_INTERACTIVE" ]; then
+    info "Non-interactive mode (firstboot): SSID='$HOTSPOT_SSID'"
+fi
 echo ""
 
 # --- Root check ---
@@ -180,21 +215,35 @@ fi
 
 # --- Ask for confirmation or manual entry ---
 echo ""
-if [[ -n "$HOME_SSID" ]]; then
-    read -r -p "Use WiFi '${HOME_SSID}' for wlan1 (internet)? [Y/n] " CONFIRM
-    if [[ "$CONFIRM" =~ ^[Nn] ]]; then
-        HOME_SSID=""
-        HOME_PASS=""
+if [ -n "$NON_INTERACTIVE" ]; then
+    # firstboot path: keep auto-detected wlan0 creds if any; otherwise fall back
+    # to --home-ssid/--home-psk flags. If both empty, STEP 3 is skipped below
+    # (no wlan1 home WiFi setup) — the AP still comes up on wlan0.
+    if [[ -z "$HOME_SSID" && -n "$HOME_SSID_FLAG" ]]; then
+        HOME_SSID="$HOME_SSID_FLAG"
+        HOME_PASS="$HOME_PSK_FLAG"
+        info "Non-interactive: home WiFi from flags (SSID='$HOME_SSID')"
+    elif [[ -n "$HOME_SSID" ]]; then
+        info "Non-interactive: keeping auto-detected home WiFi (SSID='$HOME_SSID')"
+    else
+        warn "Non-interactive: no home WiFi creds (auto-detect empty, no flags) — STEP 3 will be skipped"
     fi
-fi
-
-if [[ -z "$HOME_SSID" ]]; then
-    echo ""
-    info "Manual entry of home WiFi credentials:"
-    read -r -p "  SSID (WiFi network name): " HOME_SSID
-    [[ -n "$HOME_SSID" ]] || die "Empty SSID — aborting"
-    read -r -s -p "  WiFi password           : " HOME_PASS
-    echo ""
+else
+    if [[ -n "$HOME_SSID" ]]; then
+        read -r -p "Use WiFi '${HOME_SSID}' for wlan1 (internet)? [Y/n] " CONFIRM
+        if [[ "$CONFIRM" =~ ^[Nn] ]]; then
+            HOME_SSID=""
+            HOME_PASS=""
+        fi
+    fi
+    if [[ -z "$HOME_SSID" ]]; then
+        echo ""
+        info "Manual entry of home WiFi credentials:"
+        read -r -p "  SSID (WiFi network name): " HOME_SSID
+        [[ -n "$HOME_SSID" ]] || die "Empty SSID — aborting"
+        read -r -s -p "  WiFi password           : " HOME_PASS
+        echo ""
+    fi
 fi
 
 # =============================================================================
@@ -206,22 +255,26 @@ echo ""
 echo    "  The R2-Master will create a WiFi network that the Slave will connect to."
 echo    "  You can customize the name and password, or keep the defaults."
 echo ""
-read -r -p "  Hotspot SSID     [${HOTSPOT_SSID}]: " INPUT
-[[ -n "$INPUT" ]] && HOTSPOT_SSID="$INPUT"
+if [ -n "$NON_INTERACTIVE" ]; then
+    info "Non-interactive: hotspot SSID='${HOTSPOT_SSID}' (from --ssid or gen_hotspot_ssid default)"
+else
+    read -r -p "  Hotspot SSID     [${HOTSPOT_SSID}]: " INPUT
+    [[ -n "$INPUT" ]] && HOTSPOT_SSID="$INPUT"
 
-while true; do
-    read -r -s -p "  Hotspot password [${HOTSPOT_PASS}]: " INPUT
-    echo ""
-    if [[ -z "$INPUT" ]]; then
-        break   # keep default
-    fi
-    if [[ ${#INPUT} -lt 8 ]]; then
-        warn "WPA password must be at least 8 characters — try again"
-    else
-        HOTSPOT_PASS="$INPUT"
-        break
-    fi
-done
+    while true; do
+        read -r -s -p "  Hotspot password [${HOTSPOT_PASS}]: " INPUT
+        echo ""
+        if [[ -z "$INPUT" ]]; then
+            break   # keep default
+        fi
+        if [[ ${#INPUT} -lt 8 ]]; then
+            warn "WPA password must be at least 8 characters — try again"
+        else
+            HOTSPOT_PASS="$INPUT"
+            break
+        fi
+    done
+fi
 
 echo ""
 ok "Hotspot configured: SSID='${HOTSPOT_SSID}'  (password saved)"
@@ -280,6 +333,11 @@ ok "Hotspot credentials saved to local.cfg [hotspot]"
 # STEP 3 — Configure wlan1 (USB dongle) for home WiFi
 # =============================================================================
 echo ""
+if [[ -z "$HOME_SSID" ]]; then
+    # Firstboot path without home WiFi creds: skip wlan1 entirely. The AP still
+    # comes up on wlan0; operator can configure wlan1 later via the Flask UI.
+    info "Step 3 — Skipping wlan1 home WiFi setup (no SSID known)"
+else
 info "Step 3 — Configuring wlan1 → home WiFi '$HOME_SSID'..."
 
 # Delete the old r2d2-internet connection if it exists
@@ -320,6 +378,7 @@ if ip link show wlan1 &>/dev/null; then
 else
     warn "wlan1 not detected now — the connection will activate automatically when the USB dongle is plugged in"
 fi
+fi  # end if HOME_SSID
 
 # =============================================================================
 # STEP 4 — Remove the wlan0 home connection and create the hotspot
