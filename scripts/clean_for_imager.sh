@@ -139,13 +139,30 @@ else
     done
 fi
 
-# ─── 2. Security snapshot directory ─────────────────────────────────────────
-step "2/9  Removing security snapshot"
+# ─── 2. Operator-only safety snapshots in TARGET_HOME ───────────────────────
+step "2/9  Removing operator safety snapshots"
+# 2a — original astromech_security_snapshot dir (created by the early
+# security work in chantier 2026-05-26).
 SNAPSHOT="$TARGET_HOME/astromech_security_snapshot"
 if [ -d "$SNAPSHOT" ]; then
     rm -rf -- "$SNAPSHOT" && ok "Removed $SNAPSHOT" || warn "Failed to remove $SNAPSHOT"
 else
-    ok "No snapshot at $SNAPSHOT (already clean)"
+    ok "No security snapshot at $SNAPSHOT (already clean)"
+fi
+# 2b — migration_backup_<TS> snapshots dropped by the seed-working
+# migration (chantier-a, 2026-05-21). One-shot operator state; the
+# migration is long since complete + the .bck backup endpoint
+# (/backup/start) covers the same data going forward. find via
+# maxdepth 1 so we never walk further than TARGET_HOME itself.
+MIG_REMOVED=0
+while IFS= read -r d; do
+    rm -rf -- "$d" 2>/dev/null && \
+        { MIG_REMOVED=$((MIG_REMOVED + 1)); ok "Removed $d"; } || \
+        warn "Could not remove $d"
+done < <(find "$TARGET_HOME" -maxdepth 1 -type d \
+              -name 'migration_backup_*' 2>/dev/null)
+if [ "$MIG_REMOVED" -eq 0 ]; then
+    ok "No migration_backup_* snapshots in $TARGET_HOME"
 fi
 
 # ─── 3. Caches (pip, npm, generic .cache) ───────────────────────────────────
