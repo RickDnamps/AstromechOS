@@ -103,32 +103,14 @@ colour_temp() {
     fi
 }
 
-# Format a percent metric (CPU usage, memory).
-colour_pct() {
-    local p="$1"
-    if [ -z "$p" ] || [ "$p" = "N/A" ]; then
-        printf "${GRAY}N/A${RESET}"
-        return
-    fi
-    if [ "$p" -ge 80 ] 2>/dev/null; then
-        printf "${RED}● %s%%${RESET}" "$p"
-    elif [ "$p" -ge 50 ] 2>/dev/null; then
-        printf "${YELLOW}● %s%%${RESET}" "$p"
-    else
-        printf "${GREEN}● %s%%${RESET}" "$p"
-    fi
-}
-
 # ─── Banner ──────────────────────────────────────────────────────────
 print_banner() {
     printf "\n"
-    # The trailing "OS" glyphs render in WHITE so the operating-system half
-    # of the wordmark pops against the role-coloured ASTROMECH stem.
-    printf "${NODECOL}${BOLD}    █████  ███████ ████████ ██████   ██████  ███    ███ ███████  ██████ ██   ██${RESET}${WHITE}${BOLD}   ██████  ███████${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██ ██         ██    ██   ██ ██    ██ ████  ████ ██      ██      ██   ██${RESET}${WHITE}${BOLD}  ██    ██ ██     ${RESET}\n"
-    printf "${NODECOL}${BOLD}   ███████ ███████    ██    ██████  ██    ██ ██ ████ ██ █████   ██      ███████${RESET}${WHITE}${BOLD}  ██    ██ ███████${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██      ██    ██    ██   ██ ██    ██ ██  ██  ██ ██      ██      ██   ██${RESET}${WHITE}${BOLD}  ██    ██      ██${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██ ███████    ██    ██   ██  ██████  ██      ██ ███████  ██████ ██   ██${RESET}${WHITE}${BOLD}   ██████  ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}    █████  ███████ ████████ ██████   ██████  ███    ███ ███████  ██████ ██   ██   ██████  ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██ ██         ██    ██   ██ ██    ██ ████  ████ ██      ██      ██   ██  ██    ██ ██     ${RESET}\n"
+    printf "${NODECOL}${BOLD}   ███████ ███████    ██    ██████  ██    ██ ██ ████ ██ █████   ██      ███████  ██    ██ ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██      ██    ██    ██   ██ ██    ██ ██  ██  ██ ██      ██      ██   ██  ██    ██      ██${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██ ███████    ██    ██   ██  ██████  ██      ██ ███████  ██████ ██   ██   ██████  ███████${RESET}\n"
     printf "\n"
     # Role badge — bright background pill on a dark base.
     printf "   ${NODECOL}${BOLD}╣ ${NODELABEL} ╠${RESET}"
@@ -185,7 +167,7 @@ git_status_line() {
 
 # ─── System box ──────────────────────────────────────────────────────
 print_system() {
-    local now uptime_str cpu_temp cpu_pct disk_used disk_pct mem_pct load_avg
+    local now uptime_str cpu_temp disk_used disk_pct mem_pct load_avg
     now=$(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo "N/A")
     uptime_str=$(uptime -p 2>/dev/null | sed 's/^up //' || echo "N/A")
 
@@ -194,28 +176,6 @@ print_system() {
         cpu_temp=$(awk '{printf "%.1f", $1/1000}' /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
     else
         cpu_temp="N/A"
-    fi
-
-    # CPU % via /proc/stat delta. 150ms sample window — well inside the 1.5s
-    # MOTD budget and cheaper than `top -bn2 -d 0.5` (~500ms) with no extra
-    # package dep (sysstat / mpstat not assumed). Idle = idle + iowait.
-    cpu_pct="N/A"
-    if [ -r /proc/stat ]; then
-        local u1 n1 s1 i1 w1 q1 sq1 u2 n2 s2 i2 w2 q2 sq2 t1 t2 it1 it2 dt di
-        read -r _ u1 n1 s1 i1 w1 q1 sq1 _ < <(grep '^cpu ' /proc/stat 2>/dev/null)
-        sleep 0.15
-        read -r _ u2 n2 s2 i2 w2 q2 sq2 _ < <(grep '^cpu ' /proc/stat 2>/dev/null)
-        if [ -n "$u2" ]; then
-            it1=$(( i1 + w1 ))
-            it2=$(( i2 + w2 ))
-            t1=$(( u1 + n1 + s1 + i1 + w1 + q1 + sq1 ))
-            t2=$(( u2 + n2 + s2 + i2 + w2 + q2 + sq2 ))
-            dt=$(( t2 - t1 ))
-            di=$(( it2 - it1 ))
-            if [ "$dt" -gt 0 ]; then
-                cpu_pct=$(awk -v dt="$dt" -v di="$di" 'BEGIN{printf "%d", 100*(dt-di)/dt}')
-            fi
-        fi
     fi
 
     # Disk + memory + load via stdlib coreutils.
@@ -242,9 +202,9 @@ print_system() {
     printf "${MAGENTA}${BOLD}┌─[ SYSTEM ]${RESET}${GRAY}─────────────────────────────────────────────────────────────${RESET}\n"
     printf "  ${WHITE}Time${RESET}     %s\n" "$now"
     printf "  ${WHITE}Uptime${RESET}   %s\n" "$uptime_str"
-    printf "  ${WHITE}CPU${RESET}      %b  ${GRAY}·${RESET}  %b\n" "$(colour_temp "$cpu_temp")" "$(colour_pct "$cpu_pct")"
+    printf "  ${WHITE}CPU${RESET}      %b\n" "$(colour_temp "$cpu_temp")"
     printf "  ${WHITE}Disk${RESET}     %s used (%s available)\n" "${disk_pct:-?}" "${disk_used:-?}"
-    printf "  ${WHITE}Memory${RESET}   %b\n" "$(colour_pct "$mem_pct")"
+    printf "  ${WHITE}Memory${RESET}   %s%% used\n" "$mem_pct"
     printf "  ${WHITE}Load${RESET}     %s\n" "$load_avg"
 }
 
