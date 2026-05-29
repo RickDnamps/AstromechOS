@@ -199,7 +199,7 @@ The Slave checks its version on boot (`slave/version_check.py`) — if it mismat
 > `choreographies_default/` and `sounds_default/`, not the live working dirs.
 
 ```
-software/
+AstromechOS/
 ├── master/                          — Dome Pi 4B 4GB: Flask API, choreo, dome servos, lights
 │   ├── main.py                      — Boot sequence + service orchestration
 │   ├── flask_app.py                 — App factory, registers all 14 blueprints
