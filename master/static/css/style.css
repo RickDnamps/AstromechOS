@@ -6135,44 +6135,13 @@ body[data-lock-mode="2"] .drive-wrapper {
   color: var(--text, #e8eef5);
 }
 
-/* Settings toggle checkbox — square, themed accent, no native UA look.
-   Used by VISUAL EFFECTS → scan-line and any future on/off knob. */
-.settings-toggle {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 44px;
-  height: 22px;
-  position: relative;
-  background: var(--input-bg, rgba(0,0,0,0.25));
-  border: 1px solid var(--text-dim, #788);
-  border-radius: 11px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-  flex: 0 0 auto;
-}
-.settings-toggle::before {
-  content: '';
-  position: absolute;
-  top: 2px; left: 2px;
-  width: 16px;
-  height: 16px;
-  background: var(--text-dim, #788);
-  border-radius: 50%;
-  transition: left 0.18s ease, background 0.18s ease;
-}
-.settings-toggle:checked {
-  /* Theme-aware accent (see .btn-console-tag note above). */
-  background: rgba(var(--blue-rgb, 0, 170, 255), 0.18);
-  border-color: var(--blue, #00aaff);
-}
-.settings-toggle:checked::before {
-  left: 24px;
-  background: var(--blue, #00aaff);
-}
-.settings-toggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(var(--blue-rgb, 0, 170, 255), 0.35);
-}
+/* Note (2026-05-28): the previous .settings-toggle styled checkbox here
+   was redundant — the project's canonical toggle pattern is
+   .toggle-label + .toggle-switch (defined above, used by every other
+   on/off control). The VISUAL EFFECTS scan-line toggle now reuses that
+   pattern directly so every theme (including r2d2_light + r2q5) gets
+   the correct accent automatically via var(--blue) / var(--btn-bg) /
+   var(--border). No custom CSS needed here. */
 
 /* Phase G5 2026-05-28 — Calibration card greyed out when its parent
    HAT is configured but not detected on the live I2C scan. */

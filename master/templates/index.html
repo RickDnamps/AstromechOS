@@ -2220,14 +2220,17 @@
         <section class="card settings-card" id="visual-effects-card" style="margin-top:12px">
           <h2 class="card-title">VISUAL EFFECTS</h2>
           <div class="settings-row" style="align-items:center;gap:10px">
-            <label class="settings-label" for="scanline-toggle" style="flex:1 1 auto">
-              CRT scan-line sweep
+            <div style="flex:1 1 auto">
+              <div class="settings-label">CRT scan-line sweep</div>
               <div class="settings-note settings-note-dim" style="margin-top:4px">
                 Thin cyan bar that sweeps from top to bottom every 4 s. Decorative only — disable it if you find it distracting.
               </div>
+            </div>
+            <label class="toggle-label">
+              <input type="checkbox" id="scanline-toggle"
+                     onchange="setScanlineEnabled(this.checked)" checked>
+              <span class="toggle-switch"></span>
             </label>
-            <input type="checkbox" id="scanline-toggle" class="settings-toggle"
-                   onchange="setScanlineEnabled(this.checked)" checked>
           </div>
         </section>
         <section class="card settings-card" id="drive-layout-card" style="margin-top:12px">
