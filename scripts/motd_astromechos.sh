@@ -106,11 +106,11 @@ colour_temp() {
 # ─── Banner ──────────────────────────────────────────────────────────
 print_banner() {
     printf "\n"
-    printf "${NODECOL}${BOLD}    █████  ███████ ████████ ██████   ██████  ███    ███ ███████  ██████ ██   ██${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██ ██         ██    ██   ██ ██    ██ ████  ████ ██      ██      ██   ██${RESET}\n"
-    printf "${NODECOL}${BOLD}   ███████ ███████    ██    ██████  ██    ██ ██ ████ ██ █████   ██      ███████${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██      ██    ██    ██   ██ ██    ██ ██  ██  ██ ██      ██      ██   ██${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██ ███████    ██    ██   ██  ██████  ██      ██ ███████  ██████ ██   ██${RESET}\n"
+    printf "${NODECOL}${BOLD}    █████  ███████ ████████ ██████   ██████  ███    ███ ███████  ██████ ██   ██   ██████  ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██ ██         ██    ██   ██ ██    ██ ████  ████ ██      ██      ██   ██  ██    ██ ██     ${RESET}\n"
+    printf "${NODECOL}${BOLD}   ███████ ███████    ██    ██████  ██    ██ ██ ████ ██ █████   ██      ███████  ██    ██ ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██      ██    ██    ██   ██ ██    ██ ██  ██  ██ ██      ██      ██   ██  ██    ██      ██${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██ ███████    ██    ██   ██  ██████  ██      ██ ███████  ██████ ██   ██   ██████  ███████${RESET}\n"
     printf "\n"
     # Role badge — bright background pill on a dark base.
     printf "   ${NODECOL}${BOLD}╣ ${NODELABEL} ╠${RESET}"
