@@ -176,8 +176,8 @@ step "4/9  Emptying /tmp/"
 find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf -- {} \; 2>/dev/null || true
 ok "/tmp/ emptied"
 
-# ─── 5. node_modules + dist/build (inside AstromechOS repo ONLY) ────────────
-step "5/9  Removing node_modules + dist/build (repo-scoped, never \$HOME-wide)"
+# ─── 5. Repo-scoped artefacts (node_modules + dist/build + config rotation backups) ──
+step "5/9  Removing repo-scoped artefacts (node_modules, builds, .bak/.broken siblings)"
 declare -a NODE_CANDS=(
     "$REPO/android/node_modules"
     "$REPO/android/build"
@@ -191,6 +191,22 @@ for d in "${NODE_CANDS[@]}"; do
         rm -rf -- "$d" && ok "Removed $d" || warn "Could not remove $d"
     fi
 done
+
+# Config rotation backups — *.bak[N] siblings produced by the runtime
+# (servo_bp _rotate, settings_bp write_cfg_atomic, shortcuts_bp etc.)
+# alongside the working files. For a production-ready image these are
+# stale operator state from THIS particular Pi and add no value.
+# Quarantine files (*.broken-<ts>) from corruption recovery — same logic.
+# Bounded to the two known config dirs to avoid sweeping unrelated paths.
+CONFIG_BAK_REMOVED=0
+for dir in "$REPO/master/config" "$REPO/slave/config"; do
+    [ -d "$dir" ] || continue
+    while IFS= read -r f; do
+        rm -f -- "$f" 2>/dev/null && CONFIG_BAK_REMOVED=$((CONFIG_BAK_REMOVED + 1))
+    done < <(find "$dir" -maxdepth 1 -type f \
+                 \( -regex '.*\.bak[0-9]+$' -o -name '*.broken-*' \) 2>/dev/null)
+done
+ok "Removed $CONFIG_BAK_REMOVED config rotation/quarantine backup(s)"
 
 # ─── 6. System logs — vacuum + truncate (NEVER rm -rf /var/log/*) ──────────
 step "6/9  Vacuuming journal + truncating /var/log files"
