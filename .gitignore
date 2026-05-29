@@ -158,3 +158,6 @@ docs/_build/
 .dolt/
 *.db
 .beads-credential-key
+
+# Local one-shot dev-dir rename tool (not part of the project)
+/rename_to_AstromechOS.ps1
