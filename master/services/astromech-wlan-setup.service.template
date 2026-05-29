@@ -1,0 +1,32 @@
+[Unit]
+Description=AstromechOS wlan1 dynamic provisioning
+# Lazy NM-profile creation for the wlan1 USB dongle. Runs AFTER firstboot so
+# we don't race with firstboot's setup_master_network.sh --non-interactive
+# call (which may itself create the astromech-internet profile during the
+# Imager bootstrap path). Boot is never blocked: TimeoutStartSec=30 caps the
+# wait, and the script returns 0 on every error path.
+After=NetworkManager.service network-online.target astromech-firstboot.service
+Wants=NetworkManager.service network-online.target
+Before=astromech-master.service astromech-slave.service
+# Refuse to run while firstboot is still pending — firstboot reboots at end,
+# so on the second boot the marker is gone and this unit takes over.
+ConditionPathExists=!/boot/ASTROMECH_FIRSTBOOT_READY
+ConditionPathExists=!/boot/firmware/ASTROMECH_FIRSTBOOT_READY
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=__REPO_PATH__
+ExecStart=/bin/bash __REPO_PATH__/scripts/astromech_wlan_setup.sh
+TimeoutStartSec=30
+RemainAfterExit=yes
+# Treat any exit code as success so a script bug never blocks master/slave.
+# The script logs errors explicitly to /var/log/astromech-wlan-setup.log
+# and journalctl -u astromech-wlan-setup.
+SuccessExitStatus=0 1 2
+StandardOutput=journal+console
+StandardError=journal+console
+SyslogIdentifier=astromech-wlan-setup
+
+[Install]
+WantedBy=multi-user.target

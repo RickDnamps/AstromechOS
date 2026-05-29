@@ -228,8 +228,13 @@ install_service_template "$REPO_PATH/master/services/astromech-monitor.service.t
 # the marker file at /boot, the next boot will trigger firstboot_setup.sh.
 # We install + enable it here so the trigger path exists post-install.
 install_service_template "$REPO_PATH/master/services/astromech-firstboot.service.template" astromech-firstboot.service
+# astromech-wlan-setup.service: lazy NM-profile creation for wlan1 USB
+# dongle at every boot. Skipped if firstboot is still pending or the
+# dongle is unplugged. Reads creds from /boot/astromech_wlan.conf
+# (Imager-baked, shredded after use) or local.cfg [home_wifi].
+install_service_template "$REPO_PATH/master/services/astromech-wlan-setup.service.template" astromech-wlan-setup.service
 systemctl daemon-reload
-systemctl enable astromech-master astromech-monitor astromech-firstboot
+systemctl enable astromech-master astromech-monitor astromech-firstboot astromech-wlan-setup
 ok "systemd services installed and enabled (templated for $USER)"
 ok "  astromech-firstboot.service installed — fires when /boot/ASTROMECH_FIRSTBOOT_READY is dropped by the Imager"
 

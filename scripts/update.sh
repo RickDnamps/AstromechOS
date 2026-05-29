@@ -247,6 +247,21 @@ if [ -f "$CAM_TPL" ]; then
         || warn "Camera service file install failed"
 fi
 
+# Install/update the wlan1 dynamic provisioning service (lazy NM-profile
+# creation for the wlan1 USB dongle at every boot — see
+# scripts/astromech_wlan_setup.sh). Idempotent: install_service_template
+# overwrites, daemon-reload picks up the new unit, enable is safe if already
+# enabled. Wrapped in a -f guard so updates from a Pi without the template
+# don't fail (template ships from this commit forward).
+WLAN_TPL="$REPO/master/services/astromech-wlan-setup.service.template"
+if [ -f "$WLAN_TPL" ]; then
+    install_service_template "$WLAN_TPL" astromech-wlan-setup.service \
+        && sudo systemctl daemon-reload \
+        && sudo systemctl enable astromech-wlan-setup.service 2>/dev/null \
+        && ok "wlan1 setup service installed+enabled (templated for $(whoami))" \
+        || warn "wlan1 setup service install failed"
+fi
+
 # Install the service file on the Slave (templated — substitution happens on
 # the SLAVE side so __USER__/__HOME__/__UID__ resolve to the slave's view).
 SERVICE_TPL_REL="slave/services/astromech-slave.service.template"
