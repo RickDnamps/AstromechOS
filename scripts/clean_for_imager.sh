@@ -201,8 +201,8 @@ step "4/9  Emptying /tmp/"
 find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf -- {} \; 2>/dev/null || true
 ok "/tmp/ emptied"
 
-# ─── 5. Repo-scoped artefacts (node_modules + dist/build + config rotation backups) ──
-step "5/9  Removing repo-scoped artefacts (node_modules, builds, .bak/.broken siblings)"
+# ─── 5. Repo-scoped artefacts ──────────────────────────────────────────────
+step "5/9  Removing repo-scoped artefacts (builds, caches, rotation siblings, operator dirs)"
 declare -a NODE_CANDS=(
     "$REPO/android/node_modules"
     "$REPO/android/build"
@@ -210,6 +210,12 @@ declare -a NODE_CANDS=(
     "$REPO/android/.gradle"
     "$REPO/tools/node_modules"
     "$REPO/.tmp"
+    # Operator-only working directories — gitignored, no value on a distributable image.
+    # `.clone` = staging for a prior clone op; `debug` = debug_collect.sh output;
+    # `image` = pre-imager staging. All recreated on demand if needed.
+    "$REPO/.clone"
+    "$REPO/debug"
+    "$REPO/image"
 )
 for d in "${NODE_CANDS[@]}"; do
     if [ -d "$d" ]; then
@@ -217,21 +223,47 @@ for d in "${NODE_CANDS[@]}"; do
     fi
 done
 
-# Config rotation backups — *.bak[N] siblings produced by the runtime
-# (servo_bp _rotate, settings_bp write_cfg_atomic, shortcuts_bp etc.)
-# alongside the working files. For a production-ready image these are
-# stale operator state from THIS particular Pi and add no value.
-# Quarantine files (*.broken-<ts>) from corruption recovery — same logic.
-# Bounded to the two known config dirs to avoid sweeping unrelated paths.
+# Operator scratch scripts at the repo root (.tmp_*.py, .tmp_*.sh — written
+# by the dev workflow during quick one-shot fixes, never tracked).
+TMP_FILES_REMOVED=0
+while IFS= read -r f; do
+    rm -f -- "$f" 2>/dev/null && TMP_FILES_REMOVED=$((TMP_FILES_REMOVED + 1))
+done < <(find "$REPO" -maxdepth 1 -type f -name '.tmp_*' 2>/dev/null)
+ok "Removed $TMP_FILES_REMOVED operator .tmp_* scratch file(s) at repo root"
+
+# Python bytecode caches — __pycache__/, .pytest_cache/, *.pyc — anywhere
+# in the repo. Per-host bytecode is regenerated on first import on the new
+# image; shipping it just bloats the .img and exposes the prior Pi's paths.
+PYC_DIRS=0
+while IFS= read -r d; do
+    rm -rf -- "$d" 2>/dev/null && PYC_DIRS=$((PYC_DIRS + 1))
+done < <(find "$REPO" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) 2>/dev/null)
+PYC_FILES=0
+while IFS= read -r f; do
+    rm -f -- "$f" 2>/dev/null && PYC_FILES=$((PYC_FILES + 1))
+done < <(find "$REPO" -type f -name '*.pyc' 2>/dev/null)
+ok "Removed $PYC_DIRS Python cache dir(s), $PYC_FILES *.pyc file(s)"
+
+# Rotation backups / quarantine files / editor leftovers — same .bak[N] /
+# .broken-* / .orig / *~ pattern produced by every _atomic_write_* helper
+# (settings_bp write_cfg_atomic, servo_bp _rotate, shortcuts_bp,
+# _atomic_write_chor, …). Sweep EVERY directory that hosts a managed file:
+# config dirs (master+slave) AND the choreographies dir (.chor.bak[N]).
 CONFIG_BAK_REMOVED=0
-for dir in "$REPO/master/config" "$REPO/slave/config"; do
+for dir in \
+    "$REPO/master/config" \
+    "$REPO/slave/config" \
+    "$REPO/master/choreographies"; do
     [ -d "$dir" ] || continue
     while IFS= read -r f; do
         rm -f -- "$f" 2>/dev/null && CONFIG_BAK_REMOVED=$((CONFIG_BAK_REMOVED + 1))
     done < <(find "$dir" -maxdepth 1 -type f \
-                 \( -regex '.*\.bak[0-9]+$' -o -name '*.broken-*' \) 2>/dev/null)
+                 \( -regex '.*\.bak[0-9]+$' \
+                    -o -name '*.broken-*' \
+                    -o -name '*.orig' \
+                    -o -name '*~' \) 2>/dev/null)
 done
-ok "Removed $CONFIG_BAK_REMOVED config rotation/quarantine backup(s)"
+ok "Removed $CONFIG_BAK_REMOVED rotation/quarantine/editor backup file(s)"
 
 # ─── 6. System logs — vacuum + truncate (NEVER rm -rf /var/log/*) ──────────
 step "6/9  Vacuuming journal + truncating /var/log files"
