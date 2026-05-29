@@ -297,6 +297,23 @@ if [ -z "$HW_LAYOUT_SOURCE" ]; then
     fi
 fi
 
+# ─── Imager mode detection (shared by §4.6 + §4.7) ─────────────────────
+# CONTRACT: this script must be 100% resilient to a "manual install" path
+# where the operator just `git pull`s the repo on an existing Pi and runs
+# scripts/setup_*.sh by hand — NO Imager pre-bake, NO /boot/astromech_init.cfg.
+# Every section below uses `cfg_get section key ""` which returns the empty
+# default gracefully if the file is absent (cfg_get tests `[ -f $f ]`
+# before reading; see lib_config.sh:64-87). Sections that have nothing to
+# do then short-circuit silently — no log_err, no abort, just a single
+# `log` line so journalctl tells the truth about what happened.
+if [ -f "$INIT_CFG" ]; then
+    log_ok "Imager bootstrap detected: $INIT_CFG"
+    IMAGER_MODE=1
+else
+    log "No $INIT_CFG — manual install mode (sections 4.6 + 4.7 will skip)"
+    IMAGER_MODE=0
+fi
+
 # ─── 4.6. Admin password (Flask UI) ─────────────────────────────────────
 # The admin password unlocks the Flask Settings UI; it is ENTIRELY separate
 # from the Linux SSH password (per `bd memories admin-password-vs-ssh-separation`).
@@ -305,6 +322,11 @@ fi
 # astromech_init.cfg [admin] password — this step persists it into local.cfg
 # so the running master picks it up at first request. Master role only —
 # the slave has no Flask UI.
+#
+# Manual install fallback: if [admin] password is absent (no Imager OR
+# operator opted out), this step is a silent no-op. The Flask UI keeps the
+# `deetoo` default from main.cfg, exactly as it does on a manually-cloned
+# repo where `setup_master.sh` was run by hand at the prompt.
 if [ "$ROLE" = "master" ]; then
     log "Step 4.6: admin password (Flask UI) ..."
     ADMIN_PW=$(cfg_get admin password "")
@@ -315,7 +337,7 @@ if [ "$ROLE" = "master" ]; then
             log_warn "Could not write [admin] password to local.cfg — UI stays on the main.cfg default"
         fi
     else
-        log "[admin] password not provided by Imager — keeping main.cfg default"
+        log "[admin] password not provided — keeping main.cfg default (manual install OK)"
     fi
 fi
 
@@ -343,12 +365,20 @@ fi
 # Skipped silently if [hotspot] is missing from astromech_init.cfg
 # (operator opted out of auto-pairing — they will run setup_*_network.sh
 # manually later).
+#
+# Manual install fallback: if [hotspot] is missing from astromech_init.cfg
+# (no Imager, or operator opted out), this section is a SILENT no-op. The
+# operator is expected to run scripts/setup_master_network.sh and
+# scripts/setup_slave_network.sh BY HAND at the interactive prompts (the
+# scripts preserve their full interactive mode when `--non-interactive`
+# is NOT passed). This keeps the "git pull + bash setup_*.sh" workflow
+# 100% functional alongside the Imager-driven Golden Image path.
 log "Step 4.7: hotspot bootstrap + handover ..."
 BOOT_SSID=$(cfg_get hotspot ssid "")
 BOOT_PSK=$(cfg_get hotspot password "")
 
 if [ -z "$BOOT_SSID" ] || [ -z "$BOOT_PSK" ]; then
-    log "Hotspot bootstrap skipped: no [hotspot] in astromech_init.cfg"
+    log "Hotspot bootstrap skipped: no [hotspot] in astromech_init.cfg (manual install — operator will run setup_*_network.sh by hand)"
 elif [ "${#BOOT_PSK}" -lt 8 ]; then
     log_err "Hotspot bootstrap skipped: [hotspot] password <8 chars (WPA min)"
 elif [ "$ROLE" = "master" ]; then

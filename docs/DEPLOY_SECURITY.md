@@ -476,6 +476,44 @@ admin_pw  = secrets.token_urlsafe(12)
 # write the SAME [admin] password into BOTH cards (only master honours it).
 ```
 
+### Dual-mode contract: Imager OR manual install (HARD invariant)
+
+`firstboot_setup.sh` is **NOT allowed to brick a manually-installed Pi**.
+The same script must run cleanly on:
+
+1. **Imager mode** — Golden Image flashed by the C# tool; `/boot/astromech_init.cfg`
+   is present with `[hotspot]`, `[admin]`, optionally `[github]`, `[home_wifi]`.
+2. **Manual mode** — operator `git clone`s the repo on an existing Pi OS
+   image and runs `bash scripts/setup_master.sh` (or `setup_slave.sh`) by
+   hand. No `/boot/astromech_init.cfg`. No `/boot/astromech_secrets/`.
+
+The script enforces this contract via three rules:
+
+| Rule | Where enforced | What it guarantees |
+|---|---|---|
+| **`cfg_get sect key ""` returns `""` if file or key missing** | `lib_config.sh:64-87` — every candidate path tested with `[ -f "$f" ]` before `awk` | No section ever aborts because a cfg file isn't there |
+| **Every new section short-circuits on empty values** | `firstboot_setup.sh` §4.6 (`if [ -n "$ADMIN_PW" ]`), §4.7 (`if [ -z "$BOOT_SSID" ] \|\| [ -z "$BOOT_PSK" ]`) | Missing keys → single `log` line → continue to next section. Never `log_err`, never abort. |
+| **Single-line manual-mode detection** | `firstboot_setup.sh` immediately before §4.6: `if [ -f "$INIT_CFG" ]; then IMAGER_MODE=1 ... else IMAGER_MODE=0 ...` | journalctl tells the truth: "Imager bootstrap detected" or "manual install mode (sections 4.6 + 4.7 will skip)". |
+
+`setup_master_network.sh` and `setup_slave_network.sh` carry the symmetric
+contract on the user-facing side: when invoked WITHOUT `--non-interactive`
+(the manual-install / dev-workflow path), the original `read -r -p` prompt
+blocks remain unchanged in the `else` branch of every gated section. The
+operator types SSID/PSK/home-WiFi creds at the prompt; the scripts behave
+exactly as they did before the firstboot work landed.
+
+Smoke test (run on the dev PC or on a Pi with no /boot cfg present):
+
+```bash
+. scripts/lib_config.sh
+echo "ADMIN=[$(cfg_get admin password '')]"        # → ADMIN=[]
+echo "HOTSPOT=[$(cfg_get hotspot ssid '')]"        # → HOTSPOT=[]
+echo "exit=$?"                                     # → exit=0
+```
+
+If `cfg_get` ever returns non-zero on a missing file, that is a CRITICAL
+regression — the dual-mode contract breaks.
+
 ### First-boot script flow
 
 `scripts/firstboot_setup.sh` is fired by the oneshot systemd unit
