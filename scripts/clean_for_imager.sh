@@ -149,20 +149,26 @@ if [ -d "$SNAPSHOT" ]; then
 else
     ok "No security snapshot at $SNAPSHOT (already clean)"
 fi
-# 2b — migration_backup_<TS> snapshots dropped by the seed-working
-# migration (chantier-a, 2026-05-21). One-shot operator state; the
-# migration is long since complete + the .bck backup endpoint
-# (/backup/start) covers the same data going forward. find via
-# maxdepth 1 so we never walk further than TARGET_HOME itself.
-MIG_REMOVED=0
-while IFS= read -r d; do
-    rm -rf -- "$d" 2>/dev/null && \
-        { MIG_REMOVED=$((MIG_REMOVED + 1)); ok "Removed $d"; } || \
-        warn "Could not remove $d"
-done < <(find "$TARGET_HOME" -maxdepth 1 -type d \
-              -name 'migration_backup_*' 2>/dev/null)
-if [ "$MIG_REMOVED" -eq 0 ]; then
-    ok "No migration_backup_* snapshots in $TARGET_HOME"
+# 2b — orphan snapshots from completed chantiers. Each pattern below
+# is a known one-shot directory the operator was warned about during
+# its chantier; once that chantier ships the snapshot is operator
+# state with no value on a distributable image. find -maxdepth 1
+# bounds the sweep to TARGET_HOME itself — never recurses.
+declare -a ORPHAN_PATTERNS=(
+    'migration_backup_*'            # seed-working chantier-a (2026-05-21)
+    'legacy_*_decommissioned_*'     # legacy .scr→.chor migration (2026-05-22)
+    'angles_backup'                 # pre-rotation manual backup (early days)
+)
+ORPHAN_REMOVED=0
+for pat in "${ORPHAN_PATTERNS[@]}"; do
+    while IFS= read -r d; do
+        rm -rf -- "$d" 2>/dev/null && \
+            { ORPHAN_REMOVED=$((ORPHAN_REMOVED + 1)); ok "Removed $d"; } || \
+            warn "Could not remove $d"
+    done < <(find "$TARGET_HOME" -maxdepth 1 -type d -name "$pat" 2>/dev/null)
+done
+if [ "$ORPHAN_REMOVED" -eq 0 ]; then
+    ok "No orphan chantier snapshots in $TARGET_HOME"
 fi
 
 # ─── 3. Caches (pip, npm, generic .cache) ───────────────────────────────────
