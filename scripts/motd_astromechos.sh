@@ -106,11 +106,13 @@ colour_temp() {
 # ─── Banner ──────────────────────────────────────────────────────────
 print_banner() {
     printf "\n"
-    printf "${NODECOL}${BOLD}    █████  ███████ ████████ ██████   ██████  ███    ███ ███████  ██████ ██   ██   ██████  ███████${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██ ██         ██    ██   ██ ██    ██ ████  ████ ██      ██      ██   ██  ██    ██ ██     ${RESET}\n"
-    printf "${NODECOL}${BOLD}   ███████ ███████    ██    ██████  ██    ██ ██ ████ ██ █████   ██      ███████  ██    ██ ███████${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██      ██    ██    ██   ██ ██    ██ ██  ██  ██ ██      ██      ██   ██  ██    ██      ██${RESET}\n"
-    printf "${NODECOL}${BOLD}   ██   ██ ███████    ██    ██   ██  ██████  ██      ██ ███████  ██████ ██   ██   ██████  ███████${RESET}\n"
+    # Trailing "OS" glyphs render in WHITE so the operating-system half of
+    # the wordmark pops against the role-coloured ASTROMECH stem.
+    printf "${NODECOL}${BOLD}    █████  ███████ ████████ ██████   ██████  ███    ███ ███████  ██████ ██   ██${RESET}${WHITE}${BOLD}   ██████  ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██ ██         ██    ██   ██ ██    ██ ████  ████ ██      ██      ██   ██${RESET}${WHITE}${BOLD}  ██    ██ ██     ${RESET}\n"
+    printf "${NODECOL}${BOLD}   ███████ ███████    ██    ██████  ██    ██ ██ ████ ██ █████   ██      ███████${RESET}${WHITE}${BOLD}  ██    ██ ███████${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██      ██    ██    ██   ██ ██    ██ ██  ██  ██ ██      ██      ██   ██${RESET}${WHITE}${BOLD}  ██    ██      ██${RESET}\n"
+    printf "${NODECOL}${BOLD}   ██   ██ ███████    ██    ██   ██  ██████  ██      ██ ███████  ██████ ██   ██${RESET}${WHITE}${BOLD}   ██████  ███████${RESET}\n"
     printf "\n"
     # Role badge — bright background pill on a dark base.
     printf "   ${NODECOL}${BOLD}╣ ${NODELABEL} ╠${RESET}"
