@@ -47,7 +47,7 @@
       var s = window.screen || {};
       var dk = ptr + '_' + Math.round(s.width || window.innerWidth || 0) + 'x' + Math.round(s.height || window.innerHeight || 0);
       var hint = JSON.parse(localStorage.getItem('astromech-theme-dev') || '{}');
-      var id = (hint && typeof hint[dk] === 'string') ? hint[dk] : (localStorage.getItem('astromech-theme') || 'default');
+      var id = (hint && typeof hint[dk] === 'string') ? hint[dk] : (localStorage.getItem('astromech-theme') || 'r2d2_light');
       var cache = JSON.parse(localStorage.getItem('astromech-theme-vars-cache') || '{}');
       var entry = cache[id], root = document.documentElement;
       if (entry && entry.vars) Object.keys(entry.vars).forEach(function (k) { root.style.setProperty(k, entry.vars[k]); });

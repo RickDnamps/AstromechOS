@@ -43,7 +43,7 @@
 
 const _THEMES = {
   default: {
-    label: 'Default', swatch: '#00aaff',
+    label: 'Classic', swatch: '#00aaff',
     vars: {},  // :root defaults apply — nothing to override
   },
   r2d2: {
@@ -165,7 +165,7 @@ const _THEMES = {
   },
 };
 
-let _activeTheme = 'default';
+let _activeTheme = 'r2d2_light';
 
 // Single source of truth: does this theme engage light-mode legibility
 // overrides (body.theme-light)? Built-ins carry an explicit `light` flag;
@@ -680,7 +680,7 @@ function _initThemes() {
   window.addEventListener('storage', e => {
     if (e.key === _CUSTOM_THEMES_KEY || e.key === 'astromech-theme') {
       _renderThemePicker();
-      const active = localStorage.getItem('astromech-theme') || 'default';
+      const active = localStorage.getItem('astromech-theme') || 'r2d2_light';
       applyTheme(active, false);  // false = don't re-persist, just apply
       _activeTheme = active;
     }
@@ -725,7 +725,7 @@ function _initThemes() {
     if (hint && typeof hint[dk] === 'string') saved = hint[dk];
   } catch (e) {}
   if (!saved) saved = localStorage.getItem('astromech-theme');
-  let id = 'default';
+  let id = 'r2d2_light';
   if (saved) {
     if (_THEMES[saved]) {
       id = saved;
