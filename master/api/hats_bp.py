@@ -170,17 +170,20 @@ def _run_slave_detect(timeout: float = 25.0) -> tuple[int, str]:
     host = _resolve_slave_host()
     if not host:
         return -1, '[slave] host not configured in local.cfg'
-    # The repo path on the slave is the standard /home/<user>/astromechos.
-    # We resolve it from the master's identity helper rather than hardcoding
-    # — same portability rule as the rest of the deploy stack.
+    # Slave SSH user + repo path resolved via shared.identity so this stays
+    # portable across any UID-1000 rename (Imager cold-edit / future).
+    # Same lazy-import + legacy fallback pattern as the rest of the deploy
+    # stack (settings_bp.py, servo_bp.py).
     try:
-        from shared.identity import slave_repo_path
+        from shared.identity import slave_user, slave_repo_path
+        user = slave_user()
         repo_remote = slave_repo_path()
     except Exception:
+        user = 'artoo'
         repo_remote = '/home/artoo/astromechos'  # legacy fallback
     ssh_cmd = [
         'ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
-        f'artoo@{host}',
+        f'{user}@{host}',
         f'cd {repo_remote} && python3 scripts/detect_hats.py '
         f'--role slave --output slave/config/hw_layout.json --no-lock',
     ]
@@ -188,7 +191,7 @@ def _run_slave_detect(timeout: float = 25.0) -> tuple[int, str]:
         r = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout)
         scp_cmd = [
             'scp', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
-            f'artoo@{host}:{repo_remote}/slave/config/hw_layout.json',
+            f'{user}@{host}:{repo_remote}/slave/config/hw_layout.json',
             str(_SLAVE_OUT),
         ]
         scp = subprocess.run(scp_cmd, capture_output=True, text=True, timeout=10)

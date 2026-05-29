@@ -30,7 +30,7 @@
 # ============================================================
 # Emergency servo stop — cut PWM Master (0x40) + Slave (0x41)
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-SLAVE=artoo@${SLAVE_HOST:-astromech-slave.local}
+SLAVE=${USER:-artoo}@${SLAVE_HOST:-astromech-slave.local}
 
 pkill -9 -f test_servo 2>/dev/null
 ssh $SLAVE "pkill -9 -f test_servo 2>/dev/null; true"

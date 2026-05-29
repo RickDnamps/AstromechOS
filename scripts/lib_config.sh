@@ -117,7 +117,13 @@ capture_user() {
         read -r u
     fi
     # 6. Legacy fallback — keeps the original R2-D2 install path working.
-    [ -z "$u" ] && u="artoo"
+    # If we land here, neither astromech_init.cfg, sudo, logname, whoami,
+    # nor an interactive prompt could give us a user. Surface the warning
+    # so the operator knows the rename-friendly path was bypassed.
+    if [ -z "$u" ]; then
+        echo "[WARN] capture_user: falling back to legacy 'artoo' — set [system] user in /boot/astromech_init.cfg or run via 'sudo bash $0' from a regular login to use the dynamic path." >&2
+        u="artoo"
+    fi
     # Validation.
     [ "$u" = "root" ] && { echo "[ERR] refusing to install as root — pick a regular user" >&2; return 1; }
     id "$u" &>/dev/null || { echo "[ERR] user '$u' does not exist on this system" >&2; return 1; }
@@ -139,7 +145,10 @@ slave_user() {
     [ -z "$u" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ] && u="$SUDO_USER"
     [ -z "$u" ] && u=$(logname 2>/dev/null || true)
     [ -z "$u" ] && u=$(whoami 2>/dev/null || true)
-    [ -z "$u" ] && u="artoo"
+    if [ -z "$u" ]; then
+        echo "[WARN] slave_user: falling back to legacy 'artoo' — capture_user was not called and no SUDO_USER/logname/whoami succeeded." >&2
+        u="artoo"
+    fi
     echo "$u"
 }
 

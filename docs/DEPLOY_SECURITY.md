@@ -288,6 +288,45 @@ prepares an SD card before flashing. Its job: drop the right files on
 the boot partition so the Pi self-provisions on first boot, **no
 human interaction, no Wi-Fi connection by hand, no SSH login**.
 
+### Strategy: COLD rootfs surgery (canonical, locked-in 2026-05-29)
+
+The user-rename operation that the Imager performs is **COLD by design**:
+the C# tool mounts the freshly-flashed SD card's `rootfs` partition with
+libext2fs (read/write) and edits `/etc/passwd`, `/etc/shadow`, `/etc/group`,
+`/etc/gshadow`, `/home/<old>` → `/home/<new>`, and the literal `User=`
+lines of `/etc/systemd/system/astromech-*.service` BEFORE the Pi is ever
+powered on. The boot kernel reads an already-renamed `/etc/passwd` — no
+race, no running-process holds, no plaintext leak.
+
+#### Why HOT was rejected (security + viability audit, 2026-05-29)
+
+A HOT alternative (`firstboot_setup.sh` invoking `usermod -l NEW artoo`
++ `groupmod -n NEW artoo` + `usermod -d /home/NEW -m NEW` + `chpasswd`
+at boot time) was evaluated and DEFEATED. The audit verdict was
+**RISKY-NOT-RECOMMENDED**. Eight concrete failure modes, four of them
+HIGH likelihood:
+
+| # | Failure mode | Likelihood | Impact | Cold immune? |
+|---|---|---|---|---|
+| 1 | `usermod -l` refuses — "user is currently used by process N" (getty / dbus / `user@1000.service` / autologin / ssh) | **HIGH** | Pi unrenamed; firstboot ECONNCANCELLED | ✅ Yes |
+| 2 | `groupmod -n` refuses — GID 1000 held by `systemd-user@1000.service` | HIGH | Same as #1 | ✅ Yes |
+| 3 | `usermod -d -m` is non-transactional — `rename(2)` then `chown -R` — failure mid-chown leaves mixed ownership | Medium | Half-renamed `/home/`, services with `Exec=` 203/EXEC | ✅ Yes |
+| 4 | Race with parallel-starting `User=artoo` services in `multi-user.target` | HIGH without exhaustive `Before=` | Service starts under old UID, user vanishes mid-run → SIGKILL on next exec | ✅ Yes |
+| 5 | Autologin tty1 (Pi OS Desktop) holds UID 1000 | HIGH on Desktop | usermod refuses | ✅ Yes |
+| 6 | `user@1000.service` actively running | HIGH | usermod refuses | ✅ Yes |
+| 7 | **Plaintext password leak**: `[admin]/[system] target_password` in `/boot/astromech_init.cfg` is world-readable on the FAT-32 boot partition during the boot window. Pi OS Lite, no LUKS, SD-card thieves love this. | **CERTAIN** during boot | Cleartext on disk | ✅ Yes — cold writes only the `$6$` hash directly to `/etc/shadow` |
+| 8 | Partial rename (step 1 succeeded, step 3 failed) leaves unbootable state: `/etc/passwd` says NEW but `$HOME` points at `/home/old` | Low-Medium | Brick — no clean rollback path | ✅ Yes |
+
+COLD addresses all eight by construction. The C# Imager pays a one-time
+cost (~300 LOC of libext2fs / Ext2Fsd port + offline mount), but the
+boot-time flow becomes degenerate: the kernel sees a coherent rootfs at
+PID 1 and there is no rename to perform.
+
+The audit document remains in beads memory as
+`astromech-imager-spec-2026-05-29-corrected-the` (post-correction); the
+risk table above is the canonical reference if the choice is ever
+re-litigated.
+
 ### SD-card layout — BOOT partition (FAT32) + ROOTFS (ext4) cold edits
 
 AstromechOS is shipped as a **Golden Image**: the rootfs already contains

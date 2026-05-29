@@ -169,7 +169,7 @@ NETWORK_SCRIPT=""
 for candidate in \
     "$(dirname "$0")/setup_slave_network.sh" \
     "$REPO_PATH/scripts/setup_slave_network.sh" \
-    "/home/artoo/setup_slave_network.sh"
+    "$HOME/setup_slave_network.sh"
 do
     if [ -f "$candidate" ]; then
         NETWORK_SCRIPT="$candidate"

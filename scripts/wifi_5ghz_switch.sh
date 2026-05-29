@@ -34,7 +34,7 @@ SLAVE_HOST="${SLAVE_HOST:-192.168.4.171}"              # Slave on the hotspot su
 BAND="${HOTSPOT_BAND:-a}"; CHANNEL="${HOTSPOT_CHANNEL:-36}"; COUNTRY="${REG_COUNTRY:-CA}"
 DEADMAN_M="${DEADMAN_M:-180}"; DEADMAN_S="${DEADMAN_S:-210}"   # slave reverts AFTER master
 UNIT="astromech-5g-rollback"
-SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 artoo@${SLAVE_HOST}"
+SSH="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=8 ${USER:-artoo}@${SLAVE_HOST}"
 
 log(){ echo "[5GHz] $*"; }
 
