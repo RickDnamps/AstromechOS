@@ -64,6 +64,14 @@ tools/
 # Gradle local cache (généré automatiquement)
 android/.gradle/
 
+# Android build artefacts (APK) — never commit, drains git history
+# (chirurgie ADN 2026-05-29 purged history; .gitignore stops re-bleeding)
+android/compiled/*.apk
+
+# Doc screenshots — kept on dev PC only, not shipped to robot
+# (purged from git history same chirurgie)
+Screenshots/
+
 # Code de référence tiers (r2_control by dpoulson)
 others/
 

@@ -48,7 +48,7 @@ from typing import Tuple
 # fork including the operator's own. The bd memory
 # `astromech-git-dna-paternity-check` carries the recovery procedure.
 # ─────────────────────────────────────────────────────────────────
-OFFICIAL_INITIAL_COMMIT = 'f7a2d1ef62714ded6ad4ba0600fc398ac7f2a6a0'
+OFFICIAL_INITIAL_COMMIT = '5cd8937cc72bedfb3912233e738ddc370be472d0'
 OFFICIAL_REPO_URL       = 'https://github.com/RickDnamps/AstromechOS.git'
 
 # URL schemes the validator accepts. `file://` is included so local-loopback
