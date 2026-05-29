@@ -2214,6 +2214,19 @@
                    oninput="onScaleSlider('timeline', this.value)">
           </div>
         </section>
+        <section class="card settings-card" id="visual-effects-card" style="margin-top:12px">
+          <h2 class="card-title">VISUAL EFFECTS</h2>
+          <div class="settings-row" style="align-items:center;gap:10px">
+            <label class="settings-label" for="scanline-toggle" style="flex:1 1 auto">
+              CRT scan-line sweep
+              <div class="settings-note settings-note-dim" style="margin-top:4px">
+                Thin cyan bar that sweeps from top to bottom every 4 s. Decorative only — disable it if you find it distracting.
+              </div>
+            </label>
+            <input type="checkbox" id="scanline-toggle" class="settings-toggle"
+                   onchange="setScanlineEnabled(this.checked)" checked>
+          </div>
+        </section>
         <section class="card settings-card" id="drive-layout-card" style="margin-top:12px">
           <h2 class="card-title">DRIVE LAYOUT</h2>
           <div class="settings-note">Arrange the <span class="robot-name">R2-D2</span> Drive screen. In <strong>Custom</strong> mode you can drag the two joysticks and each shortcut button anywhere inside the drive area. The bottom bar (E-STOP, speed, lock, camera…) always stays fixed. Layouts are saved per device and ride your backups.</div>

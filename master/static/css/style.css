@@ -161,6 +161,9 @@ body::after {
   z-index: 999;
   opacity: 0.6;
 }
+/* UI refactoring 2026-05-28 — operator toggle in Settings → Interface →
+   VISUAL EFFECTS. Persists per-device via _lsKey('astromech-scanline'). */
+body.no-scan-line::after { display: none !important; }
 
 @keyframes grid-drift {
   0%   { background-position: 0 0, 0 0; }
@@ -6128,6 +6131,44 @@ body[data-lock-mode="2"] .drive-wrapper {
   line-height: 1.45;
   text-align: left;
   color: var(--text, #e8eef5);
+}
+
+/* Settings toggle checkbox — square, themed accent, no native UA look.
+   Used by VISUAL EFFECTS → scan-line and any future on/off knob. */
+.settings-toggle {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 44px;
+  height: 22px;
+  position: relative;
+  background: var(--input-bg, rgba(0,0,0,0.25));
+  border: 1px solid var(--text-dim, #788);
+  border-radius: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex: 0 0 auto;
+}
+.settings-toggle::before {
+  content: '';
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-dim, #788);
+  border-radius: 50%;
+  transition: left 0.18s ease, background 0.18s ease;
+}
+.settings-toggle:checked {
+  background: rgba(0, 212, 255, 0.18);
+  border-color: var(--accent, #00d4ff);
+}
+.settings-toggle:checked::before {
+  left: 24px;
+  background: var(--accent, #00d4ff);
+}
+.settings-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.35);
 }
 
 /* Phase G5 2026-05-28 — Calibration card greyed out when its parent

@@ -667,6 +667,28 @@ function onScaleSlider(which, raw) {
   }, 350);
 }
 
+// UI refactoring 2026-05-28 — VISUAL EFFECTS: CRT scan-line toggle.
+// Pure client-side preference (decorative-only effect; no server state).
+// Persisted per-device via _lsKey so the choice survives reloads + roams
+// only on THIS browser/device (per-robot namespacing keeps multi-robot
+// operators from cross-bleeding their preference).
+const _SCANLINE_KEY = 'astromech-scanline';
+function _applyScanline(enabled) {
+  document.body.classList.toggle('no-scan-line', !enabled);
+  const cb = document.getElementById('scanline-toggle');
+  if (cb && cb.checked !== enabled) cb.checked = enabled;
+}
+function _initScanline() {
+  // 'false' literal string = disabled; anything else (incl. null/'true') = enabled.
+  const raw = _lsGet(_SCANLINE_KEY);
+  const enabled = raw !== 'false';
+  _applyScanline(enabled);
+}
+function setScanlineEnabled(enabled) {
+  _applyScanline(!!enabled);
+  _lsSet(_SCANLINE_KEY, enabled ? 'true' : 'false');
+}
+
 function _initThemes() {
   _renderThemePicker();
   // Safety net for the pre-paint apply (in case <body> wasn't ready yet):
@@ -14490,6 +14512,7 @@ document.addEventListener('DOMContentLoaded', () => {
   _initIconPicker();
   _initThemes();
   _initEditorScale();
+  _initScanline();   // VISUAL EFFECTS toggle — apply saved preference before reveal
   // Anti-FOUC safety net: init() reveals the UI (adds .app-ready) once the boot
   // data has loaded; this guarantees we never leave the page hidden if init()
   // throws or a boot fetch stalls. Harmless no-op once init() already revealed.
