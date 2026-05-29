@@ -6112,10 +6112,12 @@ body[data-lock-mode="2"] .drive-wrapper {
 }
 .btn-console-tag:hover,
 .btn-console-tag:focus-visible {
-  color: var(--accent, #00d4ff);
-  border-color: var(--accent, #00d4ff);
-  background: rgba(0, 212, 255, 0.06);
-  box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.18) inset;
+  /* Theme-aware accent: var(--blue) flips from cyan (dark themes) to
+     navy #0849d6 in r2d2_light. rgba(var(--blue-rgb), …) follows. */
+  color: var(--blue, #00aaff);
+  border-color: var(--blue, #00aaff);
+  background: rgba(var(--blue-rgb, 0, 170, 255), 0.06);
+  box-shadow: 0 0 0 1px rgba(var(--blue-rgb, 0, 170, 255), 0.18) inset;
   outline: none;
 }
 
@@ -6159,16 +6161,17 @@ body[data-lock-mode="2"] .drive-wrapper {
   transition: left 0.18s ease, background 0.18s ease;
 }
 .settings-toggle:checked {
-  background: rgba(0, 212, 255, 0.18);
-  border-color: var(--accent, #00d4ff);
+  /* Theme-aware accent (see .btn-console-tag note above). */
+  background: rgba(var(--blue-rgb, 0, 170, 255), 0.18);
+  border-color: var(--blue, #00aaff);
 }
 .settings-toggle:checked::before {
   left: 24px;
-  background: var(--accent, #00d4ff);
+  background: var(--blue, #00aaff);
 }
 .settings-toggle:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.35);
+  box-shadow: 0 0 0 2px rgba(var(--blue-rgb, 0, 170, 255), 0.35);
 }
 
 /* Phase G5 2026-05-28 — Calibration card greyed out when its parent
