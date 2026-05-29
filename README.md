@@ -49,7 +49,7 @@ A **complete, production-grade control system** for a 1:1 scale astromech droid 
 ### 🕹️ Drive
 Dual virtual joysticks (propulsion + dome) · WASD / arrow keys · live MJPEG camera feed · speed arc + direction HUD · always-visible E-STOP · the per-axis **Shortcuts** overlay (up to 16 macro buttons) · and a fully **customizable layout** (see below).
 
-![Drive interface](Screenshots/drive.png)
+![Drive interface](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/drive.png)
 
 </td>
 <td align="center" width="50%">
@@ -57,7 +57,7 @@ Dual virtual joysticks (propulsion + dome) · WASD / arrow keys · live MJPEG ca
 ### 📊 Cockpit Status
 One-tap real-time snapshot from any tab — heartbeat & UART health, both VESCs, every servo/motor HAT, the RP2040 screen, Pi temps/CPU/disk, IP addresses, and active safety alerts (here: bench mode engaged).
 
-![Cockpit status panel](Screenshots/cockpit-status.png)
+![Cockpit status panel](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/cockpit-status.png)
 
 </td>
 </tr>
@@ -67,7 +67,7 @@ One-tap real-time snapshot from any tab — heartbeat & UART health, both VESCs,
 ### 🎨 Custom Drive Layout — "Roblox-style" editor
 **Drag the joysticks, every shortcut button, and the camera anywhere.** A live **5 % snap grid** (adjustable 1–20 %, or free pixel mode), a **resizable + movable** camera panel, transparent joysticks so the feed shows through, and a floating Save / Reset / Cancel banner. Saved **per device** (tablet ≠ PC ≠ phone) and included in your backups.
 
-![Custom Drive Layout editor](Screenshots/custom-layout-editor.png)
+![Custom Drive Layout editor](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/custom-layout-editor.png)
 
 </td>
 <td align="center" width="50%">
@@ -75,7 +75,7 @@ One-tap real-time snapshot from any tab — heartbeat & UART health, both VESCs,
 ### 🎯 Neon alignment guides
 Grab any element and a **theme-coloured laser crosshair** + live **%-position badge** locks to its edges (shortcut) or its center (joystick) for pixel-perfect alignment, then fades on release. Buttons dragged **over the video** auto-switch to a dark high-contrast fill; off the video they keep the theme styling.
 
-![Neon alignment guides](Screenshots/custom-layout-guides.png)
+![Neon alignment guides](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/custom-layout-guides.png)
 
 </td>
 </tr>
@@ -85,7 +85,7 @@ Grab any element and a **theme-coloured laser crosshair** + live **%-position ba
 ### 🟡 Kids Lock
 Drive speed capped at a configurable % (amber **KIDS** pill) — ideal for young pilots at a show. The dome and sounds stay fully free.
 
-![Kids lock mode](Screenshots/drive-kids-lock.png)
+![Kids lock mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/drive-kids-lock.png)
 
 </td>
 <td align="center" width="50%">
@@ -93,7 +93,7 @@ Drive speed capped at a configurable % (amber **KIDS** pill) — ideal for young
 ### 🔴 Child Lock
 Propulsion blocked (left joystick disabled, red **CHILD LOCK** pill) while the dome, lights and sounds keep working — hand the tablet to a small child with the droid on display.
 
-![Child lock mode](Screenshots/drive-child-lock.png)
+![Child lock mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/drive-child-lock.png)
 
 </td>
 </tr>
@@ -103,7 +103,7 @@ Propulsion blocked (left joystick disabled, red **CHILD LOCK** pill) while the d
 ### 🔊 Audio — user
 317 authentic sounds across 14 mood categories · animated waveform · perceptual volume curve · one-tap random-by-mood.
 
-![Audio interface, user mode](Screenshots/audio-user.png)
+![Audio interface, user mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/audio-user.png)
 
 </td>
 <td align="center" width="50%">
@@ -111,7 +111,7 @@ Propulsion blocked (left joystick disabled, red **CHILD LOCK** pill) while the d
 ### 🔊 Audio — admin
 Same tab unlocked: create / rename categories, drag-and-drop MP3 upload, and **Verify sounds** to reconcile the index against the files actually on the robot.
 
-![Audio interface, admin mode](Screenshots/audio-admin.png)
+![Audio interface, admin mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/audio-admin.png)
 
 </td>
 </tr>
@@ -121,7 +121,7 @@ Same tab unlocked: create / rename categories, drag-and-drop MP3 upload, and **V
 ### 🎬 Sequences — user
 48 behavioral sequences as emoji cards in pill categories. Tap to play, press-and-hold to loop. Lock badges warn which joystick a sequence will take over before you trigger it.
 
-![Sequences, user mode](Screenshots/sequences-user.png)
+![Sequences, user mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/sequences-user.png)
 
 </td>
 <td align="center" width="50%">
@@ -129,7 +129,7 @@ Same tab unlocked: create / rename categories, drag-and-drop MP3 upload, and **V
 ### 🎬 Sequences — admin
 Unlocked: rename, set emoji, drag cards between categories, and delete — all guarded by the admin password and cascaded to dependent shortcuts.
 
-![Sequences, admin mode](Screenshots/sequences-admin.png)
+![Sequences, admin mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/sequences-admin.png)
 
 </td>
 </tr>
@@ -139,7 +139,7 @@ Unlocked: rename, set emoji, drag cards between categories, and delete — all g
 ### 🎼 Choreography editor — user
 Multi-track timeline — **up to 12 simultaneous audio channels** · lights · dome keyframes · dome/body/arm servos · drive — with a Digital-Twin dome preview. Here loaded with the **"Yeah Show2"** demo, packed across every track. Guests can browse and PLAY, but cannot alter a sequence.
 
-![Choreography editor, user mode](Screenshots/choreo-user.png)
+![Choreography editor, user mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/choreo-user.png)
 
 </td>
 <td align="center" width="50%">
@@ -147,7 +147,7 @@ Multi-track timeline — **up to 12 simultaneous audio channels** · lights · d
 ### 🎼 Choreography editor — admin
 The same editor unlocked — **RENAME, SAVE, DELETE, EXPORT and IMPORT** appear once the admin password is entered. **Shown mid-playback**: the playhead sweeps the timeline while the live dome monitor mirrors the show in real time.
 
-![Choreography editor, admin mode](Screenshots/choreo-admin.png)
+![Choreography editor, admin mode](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/choreo-admin.png)
 
 </td>
 </tr>
@@ -157,7 +157,7 @@ The same editor unlocked — **RENAME, SAVE, DELETE, EXPORT and IMPORT** appear 
 ### 🎚️ Inspector — sound block
 Click any block to edit it. A **sound** block exposes specific-file vs random-by-category, **volume, priority**, channel and timing — synced to the millisecond against the rest of the timeline, so a dozen sounds layer cleanly.
 
-![Choreo sound block inspector](Screenshots/choreo-inspector-sound.png)
+![Choreo sound block inspector](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/choreo-inspector-sound.png)
 
 </td>
 <td align="center" width="50%">
@@ -165,7 +165,7 @@ Click any block to edit it. A **sound** block exposes specific-file vs random-by
 ### 🦾 Inspector — servo block
 A **servo** block exposes the target panel, the open/close action, duration and easing — so panels move in perfect sync with audio and lights.
 
-![Choreo servo block inspector](Screenshots/choreo-inspector-servo.png)
+![Choreo servo block inspector](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/choreo-inspector-servo.png)
 
 </td>
 </tr>
@@ -177,7 +177,7 @@ Teeces32 or AstroPixels+ · 22 animations · FLD / RLD / BOTH text targets · PS
 
 > **🚧 Beta — under active rework.** A full AstroPixels rewrite is planned, plus a dedicated **visual lights editor**. Expect this tab and its API to change.
 
-![Lights interface](Screenshots/lights.png)
+![Lights interface](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/lights.png)
 
 </td>
 <td align="center" width="50%">
@@ -185,7 +185,7 @@ Teeces32 or AstroPixels+ · 22 animations · FLD / RLD / BOTH text targets · PS
 ### 🔐 Admin mode
 Tap the **ADMIN** icon from any tab to unlock editing/upload across Settings and the Audio / Sequence / Choreography editors — one password, with a 5-minute inactivity auto-lock (shown throughout the user-vs-admin pairs above).
 
-![Admin access password prompt](Screenshots/admin-mode.png)
+![Admin access password prompt](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/admin-mode.png)
 
 </td>
 </tr>
@@ -213,7 +213,7 @@ Everything tunable lives in the **Settings** tab, organised into five nav sectio
 
 <div align="center">
 
-![Settings — Shortcuts editor](Screenshots/settings-shortcuts.png)
+![Settings — Shortcuts editor](https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-shortcuts.png)
 
 </div>
 
@@ -224,32 +224,32 @@ Everything tunable lives in the **Settings** tab, organised into five nav sectio
 
 <table>
 <tr>
-<td align="center" width="33%"><b>🤖 Behavior</b><br><sub>Idle & startup behaviors · next-trigger countdown</sub><br><img src="Screenshots/settings-behavior.png"></td>
-<td align="center" width="33%"><b>🔒 Lock Mode</b><br><sub>Normal / Kids / Child Lock + speed caps</sub><br><img src="Screenshots/settings-lock-mode.png"></td>
-<td align="center" width="33%"><b>⚡ VESC</b><br><sub>Telemetry · power · faults · invert · bench mode</sub><br><img src="Screenshots/settings-vesc.png"></td>
+<td align="center" width="33%"><b>🤖 Behavior</b><br><sub>Idle & startup behaviors · next-trigger countdown</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-behavior.png"></td>
+<td align="center" width="33%"><b>🔒 Lock Mode</b><br><sub>Normal / Kids / Child Lock + speed caps</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-lock-mode.png"></td>
+<td align="center" width="33%"><b>⚡ VESC</b><br><sub>Telemetry · power · faults · invert · bench mode</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-vesc.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🎩 HATs</b><br><sub>Zero-config · auto-discovered · Re-Map identity ↔ address</sub><br><img src="Screenshots/settings-hats.png"></td>
-<td align="center"><b>🦾 Arms</b><br><sub>Arm/panel mapping · per-arm open delays</sub><br><img src="Screenshots/settings-arms.png"></td>
-<td align="center"><b>🔧 Calibration</b><br><sub>Per-servo label · open/close angle · speed</sub><br><img src="Screenshots/settings-calibration.png"></td>
+<td align="center"><b>🎩 HATs</b><br><sub>Zero-config · auto-discovered · Re-Map identity ↔ address</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-hats.png"></td>
+<td align="center"><b>🦾 Arms</b><br><sub>Arm/panel mapping · per-arm open delays</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-arms.png"></td>
+<td align="center"><b>🔧 Calibration</b><br><sub>Per-servo label · open/close angle · speed</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-calibration.png"></td>
 </tr>
 <tr>
-<td align="center"><b>💡 Lights</b><br><sub>Backend select · dome light config</sub><br><img src="Screenshots/settings-lights.png"></td>
-<td align="center"><b>🔋 Battery</b><br><sub>Cell count + chemistry → live thresholds</sub><br><img src="Screenshots/settings-battery.png"></td>
-<td align="center"><b>🎮 BT Gamepad</b><br><sub>Premium header · custom button actions · scan/pair</sub><br><img src="Screenshots/settings-bluetooth.png"></td>
+<td align="center"><b>💡 Lights</b><br><sub>Backend select · dome light config</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-lights.png"></td>
+<td align="center"><b>🔋 Battery</b><br><sub>Cell count + chemistry → live thresholds</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-battery.png"></td>
+<td align="center"><b>🎮 BT Gamepad</b><br><sub>Premium header · custom button actions · scan/pair</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-bluetooth.png"></td>
 </tr>
 <tr>
-<td align="center"><b>📷 Camera</b><br><sub>Resolution / bitrate with live preview</sub><br><img src="Screenshots/settings-camera.png"></td>
-<td align="center"><b>📡 Network</b><br><sub>Hotspot + home Wi-Fi · slave-first changes</sub><br><img src="Screenshots/settings-network.png"></td>
-<td align="center"><b>🎵 Audio</b><br><sub>Channels + per-channel volume profiles</sub><br><img src="Screenshots/settings-audio.png"></td>
+<td align="center"><b>📷 Camera</b><br><sub>Resolution / bitrate with live preview</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-camera.png"></td>
+<td align="center"><b>📡 Network</b><br><sub>Hotspot + home Wi-Fi · slave-first changes</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-network.png"></td>
+<td align="center"><b>🎵 Audio</b><br><sub>Channels + per-channel volume profiles</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-audio.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🎨 Interface</b><br><sub>7 themes + custom colour/font editor</sub><br><img src="Screenshots/settings-interface.png"></td>
-<td align="center"><b>🚀 Deploy</b><br><sub>Commit card + one-button OTA update</sub><br><img src="Screenshots/settings-deploy.png"></td>
-<td align="center"><b>🖥️ System</b><br><sub>Reboot/shutdown · admin password · backup & restore</sub><br><img src="Screenshots/settings-system.png"></td>
+<td align="center"><b>🎨 Interface</b><br><sub>7 themes + custom colour/font editor</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-interface.png"></td>
+<td align="center"><b>🚀 Deploy</b><br><sub>Commit card + one-button OTA update</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-deploy.png"></td>
+<td align="center"><b>🖥️ System</b><br><sub>Reboot/shutdown · admin password · backup & restore</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-system.png"></td>
 </tr>
 <tr>
-<td align="center"><b>🔍 Diagnostics</b><br><sub>Live logs · UART RTT calibration</sub><br><img src="Screenshots/settings-diagnostics.png"></td>
+<td align="center"><b>🔍 Diagnostics</b><br><sub>Live logs · UART RTT calibration</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots/settings-diagnostics.png"></td>
 <td align="center"></td>
 <td align="center"></td>
 </tr>
