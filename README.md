@@ -250,7 +250,7 @@ Everything tunable lives in the **Settings** tab, organised into five nav sectio
 </tr>
 <tr>
 <td align="center"><b>🔍 Diagnostics</b><br><sub>Live logs · UART RTT calibration</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots_Astro/settings-diagnostics.png"></td>
-<td align="center"></td>
+<td align="center"><b>🌈 Theme picker</b><br><sub>7 built-in + custom · live preview · per-device persistence</sub><br><img src="https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots_Astro/settings-theme.png"></td>
 <td align="center"></td>
 </tr>
 </table>
