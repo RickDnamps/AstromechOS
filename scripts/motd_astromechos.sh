@@ -125,13 +125,20 @@ print_banner() {
 git_status_line() {
     # Master path: real .git tree → full status (sha + branch + sync).
     if [ -n "$REPO" ] && [ -d "$REPO/.git" ]; then
+        # update-motd.d scripts run as root; the AstromechOS repo is
+        # owned by the install user (artoo / pi / …). Without
+        # safe.directory, git 2.35+ refuses with 'dubious ownership'
+        # and every read returns empty -> sha + branch render as '?'.
+        # Scope the trust to this exact repo so the override doesn't
+        # leak to anything else the shell does next.
+        local GC=(-c "safe.directory=$REPO")
         local sha branch
-        sha=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
-        branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+        sha=$(git "${GC[@]}" -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo "?")
+        branch=$(git "${GC[@]}" -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
         local upstream behind=0 ahead=0
-        upstream=$(git -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null)
+        upstream=$(git "${GC[@]}" -C "$REPO" rev-parse --abbrev-ref --symbolic-full-name "@{upstream}" 2>/dev/null)
         if [ -n "$upstream" ]; then
-            read -r behind ahead < <(git -C "$REPO" rev-list --left-right --count "$upstream"...HEAD 2>/dev/null || echo "0 0")
+            read -r behind ahead < <(git "${GC[@]}" -C "$REPO" rev-list --left-right --count "$upstream"...HEAD 2>/dev/null || echo "0 0")
         fi
         local pill
         if [ "${behind:-0}" -gt 0 ]; then
