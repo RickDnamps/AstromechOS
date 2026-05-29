@@ -72,15 +72,152 @@ git signature surface.
 
 ### Edge case: history rewrite
 
-The original chronological first commit of AstromechOS (`f01a9be5...`,
-2026-03-14) was orphaned by a history rewrite on 2026-05-22. It now
-exists only on archived `claude/*` work branches and is **not** an
-ancestor of today's `main` HEAD. The current anchor is the OLDEST
-commit reachable from today's `main`. If `main` is ever rebased again,
-`OFFICIAL_INITIAL_COMMIT` MUST be updated in the same commit as the
-rebase, otherwise the validator will (correctly) reject every fork —
-including the operator's own. See the docstring in
-`shared/git_provenance.py` for the recovery procedure.
+The anchor is the OLDEST commit reachable from today's `main`. Any
+operation that rewrites that commit (rebase, `git filter-repo`, branch
+reset) changes its SHA and breaks the validator. `OFFICIAL_INITIAL_COMMIT`
+MUST be updated in the SAME commit that lands the rewrite, otherwise the
+validator will (correctly) reject every fork — including the operator's
+own. The recovery procedure is detailed below.
+
+#### Anchor history
+
+| Date       | Old anchor (12-char prefix) | New anchor (12-char prefix) | Cause |
+|------------|-----------------------------|------------------------------|-------|
+| 2026-03-14 | (none — initial creation)   | `f01a9be5...`                | initial commit |
+| 2026-05-22 | `f01a9be5...`               | `f7a2d1ef6271`               | history rewrite orphaned the chronological first commit (it now lives only on archived `claude/*` work branches) |
+| 2026-05-29 | `f7a2d1ef6271`              | `5cd8937cc72b`               | `git filter-repo --path android/compiled --path Screenshots --invert-paths` purged ~150 MB of APK + screenshot blobs; both paths existed in the initial commit so its tree changed |
+
+The current anchor in `shared/git_provenance.py:51` is:
+
+```python
+OFFICIAL_INITIAL_COMMIT = '5cd8937cc72bedfb3912233e738ddc370be472d0'
+```
+
+### Recovery procedure: history surgery (purge large blobs)
+
+Use case: a path with large tracked binaries (APKs, screenshots, sample
+media) has bloated `.git`. You want to drop it from all history.
+
+#### Decision tree — does this surgery touch the anchor?
+
+Before running anything, check whether the target path exists in the
+current initial commit:
+
+```bash
+git ls-tree -r --name-only "$OFFICIAL_INITIAL_COMMIT" | grep -c "^<path>/"
+```
+
+| Result | Meaning | Anchor impact |
+|--------|---------|---------------|
+| `0`    | Path NOT in initial commit (added later in history) | **DNA-safe.** Surgery rewrites descendant commits only; initial commit tree unchanged → SHA unchanged → no anchor update needed |
+| `>0`   | Path IS in initial commit | **Anchor-changing.** Surgery rewrites the initial commit too → new SHA → must update `OFFICIAL_INITIAL_COMMIT` in the same operation |
+
+#### Full procedure (anchor-changing case)
+
+This is the procedure used 2026-05-29 to purge `android/compiled/` +
+`Screenshots/`. Generalisable to any future anchor-changing surgery.
+
+```bash
+# --- 0. Pre-flight on the dev PC ---
+cd "$REPO_ROOT"
+git status --short                # must be clean (commit or stash pending changes)
+git tag pre-surgery-$(date +%F)   # safety reference
+
+# --- 1. Surgery (rewrites every commit that touched the target paths) ---
+# Install once: python -m pip install git-filter-repo
+git filter-repo --path <path1> --path <path2> --invert-paths --force
+
+# --- 2. New anchor ---
+NEW_INITIAL=$(git rev-list --max-parents=0 HEAD)
+echo "$NEW_INITIAL"
+
+# --- 3. Update the constant in code ---
+# shared/git_provenance.py:51
+#   OFFICIAL_INITIAL_COMMIT = '<NEW_INITIAL>'
+
+# --- 4. Stop future bleeding via .gitignore ---
+# Add the purged path(s) to .gitignore so accidental re-tracks
+# don't reintroduce the same blobs.
+
+# --- 5. Verify DNA tests still pass ---
+python -m pytest scripts/test_git_provenance.py -v
+# Expected: 12/12 PASS — tests validate format, not value.
+
+# --- 6. Commit + re-add origin (filter-repo strips it) ---
+git add shared/git_provenance.py .gitignore
+git commit -m "refactor(dna): re-anchor post-purge"
+git remote add origin https://github.com/RickDnamps/AstromechOS.git
+git push --force origin main      # force-push: history is rewritten
+
+# --- 7. Reclaim local space (Windows note: `git gc` can fail with
+#       "failed to run repack" — workaround is `prune` first) ---
+git reflog expire --expire=now --all
+git prune --expire=now            # drops orphan objects
+git repack -a -d --depth=250 --window=250 --aggressive
+
+# --- 8. Each existing live clone must do a one-time recovery ---
+# `git pull --ff-only` will FAIL (history is rewritten, not fast-forward).
+# On every Pi (or other clone):
+ssh artoo@<pi-ip> 'cd ~/astromechos &&
+    git fetch origin &&
+    git reset --hard origin/main &&
+    git gc --prune=now --aggressive'
+
+# --- 9. Verify ---
+# - Services up: systemctl is-active astromech-master astromech-monitor astromech-camera
+# - Flask responds: curl -sS -m 3 http://127.0.0.1:5000/status -o /dev/null -w '%{http_code}\n'
+# - MOTD renders: bash /etc/update-motd.d/99-astromechos | head
+# - HEAD == origin/main on every clone
+```
+
+#### Companion sparse-checkout (optional working-tree slim-down)
+
+Independent of the history surgery: master Pi runs a sparse-checkout
+configured to skip non-runtime paths (`docs/`, `tests/`, `android/`,
+top-level `*.md`, `LICENSE`, `preview.py`, etc.). See the live config
+at `.git/info/sparse-checkout` on the master, and the rationale at
+`bd memories astromech-sparse-checkout-master-2026-05-29` (~32 MB
+working-tree reduction; does NOT affect `.git` size — only `git gc`
++ history surgery do).
+
+#### Future-proofing rule
+
+After 2026-05-29, the initial commit `5cd8937cc72b` no longer contains
+`android/compiled/` or `Screenshots/`. Any FUTURE re-accumulation of
+these paths (new APK builds, new doc screenshots) can be purged again
+with the same `filter-repo` command **without touching the anchor** —
+the decision tree above will return `0` for both. The check costs one
+`git ls-tree` call; do it before every future surgery.
+
+#### Lessons learned — 2026-05-29 run (the actual surgery)
+
+These are the empirical observations from running the procedure live on
+this repo. Anything noted here was painful enough to write down so that
+future-me (or another maintainer) doesn't re-discover it.
+
+| Observation | Why it matters | Action |
+|-------------|----------------|--------|
+| `git filter-repo` strips the `origin` remote by default | Push fails silently if forgotten | Step 6 in the procedure re-adds origin BEFORE push |
+| `git filter-repo` also rewrites tag SHAs (any tag pointing into the rewritten range gets its target SHA updated) | The "safety tag" still points to the SAME commit content but at the new SHA — it's still useful as "this is the state before re-anchor", but it does NOT preserve the pre-rewrite SHAs | Don't rely on safety tags for SHA preservation; rely on a separate clone or repo backup |
+| `git gc --aggressive --prune=now` on Windows fails with `fatal: failed to run repack` after a fresh `filter-repo` | The repack hangs or aborts mid-operation; loose objects pile up; `.git` doesn't shrink even though history is clean | Use `git prune --expire=now` first (drops orphan blobs from old history), THEN `git repack -a -d --depth=250 --window=250`. This is what dropped dev PC from 910 MB → 111 MB on 2026-05-29 |
+| `git pull --ff-only` (used by `scripts/update.sh:108`) ALWAYS fails after a force-push of rewritten history | First update.sh after surgery aborts before rsync-to-slave runs | One-time recovery on EVERY existing clone: `git fetch origin && git reset --hard origin/main` BEFORE running update.sh |
+| Sparse-checkout config (`.git/info/sparse-checkout`) survives `git reset --hard origin/main` | Working tree excludes stay in effect post-recovery; no need to re-apply | Verify after recovery with `ls -1` at repo root |
+| DNA unit tests in `scripts/test_git_provenance.py` validate the FORMAT of `OFFICIAL_INITIAL_COMMIT` (40 hex chars), not the value | Re-anchoring with a new valid SHA is safe; tests stay green | Always run `python -m pytest scripts/test_git_provenance.py -v` after the constant update; 12/12 must PASS |
+| The new initial commit's SHA can be read with `git rev-list --max-parents=0 HEAD` | This is the only authoritative source of the post-surgery anchor | Pipe directly into the constant update; never copy-paste a SHA you guessed |
+| `.beads/issues.jsonl` may contain references to old commit SHAs in narrative text | Those references are historical fact, not load-bearing; filter-repo does NOT touch data files in the working tree | Leave them alone; old SHAs in memory text become dangling references but cause no breakage |
+
+#### Before every future cleanup — checklist
+
+```
+[ ] 1. git ls-tree -r --name-only $(grep ^OFFICIAL_INITIAL_COMMIT shared/git_provenance.py | cut -d"'" -f2) \
+       | grep -c "^<path>/"
+       → 0  = DNA-safe, no anchor update needed
+       → >0 = anchor change required, follow full procedure
+[ ] 2. git tag pre-surgery-$(date +%F)         # safety reference
+[ ] 3. git status --short                       # must be clean
+[ ] 4. Confirm no other live clones besides the master Pi (or plan their recovery)
+[ ] 5. Read the latest `docs/DEPLOY_SECURITY.md` (this file) for any new edge cases
+```
 
 ### Tests
 
