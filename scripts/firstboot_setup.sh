@@ -297,6 +297,28 @@ if [ -z "$HW_LAYOUT_SOURCE" ]; then
     fi
 fi
 
+# ─── 4.6. Admin password (Flask UI) ─────────────────────────────────────
+# The admin password unlocks the Flask Settings UI; it is ENTIRELY separate
+# from the Linux SSH password (per `bd memories admin-password-vs-ssh-separation`).
+# Default ships as 'deetoo' in main.cfg. For a fleet Golden-Image deploy at
+# a convention, the Imager pre-bakes a random admin password per device in
+# astromech_init.cfg [admin] password — this step persists it into local.cfg
+# so the running master picks it up at first request. Master role only —
+# the slave has no Flask UI.
+if [ "$ROLE" = "master" ]; then
+    log "Step 4.6: admin password (Flask UI) ..."
+    ADMIN_PW=$(cfg_get admin password "")
+    if [ -n "$ADMIN_PW" ]; then
+        if write_local_cfg admin password "$ADMIN_PW"; then
+            log_ok "[admin] password persisted to local.cfg (Imager-baked, len=${#ADMIN_PW})"
+        else
+            log_warn "Could not write [admin] password to local.cfg — UI stays on the main.cfg default"
+        fi
+    else
+        log "[admin] password not provided by Imager — keeping main.cfg default"
+    fi
+fi
+
 # ─── 4.7. Hotspot bootstrap + handover (firstboot pairing) ──────────────
 # Solves the Golden-Image chicken-and-egg: 20 identical SD cards at a
 # convention, each Master/Slave pair must auto-pair without operator typing.

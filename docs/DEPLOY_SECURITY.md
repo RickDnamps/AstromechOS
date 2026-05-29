@@ -291,11 +291,21 @@ human interaction, no Wi-Fi connection by hand, no SSH login**.
 ### SD-card boot partition layout
 
 ```
+/boot/firmware/userconf.txt            ← Pi OS standard: creates the Linux
+                                          user account (consumed BEFORE
+                                          AstromechOS firstboot runs).
+                                          Pi OS Bullseye uses /boot/userconf.
+/boot/firmware/wpa_supplicant.conf     ← Pi OS standard: home WiFi (wlan0
+                                          comes up before AstromechOS
+                                          firstboot — used by DNA fetch).
 /boot/ASTROMECH_FIRSTBOOT_READY        ← trigger marker (presence = run)
 /boot/astromech_init.cfg               ← cfg-style bootstrap, consumed
                                           by lib_config.sh::cfg_get
                                           (already wired in commits
                                           fdf8c75 → 7674f62)
+/boot/hw_layout.json                   ← optional Imager-provided HAT layout
+                                          override (wins over the read-only
+                                          smbus2 scan, see §3.5 below)
 /boot/astromech_secrets/  (chmod 0700)
     init_config.json                   ← {"role": "master|slave",
                                           "hostname": "...", ...}
@@ -308,13 +318,61 @@ human interaction, no Wi-Fi connection by hand, no SSH login**.
                                           Master→Slave ssh-copy-id)
 ```
 
-`/boot/astromech_init.cfg` example the Imager would write:
+### `/boot/firmware/userconf.txt` — Linux user account (Pi OS standard)
+
+AstromechOS firstboot does **NOT** create the Linux user; it inherits one
+that Pi OS itself creates from `userconf.txt` on the first boot, BEFORE
+`astromech-firstboot.service` runs. `firstboot_setup.sh::capture_user`
+then auto-detects it (`[system] user` in `astromech_init.cfg` → `$SUDO_USER`
+→ fallback chain `pi` / `astromech` / `artoo`).
+
+**Format** — exactly ONE line, no trailing newline issues:
+```
+username:salted-hash
+```
+The hash MUST be a yescrypt or SHA-512 crypt(3) digest (NOT plaintext). The
+canonical generator (works on every Linux + Git Bash + WSL):
+
+```bash
+echo "$PASSWORD" | openssl passwd -6 -stdin
+# → $6$<random16>$<86-char-hash>
+```
+
+`-6` selects SHA-512 (`crypt id 6`). Pi OS Bookworm also accepts yescrypt
+(`-y`) but `-6` is portable to every Imager host.
+
+**Imager tool flow per device** (for a fleet of 20 R2-D2):
+
+```python
+# per SD card (master OR slave):
+import secrets, subprocess
+user = "artoo"                                # AstromechOS convention
+pw   = secrets.token_urlsafe(12)              # 16-char random password
+hash = subprocess.check_output(
+    ["openssl", "passwd", "-6", "-stdin"],
+    input=pw.encode()
+).decode().strip()
+# write to BOOT partition before flashing:
+Path(boot / "firmware" / "userconf.txt").write_text(f"{user}:{hash}\n")
+# record (sd_serial, user, pw) in your fleet inventory CSV
+# so the operator can look up the password later if needed.
+```
+
+⚠ **Same `user` + same `pw` recommended for BOTH cards of a paired
+master/slave** so the operator only memorises one credential per robot.
+Different from any OTHER robot's credentials (`secrets.token_urlsafe`
+guarantees uniqueness).
+
+### `/boot/astromech_init.cfg` — AstromechOS-specific bootstrap
+
+Example the Imager writes (everything is OPTIONAL — firstboot skips any
+section it doesn't find):
 
 ```ini
 [system]
-user        = pi
-home        = /home/pi
-repo_path   = /home/pi/astromechos
+user        = artoo
+home        = /home/artoo
+repo_path   = /home/artoo/astromechos
 service_uid = 1000
 
 [github]
@@ -323,12 +381,38 @@ branch            = main
 auto_pull_on_boot = true
 
 [home_wifi]
+# Optional — usually handled by Pi OS wpa_supplicant.conf at the boot-
+# partition root. Repeated here only if you want AstromechOS to take
+# over the wlan1 USB-dongle path explicitly.
 ssid     = TonWifiMaison
 password = changeme
 
 [hotspot]
-ssid     = R2D2_Eric
-password = solo1977
+# REQUIRED for auto-pairing master/slave at firstboot. Imager bakes the
+# SAME (ssid, password) pair into BOTH SD cards of a paired set; unique
+# across robots so 20 R2-D2 at a convention never collide.
+# Master at firstboot creates the bootstrap AP on this SSID; Slave joins
+# it; Master then regenerates a serial-derived FINAL SSID and pushes the
+# swap. See §4.7 below.
+ssid     = Astromech_Pair_A3F8B142
+password = solo1977randoma3
+
+[admin]
+# Flask UI admin password (separate from the Linux SSH password above).
+# Default in main.cfg is 'deetoo' if absent here. firstboot §4.6 persists
+# this into local.cfg [admin].
+password = boo3pic7lock22
+```
+
+**Imager generation snippet** for `[hotspot]` + `[admin]` per pair:
+
+```python
+import secrets
+pair_ssid = "Astromech_Pair_" + secrets.token_hex(4).upper()
+pair_psk  = secrets.token_urlsafe(12)
+admin_pw  = secrets.token_urlsafe(12)
+# write the SAME [hotspot] block into BOTH cards of a pair.
+# write the SAME [admin] password into BOTH cards (only master honours it).
 ```
 
 ### First-boot script flow
@@ -341,20 +425,47 @@ or by the Imager itself.
 firstboot_setup.sh
   1. ConditionPathExists guard           ← skip if no trigger marker
   2. source lib_config.sh + capture_user → TARGET_USER / TARGET_HOME
+                                            (Pi OS userconf.txt already
+                                             created the account)
   3. Inject /boot/astromech_secrets/authorized_keys
         atomic append to $TARGET_HOME/.ssh/authorized_keys
         dedupe, chmod 0600, chown TARGET_USER
-        copy optional id_ed25519* keypair
+        copy optional id_ed25519* keypair (for Master → Slave SSH)
   4. Parse /boot/astromech_secrets/init_config.json
         → role (master|slave)            → write_local_cfg [system] role
         → hostname                       → hostnamectl + /etc/hosts
                                               (RFC-1123 charset filter)
+                                              default: astromech-<role>
   4.5 I2C HAT layout detection (read-only, never bricks boot):
         /boot/hw_layout.json exists  →  cp verbatim (Imager wins)
         else                         →  detect_hats.py --output ...
                                           (smbus2, READ-ONLY, locked)
         on failure                   →  log WARN + continue
                                           (services boot DEGRADED)
+  4.6 Admin password (Master only):
+        cfg_get admin password       →  write_local_cfg admin password
+                                          (Flask UI unlocked with Imager-
+                                          baked value; absent → main.cfg
+                                          default 'deetoo' applies)
+  4.7 Hotspot bootstrap + handover (the chicken-and-egg solver):
+        Master role →  setup_master_network.sh --non-interactive
+                          --ssid BOOT_SSID --psk BOOT_PSK
+                       → wait ≤5 min for Slave on astromech-slave.local
+                       → gen_hotspot_ssid.sh → FINAL serial-derived SSID
+                       → ssh slave 'sudo -n nmcli connection modify ...'
+                          (mirrors _push_slave_hotspot_creds in
+                           settings_bp.py:772)
+                       → nmcli modify own AP + nmcli connection up
+                       → sed local.cfg [hotspot] with final creds
+                          (pair sealed for life)
+        Slave  role →  setup_slave_network.sh --non-interactive
+                          --ssid BOOT_SSID --psk BOOT_PSK
+                          (Master rewrites this profile over SSH a few
+                           seconds later — NM transparently rejoins
+                           the FINAL SSID on the next AP cycle)
+        Failure modes: every step log_err and falls through. firstboot
+                       NEVER aborts on networking; operator can finish
+                       via Flask UI → Settings → Hotspot.
   5. If [github] repo_url differs from current `origin`:
         dna_validate  → DNA OK   → git remote set-url + fetch + reset --hard
                      → DNA FAIL → KEEP origin pointing at the official URL,
