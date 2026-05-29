@@ -69,8 +69,14 @@ android/.gradle/
 android/compiled/*.apk
 
 # Doc screenshots — kept on dev PC only, not shipped to robot
-# (purged from git history same chirurgie)
+# (purged from git history same chirurgie; legacy `Screenshots/` rule
+# kept for old clones; new layout is the sibling AstromechOS_Screenshots
+# repo with Screenshots_Astro/ + Screenshots_Imager/ subdirs — both
+# blocked here as defense-in-depth if anyone drops them into the main
+# code repo by mistake).
 Screenshots/
+Screenshots_Astro/
+Screenshots_Imager/
 
 # Code de référence tiers (r2_control by dpoulson)
 others/
