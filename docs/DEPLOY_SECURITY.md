@@ -288,80 +288,141 @@ prepares an SD card before flashing. Its job: drop the right files on
 the boot partition so the Pi self-provisions on first boot, **no
 human interaction, no Wi-Fi connection by hand, no SSH login**.
 
-### SD-card boot partition layout
+### SD-card layout — BOOT partition (FAT32) + ROOTFS (ext4) cold edits
+
+AstromechOS is shipped as a **Golden Image**: the rootfs already contains
+a configured Linux user (UID 1000), the Python venv, all apt deps, the
+`/home/<user>/astromechos/` checkout, systemd units, NetworkManager
+profiles, and udev rules. The Imager NEVER touches the FAT-32 boot file
+`userconf.txt` for user provisioning — Pi OS only honours that file on a
+**virgin** image and silently ignores it on an image that already has UID
+1000, so writing it would do nothing AND would create a false sense of
+"changed credentials" on flash.
+
+Instead the Imager performs a **cold edit of the rootfs partition** before
+flashing the SD card. On Linux it uses libguestfs / loopback mount; on
+Windows it uses libext2fs (Ext2Fsd / `ext2fsprogs` port) so the C# tool can
+read/write ext4 without going through WSL.
 
 ```
-/boot/firmware/userconf.txt            ← Pi OS standard: creates the Linux
-                                          user account (consumed BEFORE
-                                          AstromechOS firstboot runs).
-                                          Pi OS Bullseye uses /boot/userconf.
-/boot/firmware/wpa_supplicant.conf     ← Pi OS standard: home WiFi (wlan0
-                                          comes up before AstromechOS
-                                          firstboot — used by DNA fetch).
-/boot/ASTROMECH_FIRSTBOOT_READY        ← trigger marker (presence = run)
-/boot/astromech_init.cfg               ← cfg-style bootstrap, consumed
-                                          by lib_config.sh::cfg_get
-                                          (already wired in commits
-                                          fdf8c75 → 7674f62)
-/boot/hw_layout.json                   ← optional Imager-provided HAT layout
-                                          override (wins over the read-only
-                                          smbus2 scan, see §3.5 below)
-/boot/astromech_secrets/  (chmod 0700)
-    init_config.json                   ← {"role": "master|slave",
-                                          "hostname": "...", ...}
-    authorized_keys                    ← OpenSSH pubkeys, one/line
-                                          (PC public key, plus any
-                                          friends the operator wants
-                                          to grant access to)
-    id_ed25519 + id_ed25519.pub        ← optional outbound keypair
-                                          (Master only — for the
-                                          Master→Slave ssh-copy-id)
+/  (rootfs, ext4)               EDITED by the C# Imager BEFORE flash
+├── etc/passwd                  rename the UID-1000 row (username + GECOS + home)
+├── etc/shadow                  replace the UID-1000 row's hash with the new one
+├── etc/group                   rename the UID-1000 user-private group + every
+│                               supplementary group that lists the old name
+├── etc/gshadow                 same rename (rows that reference the old name)
+├── etc/sudoers.d/*             rename if the old username appears verbatim
+├── etc/ssh/sshd_config.d/*     rename AllowUsers/AllowGroups directives
+├── home/<old_user>             rename directory to /home/<new_user>
+└── home/<new_user>/.config/    rewrite any XDG path with the new $HOME
+
+/boot/  (FAT-32)                ADDED by the C# Imager BEFORE flash
+├── ASTROMECH_FIRSTBOOT_READY   trigger marker (presence = run firstboot)
+├── astromech_init.cfg          cfg-style bootstrap, consumed by
+│                               lib_config.sh::cfg_get during firstboot;
+│                               [system] user/home MUST match the new
+│                               username + /home/<new_user> the rootfs
+│                               edits installed.
+├── hw_layout.json              optional HAT layout override (wins over
+│                               the read-only smbus2 scan; see §3.5).
+└── astromech_secrets/  (0700)
+    ├── init_config.json        {"role": "master|slave", "hostname": "..."}
+    ├── authorized_keys         operator pubkey + (on slave) Master pubkey
+    └── id_ed25519 + .pub       Master-only outbound keypair for Master→Slave
+                                SSH (matched by .pub in the Slave's
+                                authorized_keys on its own SD card).
 ```
 
-### `/boot/firmware/userconf.txt` — Linux user account (Pi OS standard)
+`userconf.txt` is **never** written by the AstromechOS Imager. If the
+operator wants to keep the existing username (just rotate the password),
+the Imager edits ONLY `/etc/shadow` and leaves `/etc/passwd` + `/etc/group`
++ `/home/<user>` untouched.
 
-AstromechOS firstboot does **NOT** create the Linux user; it inherits one
-that Pi OS itself creates from `userconf.txt` on the first boot, BEFORE
-`astromech-firstboot.service` runs. `firstboot_setup.sh::capture_user`
-then auto-detects it (`[system] user` in `astromech_init.cfg` → `$SUDO_USER`
-→ fallback chain `pi` / `astromech` / `artoo`).
+### Linux user provisioning — cold rootfs surgery (the C# Imager's job)
 
-**Format** — exactly ONE line, no trailing newline issues:
-```
-username:salted-hash
-```
-The hash MUST be a yescrypt or SHA-512 crypt(3) digest (NOT plaintext). The
-canonical generator (works on every Linux + Git Bash + WSL):
+The Golden Image ships with a known UID-1000 user (today: `artoo`). The
+Imager renames + repasswords that account at burn time so each robot ends
+up with a unique credential pair. AstromechOS firstboot doesn't care which
+username it inherits — `firstboot_setup.sh::capture_user` reads
+`[system] user` from `astromech_init.cfg` first and falls through to
+`$SUDO_USER` / `pi` / `astromech` / `artoo` if absent. So the Imager's job
+is to keep the rootfs and the `astromech_init.cfg` in sync.
+
+**Hash format for `/etc/shadow`** — exactly the same digest Pi OS accepts
+for `useradd -p`: `$id$salt$hash`. `$6$` = SHA-512 crypt (portable, Bullseye
++ Bookworm + Trixie); `$y$` = yescrypt (Bookworm+). Use `$6$` for maximum
+portability across Pi OS releases.
+
+The canonical generator on the Imager host:
 
 ```bash
 echo "$PASSWORD" | openssl passwd -6 -stdin
-# → $6$<random16>$<86-char-hash>
+# → $6$<random-16-char-salt>$<86-char-base64-hash>
 ```
 
-`-6` selects SHA-512 (`crypt id 6`). Pi OS Bookworm also accepts yescrypt
-(`-y`) but `-6` is portable to every Imager host.
+**Per-device Imager flow** (C# pseudo-code; the real tool uses libext2fs
+to mount ext4 read/write without WSL):
 
-**Imager tool flow per device** (for a fleet of 20 R2-D2):
+```csharp
+// per SD card (master OR slave):
+string newUser     = "r2d2_eric";                              // operator picks
+string newPw       = SecretsGen.UrlSafe(12);                   // 16-char random
+string shadowHash  = ProcessRunner.Run(                         // $6$...$...
+    "openssl", "passwd -6 -stdin", stdin: newPw);
 
-```python
-# per SD card (master OR slave):
-import secrets, subprocess
-user = "artoo"                                # AstromechOS convention
-pw   = secrets.token_urlsafe(12)              # 16-char random password
-hash = subprocess.check_output(
-    ["openssl", "passwd", "-6", "-stdin"],
-    input=pw.encode()
-).decode().strip()
-# write to BOOT partition before flashing:
-Path(boot / "firmware" / "userconf.txt").write_text(f"{user}:{hash}\n")
-# record (sd_serial, user, pw) in your fleet inventory CSV
-# so the operator can look up the password later if needed.
+using (var fs = Ext2.Mount(sdCardRootfsPartition, readWrite: true))
+{
+    // 1. /etc/passwd : rewrite the UID-1000 line.
+    Etc.Passwd.RenameUid(fs, uid: 1000, newName: newUser,
+                         newHome: $"/home/{newUser}");
+
+    // 2. /etc/shadow : replace the hash field for that user.
+    Etc.Shadow.SetHash(fs, user: newUser, hash: shadowHash);
+
+    // 3. /etc/group : rename the user-private group (default Pi OS) +
+    //    rewrite the member list in every group that referenced the
+    //    old name (sudo, dialout, gpio, i2c, spi, video, netdev, …).
+    Etc.Group.RenameUser(fs, oldName: "artoo", newName: newUser);
+    Etc.GShadow.RenameUser(fs, oldName: "artoo", newName: newUser);
+
+    // 4. Rename the home directory in-place.
+    fs.Rename("/home/artoo", $"/home/{newUser}");
+
+    // 5. Sweep config files that hardcoded the old username.
+    foreach (var path in new[] { "/etc/sudoers", "/etc/sudoers.d/",
+                                 "/etc/ssh/sshd_config",
+                                 "/etc/ssh/sshd_config.d/" })
+        TextSubstitute.RewriteUsername(fs, path, "artoo", newUser);
+}
+
+// 6. astromech_init.cfg on the BOOT partition must match the rootfs edits.
+File.WriteAllText(sdCardBootPath / "astromech_init.cfg",
+    $@"[system]
+       user = {newUser}
+       home = /home/{newUser}
+       repo_path = /home/{newUser}/astromechos
+       service_uid = 1000
+       ... ([github], [home_wifi], [hotspot], [admin] follow)");
+
+// 7. Record (sd_serial, host_role, newUser, newPw) in the fleet inventory.
 ```
 
-⚠ **Same `user` + same `pw` recommended for BOTH cards of a paired
-master/slave** so the operator only memorises one credential per robot.
-Different from any OTHER robot's credentials (`secrets.token_urlsafe`
-guarantees uniqueness).
+⚠ **Pair convention**: same `(newUser, newPw)` for BOTH cards of a paired
+master/slave (operator memorises one credential per robot), but distinct
+across robots so a stolen SD doesn't yield blanket access to the fleet.
+
+The rootfs path `/home/<new_user>/astromechos/` is the install location of
+the AstromechOS repo. The Imager does NOT need to re-checkout git — the
+Golden Image already has it; only the parent path needs renaming so the
+running services find their code.
+
+⚠ **systemd unit templates** in the Golden Image must use `%U`/`%h` or
+`${TARGET_USER}`-style placeholders (NOT a hardcoded `artoo`). The Imager's
+rename will break any unit that has a literal `artoo` in `ExecStart=`,
+`User=`, `WorkingDirectory=`, or `Environment=`. See
+`master/services/*.service.template` and `slave/services/*.service.template`
+— they are templated and processed at install time by `update.sh` /
+`install_service_template_remote`.
 
 ### `/boot/astromech_init.cfg` — AstromechOS-specific bootstrap
 
