@@ -267,12 +267,13 @@ def _cpu_temp() -> float | None:
     return v
 
 
-_DEFAULT_ADMIN_PASSWORDS = ('astro', 'deetoo')
+_DEFAULT_ADMIN_PASSWORDS = ('astro', 'astropass', 'deetoo')
 
 
 def _is_default_admin_password() -> bool:
     """W2 fix 2026-05-16, updated 2026-05-30: True if [admin] password
-    matches any shipped default ('astro' current, 'deetoo' legacy).
+    matches any shipped default ('astro' current, 'astropass' transitional,
+    'deetoo' legacy R2-D2 install).
     Either way the operator should have changed it. Used by /status to
     drive the SYSTEM panel banner."""
     try:
@@ -830,7 +831,7 @@ def lock_unlock():
     (Normal→Kids/Lock) goes through /lock/set without auth.
 
     Server verifies the password (NOT a client-side string compare —
-    audit finding CR-1 2026-05-15: 'deetoo' was hardcoded in app.js).
+    audit finding CR-1 2026-05-15: 'astropass' was hardcoded in app.js).
     Persists to local.cfg on success."""
     body = request.get_json(silent=True)
     if not isinstance(body, dict):

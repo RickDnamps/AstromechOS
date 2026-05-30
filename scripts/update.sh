@@ -43,7 +43,7 @@
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 # Slave SSH endpoint resolves via shared/lib_config.sh — both the user AND
 # the host come from cfg ([deploy] slave_user → [system] user → $SUDO_USER
-# → 'artoo' legacy) instead of being hardcoded. Env overrides still work
+# → 'astromech' legacy) instead of being hardcoded. Env overrides still work
 # (export SLAVE_USER=… SLAVE_HOST=… before running this script).
 # shellcheck source=lib_config.sh
 . "$REPO/scripts/lib_config.sh"

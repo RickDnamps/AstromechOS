@@ -47,7 +47,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_master.sh | sudo bash
 #
 # Or if the repo is already cloned:
-#   sudo bash /home/artoo/astromechos/scripts/setup_master.sh
+#   sudo bash /home/astromech/astromechos/scripts/setup_master.sh
 #
 # =============================================================================
 
@@ -81,7 +81,7 @@ fi
 
 # Capture the install target user — $SUDO_USER (run with sudo from a regular
 # login), /boot/astromech_init.cfg [system] user (future Imager bootstrap),
-# interactive prompt, or legacy 'artoo'. Sets TARGET_USER + TARGET_HOME and
+# interactive prompt, or legacy 'astromech'. Sets TARGET_USER + TARGET_HOME and
 # refuses root + non-existent users.
 # shellcheck source=lib_config.sh
 . "$REPO_PATH/scripts/lib_config.sh"
@@ -219,7 +219,7 @@ echo ""
 info "Step 8/8 — Installing systemd services..."
 # Service files are now TEMPLATES (.service.template) — install_service_template
 # substitutes __USER__/__HOME__/__UID__/__REPO_PATH__ at install time. Makes the
-# units portable to any Pi user (artoo / pi / astromech / ...).
+# units portable to any Pi user (astromech / pi / astromech / ...).
 install_service_template "$REPO_PATH/master/services/astromech-master.service.template"  astromech-master.service
 install_service_template "$REPO_PATH/master/services/astromech-monitor.service.template" astromech-monitor.service
 # astromech-firstboot.service is a oneshot guarded by ConditionPathExists

@@ -393,7 +393,7 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 
 ### Prerequisites
 
-- 2× Raspberry Pi 4B (username: `artoo` — set in Raspberry Pi Imager)
+- 2× Raspberry Pi 4B (username: `astromech` — set in Raspberry Pi Imager)
 - Both running **Raspberry Pi OS Trixie** (64-bit)
 - USB Wi-Fi dongle on the Master Pi (internet on wlan1 while hosting hotspot on wlan0)
 
@@ -424,7 +424,7 @@ bash ~/astromechos/scripts/deploy.sh --first-install
 ### Updates
 
 ```bash
-bash /home/artoo/astromechos/scripts/update.sh
+bash /home/astromech/astromechos/scripts/update.sh
 ```
 
 Or press the physical dome button (short press). Updates itself over-the-air — no SSH required.
@@ -444,7 +444,7 @@ exactly how much was reclaimed.
 # First time only — copy the script to /usr/local/bin/ (so it lives on
 # the imaged card and any future operator can run it without cd-ing
 # to the repo first):
-sudo bash /home/artoo/astromechos/scripts/clean_for_imager.sh --install
+sudo bash /home/astromech/astromechos/scripts/clean_for_imager.sh --install
 
 # Then, whenever you want to produce a clean image:
 sudo clean_for_imager.sh           # interactive — type 'yes' to confirm

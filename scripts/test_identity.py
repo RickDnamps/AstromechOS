@@ -104,8 +104,8 @@ class TestSlaveTarget(unittest.TestCase):
         """No cfg sections → current_user() is used (NOT the legacy literal)."""
         self._set_cfg('')   # empty cfg file
         # On a dev box / Pi, current_user() returns the real OS user.
-        # On Windows it may return $USERNAME. Either way: NOT 'artoo'
-        # unless the dev happens to be named artoo.
+        # On Windows it may return $USERNAME. Either way: NOT 'astromech'
+        # unless the dev happens to be named astromech.
         if I.current_user():
             self.assertEqual(I.slave_user(), I.current_user())
 

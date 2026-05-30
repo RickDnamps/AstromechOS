@@ -56,8 +56,8 @@ except ImportError:
     print("[WARN] paramiko not installed -- SSH monitoring disabled")
 
 PI_HOST  = '192.168.2.104'
-PI_USER  = 'artoo'
-PI_PASS  = 'deetoo'
+PI_USER  = 'astromech'
+PI_PASS  = 'astropass'
 BASE_URL = f'http://{PI_HOST}:5000'
 
 stats = {

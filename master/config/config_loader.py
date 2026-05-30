@@ -135,9 +135,9 @@ def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
 
     B-76 / B-77 (Settings audit 2026-05-15): local.cfg + slave.cfg hold
     plaintext WiFi / hotspot / admin passwords. Restrict file
-    permissions to 0600 (owner read+write only) so non-artoo users on
+    permissions to 0600 (owner read+write only) so non-astromech users on
     the Pi can't read the passwords via filesystem access alone.
-    Anyone with SSH as artoo (default password 'deetoo') still gets
+    Anyone with SSH as astromech (default password 'astropass') still gets
     them — the real defense is changing the admin + SSH passwords,
     which is operator responsibility. fsync flushes the rename
     durability so a power loss right after replace doesn't lose it.

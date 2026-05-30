@@ -7,8 +7,8 @@ atomically. Then restarts the slave service so AudioDriver picks it up.
 
 Usage: python3 scripts/fix_slave_sounds_index.py
 
-Portability chantier 2026-05-28: was hardcoded 'artoo' + 'deetoo'
-plaintext password + '/home/artoo/...' paths. Now derives the repo
+Portability chantier 2026-05-28: was hardcoded 'astromech' + 'astropass'
+plaintext password + '/home/astromech/...' paths. Now derives the repo
 root from __file__ and the SSH target from shared/identity.py."""
 import base64
 import json

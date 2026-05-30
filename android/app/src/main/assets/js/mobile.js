@@ -593,7 +593,7 @@ function submitLockPwd() {
   // CR-1 fix 2026-05-30: Lock Mode unlock now validates server-side via
   // POST /lock/unlock. The desktop app.js path was server-side-ified by
   // the 2026-05-15 audit chantier, but mobile.js was missed — leaving a
-  // hardcoded 'deetoo' check that ALSO no longer matched the current
+  // hardcoded 'astropass' check that ALSO no longer matched the current
   // default 'astro'. Mirrors app.js:1751-1768.
   //   200 OK   → server already set mode=0, mirror locally
   //   401      → wrong password (server-side hmac check), shake + error

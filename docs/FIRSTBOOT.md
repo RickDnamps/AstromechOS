@@ -239,7 +239,7 @@ SSH in later and finish manually, not get locked out of a brick.
 ├─────────────────────────────────────────────────────────────────────┤
 │ Phase 2 — Identify TARGET_USER + TARGET_HOME (lines 85-110)         │
 │   capture_user → /boot/astromech_init.cfg [system] user → $SUDO_USER│
-│   → logname → fallback 'pi' / 'astromech' / 'artoo' legacy.         │
+│   → logname → fallback 'pi' / 'astromech' / 'astromech' legacy.         │
 │   See §13 for the username-agnostic rule.                           │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Phase 3 — SSH key injection (lines 112-158)                         │
@@ -530,13 +530,13 @@ The Flask Settings UI requires a password to unlock editing
 [`CLAUDE.md` §"Safety + Auth"](../CLAUDE.md)). This is **entirely separate
 from the Linux SSH password** (memory `admin-password-vs-ssh-separation`).
 
-**Default**: `astro` (was `deetoo` on installs flashed before 2026-05-30),
+**Default**: `astro` (was `astropass` on installs flashed before 2026-05-30),
 hardcoded as the `fallback=` value in `settings_bp.py::_get_admin_password()`
 since `master/config/main.cfg` has no `[admin]` section. Used by the
 manual install path when the operator never overrides it. The Cockpit
 SYSTEM banner flags **both** defaults as "still on the default — change
 it" (`status_bp.py::_DEFAULT_ADMIN_PASSWORDS`), so a legacy Pi on
-`deetoo` doesn't go un-warned after the rename.
+`astropass` doesn't go un-warned after the rename.
 
 **Imager path** (`firstboot_setup.sh:309-322`, §4.6, master only):
 
@@ -613,7 +613,7 @@ starts cleanly because:
 
 **HARD RULE** locked-in 2026-05-29 (CLAUDE.md §"Code Standard"):
 **no code/script/systemd unit in this repo may hardcode the username
-`pi`, `artoo`, or any other literal**. Each robot the Imager flashes
+`pi`, `astromech`, or any other literal**. Each robot the Imager flashes
 gets a **different UID-1000 username** posted by the COLD rootfs
 surgery (see [`DEPLOY_SECURITY.md` §3](DEPLOY_SECURITY.md#3-the-astromechos-imager-workflow)).
 
@@ -623,7 +623,7 @@ surgery (see [`DEPLOY_SECURITY.md` §3](DEPLOY_SECURITY.md#3-the-astromechos-ima
 1. /boot/astromech_init.cfg [system] user         (Imager-baked)
 2. $SUDO_USER                                      (if firstboot ran via sudo)
 3. logname                                         (process-effective user)
-4. fallback: try 'pi', 'astromech', 'artoo' in order
+4. fallback: try 'pi', 'astromech', 'astromech' in order
 5. abort with log_err if none of those exist
 ```
 
@@ -634,7 +634,7 @@ template uses these variables — never a literal.
 **Pre-commit checklist** (CLAUDE.md §"Code Standard"):
 
 ```bash
-grep -rn 'artoo@\|chown artoo\|/home/artoo\|User=artoo' <modified files>
+grep -rn 'astromech@\|chown astromech\|/home/astromech\|User=astromech' <modified files>
 ```
 
 Only acceptable hits: (a) docstrings/comments describing historical
@@ -722,7 +722,7 @@ path:
   `astromech-slave`), not Imager-randomized
 - **SSH keypair**: generated locally by `setup_ssh_keys.sh`, not
   Imager-baked
-- **Admin password**: stays `astro` (or `deetoo` on legacy installs, or
+- **Admin password**: stays `astro` (or `astropass` on legacy installs, or
   whatever the operator types later in Settings)
 - **Hotspot SSID**: whatever the operator typed at the interactive
   prompt, **NOT** auto-renamed to `Astromech_Control_XXXX`

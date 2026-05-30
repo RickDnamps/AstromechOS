@@ -28,7 +28,7 @@
 - [ ] **#3 — Lumières + dôme réactifs à la musique** · 💥💥💥 · 🛠️M
   FFT sur le MP3 en cours (ou un micro) → AstroPixels pulsent + dôme rebondit sur le beat. Cantina → le droïde "danse".
 
-- [ ] **#4 — Wake-word "Hey Artoo"** · 💥💥 · 🛠️M
+- [ ] **#4 — Wake-word "Hey Astromech"** · 💥💥 · 🛠️M
   Micro tablette → mot-clé → réponse aléatoire / behavior. Interaction mains-libres avec la foule.
 
 ## 🕹️ UX opérateur — piloter mieux, yeux sur la foule

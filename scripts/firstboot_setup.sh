@@ -84,7 +84,7 @@ log_ok "BOOT_DIR=$BOOT_DIR  SECRETS_DIR=$SECRETS_DIR"
 
 # ─── 2. Identify the install user (TARGET_USER + TARGET_HOME) ───────────
 # capture_user looks in /boot/astromech_init.cfg [system] user first, then
-# falls through to $SUDO_USER / logname / 'artoo' legacy.
+# falls through to $SUDO_USER / logname / new 'astromech' / legacy 'artoo'.
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib_config.sh
 . "$REPO_PATH/scripts/lib_config.sh"
@@ -92,9 +92,12 @@ REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # We're running as root (systemd unit). The "install" user is the one
 # whose home will receive the SSH keys + own the repo install. capture_user
 # normally errors if it can't auto-detect; for firstboot we accept whatever
-# /boot says, else fall back to 'pi' if it exists, else 'artoo'.
+# /boot says, else fall back to the new convention 'astromech' first, then
+# Raspberry Pi OS's default 'pi', then the legacy AstromechOS user 'artoo'
+# (kept so any previously-flashed Pi keeps booting unchanged after an
+# upgrade of the live scripts).
 if ! capture_user 2>/dev/null; then
-    for u in pi astromech artoo; do
+    for u in astromech pi artoo; do
         if id "$u" &>/dev/null; then
             TARGET_USER="$u"
             TARGET_HOME=$(getent passwd "$u" | cut -d: -f6 || echo "/home/$u")
@@ -317,7 +320,7 @@ fi
 # ─── 4.6. Admin password (Flask UI) ─────────────────────────────────────
 # The admin password unlocks the Flask Settings UI; it is ENTIRELY separate
 # from the Linux SSH password (per `bd memories admin-password-vs-ssh-separation`).
-# Default ships as 'deetoo' in main.cfg. For a fleet Golden-Image deploy at
+# Default ships as 'astropass' in main.cfg. For a fleet Golden-Image deploy at
 # a convention, the Imager pre-bakes a random admin password per device in
 # astromech_init.cfg [admin] password — this step persists it into local.cfg
 # so the running master picks it up at first request. Master role only —
@@ -325,7 +328,7 @@ fi
 #
 # Manual install fallback: if [admin] password is absent (no Imager OR
 # operator opted out), this step is a silent no-op. The Flask UI keeps the
-# `deetoo` default from main.cfg, exactly as it does on a manually-cloned
+# `astropass` default from main.cfg, exactly as it does on a manually-cloned
 # repo where `setup_master.sh` was run by hand at the prompt.
 if [ "$ROLE" = "master" ]; then
     log "Step 4.6: admin password (Flask UI) ..."
@@ -451,7 +454,7 @@ elif [ "$ROLE" = "master" ]; then
                 # (sanitized) but defense in depth: if either ever contains a
                 # quote, dollar sign, backslash, or control char, the raw
                 # single-quote wrapping below would break out into the remote
-                # shell and execute as the Slave's artoo user with
+                # shell and execute as the Slave's astromech user with
                 # passwordless sudo. printf %q produces a bash-safe escaped
                 # form that survives the SSH transport untouched.
                 _QSSID=$(printf '%q' "$FINAL_SSID")

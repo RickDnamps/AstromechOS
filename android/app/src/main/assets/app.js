@@ -10414,7 +10414,7 @@ async function loadSettings() {
   if (!data) return;
 
   // SSH username + config path shown in the admin-password note / forgot-pwd
-  // help — the REAL OS user (artoo / C3PO / pi / …) and the actual local.cfg
+  // help — the REAL OS user (astromech / C3PO / pi / …) and the actual local.cfg
   // path, never hardcoded.
   if (data.system_user) {
     document.querySelectorAll('.ssh-username').forEach(e => { e.textContent = data.system_user; });

@@ -4,7 +4,7 @@
 
 Everything is automated. The full installation is **3 commands + 2 reboots**.
 
-> **Portability (2026-05-28)** — AstromechOS no longer assumes your Pi user is named `artoo`. The setup scripts auto-detect your user via `$SUDO_USER` (or read `/boot/astromech_init.cfg` if the AstromechOS Imager — coming soon — has written one), and all systemd unit files + SSH targets + repo paths are derived at runtime via `shared/identity.py` + `scripts/lib_config.sh`. Examples in this guide use `artoo` as a placeholder — **replace it with your Pi username** if you imaged your SD card under a different name. Master and Slave **must share the same Linux user** (and the same password — simplifies SSH key distribution and first-contact auth).
+> **Portability (2026-05-28)** — AstromechOS no longer assumes your Pi user is named `astromech`. The setup scripts auto-detect your user via `$SUDO_USER` (or read `/boot/astromech_init.cfg` if the AstromechOS Imager — coming soon — has written one), and all systemd unit files + SSH targets + repo paths are derived at runtime via `shared/identity.py` + `scripts/lib_config.sh`. Examples in this guide use `astromech` as a placeholder — **replace it with your Pi username** if you imaged your SD card under a different name. Master and Slave **must share the same Linux user** (and the same password — simplifies SSH key distribution and first-contact auth).
 
 > **🛡️ Deploy Security & First-Boot Imager (2026-05-28)** — the Settings → Deploy panel runs a Git **DNA paternity check** before letting `origin` point at any repo that isn't a fork of RickDnamps/AstromechOS — blocks typos, hostile URLs, mis-pasted clones, all the way upstream of `git pull`. The same primitive runs at first boot of an Imager-prepared SD card (`scripts/firstboot_setup.sh` + the oneshot `astromech-firstboot.service`), which atomically injects SSH keys, sets the hostname + role, and DNA-validates the configured remote — fully headless provisioning. Architecture, threat model, recovery procedures → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
 
@@ -76,7 +76,7 @@ Use **Raspberry Pi Imager** → click ⚙️ Options before writing:
 
 | Setting | Master | Slave |
 |---------|--------|-------|
-| Username | `artoo` | `artoo` |
+| Username | `astromech` | `astromech` |
 | Password | (your choice — same on both is recommended) | same |
 | Hostname | `astromech-master` | `astromech-slave` |
 | Wi-Fi | your home network | your home network |
@@ -92,8 +92,8 @@ Find their IPs in your router, or use `astromech-master.local` / `astromech-slav
 Plug the USB Wi-Fi dongle into the Master, then SSH into it from your PC:
 
 ```bash
-ssh artoo@astromech-master.local
-# or: ssh artoo@<MASTER_IP>  if .local doesn't resolve
+ssh astromech@astromech-master.local
+# or: ssh astromech@<MASTER_IP>  if .local doesn't resolve
 ```
 
 **Before running the installer**, note the Master's current IP on your home network —
@@ -142,7 +142,7 @@ Your PC is still on the home network, so you have **two options** to reconnect:
 1. On your PC, connect to Wi-Fi network: **`Astromech_Control_XXXX`** (the SSID shown at the end of install)
 2. SSH using the fixed hotspot IP:
    ```bash
-   ssh artoo@192.168.4.1
+   ssh astromech@192.168.4.1
    ```
    This IP never changes — use it for all future SSH sessions.
 
@@ -151,7 +151,7 @@ Your PC is still on the home network, so you have **two options** to reconnect:
 The Master's wlan1 gets a new DHCP IP from your router.
 Find it in one of these ways:
 - Check your router's admin page (look for `astromech-master`)
-- Try: `ssh artoo@astromech-master.local` (works on Linux/Mac via mDNS, unreliable on Windows)
+- Try: `ssh astromech@astromech-master.local` (works on Linux/Mac via mDNS, unreliable on Windows)
 - Use a network scanner app (e.g. Fing on phone, Angry IP Scanner on PC)
 
 > Option A is simpler and what you'll use permanently — the hotspot IP 192.168.4.1 is fixed forever.
@@ -164,8 +164,8 @@ Find it in one of these ways:
 **While the Slave is still on your home Wi-Fi** (before connecting to the hotspot), SSH into it:
 
 ```bash
-ssh artoo@astromech-slave.local
-# or: ssh artoo@<SLAVE_IP>
+ssh astromech@astromech-slave.local
+# or: ssh astromech@<SLAVE_IP>
 ```
 
 Run the one-line installer:
@@ -181,7 +181,7 @@ This script handles everything automatically:
 - Python dependencies (pyserial, smbus2, adafruit-pca9685)
 - Wi-Fi: connect wlan0 to the robot hotspot (`Astromech_Control_XXXX`)
 - ALSA → PulseAudio routing (`~/.asoundrc`) — `mpg123` audio routes through PulseAudio, enabling 3.5mm jack or BT speaker output
-- BT speaker support: `artoo` user added to `bluetooth` group, PulseAudio BT modules configured (`default.pa`), linger enabled for headless session
+- BT speaker support: `astromech` user added to `bluetooth` group, PulseAudio BT modules configured (`default.pa`), linger enabled for headless session
 
 **At the end it asks to reboot — answer Y.**
 
@@ -193,13 +193,13 @@ The Slave now joins the Master hotspot and gets a DHCP address in the `192.168.4
 
 SSH into the Master using whichever method you used in Step 1:
 
-- **Option A (hotspot):** your PC is on the robot hotspot → `ssh artoo@192.168.4.1`
-- **Option B (home network):** `ssh artoo@astromech-master.local` or the IP you found in your router
+- **Option A (hotspot):** your PC is on the robot hotspot → `ssh astromech@192.168.4.1`
+- **Option B (home network):** `ssh astromech@astromech-master.local` or the IP you found in your router
 
 Run the first deployment:
 
 ```bash
-bash /home/artoo/astromechos/scripts/deploy.sh --first-install
+bash /home/astromech/astromechos/scripts/deploy.sh --first-install
 ```
 
 This:
@@ -211,7 +211,7 @@ This:
 Then copy the SSH key to the Slave (enables passwordless rsync for future updates):
 
 ```bash
-ssh-copy-id artoo@astromech-slave.local
+ssh-copy-id astromech@astromech-slave.local
 ```
 
 **Done.** Your droid is operational.
@@ -273,7 +273,7 @@ Click the **🔒 ADMIN** button in the tab bar (beside the ⚙️ gear) to unloc
 There are **two separate passwords** on the robot — don't confuse them:
 
 - 🔑 **Interface Admin Password** — the one you type to unlock this dashboard/app (Settings + the Choreo, Audio & Sequence editors). Change it in **System → Change Admin Password**. This only updates the dashboard password; it does **not** touch your Linux login.
-- 🖥️ **Linux / SSH Password** — the password for the Pi's system account (the user you created at install, e.g. `artoo`). It's completely separate and is **not** changed from the dashboard. To change it, SSH in and run `passwd`. The dashboard always shows your *real* username (it's read from the system, never hardcoded), so the on-screen "Forgot password?" recovery steps point at the correct user and config path for your install.
+- 🖥️ **Linux / SSH Password** — the password for the Pi's system account (the user you created at install, e.g. `astromech`). It's completely separate and is **not** changed from the dashboard. To change it, SSH in and run `passwd`. The dashboard always shows your *real* username (it's read from the system, never hardcoded), so the on-screen "Forgot password?" recovery steps point at the correct user and config path for your install.
 
 So changing the admin password locks down the web interface but leaves SSH as-is — change the Linux password too if you want to fully secure remote access.
 
@@ -401,11 +401,11 @@ Download [`android/compiled/AstroMech_Control.apk`](android/compiled/AstroMech_C
 
 ```bash
 # From any device on the robot hotspot (`Astromech_Control_XXXX`):
-ssh artoo@192.168.4.1    # Master (dome) — fixed IP
-ssh artoo@192.168.4.171  # Slave (body) — typical DHCP lease, check the STATUS panel if it differs
+ssh astromech@192.168.4.1    # Master (dome) — fixed IP
+ssh astromech@192.168.4.171  # Slave (body) — typical DHCP lease, check the STATUS panel if it differs
 
 # From the Master, reach the Slave:
-ssh artoo@astromech-slave.local
+ssh astromech@astromech-slave.local
 ```
 
 > Do not use `.local` hostnames from Windows — mDNS is unreliable.
@@ -440,14 +440,14 @@ Build a theme in **Config → Appearance → Theme** (8 colour pickers + font). 
 
 ### Update the software
 
-**From the dashboard:** click the **Admin** button (top right) → enter the admin password (default **`astro`** since 2026-05-30, or `deetoo` on legacy installs) → the Config tab and other protected menus become visible → **Config → Deploy → UPDATE** (git pull + rsync to Slave + restart, all automatic). If an update misbehaves, the **ROLLBACK** button in the same panel reverts to the previous commit.
+**From the dashboard:** click the **Admin** button (top right) → enter the admin password (default **`astro`** since 2026-05-30, or `astropass` on legacy installs) → the Config tab and other protected menus become visible → **Config → Deploy → UPDATE** (git pull + rsync to Slave + restart, all automatic). If an update misbehaves, the **ROLLBACK** button in the same panel reverts to the previous commit.
 
 > Admin session expires after 5 minutes of inactivity. The password can be changed in **Config → System** once logged in.
 
 **Or from SSH on the Master:**
 
 ```bash
-bash /home/artoo/astromechos/scripts/update.sh
+bash /home/astromech/astromechos/scripts/update.sh
 ```
 
 This does: backup sequences → git pull → rsync to Slave → restart Slave → restart Master → verify services.
@@ -460,8 +460,8 @@ sudo systemctl status astromech-master
 sudo journalctl -u astromech-master -f
 
 # On Slave (from Master):
-ssh artoo@astromech-slave.local sudo systemctl status astromech-slave
-ssh artoo@astromech-slave.local sudo journalctl -u astromech-slave -f
+ssh astromech@astromech-slave.local sudo systemctl status astromech-slave
+ssh astromech@astromech-slave.local sudo journalctl -u astromech-slave -f
 ```
 
 > **Note:** older logs may show `astromech-master.service: Failed with result 'exit-code'` lines — one per deploy/restart. These were **not** crashes; the service stops, exits, and restarts immediately. They were caused by a shutdown-handler bug (fixed) and are harmless. A clean stop now logs `Master shut down cleanly` + `Deactivated successfully`.
@@ -469,14 +469,14 @@ ssh artoo@astromech-slave.local sudo journalctl -u astromech-slave -f
 ### Collect debug info
 
 ```bash
-bash /home/artoo/astromechos/scripts/check_logs.sh
-bash /home/artoo/astromechos/scripts/debug_collect.sh
+bash /home/astromech/astromechos/scripts/check_logs.sh
+bash /home/astromech/astromechos/scripts/debug_collect.sh
 ```
 
 ### Resync Slave only (without git pull)
 
 ```bash
-bash /home/artoo/astromechos/scripts/resync_slave.sh
+bash /home/astromech/astromechos/scripts/resync_slave.sh
 ```
 
 ---
@@ -498,17 +498,17 @@ Flash manually via `mpremote` (only needed after hardware replacement or firmwar
 
 ```bash
 # SSH into the Slave:
-ssh artoo@astromech-slave.local
+ssh astromech@astromech-slave.local
 
 # Flash (always rm before cp — mpremote compares timestamps, not content):
 python3 -m mpremote connect /dev/ttyACM0 rm :display.py
-python3 -m mpremote connect /dev/ttyACM0 cp /home/artoo/astromechos/rp2040/firmware/display.py :display.py
+python3 -m mpremote connect /dev/ttyACM0 cp /home/astromech/astromechos/rp2040/firmware/display.py :display.py
 ```
 
 Or use the dedicated script from the Master:
 
 ```bash
-bash /home/artoo/astromechos/scripts/deploy_rp2040.sh
+bash /home/astromech/astromechos/scripts/deploy_rp2040.sh
 ```
 
 ---
@@ -551,7 +551,7 @@ Pair a Bluetooth speaker to the **Slave Pi** from the dashboard: **Settings → 
 Or manually on the Slave:
 
 ```bash
-ssh artoo@192.168.4.171
+ssh astromech@192.168.4.171
 bluetoothctl
 > power on
 > pairable on
@@ -592,7 +592,7 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) pactl set-default-sink bluez_sink.XX_XX_XX_XX
 | Master | `192.168.4.1` (fixed) | any device on hotspot |
 | Slave | `192.168.4.171` (typical DHCP lease) | any device on hotspot |
 | Dashboard | `http://192.168.4.1:5000` | browser on hotspot |
-| SSH Master | `ssh artoo@192.168.4.1` | password: `deetoo` (change it!) |
-| SSH Slave | `ssh artoo@192.168.4.171` | password: `deetoo` (change it!) |
+| SSH Master | `ssh astromech@192.168.4.1` | password: `astropass` (change it!) |
+| SSH Slave | `ssh astromech@192.168.4.171` | password: `astropass` (change it!) |
 
-> Two separate passwords ship as defaults for first boot: the Linux/SSH login (`artoo` / `deetoo`) and the dashboard admin (`astro` since 2026-05-30, `deetoo` on legacy installs). Change **both** — `passwd` for the Linux account and **Config → System** for the dashboard — before any public use.
+> Two separate passwords ship as defaults for first boot: the Linux/SSH login (`astromech` / `astropass`) and the dashboard admin (`astro` since 2026-05-30, `astropass` on legacy installs). Change **both** — `passwd` for the Linux account and **Config → System** for the dashboard — before any public use.

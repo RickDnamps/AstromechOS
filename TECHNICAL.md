@@ -159,7 +159,7 @@ Flash firmware manually via `mpremote` (only after hardware replacement or firmw
 
 ```bash
 python3 -m mpremote connect /dev/ttyACM0 rm :display.py
-python3 -m mpremote connect /dev/ttyACM0 cp /home/artoo/astromechos/rp2040/firmware/display.py :display.py
+python3 -m mpremote connect /dev/ttyACM0 cp /home/astromech/astromechos/rp2040/firmware/display.py :display.py
 ```
 
 ---

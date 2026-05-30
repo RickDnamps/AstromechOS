@@ -38,7 +38,7 @@
 set -e
 
 REPO_PATH="$(cd "$(dirname "$0")/.." && pwd)"
-# Slave SSH endpoint via shared/lib_config.sh — no more hardcoded 'artoo'.
+# Slave SSH endpoint via shared/lib_config.sh — no more hardcoded 'astromech'.
 # Env overrides still work (export SLAVE_USER=… SLAVE_HOST=… before run).
 # shellcheck source=lib_config.sh
 . "$REPO_PATH/scripts/lib_config.sh"
@@ -206,7 +206,7 @@ if [ "$FIRST_INSTALL" = true ]; then
         # $HOME / $USER auto-resolve on the SLAVE side to the SSH login user
         # (the quoted 'REMOTE' heredoc keeps them literal until remote bash
         # interprets them) — so the audio config now lands in the right place
-        # regardless of whether the slave user is 'artoo', 'pi', or anything.
+        # regardless of whether the slave user is 'astromech', 'pi', or anything.
         cat > "$HOME/.asoundrc" << 'ASOUNDRC'
 pcm.!default {
   type pulse

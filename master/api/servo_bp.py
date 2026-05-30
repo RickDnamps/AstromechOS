@@ -89,7 +89,7 @@ from shared.paths import MAIN_CFG as _MAIN_CFG, LOCAL_CFG as _LOCAL_CFG, DOME_AN
 
 def _slave_host() -> str:
     """Return 'user@host' for SSH/SCP to the Slave — both user AND host
-    are resolved by shared.identity (was hardcoded 'artoo@')."""
+    are resolved by shared.identity (was hardcoded 'astromech@')."""
     from shared.identity import slave_ssh_target
     return slave_ssh_target()
 

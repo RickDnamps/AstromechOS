@@ -70,7 +70,7 @@ def _slave_sftp_creds() -> dict:
     post-install state — setup_ssh_keys.sh pushes Master's pubkey to
     the Slave). paramiko falls back to the SSH agent in that case.
 
-    Replaces the hardcoded `192.168.4.171 / artoo / deetoo` previously
+    Replaces the hardcoded `192.168.4.171 / astromech / astropass` previously
     baked into _sftp_sync_* (violated feedback_no_hardcoded_install_values)."""
     from shared.identity import slave_user, slave_host, slave_password
     creds = {'hostname': slave_host(), 'username': slave_user(), 'timeout': 8.0}
@@ -1195,7 +1195,7 @@ def _sftp_sync_index(index: dict) -> None:
     """Sync sounds_index.json to slave atomically.
 
     B-3: credentials read from cfg (deploy.slave_user / slave_password)
-    instead of hardcoded 'artoo'/'deetoo'. Falls back to key-based auth
+    instead of hardcoded 'astromech'/'astropass'. Falls back to key-based auth
     when no password is configured."""
     try:
         import paramiko

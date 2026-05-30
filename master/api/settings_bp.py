@@ -62,7 +62,7 @@ from shared.paths import LOCAL_CFG, MAIN_CFG, SLAVE_CFG as _SLAVE_CFG
 # B-61 (audit 2026-05-15) + portability chantier 2026-05-28: both the
 # slave HOST (from local.cfg [slave] host) and the SSH USER (from
 # [deploy] slave_user / [system] user / current OS user) are resolved
-# centrally by shared.identity — no more hardcoded 'artoo@' here.
+# centrally by shared.identity — no more hardcoded 'astromech@' here.
 def _resolve_slave_ssh_target() -> str:
     """Return 'user@host' for SSH/SCP/rsync to the Slave."""
     from shared.identity import slave_ssh_target
@@ -116,11 +116,11 @@ def _resolve_con(names: tuple) -> str:
             _con_cache[new] = name
             return name
     return new
-# The Flask service runs as 'artoo' (not root), and nmcli MUTATIONS
+# The Flask service runs as 'astromech' (not root), and nmcli MUTATIONS
 # (modify/up/down/add/delete) need polkit auth that a non-interactive systemd
-# service doesn't have -> 'Insufficient privileges'. artoo has passwordless sudo
+# service doesn't have -> 'Insufficient privileges'. astromech has passwordless sudo
 # (same as the slave-restart path), so write-ops go through sudo -n. READ-only
-# nmcli (-g ... show / wifi list) works as artoo and stays bare.
+# nmcli (-g ... show / wifi list) works as astromech and stays bare.
 _NMCLI_W = ('sudo', '-n', 'nmcli')
 
 
@@ -478,7 +478,7 @@ def get_settings():
     # B4: mask sensitive fields when no admin token
     _mask_ssid = lambda s: s if is_admin else (('•' * min(len(s), 8)) if s else '')
     # Real Linux user the service runs as — NOT hardcoded, so the admin-password
-    # note shows the actual SSH login user (artoo / C3PO / pi / …) per install.
+    # note shows the actual SSH login user (astromech / C3PO / pi / …) per install.
     # Delegated to shared.identity (single source of truth, Windows-safe).
     from shared.identity import current_user as _id_current_user
     _sys_user = _id_current_user()
@@ -782,7 +782,7 @@ def _push_slave_hotspot_creds(ssid: str, password: str) -> tuple[bool, str]:
         return False, f'slave host has an unexpected format ({slave_host!r})'
     # sudo -n: nmcli modify over SSH has no interactive polkit session, so it
     # fails with 'Insufficient privileges' as a normal user. The Slave grants
-    # artoo passwordless sudo (same as the slave-restart path), so sudo -n works
+    # astromech passwordless sudo (same as the slave-restart path), so sudo -n works
     # and fails fast (non-interactive) if it ever isn't set up.
     # Resolve the profile name ON THE SLAVE (prefer astromech-master-hotspot, fall
     # back to legacy r2d2-master-hotspot) so this works on both fresh and pre-rename
@@ -1340,7 +1340,7 @@ def apply_audio_profile():
 def _get_admin_password() -> str:
     """Returns the current admin password from local.cfg.
 
-    Default fallback is 'astro' as of 2026-05-30 (was 'deetoo' on
+    Default fallback is 'astro' as of 2026-05-30 (was 'astropass' on
     installs flashed before that date). main.cfg has no [admin]
     section so the fallback IS the shipped default for fresh installs.
     The Cockpit SYSTEM banner flags both as default-not-yet-changed

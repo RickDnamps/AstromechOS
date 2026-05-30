@@ -12,7 +12,7 @@
 #                                       local.cfg, main.cfg, default.
 #   capture_user                        set TARGET_USER + TARGET_HOME from
 #                                       $SUDO_USER / logname / prompt /
-#                                       legacy 'artoo'.
+#                                       legacy 'astromech'.
 #   slave_user                          SSH user on the Slave (cfg + waterfall).
 #   slave_host                          Slave hostname/IP (cfg + waterfall).
 #   slave_target                        composite user@host string.
@@ -22,7 +22,7 @@
 #   2. local.cfg  ([system]/[deploy]/[slave])
 #   3. main.cfg   (in-repo defaults)
 #   4. $SUDO_USER / $(logname) / $(whoami) auto-detection
-#   5. Legacy 'artoo' / 'astromech-slave.local' (rétrocompat for the
+#   5. Legacy 'astromech' / 'astromech-slave.local' (rétrocompat for the
 #      original R2-D2 install — never reached on a fresh Imager install).
 
 # Resolve REPO + cfg paths if the caller didn't set them.
@@ -90,7 +90,7 @@ cfg_get() {
 # capture_user — set TARGET_USER + TARGET_HOME for the install.
 # Exits non-zero if root or non-existent user (caller should `|| exit`).
 # Waterfall: Imager bootstrap [system] user → $SUDO_USER → logname →
-# whoami → interactive prompt (TTY) → legacy 'artoo'.
+# whoami → interactive prompt (TTY) → legacy 'astromech'.
 # ──────────────────────────────────────────────────────────────────
 capture_user() {
     local u=""
@@ -116,13 +116,22 @@ capture_user() {
         printf "    Linux user to install AstromechOS for: " >&2
         read -r u
     fi
-    # 6. Legacy fallback — keeps the original R2-D2 install path working.
-    # If we land here, neither astromech_init.cfg, sudo, logname, whoami,
-    # nor an interactive prompt could give us a user. Surface the warning
-    # so the operator knows the rename-friendly path was bypassed.
+    # 6. Hard fallback — keeps both the new convention AND the original
+    # R2-D2 install path working. If we land here, neither astromech_init.cfg,
+    # sudo, logname, whoami, nor an interactive prompt could give us a user.
+    # Prefer the new generic 'astromech' (AstromechOS Imager default since
+    # 2026-05-30); fall back to the legacy 'artoo' only on a pre-existing
+    # account that was deployed before the migration.
     if [ -z "$u" ]; then
-        echo "[WARN] capture_user: falling back to legacy 'artoo' — set [system] user in /boot/astromech_init.cfg or run via 'sudo bash $0' from a regular login to use the dynamic path." >&2
-        u="artoo"
+        if id "astromech" &>/dev/null; then
+            echo "[WARN] capture_user: defaulting to 'astromech' — set [system] user in /boot/astromech_init.cfg or run via 'sudo bash $0' from a regular login for explicit selection." >&2
+            u="astromech"
+        elif id "artoo" &>/dev/null; then
+            echo "[WARN] capture_user: falling back to legacy 'artoo' (no 'astromech' account on this box) — set [system] user in /boot/astromech_init.cfg to silence this warning." >&2
+            u="artoo"
+        else
+            u="astromech"  # last-ditch default — validation below will fail and the caller reports it.
+        fi
     fi
     # Validation.
     [ "$u" = "root" ] && { echo "[ERR] refusing to install as root — pick a regular user" >&2; return 1; }
@@ -146,8 +155,15 @@ slave_user() {
     [ -z "$u" ] && u=$(logname 2>/dev/null || true)
     [ -z "$u" ] && u=$(whoami 2>/dev/null || true)
     if [ -z "$u" ]; then
-        echo "[WARN] slave_user: falling back to legacy 'artoo' — capture_user was not called and no SUDO_USER/logname/whoami succeeded." >&2
-        u="artoo"
+        if id "astromech" &>/dev/null; then
+            echo "[WARN] slave_user: defaulting to 'astromech' — capture_user was not called and no SUDO_USER/logname/whoami succeeded." >&2
+            u="astromech"
+        elif id "artoo" &>/dev/null; then
+            echo "[WARN] slave_user: falling back to legacy 'artoo' (no 'astromech' account on this box)." >&2
+            u="artoo"
+        else
+            u="astromech"  # last-ditch default; caller should detect via id check.
+        fi
     fi
     echo "$u"
 }

@@ -2,9 +2,9 @@
 shared/identity.py — single source of truth for runtime IDENTITY.
 
 Replaces the 4 duplicate `_slave_host()` helpers and the hardcoded
-`'artoo@'` literals scattered across master/api/*. Designed to make
+`'astromech@'` literals scattered across master/api/*. Designed to make
 AstromechOS portable across any Raspberry Pi OS username (pi /
-astromech / artoo / ...).
+astromech / astromech / ...).
 
 ──────────────────────────────────────────────────────────────────────
 Resolution priority (every getter follows the same waterfall):
@@ -23,7 +23,7 @@ Resolution priority (every getter follows the same waterfall):
 
    4. Runtime auto-detection (pwd.getpwuid(os.getuid()) for user, etc.).
 
-   5. Legacy fallback 'artoo' / 'astromech-slave.local' — kept ONLY so
+   5. Legacy fallback 'astromech' / 'astromech-slave.local' — kept ONLY so
       existing R2-D2 deployments (where local.cfg may pre-date the
       [system] section) keep booting unchanged. A fresh install via
       the Imager / setup_*.sh writes [system] + [deploy] so the legacy
@@ -134,8 +134,8 @@ def current_home() -> str:
 
 
 # ─── Slave SSH target ────────────────────────────────────────────────
-# Replaces:  master/api/settings_bp.py::_resolve_slave_ssh_target  (hardcoded 'artoo@')
-#            master/api/servo_bp.py::_slave_host                    (hardcoded 'artoo@')
+# Replaces:  master/api/settings_bp.py::_resolve_slave_ssh_target  (hardcoded 'astromech@')
+#            master/api/servo_bp.py::_slave_host                    (hardcoded 'astromech@')
 #            master/api/audio_bp.py::_slave_host  +  _slave_sftp_creds
 #            master/api/diagnostics_bp.py::_slave_host
 #            master/api/status_bp.py::_slave_host
@@ -156,7 +156,7 @@ def slave_user() -> str:
 
     (The previously-supported `[deploy] slave_user` cfg key is now
     intentionally ignored. Legacy R2-D2 installs are unaffected because
-    their current_user() == 'artoo' anyway.)"""
+    their current_user() == 'astromech' anyway.)"""
     return current_user()
 
 

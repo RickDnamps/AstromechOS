@@ -2556,7 +2556,7 @@
 
         <section class="card settings-card" style="margin-top:12px">
           <h2 class="card-title">CHANGE ADMIN PASSWORD</h2>
-          <div class="settings-note">🔑 <strong>Interface Admin Password:</strong> used to unlock this interface and the app (Settings, plus the Choreo, Audio &amp; Sequence editors).<br>🖥️ <strong>Linux System Password:</strong> the SSH login (username: <strong class="ssh-username">artoo</strong>) is completely separate and remains unchanged.</div>
+          <div class="settings-note">🔑 <strong>Interface Admin Password:</strong> used to unlock this interface and the app (Settings, plus the Choreo, Audio &amp; Sequence editors).<br>🖥️ <strong>Linux System Password:</strong> the SSH login (username: <strong class="ssh-username">astromech</strong>) is completely separate and remains unchanged.</div>
           <div class="settings-row pwd-row">
             <!-- W1 fix 2026-05-16: show/hide eye toggle (reuse Network pattern) -->
             <div class="pwd-input-wrap">
@@ -2598,8 +2598,8 @@
           <details class="forgot-password-help" style="margin-top:12px;font-size:11px;opacity:.7">
             <summary style="cursor:pointer">🔑 Forgot password?</summary>
             <div style="padding:6px 0">
-              SSH into Master (<code>ssh <span class="ssh-username">artoo</span>@&lt;master-ip&gt;</code>), edit
-              <code class="local-cfg-path">/home/artoo/astromechos/master/config/local.cfg</code>,
+              SSH into Master (<code>ssh <span class="ssh-username">astromech</span>@&lt;master-ip&gt;</code>), edit
+              <code class="local-cfg-path">/home/astromech/astromechos/master/config/local.cfg</code>,
               find the <code>[admin]</code> section, set <code>password = newpwd</code>,
               save + restart: <code>sudo systemctl restart astromech-master.service</code>.
             </div>

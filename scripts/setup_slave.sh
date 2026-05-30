@@ -36,18 +36,18 @@
 #   1. System update + packages
 #   2. UART fix (disable-bt to free ttyAMA0)
 #   3. Enable UART + I2C via raspi-config
-#   4. Create the /home/artoo/astromechos directory
+#   4. Create the /home/astromech/astromechos directory
 #   5. Network configuration (wlan0 → Master hotspot)
 #   → reboot
 #
 # After reboot, the Master runs rsync + installs services automatically:
-#   bash /home/artoo/astromechos/scripts/deploy.sh --first-install
+#   bash /home/astromech/astromechos/scripts/deploy.sh --first-install
 #
 # Usage (on the R2-Slave, connected to home WiFi):
 #   curl -fsSL https://raw.githubusercontent.com/RickDnamps/AstromechOS/main/scripts/setup_slave.sh | sudo bash
 #
 # Or if the script was copied from the Master:
-#   sudo bash /home/artoo/setup_slave.sh
+#   sudo bash /home/astromech/setup_slave.sh
 #
 # =============================================================================
 
@@ -83,7 +83,7 @@ fi
 
 # Capture the install target user via shared lib_config.sh (waterfall:
 # /boot/astromech_init.cfg → $SUDO_USER → logname → interactive prompt →
-# legacy 'artoo'). Refuses root + non-existent users.
+# legacy 'astromech'). Refuses root + non-existent users.
 # shellcheck source=lib_config.sh
 . "$REPO_PATH/scripts/lib_config.sh"
 capture_user || err "Could not determine install user. Run via 'sudo bash $0' from a regular login (so \$SUDO_USER is set), or provide [system] user in /boot/astromech_init.cfg."
@@ -231,7 +231,7 @@ ok "ALSA → pulseaudio routing configured, volume 100%"
 # =============================================================================
 info "Step 6b — PulseAudio Bluetooth configuration..."
 
-# Add artoo to the bluetooth group (required for bluetoothctl without sudo)
+# Add astromech to the bluetooth group (required for bluetoothctl without sudo)
 usermod -aG bluetooth "$USER"
 
 # Load BT modules in pulseaudio (survives reboots via user config)
@@ -246,8 +246,8 @@ chown -R "$USER:$USER" "/home/$USER/.config"
 
 # Allow pulseaudio user service to run without an active login session
 loginctl enable-linger "$USER"
-ARTOO_UID=$(id -u "$USER")
-sudo -u "$USER" XDG_RUNTIME_DIR="/run/user/$ARTOO_UID" \
+ASTROMECH_UID=$(id -u "$USER")
+sudo -u "$USER" XDG_RUNTIME_DIR="/run/user/$ASTROMECH_UID" \
     systemctl --user enable pulseaudio.service pulseaudio.socket 2>/dev/null || true
 
 ok "PulseAudio BT configured (auto-start, BT modules loaded)"

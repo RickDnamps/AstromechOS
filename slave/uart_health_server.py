@@ -120,8 +120,8 @@ def _session_env() -> dict:
 
     Uses os.getuid() — the UID systemd launched the slave service with —
     so the session paths resolve correctly regardless of the OS username
-    (artoo / pi / astromech / …). Portability chantier 2026-05-28: was
-    pwd.getpwnam('artoo'), which broke any install whose user wasn't 'artoo'."""
+    (astromech / pi / astromech / …). Portability chantier 2026-05-28: was
+    pwd.getpwnam('astromech'), which broke any install whose user wasn't 'astromech'."""
     uid = _os.getuid()
     env = dict(_os.environ)
     env['XDG_RUNTIME_DIR'] = f'/run/user/{uid}'

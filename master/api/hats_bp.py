@@ -179,8 +179,8 @@ def _run_slave_detect(timeout: float = 25.0) -> tuple[int, str]:
         user = slave_user()
         repo_remote = slave_repo_path()
     except Exception:
-        user = 'artoo'
-        repo_remote = '/home/artoo/astromechos'  # legacy fallback
+        user = 'astromech'
+        repo_remote = '/home/astromech/astromechos'  # legacy fallback
 
     # CMD-2 fix 2026-05-30: repo_remote lands UNQUOTED inside the ssh
     # remote shell string below. slave_repo_path() reads from
@@ -194,8 +194,9 @@ def _run_slave_detect(timeout: float = 25.0) -> tuple[int, str]:
     # CLAUDE.md §"Code Standard") would need to extend this set in
     # the same commit that ships the new user.
     _ALLOWED_REPO_REMOTES = frozenset({
-        '/home/artoo/astromechos',
+        '/home/astromech/astromechos',  # AstromechOS Imager default since 2026-05-30
         '/home/astro/astromechos',
+        '/home/artoo/astromechos',      # legacy R2-D2 install
     })
     if repo_remote not in _ALLOWED_REPO_REMOTES:
         return -1, (

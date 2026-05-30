@@ -6,8 +6,8 @@
 # (band a, channel 36 — UNII-1, non-DFS) WITHOUT changing the SSID or password
 # (band/channel only) so already-paired tablets/PC just re-associate by name.
 #
-# Run AS THE artoo USER (NOT via sudo bash) so the master->slave ssh uses
-# artoo's key. Privileged ops use `sudo -n` (artoo has NOPASSWD). The operator's
+# Run AS THE astromech USER (NOT via sudo bash) so the master->slave ssh uses
+# astromech's key. Privileged ops use `sudo -n` (astromech has NOPASSWD). The operator's
 # SSH to the Master is over wlan1 (home WiFi) — independent of the wlan0 hotspot
 # — so Master control is never lost; the deadman only covers this script dying.
 #
@@ -20,7 +20,7 @@
 # script death. softAP-on-5GHz support of the brcmfmac firmware is unproven — the
 # verify+deadman is exactly what tests it safely.
 #
-# Usage (on the Master, as artoo):
+# Usage (on the Master, as astromech):
 #   bash scripts/wifi_5ghz_switch.sh --dry-run   # validate + print plan, change nothing
 #   bash scripts/wifi_5ghz_switch.sh             # execute the live switch
 set -u

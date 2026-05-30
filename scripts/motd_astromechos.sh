@@ -128,7 +128,7 @@ git_status_line() {
     # Master path: real .git tree → full status (sha + branch + sync).
     if [ -n "$REPO" ] && [ -d "$REPO/.git" ]; then
         # update-motd.d scripts run as root; the AstromechOS repo is
-        # owned by the install user (artoo / pi / …). Without
+        # owned by the install user (astromech / pi / …). Without
         # safe.directory, git 2.35+ refuses with 'dubious ownership'
         # and every read returns empty -> sha + branch render as '?'.
         # Scope the trust to this exact repo so the override doesn't

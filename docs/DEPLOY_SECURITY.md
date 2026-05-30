@@ -158,7 +158,7 @@ git repack -a -d --depth=250 --window=250 --aggressive
 # --- 8. Each existing live clone must do a one-time recovery ---
 # `git pull --ff-only` will FAIL (history is rewritten, not fast-forward).
 # On every Pi (or other clone):
-ssh artoo@<pi-ip> 'cd ~/astromechos &&
+ssh astromech@<pi-ip> 'cd ~/astromechos &&
     git fetch origin &&
     git reset --hard origin/main &&
     git gc --prune=now --aggressive'
@@ -300,8 +300,8 @@ race, no running-process holds, no plaintext leak.
 
 #### Why HOT was rejected (security + viability audit, 2026-05-29)
 
-A HOT alternative (`firstboot_setup.sh` invoking `usermod -l NEW artoo`
-+ `groupmod -n NEW artoo` + `usermod -d /home/NEW -m NEW` + `chpasswd`
+A HOT alternative (`firstboot_setup.sh` invoking `usermod -l NEW astromech`
++ `groupmod -n NEW astromech` + `usermod -d /home/NEW -m NEW` + `chpasswd`
 at boot time) was evaluated and DEFEATED. The audit verdict was
 **RISKY-NOT-RECOMMENDED**. Eight concrete failure modes, four of them
 HIGH likelihood:
@@ -311,7 +311,7 @@ HIGH likelihood:
 | 1 | `usermod -l` refuses — "user is currently used by process N" (getty / dbus / `user@1000.service` / autologin / ssh) | **HIGH** | Pi unrenamed; firstboot ECONNCANCELLED | ✅ Yes |
 | 2 | `groupmod -n` refuses — GID 1000 held by `systemd-user@1000.service` | HIGH | Same as #1 | ✅ Yes |
 | 3 | `usermod -d -m` is non-transactional — `rename(2)` then `chown -R` — failure mid-chown leaves mixed ownership | Medium | Half-renamed `/home/`, services with `Exec=` 203/EXEC | ✅ Yes |
-| 4 | Race with parallel-starting `User=artoo` services in `multi-user.target` | HIGH without exhaustive `Before=` | Service starts under old UID, user vanishes mid-run → SIGKILL on next exec | ✅ Yes |
+| 4 | Race with parallel-starting `User=astromech` services in `multi-user.target` | HIGH without exhaustive `Before=` | Service starts under old UID, user vanishes mid-run → SIGKILL on next exec | ✅ Yes |
 | 5 | Autologin tty1 (Pi OS Desktop) holds UID 1000 | HIGH on Desktop | usermod refuses | ✅ Yes |
 | 6 | `user@1000.service` actively running | HIGH | usermod refuses | ✅ Yes |
 | 7 | **Plaintext password leak**: `[admin]/[system] target_password` in `/boot/astromech_init.cfg` is world-readable on the FAT-32 boot partition during the boot window. Pi OS Lite, no LUKS, SD-card thieves love this. | **CERTAIN** during boot | Cleartext on disk | ✅ Yes — cold writes only the `$6$` hash directly to `/etc/shadow` |
@@ -379,12 +379,12 @@ the Imager edits ONLY `/etc/shadow` and leaves `/etc/passwd` + `/etc/group`
 
 ### Linux user provisioning — cold rootfs surgery (the C# Imager's job)
 
-The Golden Image ships with a known UID-1000 user (today: `artoo`). The
+The Golden Image ships with a known UID-1000 user (today: `astromech`). The
 Imager renames + repasswords that account at burn time so each robot ends
 up with a unique credential pair. AstromechOS firstboot doesn't care which
 username it inherits — `firstboot_setup.sh::capture_user` reads
 `[system] user` from `astromech_init.cfg` first and falls through to
-`$SUDO_USER` / `pi` / `astromech` / `artoo` if absent. So the Imager's job
+`$SUDO_USER` / `pi` / `astromech` / `astromech` if absent. So the Imager's job
 is to keep the rootfs and the `astromech_init.cfg` in sync.
 
 **Hash format for `/etc/shadow`** — exactly the same digest Pi OS accepts
@@ -421,17 +421,17 @@ using (var fs = Ext2.Mount(sdCardRootfsPartition, readWrite: true))
     // 3. /etc/group : rename the user-private group (default Pi OS) +
     //    rewrite the member list in every group that referenced the
     //    old name (sudo, dialout, gpio, i2c, spi, video, netdev, …).
-    Etc.Group.RenameUser(fs, oldName: "artoo", newName: newUser);
-    Etc.GShadow.RenameUser(fs, oldName: "artoo", newName: newUser);
+    Etc.Group.RenameUser(fs, oldName: "astromech", newName: newUser);
+    Etc.GShadow.RenameUser(fs, oldName: "astromech", newName: newUser);
 
     // 4. Rename the home directory in-place.
-    fs.Rename("/home/artoo", $"/home/{newUser}");
+    fs.Rename("/home/astromech", $"/home/{newUser}");
 
     // 5. Sweep config files that hardcoded the old username.
     foreach (var path in new[] { "/etc/sudoers", "/etc/sudoers.d/",
                                  "/etc/ssh/sshd_config",
                                  "/etc/ssh/sshd_config.d/" })
-        TextSubstitute.RewriteUsername(fs, path, "artoo", newUser);
+        TextSubstitute.RewriteUsername(fs, path, "astromech", newUser);
 }
 
 // 6. astromech_init.cfg on the BOOT partition must match the rootfs edits.
@@ -456,8 +456,8 @@ Golden Image already has it; only the parent path needs renaming so the
 running services find their code.
 
 ⚠ **systemd unit templates** in the Golden Image must use `%U`/`%h` or
-`${TARGET_USER}`-style placeholders (NOT a hardcoded `artoo`). The Imager's
-rename will break any unit that has a literal `artoo` in `ExecStart=`,
+`${TARGET_USER}`-style placeholders (NOT a hardcoded `astromech`). The Imager's
+rename will break any unit that has a literal `astromech` in `ExecStart=`,
 `User=`, `WorkingDirectory=`, or `Environment=`. See
 `master/services/*.service.template` and `slave/services/*.service.template`
 — they are templated and processed at install time by `update.sh` /
@@ -470,9 +470,9 @@ section it doesn't find):
 
 ```ini
 [system]
-user        = artoo
-home        = /home/artoo
-repo_path   = /home/artoo/astromechos
+user        = astromech
+home        = /home/astromech
+repo_path   = /home/astromech/astromechos
 service_uid = 1000
 
 [github]
@@ -499,7 +499,7 @@ password = solo1977randoma3
 
 [admin]
 # Flask UI admin password (separate from the Linux SSH password above).
-# Default fallback is 'astro' (was 'deetoo' on installs flashed before
+# Default fallback is 'astro' (was 'astropass' on installs flashed before
 # 2026-05-30) if [admin] is absent here. firstboot §4.6 persists
 # this into local.cfg [admin].
 password = boo3pic7lock22
@@ -586,7 +586,7 @@ firstboot_setup.sh
                                           (Flask UI unlocked with Imager-
                                           baked value; absent → main.cfg
                                           default 'astro' applies — or
-                                          'deetoo' on legacy installs)
+                                          'astropass' on legacy installs)
   4.7 Hotspot bootstrap + handover (the chicken-and-egg solver):
         Master role →  setup_master_network.sh --non-interactive
                           --ssid BOOT_SSID --psk BOOT_PSK
