@@ -723,10 +723,25 @@ function _renderChoreoList() {
       row.dataset.name = c.name;
 
       const dur = c.duration ? `${Math.round(c.duration)}s` : '';
-      row.innerHTML =
-        `<span class="choreo-emoji">${c.emoji || '🎭'}</span>` +
-        `<span class="choreo-name">${c.label || c.name}</span>` +
-        `<span class="choreo-dur">${dur}</span>`;
+      // XSS-1 fix 2026-05-30: c.emoji and c.label come from /choreo/list
+      // which surfaces operator-edited metadata. innerHTML with template
+      // interpolation let an operator paste e.g. `<img src=x onerror=…>`
+      // into a choreo label and trigger XSS on every mobile load. There
+      // is no escapeHtml() in mobile.js, so we use createElement +
+      // textContent which is XSS-safe by construction.
+      const spanEmoji = document.createElement('span');
+      spanEmoji.className = 'choreo-emoji';
+      spanEmoji.textContent = c.emoji || '🎭';
+
+      const spanName = document.createElement('span');
+      spanName.className = 'choreo-name';
+      spanName.textContent = c.label || c.name;
+
+      const spanDur = document.createElement('span');
+      spanDur.className = 'choreo-dur';
+      spanDur.textContent = dur;
+
+      row.replaceChildren(spanEmoji, spanName, spanDur);
 
       row.onclick = () => { playChoreo(c.name, c.label || c.name); _haptic(30); };
       list.appendChild(row);
