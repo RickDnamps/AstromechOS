@@ -530,8 +530,13 @@ The Flask Settings UI requires a password to unlock editing
 [`CLAUDE.md` §"Safety + Auth"](../CLAUDE.md)). This is **entirely separate
 from the Linux SSH password** (memory `admin-password-vs-ssh-separation`).
 
-**Default**: `deetoo`, shipped in `master/config/main.cfg`. Used by the
-manual install path when the operator never overrides it.
+**Default**: `astro` (was `deetoo` on installs flashed before 2026-05-30),
+hardcoded as the `fallback=` value in `settings_bp.py::_get_admin_password()`
+since `master/config/main.cfg` has no `[admin]` section. Used by the
+manual install path when the operator never overrides it. The Cockpit
+SYSTEM banner flags **both** defaults as "still on the default — change
+it" (`status_bp.py::_DEFAULT_ADMIN_PASSWORDS`), so a legacy Pi on
+`deetoo` doesn't go un-warned after the rename.
 
 **Imager path** (`firstboot_setup.sh:309-322`, §4.6, master only):
 
@@ -717,8 +722,8 @@ path:
   `astromech-slave`), not Imager-randomized
 - **SSH keypair**: generated locally by `setup_ssh_keys.sh`, not
   Imager-baked
-- **Admin password**: stays `deetoo` (or whatever the operator types
-  later in Settings)
+- **Admin password**: stays `astro` (or `deetoo` on legacy installs, or
+  whatever the operator types later in Settings)
 - **Hotspot SSID**: whatever the operator typed at the interactive
   prompt, **NOT** auto-renamed to `Astromech_Control_XXXX`
 - **Home WiFi**: not pre-configured. The operator types it later in

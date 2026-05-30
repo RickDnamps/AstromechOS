@@ -1338,8 +1338,15 @@ def apply_audio_profile():
 
 
 def _get_admin_password() -> str:
-    """Returns the current admin password from local.cfg (default: deetoo)."""
-    return _read_cfg().get('admin', 'password', fallback='deetoo')
+    """Returns the current admin password from local.cfg.
+
+    Default fallback is 'astro' as of 2026-05-30 (was 'deetoo' on
+    installs flashed before that date). main.cfg has no [admin]
+    section so the fallback IS the shipped default for fresh installs.
+    The Cockpit SYSTEM banner flags both as default-not-yet-changed
+    via status_bp._DEFAULT_ADMIN_PASSWORDS.
+    """
+    return _read_cfg().get('admin', 'password', fallback='astro')
 
 
 # B-53 (audit 2026-05-15): rate-limit /settings/admin/verify to defeat

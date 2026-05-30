@@ -419,7 +419,7 @@ Créez un thème dans **Config → Appearance → Theme** (8 sélecteurs de coul
 
 ### Mettre à jour AstromechOS
 
-**Depuis le dashboard :** cliquer sur le bouton **Admin** (en haut à droite) → entrer le mot de passe admin (défaut **`deetoo`**) → les menus protégés deviennent visibles → **Config → Deploy → UPDATE** (git pull + rsync Slave + restart, tout automatique). Si une mise à jour pose problème, le bouton **ROLLBACK** (même panneau) revient au commit précédent.
+**Depuis le dashboard :** cliquer sur le bouton **Admin** (en haut à droite) → entrer le mot de passe admin (défaut **`astro`** depuis le 2026-05-30, ou `deetoo` sur les installations historiques) → les menus protégés deviennent visibles → **Config → Deploy → UPDATE** (git pull + rsync Slave + restart, tout automatique). Si une mise à jour pose problème, le bouton **ROLLBACK** (même panneau) revient au commit précédent.
 
 > La session admin expire après 5 minutes d'inactivité. Le mot de passe peut être changé dans **Config → System** une fois connecté.
 

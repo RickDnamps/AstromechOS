@@ -499,7 +499,8 @@ password = solo1977randoma3
 
 [admin]
 # Flask UI admin password (separate from the Linux SSH password above).
-# Default in main.cfg is 'deetoo' if absent here. firstboot §4.6 persists
+# Default fallback is 'astro' (was 'deetoo' on installs flashed before
+# 2026-05-30) if [admin] is absent here. firstboot §4.6 persists
 # this into local.cfg [admin].
 password = boo3pic7lock22
 ```
@@ -584,7 +585,8 @@ firstboot_setup.sh
         cfg_get admin password       →  write_local_cfg admin password
                                           (Flask UI unlocked with Imager-
                                           baked value; absent → main.cfg
-                                          default 'deetoo' applies)
+                                          default 'astro' applies — or
+                                          'deetoo' on legacy installs)
   4.7 Hotspot bootstrap + handover (the chicken-and-egg solver):
         Master role →  setup_master_network.sh --non-interactive
                           --ssid BOOT_SSID --psk BOOT_PSK

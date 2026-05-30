@@ -267,13 +267,17 @@ def _cpu_temp() -> float | None:
     return v
 
 
+_DEFAULT_ADMIN_PASSWORDS = ('astro', 'deetoo')
+
+
 def _is_default_admin_password() -> bool:
-    """W2 fix 2026-05-16: True if [admin] password equals 'deetoo'
-    (the documented default). Used by /status to drive the SYSTEM
-    panel banner."""
+    """W2 fix 2026-05-16, updated 2026-05-30: True if [admin] password
+    matches any shipped default ('astro' current, 'deetoo' legacy).
+    Either way the operator should have changed it. Used by /status to
+    drive the SYSTEM panel banner."""
     try:
         from master.api.settings_bp import _get_admin_password
-        return _get_admin_password() == 'deetoo'
+        return _get_admin_password() in _DEFAULT_ADMIN_PASSWORDS
     except Exception:
         return False
 

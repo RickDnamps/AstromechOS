@@ -440,7 +440,7 @@ Build a theme in **Config → Appearance → Theme** (8 colour pickers + font). 
 
 ### Update the software
 
-**From the dashboard:** click the **Admin** button (top right) → enter the admin password (default **`deetoo`**) → the Config tab and other protected menus become visible → **Config → Deploy → UPDATE** (git pull + rsync to Slave + restart, all automatic). If an update misbehaves, the **ROLLBACK** button in the same panel reverts to the previous commit.
+**From the dashboard:** click the **Admin** button (top right) → enter the admin password (default **`astro`** since 2026-05-30, or `deetoo` on legacy installs) → the Config tab and other protected menus become visible → **Config → Deploy → UPDATE** (git pull + rsync to Slave + restart, all automatic). If an update misbehaves, the **ROLLBACK** button in the same panel reverts to the previous commit.
 
 > Admin session expires after 5 minutes of inactivity. The password can be changed in **Config → System** once logged in.
 
@@ -595,4 +595,4 @@ XDG_RUNTIME_DIR=/run/user/$(id -u) pactl set-default-sink bluez_sink.XX_XX_XX_XX
 | SSH Master | `ssh artoo@192.168.4.1` | password: `deetoo` (change it!) |
 | SSH Slave | `ssh artoo@192.168.4.171` | password: `deetoo` (change it!) |
 
-> The default password `deetoo` is shipped for first boot — change both the Linux/SSH password (`passwd`) and the dashboard admin password (Config → System) before any public use.
+> Two separate passwords ship as defaults for first boot: the Linux/SSH login (`artoo` / `deetoo`) and the dashboard admin (`astro` since 2026-05-30, `deetoo` on legacy installs). Change **both** — `passwd` for the Linux account and **Config → System** for the dashboard — before any public use.
