@@ -532,6 +532,13 @@ def _check_servo_safety(side: str) -> tuple[bool, tuple]:
 
 @servo_bp.post('/body/move')
 def body_move():
+    """Move a body panel servo to an interpolated position 0..1.
+
+    LAN-open operator control (mirrors /motion/* pattern, 2026-05-15
+    audit) — not an admin-level config mutation. Gated by
+    _check_servo_safety() (E-STOP / stow-in-progress / choreo lock)
+    and _valid_servo_name() allowlist before any I2C/UART side effect.
+    """
     safe, resp = _check_servo_safety('body')
     if not safe: return resp
     body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -556,6 +563,11 @@ def body_move():
 
 @servo_bp.post('/body/open')
 def body_open():
+    """Open a single body panel servo by name.
+
+    LAN-open operator control (see /body/move docstring for the full
+    rationale). Gated by _check_servo_safety() + _valid_servo_name().
+    """
     safe, resp = _check_servo_safety('body')
     if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -576,6 +588,11 @@ def body_open():
 
 @servo_bp.post('/body/close')
 def body_close():
+    """Close a single body panel servo by name.
+
+    LAN-open operator control (see /body/move docstring for the full
+    rationale). Gated by _check_servo_safety() + _valid_servo_name().
+    """
     safe, resp = _check_servo_safety('body')
     if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -693,6 +710,12 @@ def _launch_arm_sequences(arms_cfg: dict, cfg: dict, action: str) -> None:
 
 @servo_bp.post('/body/open_all')
 def body_open_all():
+    """Open every body panel sequentially.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety() so an in-progress choreo or E-STOP blocks
+    the bulk move.
+    """
     safe, resp = _check_servo_safety('body')
     if not safe: return resp
     cfg     = _read_panels_cfg()
@@ -707,6 +730,11 @@ def body_open_all():
 
 @servo_bp.post('/body/close_all')
 def body_close_all():
+    """Close every body panel sequentially.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety().
+    """
     safe, resp = _check_servo_safety('body')
     if not safe: return resp
     cfg     = _read_panels_cfg()
@@ -735,6 +763,12 @@ def dome_state():
 
 @servo_bp.post('/dome/move')
 def dome_move():
+    """Move a dome panel servo to an interpolated position 0..1.
+
+    LAN-open operator control (see /body/move docstring — same
+    rationale for the dome side). Gated by _check_servo_safety('dome')
+    + _valid_servo_name() before any I2C side effect.
+    """
     safe, resp = _check_servo_safety('dome')
     if not safe: return resp
     body     = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -757,6 +791,11 @@ def dome_move():
 
 @servo_bp.post('/dome/open')
 def dome_open():
+    """Open a single dome panel servo by name.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety('dome') + _valid_servo_name().
+    """
     safe, resp = _check_servo_safety('dome')
     if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -776,6 +815,11 @@ def dome_open():
 
 @servo_bp.post('/dome/close')
 def dome_close():
+    """Close a single dome panel servo by name.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety('dome') + _valid_servo_name().
+    """
     safe, resp = _check_servo_safety('dome')
     if not safe: return resp
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
@@ -795,6 +839,11 @@ def dome_close():
 
 @servo_bp.post('/dome/open_all')
 def dome_open_all():
+    """Open every dome panel sequentially.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety('dome').
+    """
     safe, resp = _check_servo_safety('dome')
     if not safe: return resp
     if not reg.dome_servo:
@@ -807,6 +856,11 @@ def dome_open_all():
 
 @servo_bp.post('/dome/close_all')
 def dome_close_all():
+    """Close every dome panel sequentially.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety('dome').
+    """
     safe, resp = _check_servo_safety('dome')
     if not safe: return resp
     if not reg.dome_servo:
@@ -1038,6 +1092,11 @@ def servo_state():
 
 @servo_bp.post('/open_all')
 def servo_open_all():
+    """Open every servo on body AND dome simultaneously (showcase).
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety() on both sides.
+    """
     cfg     = _read_panels_cfg()
     arm_set = _arm_servo_set()
     for name in BODY_SERVOS:
@@ -1053,6 +1112,11 @@ def servo_open_all():
 
 @servo_bp.post('/close_all')
 def servo_close_all():
+    """Close every servo on body AND dome simultaneously.
+
+    LAN-open operator control (see /body/move docstring). Gated by
+    _check_servo_safety() on both sides.
+    """
     cfg     = _read_panels_cfg()
     arm_set = _arm_servo_set()
     for name in BODY_SERVOS:

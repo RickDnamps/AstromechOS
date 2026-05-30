@@ -181,6 +181,28 @@ def _run_slave_detect(timeout: float = 25.0) -> tuple[int, str]:
     except Exception:
         user = 'artoo'
         repo_remote = '/home/artoo/astromechos'  # legacy fallback
+
+    # CMD-2 fix 2026-05-30: repo_remote lands UNQUOTED inside the ssh
+    # remote shell string below. slave_repo_path() reads from
+    # local.cfg [deploy] slave_path / [system] repo_path with a
+    # current_home() default, so an attacker-controlled cfg could
+    # inject shell metacharacters through this interpolation. Reject
+    # any path outside the small allowlist before subprocess fires.
+    # Note: this two-entry allowlist is per the operator's explicit
+    # 2026-05-30 spec for THIS deployment. A fleet with a different
+    # UID-1000 username (per the username-agnostic HARD RULE in
+    # CLAUDE.md §"Code Standard") would need to extend this set in
+    # the same commit that ships the new user.
+    _ALLOWED_REPO_REMOTES = frozenset({
+        '/home/artoo/astromechos',
+        '/home/astro/astromechos',
+    })
+    if repo_remote not in _ALLOWED_REPO_REMOTES:
+        return -1, (
+            f'slave repo path not in allowlist: {repo_remote!r} '
+            f'(expected one of {sorted(_ALLOWED_REPO_REMOTES)})'
+        )
+
     ssh_cmd = [
         'ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8',
         f'{user}@{host}',

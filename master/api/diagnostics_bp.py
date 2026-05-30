@@ -155,7 +155,16 @@ def diag_stats():
 @diagnostics_bp.post('/diagnostics/ping_slave')
 @require_admin
 def diag_ping_slave():
-    """Measures HTTP round-trip time to Slave health server (port 5001)."""
+    """Measures HTTP round-trip time to Slave health server (port 5001).
+
+    DOC-3 2026-05-30: admin-gated even though the side-effect is just
+    a 3-second-timeout outbound HTTP probe with no state change. The
+    rationale is rate-limiting: without auth, anyone on the LAN could
+    fire this endpoint in a tight loop to amplify load on the Slave
+    health endpoint or exhaust the master's request handler pool. The
+    Settings → Diagnostics panel is the only legitimate caller and
+    already lives behind the admin password.
+    """
     import requests as _http
     host = _slave_host()
     t0 = time.monotonic()

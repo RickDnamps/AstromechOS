@@ -560,7 +560,14 @@ def get_sounds():
 
 @audio_bp.post('/play')
 def play_sound():
-    """Plays a specific sound. Body: {"sound": "Happy001"}"""
+    """Plays a specific sound. Body: {"sound": "Happy001"}
+
+    LAN-open by design (2026-05-15 audit — see /volume:726 docstring
+    for the canonical rationale). Operator sound trigger, not a config
+    mutation. Sound name is allowlisted by _valid_sound() before any
+    side effect leaves the function, so the worst-case unauthenticated
+    request is "make the robot say something from its catalogue".
+    """
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     sound = body.get('sound', '').strip()
     if not sound:
@@ -577,7 +584,12 @@ def play_sound():
 
 @audio_bp.post('/random')
 def play_random():
-    """Plays a random sound. Body: {"category": "happy"}"""
+    """Plays a random sound. Body: {"category": "happy"}
+
+    LAN-open by design (2026-05-15 audit — same rationale as /play and
+    /volume:726). Operator UX. Category is allowlisted by
+    _valid_category() and refused if it has no sounds (L-3 below).
+    """
     body = (lambda _b: _b if isinstance(_b, dict) else {})(request.get_json(silent=True))
     category = body.get('category', 'happy').strip().lower()
     if not _valid_category(category):
@@ -638,7 +650,14 @@ def stream_sound_file(sound):
 
 @audio_bp.post('/stop')
 def stop_audio():
-    """Stops the current sound. L-1: timer cancel under _audio_state_lock
+    """Stops the current sound.
+
+    LAN-open by design (2026-05-15 audit — same rationale as /play,
+    /random, /volume:726). Anyone on the LAN should be able to silence
+    the robot without admin auth (operator-control endpoint, no config
+    mutation). The L-1 note below is about thread safety, not auth.
+
+    L-1: timer cancel under _audio_state_lock
     so a concurrent /play can't replace _play_timer between is_alive() and
     cancel() — would otherwise leave the new timer running while we
     clear audio_playing here, then the timer's _reset would fire later
