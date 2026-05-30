@@ -20,7 +20,15 @@
 
 **E-STOP overlay** : `position:fixed inset:0 pointer-events:none z-index:9999`, class `active` = red pulsing border, synced from `data.estop_active`. Prompt `.estop-prompt` à l'intérieur : titre rouge "EMERGENCY STOP ENGAGED" + sub "Press RESET E-STOP below to re-arm drive" (opacity contrôlée par le `.active` de l'overlay parent).
 
-**SERVICES HAT health** : dome HATs via `DomeServoDriver.hat_health()` (Master) · body+motor HAT + Screen via slave's port 5001 → `reg.slave_uart_health`.
+**SERVICES HAT health row** (chantier 2026-05-30, consolidated) : single row inside the SERVICES grid (slot ex-Dome/Body Servo/Body Motor rows, between BT Gamepad and Body Screen), rendered by `cockpitPanel._hatHealthRow(data)`. Left = layout summary `Master X HAT(s) · Slave Y HAT(s)` (from `data.hats.{master,slave}.hats[]`). Right = Orbitron status pill driven by **LIVE driver metrics** (`data.dome_hat_health[]` + `body_hat_health[]` + `motor_hat_health`, refreshed every `/status` tick): green `ALL HEALTHY` / red `⚠ N ERRORS` / red `⚠ COLLISION @…` (top priority, needs PCA9685 solder fix) / amber `⚠ DEGRADED — RESCAN`. Whole row clickable → Settings → HATs (per-HAT detail lives there: errors count, chip, address). The previous separate `<div id="ck-hardware-health">` widget + gray badge were dropped at the same commit. Backend sources : `reg.dome_servo.hat_health()` (Master direct) · `reg.slave_uart_health['body_hat_health' / 'motor_hat_health']` (Slave UART relay).
+
+**Cockpit clickable shortcuts** (chantier 2026-05-30) : every cockpit row is a clickable shortcut to its admin surface via the standard router so admin-gated panels naturally land on the password prompt (no bypass). Two helpers generate the inline onclick string :
+- `cockpitPanel._cockpitGoto(panel)` → Settings sub-panel (uses `switchTab('settings') + setTimeout(switchSettingsPanel(panel), 50ms)`)
+- `cockpitPanel._cockpitTab(tab)` → top-level tab (`switchTab('drive'|'audio'|'sequences'|'lights'|'choreo'|'settings')`)
+
+`_svcRow(label, cls, val, panel?)` has an optional 4th arg : when set, adds the onclick + `.cockpit-row-clickable` class (cursor pointer, subtle hover slide). Activity/Network rows that need HTML content (inline spans) build their own `<div>` manually with the same class + onclick.
+
+**Mapping verrouillé 2026-05-30** (16 clickable rows) : SERVICES → E-STOP → System · Bench Mode → VESC · UART → Diagnostics · VESC L/R → VESC · AstroPixels → Lights · Camera → Camera · BT Gamepad → Bluetooth · HAT health → HATs · Body Screen → System · Body Audio → Audio ; ACTIVITY → Choreo → tab `choreo` · Audio → tab `audio` · ALIVE → Behavior ; NETWORK → Master/Slave IP → Network · Version → Deploy. Toute nouvelle row cockpit doit avoir un mapping (sinon discoverability cassée).
 
 **JS syntax rule** : `StatusPoller` est un `class` (no trailing comma) · `cockpitPanel` est un object literal (trailing comma). Mixer = silent syntax error. **Toujours `node --check master/static/js/app.js` avant commit.**
 
