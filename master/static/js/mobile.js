@@ -19,11 +19,27 @@ let lastDriveT = 0;
 let lastDomeT  = 0;
 
 // ── API helper ────────────────────────────────────────────────
-function api(method, endpoint, body) {
+// Phase 1 chantier 2026-05-30:
+//  - opts.admin=true → inject X-Admin-Pw from the cached token. Mirrors the
+//    desktop adminGuard.getToken() pattern from app.js. Required for the
+//    @require_admin endpoints (e.g. /system/estop_reset, /bt/estop_reset).
+//  - _mobileAdminToken is module-scoped, in-memory only (never persisted),
+//    cleared on Child-Lock engagement and on any 401 we receive.
+let _mobileAdminToken = null;
+let _statusInFlight   = false;          // M3: poll-stacking guard
+let _serverKidsCap    = 0.5;            // M2: server-driven Kids speed cap (default matches main.cfg)
+let _adminPwResolve   = null;           // promise resolver for the admin modal flow
+let _hostDialogResolve = null;          // promise resolver for the host dialog flow
+
+function api(method, endpoint, body, opts) {
+  const headers = body ? { 'Content-Type': 'application/json' } : {};
+  if (opts && opts.admin && _mobileAdminToken) {
+    headers['X-Admin-Pw'] = _mobileAdminToken;
+  }
   return fetch(API_BASE + endpoint, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body:    body ? JSON.stringify(body) : undefined,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
   }).catch(() => null);
 }
 
@@ -59,8 +75,18 @@ let _choreoRunning  = false;
 let _choreoName     = '';
 
 setInterval(() => {
-  api('GET', '/status').then(r => r && r.json()).then(s => {
+  // M3: skip this tick if the previous /status is still in flight.
+  // On a flaky WiFi link the 1s interval would otherwise stack pending
+  // requests and eventually flood the network.
+  if (_statusInFlight) return;
+  _statusInFlight = true;
+  api('GET', '/status')
+    .then(r => { _statusInFlight = false; return r && r.json(); })
+    .then(s => {
     if (!s) return;
+    // M2: capture server-side Kids cap so _applyLockMode mirrors the
+    // operator-configured ceiling instead of a hardcoded 0.2.
+    if (typeof s.kids_speed_limit === 'number') _serverKidsCap = s.kids_speed_limit;
 
     _setInd('ind-hb',   s.heartbeat_ok);
     _setInd('ind-uart', s.uart_ready);
@@ -412,10 +438,93 @@ function triggerEstop() {
 }
 
 function resetEstop() {
-  api('POST', '/system/estop_reset');
-  api('POST', '/bt/estop_reset');
-  estopActive = false;
-  _applyEstopUI(false);
+  // H1+H2 fix 2026-05-30: /system/estop_reset and /bt/estop_reset are
+  // @require_admin server-side (status_bp.py:1174 + bt_bp.py:292 which
+  // delegates). The pre-fix mobile.js fired both as bare api() calls with
+  // no X-Admin-Pw header → both 401, RESET button silently broken.
+  //
+  // Flow: cached token → POST both with admin:true. No cached token →
+  // pop admin-modal, verify password, cache token, POST both. 401 on the
+  // POSTs (token revoked since cache) → clear cache + re-prompt once.
+  _withAdminToken('Reset E-STOP').then(token => {
+    if (!token) return;   // operator cancelled the modal
+    Promise.all([
+      api('POST', '/system/estop_reset', null, { admin: true }),
+      api('POST', '/bt/estop_reset',     null, { admin: true }),
+    ]).then(([r1, r2]) => {
+      const okSystem = r1 && r1.ok;
+      const okBt     = r2 && r2.ok;
+      if (okSystem || okBt) {
+        estopActive = false;
+        _applyEstopUI(false);
+        showToast('✓ E-STOP reset', 2000);
+        return;
+      }
+      const rejected = (r1 && r1.status === 401) || (r2 && r2.status === 401);
+      if (rejected) {
+        _mobileAdminToken = null;
+        showToast('⚠ Admin password rejected — try again', 3000);
+      } else {
+        showToast('⚠ E-STOP reset failed — check link', 3000);
+      }
+    });
+  });
+}
+
+// Resolves to the verified admin token (a string) once the operator types it
+// into the admin modal AND /settings/admin/verify returns 200. Resolves to
+// null on cancel. If we already have a cached token, resolves IMMEDIATELY
+// without showing the modal (UX: one prompt per session unlock window).
+function _withAdminToken(reason) {
+  if (_mobileAdminToken) return Promise.resolve(_mobileAdminToken);
+  return new Promise(resolve => {
+    _adminPwResolve = resolve;
+    const m = document.getElementById('admin-modal');
+    const r = document.getElementById('admin-modal-reason');
+    const i = document.getElementById('admin-pwd');
+    const e = document.getElementById('admin-pwd-err');
+    if (r) r.textContent = reason || 'Admin password required';
+    if (e) e.classList.add('hidden');
+    if (i) i.value = '';
+    if (m) m.classList.remove('hidden');
+    setTimeout(() => i?.focus(), 80);
+  });
+}
+
+function submitAdminPwd() {
+  const pwd = document.getElementById('admin-pwd')?.value || '';
+  if (!pwd) return;
+  // Server-side validation via the same /settings/admin/verify endpoint
+  // the desktop adminGuard uses. Returns 200 if password matches local.cfg
+  // [admin] password (or the 'astro' fallback), 401 on mismatch, 429 on
+  // rate-limit lockout (10 attempts / 60s → 5min lockout per IP).
+  api('POST', '/settings/admin/verify', { password: pwd }).then(r => {
+    if (r && r.ok) {
+      _mobileAdminToken = pwd;
+      closeAdminModal();
+      const resolve = _adminPwResolve;
+      _adminPwResolve = null;
+      if (resolve) resolve(pwd);
+      return;
+    }
+    const e = document.getElementById('admin-pwd-err');
+    if (e) {
+      e.classList.remove('hidden');
+      e.textContent = (r && r.status === 429)
+        ? 'Locked out — try again later'
+        : (r ? 'Incorrect password' : 'Network error');
+    }
+    const i = document.getElementById('admin-pwd');
+    if (i) { i.value = ''; i.focus(); }
+    if (window.AndroidBridge) AndroidBridge.vibrate(80);
+  });
+}
+
+function closeAdminModal() {
+  document.getElementById('admin-modal')?.classList.add('hidden');
+  const resolve = _adminPwResolve;
+  _adminPwResolve = null;
+  if (resolve) resolve(null);   // signal cancellation
 }
 
 // ── Lock — cycle Normal(0) → Kids(1) → ChildLock(2) ──────────
@@ -451,9 +560,14 @@ function _applyLockMode(sendApi) {
   if (lockMode === 0) {
     speedLimit = 1.0;
   } else if (lockMode === 1) {
-    speedLimit = 0.2;
+    // M2: server-driven kids cap (was hardcoded 0.2 — operator-changed cap
+    // wasn't reflected). _serverKidsCap is updated on every /status tick.
+    speedLimit = _serverKidsCap;
   } else {
     speedLimit = 0;
+    // Security hygiene: drop any cached admin token when ChildLock engages.
+    // Forces the next E-STOP reset / admin action to re-prompt for password.
+    _mobileAdminToken = null;
     jsLeft.reset(); jsRight.reset();
     api('POST', '/motion/stop');
   }
@@ -642,13 +756,25 @@ function _updateChoreoBar() {
 }
 
 function playChoreo(name, label) {
+  // M4: optimistic UI — set running state IMMEDIATELY so the player bar
+  // and row highlight react to the click without waiting for the 1s
+  // /status poll. Rollback on server refusal.
+  const prevRunning = _choreoRunning;
+  const prevName    = _choreoName;
+  _choreoRunning = true;
+  _choreoName    = name;
+  _updateChoreoBar();
   api('POST', '/choreo/play', { name }).then(r => r && r.json()).then(d => {
-    if (d) {
-      _choreoRunning = true;
-      _choreoName    = name;
+    if (!d) {
+      _choreoRunning = prevRunning;
+      _choreoName    = prevName;
       _updateChoreoBar();
     }
-  }).catch(() => {});
+  }).catch(() => {
+    _choreoRunning = prevRunning;
+    _choreoName    = prevName;
+    _updateChoreoBar();
+  });
 }
 
 function stopChoreo() {
@@ -669,15 +795,44 @@ function teecesText() {
 function teecesPS(mode) { api('POST', '/teeces/psi', { mode }); }
 
 // ── Host dialog ───────────────────────────────────────────────
+// M5 fix 2026-05-30: replaced native prompt() (which some Android WebView
+// OEMs block) with an in-DOM modal that mirrors the lock-modal shape.
 function showHostDialog() {
-  if (window.AndroidBridge) {
-    const h = prompt('AstromechOS Master IP:', AndroidBridge.getHost());
-    if (h?.trim()) {
+  if (!window.AndroidBridge) return;
+  const current = AndroidBridge.getHost();
+  _promptHostModal(current).then(h => {
+    if (h && h.trim()) {
       AndroidBridge.setHost(h.trim());
       API_BASE = 'http://' + h.trim() + ':5000';
       _updateHostLabel();
     }
-  }
+  });
+}
+
+function _promptHostModal(current) {
+  return new Promise(resolve => {
+    _hostDialogResolve = resolve;
+    const m = document.getElementById('host-modal');
+    const i = document.getElementById('host-input');
+    if (i) i.value = current || '';
+    if (m) m.classList.remove('hidden');
+    setTimeout(() => i?.focus(), 80);
+  });
+}
+
+function submitHostDialog() {
+  const v = document.getElementById('host-input')?.value || '';
+  closeHostDialog();
+  const resolve = _hostDialogResolve;
+  _hostDialogResolve = null;
+  if (resolve) resolve(v);
+}
+
+function closeHostDialog() {
+  document.getElementById('host-modal')?.classList.add('hidden');
+  const resolve = _hostDialogResolve;
+  _hostDialogResolve = null;
+  if (resolve) resolve(null);
 }
 
 function _updateHostLabel() {
@@ -744,8 +899,17 @@ window.addEventListener('load', () => {
   }
   _updateHostLabel();
 
-  const vs = document.getElementById('vol-slider');
-  if (vs) document.getElementById('vol-pct').textContent = vs.value + '%';
+  // M1: pull persisted volume from the server instead of using the hardcoded
+  // value="79" stamped into the HTML. Without this the first slider drag
+  // overwrites the operator-saved volume with a stale 79%.
+  api('GET', '/audio/volume').then(r => r && r.json()).then(d => {
+    if (d && typeof d.volume === 'number') {
+      const s = document.getElementById('vol-slider');
+      const p = document.getElementById('vol-pct');
+      if (s) s.value = Math.round(d.volume);
+      if (p) p.textContent = Math.round(d.volume) + '%';
+    }
+  }).catch(() => {});
 
   // Init lock visual (data-lock = 0)
   _applyLockMode(false);

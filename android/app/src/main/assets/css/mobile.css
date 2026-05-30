@@ -949,6 +949,57 @@ body { display: flex; flex-direction: column; }
 #lock-modal-btns button:last-child  { background: var(--danger); color: #fff; }
 #lock-modal-btns button:active { filter: brightness(.8); }
 
+/* ── Admin pw modal + Host dialog (2026-05-30) — share lock-modal shape,
+   amber accent for "auth required" / "config" semantics vs red ChildLock ─ */
+#admin-modal, #host-modal {
+  position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,.82);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(3px);
+}
+#admin-modal.hidden, #host-modal.hidden { display: none; }
+#admin-modal-box, #host-modal-box {
+  background: var(--bg2);
+  border: 1px solid rgba(255,170,68,.5);
+  border-radius: 12px;
+  padding: 26px 22px;
+  width: 82%; max-width: 300px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+#admin-modal-title, #host-modal-title {
+  font-size: 10px; font-weight: bold; letter-spacing: .18em;
+  color: #ffaa44; text-align: center;
+}
+.lock-modal-reason {
+  font-size: 11px; color: var(--text-dim, #888);
+  text-align: center; line-height: 1.4;
+}
+#admin-pwd, #host-input {
+  background: #060a14;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: monospace; font-size: 15px;
+  padding: 10px; width: 100%;
+}
+#admin-pwd:focus, #host-input:focus { outline: none; border-color: #ffaa44; }
+#admin-pwd-err {
+  font-size: 9px; color: var(--danger); text-align: center;
+}
+#admin-modal-btns, #host-modal-btns { display: flex; gap: 10px; }
+#admin-modal-btns button, #host-modal-btns button {
+  flex: 1; padding: 10px; border-radius: 8px;
+  font-family: monospace; font-size: 11px; font-weight: bold;
+  cursor: pointer; border: none; transition: filter .15s;
+}
+#admin-modal-btns button:first-child, #host-modal-btns button:first-child {
+  background: #1a2438; color: var(--text-dim);
+}
+#admin-modal-btns button:last-child, #host-modal-btns button:last-child {
+  background: #ffaa44; color: #000;
+}
+#admin-modal-btns button:active, #host-modal-btns button:active { filter: brightness(.8); }
+
 /* ── Alert toast  z-60 ────────────────────────────────────── */
 
 #alert-toast {

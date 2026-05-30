@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0,
                maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AstromechOS</title>
-  <link rel="stylesheet" href="/static/css/mobile.css">
+  <link rel="stylesheet" href="css/mobile.css">
 </head>
 <body>
 
@@ -92,6 +92,35 @@
     </div>
   </div>
 
+  <!-- ── Admin password modal (E-STOP reset + future admin actions) ── -->
+  <div id="admin-modal" class="hidden" onclick="if(event.target===this)closeAdminModal()">
+    <div id="admin-modal-box">
+      <div id="admin-modal-title">ADMIN PASSWORD</div>
+      <div id="admin-modal-reason" class="lock-modal-reason"></div>
+      <input type="password" id="admin-pwd" placeholder="Password"
+             onkeydown="if(event.key==='Enter')submitAdminPwd()">
+      <div id="admin-pwd-err" class="hidden">Incorrect password</div>
+      <div id="admin-modal-btns">
+        <button onclick="closeAdminModal()">CANCEL</button>
+        <button onclick="submitAdminPwd()">UNLOCK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Host dialog (replaces native prompt()) ── -->
+  <div id="host-modal" class="hidden" onclick="if(event.target===this)closeHostDialog()">
+    <div id="host-modal-box">
+      <div id="host-modal-title">MASTER HOST</div>
+      <input type="text" id="host-input" placeholder="192.168.4.1"
+             inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false"
+             onkeydown="if(event.key==='Enter')submitHostDialog()">
+      <div id="host-modal-btns">
+        <button onclick="closeHostDialog()">CANCEL</button>
+        <button onclick="submitHostDialog()">SAVE</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Drawer backdrop ────────────────────────── -->
   <div id="drawer-backdrop" class="hidden" onclick="closeDrawer()"></div>
 
@@ -155,6 +184,6 @@
     </div><!-- /drawer-body -->
   </div><!-- /bottom-drawer -->
 
-  <script src="/static/js/mobile.js"></script>
+  <script src="js/mobile.js"></script>
 </body>
 </html>
