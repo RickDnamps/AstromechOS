@@ -476,17 +476,38 @@ function closeLockModal() {
 
 function submitLockPwd() {
   const pwd = document.getElementById('lock-pwd')?.value || '';
-  if (pwd === 'deetoo') {
-    closeLockModal();
-    lockMode = 0;
-    _applyLockMode(true);
-  } else {
-    const err = document.getElementById('lock-pwd-err');
-    if (err) err.classList.remove('hidden');
-    const i = document.getElementById('lock-pwd');
-    if (i) { i.value = ''; i.focus(); }
-    if (window.AndroidBridge) AndroidBridge.vibrate(80);
-  }
+  // CR-1 fix 2026-05-30: Lock Mode unlock now validates server-side via
+  // POST /lock/unlock. The desktop app.js path was server-side-ified by
+  // the 2026-05-15 audit chantier, but mobile.js was missed — leaving a
+  // hardcoded 'deetoo' check that ALSO no longer matched the current
+  // default 'astro'. Mirrors app.js:1751-1768.
+  //   200 OK   → server already set mode=0, mirror locally
+  //   401      → wrong password (server-side hmac check), shake + error
+  //   429      → rate-limit lockout, retry-after message
+  //   network  → res === null, generic visual error
+  api('POST', '/lock/unlock', { password: pwd, mode: 0 })
+    .then(res => {
+      if (res && res.ok) {
+        closeLockModal();
+        lockMode = 0;
+        _applyLockMode(true);
+        return;
+      }
+      const err = document.getElementById('lock-pwd-err');
+      if (err) {
+        err.classList.remove('hidden');
+        if (res && res.status === 429) {
+          err.textContent = 'Locked out — try again later';
+        } else if (!res) {
+          err.textContent = 'Network error';
+        } else {
+          err.textContent = 'Incorrect password';
+        }
+      }
+      const i = document.getElementById('lock-pwd');
+      if (i) { i.value = ''; i.focus(); }
+      if (window.AndroidBridge) AndroidBridge.vibrate(80);
+    });
 }
 
 // ── Audio ─────────────────────────────────────────────────────
