@@ -5980,24 +5980,12 @@ body[data-lock-mode="2"] .drive-wrapper {
                        animation: hat-critical-pulse 1.4s ease-in-out infinite; }
 .hat-status-unknown  { color: var(--text-dim, #888); background: rgba(136, 136, 136, 0.10); }
 
-/* Cockpit Hardware Health — consolidated single-row layout (2026-05-30).
- * Layout summary "Master X · Slave Y" stays left; live status pill
- * ("ALL HEALTHY" green / "⚠ N ERRORS" red / "⚠ COLLISION @…" red)
- * pushes to the far right. The legacy gray badge was dropped at the
- * same commit. */
-.cockpit-hw-summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-}
-.ck-hw-left {
-  flex: 0 1 auto;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* Cockpit HAT health row — single-line live-driven status inside the
+ * SERVICES grid (chantier 2026-05-30, refined 2026-05-30). The row uses
+ * the standard .cockpit-row flex (label left, status pill right) so it
+ * lines up perfectly with its neighbours; the status pill below is
+ * styled distinctively (Orbitron + glow) so it reads as the live
+ * health verdict, not just another column value. */
 .ck-hw-right {
   flex: 0 0 auto;
   margin-left: auto;
@@ -6011,6 +5999,21 @@ body[data-lock-mode="2"] .drive-wrapper {
 .ck-hw-status-ok   { color: var(--ok,   #4caf50); text-shadow: 0 0 4px rgba(76,175,80,0.45); }
 .ck-hw-status-err  { color: var(--err,  #e74c3c); text-shadow: 0 0 6px rgba(231,76,60,0.55); }
 .ck-hw-status-warn { color: var(--amber,#ffaa44); }
+
+/* Clickable cockpit row — every cockpit row that routes to a Settings
+ * sub-panel or a top-level tab gets this. Subtle hover affordance so
+ * the operator sees it's actionable without it screaming. */
+.cockpit-row-clickable {
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+.cockpit-row-clickable:hover {
+  background: rgba(255,255,255,0.06);
+  transform: translateX(2px);
+}
+body.theme-light .cockpit-panel .cockpit-row-clickable:hover {
+  background: rgba(8,73,214,0.10);
+}
 
 @keyframes hat-critical-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.55); }

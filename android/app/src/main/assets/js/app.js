@@ -9158,7 +9158,63 @@ const cockpitPanel = {
     if (ver) ver.textContent = 'v' + (data.version || '?');
   },
 
-  _svcRow(label, cls, val) {
+  // Inline onclick string for cockpit rows that should jump to a Settings
+  // sub-panel. Uses the standard router (switchTab + switchSettingsPanel)
+  // so admin-gated panels naturally land on the password prompt rather
+  // than bypassing it. The 50ms setTimeout lets switchTab finish mounting
+  // the Settings tab DOM before the sub-panel switch fires.
+  _cockpitGoto(panel) {
+    return `if(typeof switchTab==='function'){switchTab('settings');setTimeout(()=>switchSettingsPanel&&switchSettingsPanel('${panel}'),50);} cockpitPanel.close();`;
+  },
+
+  // Inline onclick string for cockpit rows that should jump to a top-level
+  // application tab (drive, audio, sequences, lights, choreo, settings).
+  // Same admin-guard behavior as _cockpitGoto: switchTab() itself triggers
+  // the password modal when the tab is protected and the session is locked.
+  _cockpitTab(tab) {
+    return `if(typeof switchTab==='function'){switchTab('${tab}');} cockpitPanel.close();`;
+  },
+
+  // Single-line live-driven HAT health row, embedded inside the SERVICES
+  // grid at the exact vertical position where the 3 legacy per-HAT text
+  // rows used to sit (Dome Servo / Body Servo / Body Motor). Same flex
+  // shape as _svcRow, but the right-hand side is a status pill with
+  // Orbitron + theme-color shadow instead of the normal cockpit-row-val.
+  _hatHealthRow(data) {
+    const onClick = this._cockpitGoto('hats');
+    const h = data.hats;
+    if (!h || typeof h !== 'object') {
+      return `<div class="cockpit-row cockpit-row-clickable" onclick="${onClick}" title="Click for details (Settings → HATs)"><span class="cockpit-row-lbl">No HAT data yet</span><span class="ck-hw-right ck-hw-status-warn">— OFFLINE</span></div>`;
+    }
+    const mCount = (h.master && h.master.hats || []).length;
+    const sCount = (h.slave  && h.slave.hats  || []).length;
+    const domeErrors = (data.dome_hat_health || []).reduce((n, x) => n + (x && x.ok ? 0 : 1), 0);
+    const bodyErrors = (data.body_hat_health || []).reduce((n, x) => n + (x && x.ok ? 0 : 1), 0);
+    const motorErr   = (data.motor_hat_health && !data.motor_hat_health.ok) ? 1 : 0;
+    const liveErrors = domeErrors + bodyErrors + motorErr;
+    const collisions = [];
+    for (const side of ['master', 'slave']) {
+      for (const hat of ((h[side] && h[side].hats) || [])) {
+        if (hat.collision || hat.chip === 'collision') collisions.push(`${side} ${hat.addr}`);
+      }
+    }
+    const left = `Master ${mCount} HAT${mCount === 1 ? '' : 's'} · Slave ${sCount} HAT${sCount === 1 ? '' : 's'}`;
+    let right;
+    if (collisions.length) {
+      right = `<span class="ck-hw-right ck-hw-status-err">⚠ COLLISION @ ${escapeHtml(collisions.join(', '))}</span>`;
+    } else if (liveErrors > 0) {
+      right = `<span class="ck-hw-right ck-hw-status-err">⚠ ${liveErrors} ERROR${liveErrors === 1 ? '' : 'S'}</span>`;
+    } else if (h.aggregate_status === 'degraded') {
+      right = '<span class="ck-hw-right ck-hw-status-warn">⚠ DEGRADED — RESCAN</span>';
+    } else if (h.aggregate_status === 'ready') {
+      right = '<span class="ck-hw-right ck-hw-status-ok">ALL HEALTHY</span>';
+    } else {
+      right = '<span class="ck-hw-right ck-hw-status-warn">— UNKNOWN</span>';
+    }
+    return `<div class="cockpit-row cockpit-row-clickable" onclick="${onClick}" title="Click for details (Settings → HATs)"><span class="cockpit-row-lbl">${escapeHtml(left)}</span>${right}</div>`;
+  },
+
+  _svcRow(label, cls, val, panel) {
     // B-40 (audit 2026-05-15): `label` includes user-supplied
     // master_location / slave_location strings (written via
     // /settings/robot_locations, now admin-gated by B-10 but still
@@ -9168,7 +9224,9 @@ const cockpitPanel = {
     // doesn't need escaping. The `val` strings here are all internal
     // constants + numeric ids today but escape them anyway as
     // defence-in-depth — a future code path could feed user data in.
-    return `<div class="cockpit-row"><span class="cockpit-row-lbl">${escapeHtml(label)}</span><span class="cockpit-row-val cockpit-${cls}">${escapeHtml(val)}</span></div>`;
+    const rowCls = panel ? 'cockpit-row cockpit-row-clickable' : 'cockpit-row';
+    const click  = panel ? ` onclick="${this._cockpitGoto(panel)}" title="Click for details (Settings → ${panel})"` : '';
+    return `<div class="${rowCls}"${click}><span class="cockpit-row-lbl">${escapeHtml(label)}</span><span class="cockpit-row-val cockpit-${cls}">${escapeHtml(val)}</span></div>`;
   },
 
   _updateServices(data) {
@@ -9192,29 +9250,27 @@ const cockpitPanel = {
     const benchCls = data.vesc_bench_mode ? 'warn' : 'dim';
     const benchVal = data.vesc_bench_mode ? '⚠ ON' : '— off';
     svc.innerHTML =
-      this._svcRow('E-STOP',     estopCls, estopVal) +
-      this._svcRow('Bench Mode', benchCls, benchVal) +
-      this._svcRow('UART',       uartCls,  uartVal) +
-      this._svcRow('VESC L',     vescLCls, vescLVal) +
-      this._svcRow('VESC R',     vescRCls, vescRVal) +
+      this._svcRow('E-STOP',     estopCls, estopVal, 'system') +
+      this._svcRow('Bench Mode', benchCls, benchVal, 'vesc') +
+      this._svcRow('UART',       uartCls,  uartVal,  'diagnostics') +
+      this._svcRow('VESC L',     vescLCls, vescLVal, 'vesc') +
+      this._svcRow('VESC R',     vescRCls, vescRVal, 'vesc') +
       this._svcRow(data.lights_backend === 'astropixels' ? 'AstroPixels' : 'Teeces',
-                   data.teeces_ready ? 'ok' : 'dim', data.teeces_ready ? '✓ OK' : '— N/A') +
+                   data.teeces_ready ? 'ok' : 'dim', data.teeces_ready ? '✓ OK' : '— N/A', 'lights') +
       this._svcRow('Camera',     data.camera_found ? (data.camera_active ? 'ok' : 'dim') : 'warn',
-                   data.camera_found ? (data.camera_active ? '✓ streaming' : '✓ found') : '⚠ not found') +
-      this._svcRow('BT Gamepad', btCls, btVal) +
-      // HAT health rows moved to the consolidated HARDWARE HEALTH widget
-      // (chantier 2026-05-30, post zero-config). Per-HAT detail
-      // (errors count, chip, address) lives under Settings → HATs.
+                   data.camera_found ? (data.camera_active ? '✓ streaming' : '✓ found') : '⚠ not found', 'camera') +
+      this._svcRow('BT Gamepad', btCls, btVal, 'bluetooth') +
+      this._hatHealthRow(data) +
       (data.display_ready != null
         ? this._svcRow(`${data.slave_location} Screen`,
                        data.display_ready ? 'ok' : 'warn',
-                       data.display_ready ? `✓ ${data.display_port || 'OK'}` : '⚠ not connected')
-        : this._svcRow(`${data.slave_location} Screen`, 'dim', '— N/A')) +
+                       data.display_ready ? `✓ ${data.display_port || 'OK'}` : '⚠ not connected', 'system')
+        : this._svcRow(`${data.slave_location} Screen`, 'dim', '— N/A', 'system')) +
       (data.audio_ready != null
         ? this._svcRow(`${data.slave_location} Audio`,
                        data.audio_ready ? 'ok' : 'warn',
-                       data.audio_ready ? '✓ OK' : '⚠ disabled')
-        : this._svcRow(`${data.slave_location} Audio`, 'dim', '— N/A'));
+                       data.audio_ready ? '✓ OK' : '⚠ disabled', 'audio')
+        : this._svcRow(`${data.slave_location} Audio`, 'dim', '— N/A', 'audio'));
   },
 
   _updateActivity(data) {
@@ -9231,19 +9287,24 @@ const cockpitPanel = {
     const aliveVal = data.alive_enabled
       ? '<span class="cockpit-ok">ON</span>'
       : '<span class="cockpit-dim">OFF</span>';
+    const goChoreo = this._cockpitTab('choreo');
+    const goAudio  = this._cockpitTab('audio');
+    const goAlive  = this._cockpitGoto('behavior');
     act.innerHTML =
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">Choreo</span><span class="cockpit-row-val">${choreoVal}</span></div>` +
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">Audio</span><span class="cockpit-row-val">${audioVal}</span></div>` +
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">ALIVE</span><span class="cockpit-row-val">${aliveVal}</span></div>`;
+      `<div class="cockpit-row cockpit-row-clickable" onclick="${goChoreo}" title="Click for details (Choreographies)"><span class="cockpit-row-lbl">Choreo</span><span class="cockpit-row-val">${choreoVal}</span></div>` +
+      `<div class="cockpit-row cockpit-row-clickable" onclick="${goAudio}" title="Click for details (Audio)"><span class="cockpit-row-lbl">Audio</span><span class="cockpit-row-val">${audioVal}</span></div>` +
+      `<div class="cockpit-row cockpit-row-clickable" onclick="${goAlive}" title="Click for details (Settings → Behavior)"><span class="cockpit-row-lbl">ALIVE</span><span class="cockpit-row-val">${aliveVal}</span></div>`;
   },
 
   _updateNetwork(data) {
     const net = el('ck-network');
     if (!net) return;
+    const goNet    = this._cockpitGoto('network');
+    const goDeploy = this._cockpitGoto('deploy');
     net.innerHTML =
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">Master</span><span class="cockpit-row-val cockpit-ok" style="font-size:10px">wlan0: ${escapeHtml(data.master_wlan0 || '—')} &nbsp;|&nbsp; wlan1: ${escapeHtml(data.master_wlan1 || '—')}</span></div>` +
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">Slave</span><span class="cockpit-row-val cockpit-ok">${escapeHtml(data.slave_host || '—')}</span></div>` +
-      `<div class="cockpit-row"><span class="cockpit-row-lbl">Version</span><span class="cockpit-row-val cockpit-dim">v${escapeHtml(String(data.version || '?'))}</span></div>`;
+      `<div class="cockpit-row cockpit-row-clickable" onclick="${goNet}" title="Click for details (Settings → Network)"><span class="cockpit-row-lbl">Master</span><span class="cockpit-row-val cockpit-ok" style="font-size:10px">wlan0: ${escapeHtml(data.master_wlan0 || '—')} &nbsp;|&nbsp; wlan1: ${escapeHtml(data.master_wlan1 || '—')}</span></div>` +
+      `<div class="cockpit-row cockpit-row-clickable" onclick="${goNet}" title="Click for details (Settings → Network)"><span class="cockpit-row-lbl">Slave</span><span class="cockpit-row-val cockpit-ok">${escapeHtml(data.slave_host || '—')}</span></div>` +
+      `<div class="cockpit-row cockpit-row-clickable" onclick="${goDeploy}" title="Click for details (Settings → Deploy)"><span class="cockpit-row-lbl">Version</span><span class="cockpit-row-val cockpit-dim">v${escapeHtml(String(data.version || '?'))}</span></div>`;
   },
 
   updateBtn(data) {
