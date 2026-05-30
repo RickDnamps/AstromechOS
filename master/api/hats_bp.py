@@ -352,6 +352,18 @@ def hats_remap():
             with os.fdopen(fd, 'w', encoding='utf-8') as f:
                 _json.dump(new_mapping, f, indent=2)
                 f.write('\n')
+                # Phase 3 fix 2026-05-30: missing fsync — a power cut
+                # between the json.dump returning and the inode flush
+                # left an empty config_mapping.json on reboot. HAT
+                # detection re-scans and regenerates eventually, but
+                # the brief window loses the operator-edited identity
+                # ↔ address remap until then. Match the pattern used
+                # by write_cfg_atomic / _atomic_write_json elsewhere.
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except OSError:
+                    pass
             os.replace(tmp, str(out_path))
             try:
                 os.chmod(str(out_path), 0o644)

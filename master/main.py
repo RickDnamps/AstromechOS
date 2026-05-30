@@ -485,6 +485,13 @@ def main() -> None:
             except Exception as e:
                 log.warning("shutdown: %s cleanup failed: %s", label, e)
 
+        # Phase 3 fix 2026-05-30: stop ChoreoPlayer FIRST. Its worker
+        # thread + scheduled timers emit servo/UART/teeces commands; if
+        # we tear those down first (uart.stop / teeces.shutdown / servo
+        # .shutdown), the in-flight timer callbacks crash with
+        # AttributeError on torn-down singletons. Stopping the player
+        # first lets it cancel its own timers under its internal locks.
+        _safe("choreo", reg.choreo.stop if reg.choreo else None)
         _safe("uart", uart.stop)
         _safe("teeces", teeces.shutdown)
         # Phase 2: reg.vesc.shutdown() / reg.dome.shutdown()

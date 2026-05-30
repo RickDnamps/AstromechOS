@@ -365,6 +365,17 @@ def _run_restore(bck_path):
                             except OSError:
                                 pass
                         os.replace(tmp, tgt)
+                        # Phase 3 fix 2026-05-30: local.cfg contains plain-
+                        # text admin password + WPA-PSK creds. Restore path
+                        # was missing the chmod 0o600 that write_cfg_atomic
+                        # always applies, so a restore under a permissive
+                        # umask could leave the file world-readable to
+                        # other Linux users on the Pi (defense in depth —
+                        # only matters if the Pi gets a second OS user).
+                        try:
+                            os.chmod(tgt, 0o600)
+                        except OSError:
+                            pass
                     else:
                         tmp = tgt + '.tmp'
                         shutil.copy2(full, tmp)
