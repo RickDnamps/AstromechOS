@@ -9165,58 +9165,69 @@ const cockpitPanel = {
     this._updateAlerts(data);
   },
 
-  // Phase E 2026-05-28 — Hardware Health widget. Reads /status.hats
-  // (single source of truth, populated by hats_bp.hats_payload()).
-  // Green / amber / red badge + concise summary. CRITICAL pulses.
+  // Consolidated Hardware Health row (chantier 2026-05-30, post zero-config
+  // HATs). Single-line flex layout: layout summary on the left ("Master 1
+  // HAT · Slave 2 HATs"), live status pill on the right ("ALL HEALTHY" in
+  // green / "⚠ N ERRORS" in red / "⚠ COLLISION @…" in red). The legacy
+  // per-HAT rows in SERVICES + the standalone gray badge were dropped at
+  // the same commit — the per-HAT detail moved to Settings → HATs, where
+  // the operator already goes when something is wrong.
+  //
+  // The status text is driven by the LIVE driver metrics
+  // (data.dome_hat_health[], data.body_hat_health[], data.motor_hat_health)
+  // which the master driver + slave UART relay refresh on every /status
+  // tick — so a HAT that drifts/unplugs surfaces instantly, instead of
+  // waiting for a manual rescan. Collisions still come from the hats
+  // payload (only place that detects them) and take top priority because
+  // they require a physical solder-jumper fix.
   _updateHardwareHealth(data) {
-    const badge   = el('ck-hw-badge');
     const summary = el('ck-hw-summary');
     const wrap    = el('ck-hardware-health');
-    if (!badge || !summary || !wrap) return;
+    if (!summary || !wrap) return;
     const h = data.hats;
     if (!h || typeof h !== 'object') {
-      badge.textContent = 'unknown';
-      badge.className   = 'hat-status-badge hat-status-unknown';
-      summary.textContent = 'No HAT data yet — open Settings → HATs to rescan.';
+      summary.innerHTML = '<span class="ck-hw-left">No HAT data yet</span>'
+                        + '<span class="ck-hw-right ck-hw-status-warn">— OFFLINE</span>';
       wrap.classList.remove('cockpit-hw-critical');
       return;
     }
-    const agg = h.aggregate_status || 'unknown';
-    badge.textContent = agg;
-    badge.className   = 'hat-status-badge hat-status-' + agg;
-
     const mCount = (h.master && h.master.hats || []).length;
     const sCount = (h.slave  && h.slave.hats  || []).length;
-    const mPresent = !!(h.master && h.master.present);
-    const sPresent = !!(h.slave  && h.slave.present);
 
-    // Collisions list for the summary line (high-signal info).
+    // LIVE driver errors — top priority, refreshed on every tick.
+    const domeErrors = (data.dome_hat_health || []).reduce((n, x) => n + (x && x.ok ? 0 : 1), 0);
+    const bodyErrors = (data.body_hat_health || []).reduce((n, x) => n + (x && x.ok ? 0 : 1), 0);
+    const motorErr   = (data.motor_hat_health && !data.motor_hat_health.ok) ? 1 : 0;
+    const liveErrors = domeErrors + bodyErrors + motorErr;
+
+    // Collisions come from the hats payload (only source that detects them).
     const collisions = [];
     for (const side of ['master', 'slave']) {
       for (const hat of ((h[side] && h[side].hats) || [])) {
         if (hat.collision || hat.chip === 'collision') collisions.push(`${side} ${hat.addr}`);
       }
     }
+
+    const left = `Master ${mCount} HAT${mCount === 1 ? '' : 's'} · Slave ${sCount} HAT${sCount === 1 ? '' : 's'}`;
+    let right;
     if (collisions.length) {
-      summary.textContent = `⚠ Collision @ ${collisions.join(', ')} — re-jumper PCA9685 (A0/A1/A2).`;
+      right = `<span class="ck-hw-right ck-hw-status-err">⚠ COLLISION @ ${collisions.join(', ')}</span>`;
       wrap.classList.add('cockpit-hw-critical');
-    } else if (agg === 'ready') {
-      summary.textContent = `Master ${mCount} HAT${mCount === 1 ? '' : 's'} · Slave ${sCount} HAT${sCount === 1 ? '' : 's'} — all healthy.`;
+    } else if (liveErrors > 0) {
+      right = `<span class="ck-hw-right ck-hw-status-err">⚠ ${liveErrors} ERROR${liveErrors === 1 ? '' : 'S'}</span>`;
+      wrap.classList.add('cockpit-hw-critical');
+    } else if (h.aggregate_status === 'degraded') {
+      right = '<span class="ck-hw-right ck-hw-status-warn">⚠ DEGRADED — RESCAN</span>';
       wrap.classList.remove('cockpit-hw-critical');
-    } else if (agg === 'degraded') {
-      const parts = [];
-      if (!mPresent) parts.push('Master: no scan');
-      else if (!mCount) parts.push('Master: no HAT detected');
-      if (!sPresent) parts.push('Slave: no scan');
-      else if (!sCount) parts.push('Slave: no HAT detected');
-      summary.textContent = parts.length
-        ? parts.join(' · ') + ' — open Settings → HATs to rescan.'
-        : 'Degraded — open Settings → HATs to investigate.';
+    } else if (h.aggregate_status === 'ready') {
+      right = '<span class="ck-hw-right ck-hw-status-ok">ALL HEALTHY</span>';
       wrap.classList.remove('cockpit-hw-critical');
     } else {
-      summary.textContent = 'Hardware status unknown.';
+      right = '<span class="ck-hw-right ck-hw-status-warn">— UNKNOWN</span>';
       wrap.classList.remove('cockpit-hw-critical');
     }
+
+    summary.innerHTML = `<span class="ck-hw-left">${left}</span>${right}`;
   },
 
   _updateVitals(data) {
@@ -9359,22 +9370,9 @@ const cockpitPanel = {
       this._svcRow('Camera',     data.camera_found ? (data.camera_active ? 'ok' : 'dim') : 'warn',
                    data.camera_found ? (data.camera_active ? '✓ streaming' : '✓ found') : '⚠ not found') +
       this._svcRow('BT Gamepad', btCls, btVal) +
-      (Array.isArray(data.dome_hat_health) && data.dome_hat_health.length > 0
-        ? data.dome_hat_health.map(h =>
-            this._svcRow(`${data.master_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? '✓ OK' : `⚠ ${h.errors} errors`)
-          ).join('')
-        : this._svcRow(`${data.master_location} Servo`, data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A')
-      ) +
-      (Array.isArray(data.body_hat_health) && data.body_hat_health.length > 0
-        ? data.body_hat_health.map(h =>
-            this._svcRow(`${data.slave_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? '✓ OK' : `⚠ ${h.errors} errors`)
-          ).join('')
-        : this._svcRow(`${data.slave_location} Servo`, data.servo_ready ? 'ok' : 'dim', data.servo_ready ? '✓ OK' : '— N/A')
-      ) +
-      (data.motor_hat_health
-        ? this._svcRow(`${data.slave_location} Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
-                       data.motor_hat_health.ok ? '✓ OK' : '✗ not responding')
-        : '') +
+      // HAT health rows moved to the consolidated HARDWARE HEALTH widget
+      // (chantier 2026-05-30, post zero-config). Per-HAT detail
+      // (errors count, chip, address) lives under Settings → HATs.
       (data.display_ready != null
         ? this._svcRow(`${data.slave_location} Screen`,
                        data.display_ready ? 'ok' : 'warn',

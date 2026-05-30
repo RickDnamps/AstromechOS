@@ -9202,22 +9202,9 @@ const cockpitPanel = {
       this._svcRow('Camera',     data.camera_found ? (data.camera_active ? 'ok' : 'dim') : 'warn',
                    data.camera_found ? (data.camera_active ? '✓ streaming' : '✓ found') : '⚠ not found') +
       this._svcRow('BT Gamepad', btCls, btVal) +
-      (Array.isArray(data.dome_hat_health) && data.dome_hat_health.length > 0
-        ? data.dome_hat_health.map(h =>
-            this._svcRow(`${data.master_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? '✓ OK' : `⚠ ${h.errors} errors`)
-          ).join('')
-        : this._svcRow(`${data.master_location} Servo`, data.dome_servo_ready ? 'ok' : 'dim', data.dome_servo_ready ? '✓ OK' : '— N/A')
-      ) +
-      (Array.isArray(data.body_hat_health) && data.body_hat_health.length > 0
-        ? data.body_hat_health.map(h =>
-            this._svcRow(`${data.slave_location} Servo HAT ${h.addr}`, h.ok ? 'ok' : 'warn', h.ok ? '✓ OK' : `⚠ ${h.errors} errors`)
-          ).join('')
-        : this._svcRow(`${data.slave_location} Servo`, data.servo_ready ? 'ok' : 'dim', data.servo_ready ? '✓ OK' : '— N/A')
-      ) +
-      (data.motor_hat_health
-        ? this._svcRow(`${data.slave_location} Motor HAT ${data.motor_hat_health.addr}`, data.motor_hat_health.ok ? 'ok' : 'err',
-                       data.motor_hat_health.ok ? '✓ OK' : '✗ not responding')
-        : '') +
+      // HAT health rows moved to the consolidated HARDWARE HEALTH widget
+      // (chantier 2026-05-30, post zero-config). Per-HAT detail
+      // (errors count, chip, address) lives under Settings → HATs.
       (data.display_ready != null
         ? this._svcRow(`${data.slave_location} Screen`,
                        data.display_ready ? 'ok' : 'warn',

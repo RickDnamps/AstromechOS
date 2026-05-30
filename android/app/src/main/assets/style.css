@@ -5980,6 +5980,38 @@ body[data-lock-mode="2"] .drive-wrapper {
                        animation: hat-critical-pulse 1.4s ease-in-out infinite; }
 .hat-status-unknown  { color: var(--text-dim, #888); background: rgba(136, 136, 136, 0.10); }
 
+/* Cockpit Hardware Health — consolidated single-row layout (2026-05-30).
+ * Layout summary "Master X · Slave Y" stays left; live status pill
+ * ("ALL HEALTHY" green / "⚠ N ERRORS" red / "⚠ COLLISION @…" red)
+ * pushes to the far right. The legacy gray badge was dropped at the
+ * same commit. */
+.cockpit-hw-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.ck-hw-left {
+  flex: 0 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ck-hw-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-family: 'Orbitron', 'Share Tech Mono', monospace;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.ck-hw-status-ok   { color: var(--ok,   #4caf50); text-shadow: 0 0 4px rgba(76,175,80,0.45); }
+.ck-hw-status-err  { color: var(--err,  #e74c3c); text-shadow: 0 0 6px rgba(231,76,60,0.55); }
+.ck-hw-status-warn { color: var(--amber,#ffaa44); }
+
 @keyframes hat-critical-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.55); }
   50%      { box-shadow: 0 0 0 4px rgba(231, 76, 60, 0); }
