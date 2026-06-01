@@ -41,6 +41,26 @@ _shred_boot_conf() {
     fi
 }
 
+# ─── INI value reader (handles '=' inside values) ────────────────────────
+# $1=section header (e.g. "[home_wifi]")  $2=key  $3=file
+# Captures the FULL value after the FIRST '=', so SSIDs/PSKs containing '='
+# are preserved verbatim. The previous `-F= ... print $2` truncated at the
+# first '=' — a WPA2 PSK like "p=ssw0rd!" became "p" (then <8 chars → the
+# profile was silently rejected). Surrounding whitespace is trimmed; inner
+# characters are kept exactly.
+_ini_get() {
+    awk -v s="$1" -v k="$2" '
+        /^[[:space:]]*\[/ {
+            cur=$0; sub(/^[[:space:]]+/,"",cur); sub(/[[:space:]]+$/,"",cur); next
+        }
+        cur==s && $0 ~ "^[[:space:]]*"k"[[:space:]]*=" {
+            v=$0
+            sub(/^[[:space:]]*[^=]*=[[:space:]]*/,"",v)   # strip "key ="
+            sub(/[[:space:]]+$/,"",v)                     # trim trailing ws
+            print v; exit
+        }' "$3" 2>/dev/null
+}
+
 # ─── Source lib_config.sh ────────────────────────────────────────────────
 REPO_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=lib_config.sh
@@ -57,12 +77,25 @@ BOOT_DIR="/boot"
 WLAN_CONF="$BOOT_DIR/astromech_wlan.conf"
 log_ok "BOOT_DIR=$BOOT_DIR  WLAN_CONF=$WLAN_CONF"
 
-# ─── 1. wlan1 presence check ─────────────────────────────────────────────
+# ─── 1. wlan1 presence check (with enumeration wait) ─────────────────────
 # Optional dev-mode override: WLAN_SETUP_FAKE_WLAN1=1 simulates presence
 # (for local Windows-side testing). NEVER set in production.
-if [ "${WLAN_SETUP_FAKE_WLAN1:-0}" != "1" ] && [ ! -e /sys/class/net/wlan1 ]; then
-    log "wlan1 interface absent (no USB dongle plugged in) — no-op"
-    exit 0
+#
+# RACE FIX: a USB Wi-Fi dongle can take several seconds to enumerate after
+# boot (driver probe + udev rename to wlan1). This service is a systemd
+# oneshot — a single early check would no-op PERMANENTLY even though the
+# dongle appears moments later, which is exactly why a working dongle never
+# got an 'astromech-internet' profile on a fresh flash. Poll for up to ~30s.
+if [ "${WLAN_SETUP_FAKE_WLAN1:-0}" != "1" ]; then
+    _wlan1_wait="${WLAN1_WAIT_SECS:-30}"
+    while [ ! -e /sys/class/net/wlan1 ] && [ "$_wlan1_wait" -gt 0 ]; do
+        sleep 1
+        _wlan1_wait=$((_wlan1_wait - 1))
+    done
+    if [ ! -e /sys/class/net/wlan1 ]; then
+        log "wlan1 interface still absent after wait (no USB dongle plugged in?) — no-op"
+        exit 0
+    fi
 fi
 log_ok "wlan1 interface present"
 
@@ -78,18 +111,8 @@ SOURCE=""
 
 if [ -f "$WLAN_CONF" ]; then
     log_ok "Imager-baked creds file found: $WLAN_CONF"
-    SSID=$(awk -F= -v s="[home_wifi]" -v k="ssid" '
-        /^\[/{cur=$0}
-        cur==s && $1 ~ "^[[:space:]]*"k"[[:space:]]*$" {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-            print $2; exit
-        }' "$WLAN_CONF" 2>/dev/null)
-    PSK=$(awk -F= -v s="[home_wifi]" -v k="password" '
-        /^\[/{cur=$0}
-        cur==s && $1 ~ "^[[:space:]]*"k"[[:space:]]*$" {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2)
-            print $2; exit
-        }' "$WLAN_CONF" 2>/dev/null)
+    SSID=$(_ini_get "[home_wifi]" ssid     "$WLAN_CONF")
+    PSK=$(_ini_get  "[home_wifi]" password "$WLAN_CONF")
     [ -n "$SSID" ] && SOURCE="boot"
 fi
 
@@ -128,10 +151,25 @@ fi
 # Run nmcli directly (no sudo: the service runs as root). Tolerant on
 # failure — any error path falls through to exit 0 so the boot never blocks.
 log "Creating NM profile 'astromech-internet' for wlan1 (ssid=$SSID, source=$SOURCE)"
+
+# Make sure NetworkManager actually MANAGES wlan1. USB dongles are often left
+# unmanaged (claimed by dhcpcd/wpa_supplicant, or brought up after NM
+# started) — and an unmanaged device silently refuses to activate any
+# profile, which is a prime suspect for "profile created but never connects".
+nmcli device set wlan1 managed yes 2>>"$LOGFILE" \
+    && log_ok "wlan1 set managed=yes" \
+    || log_warn "could not set wlan1 managed (continuing)"
+
+# Prime NM's scan cache so the target SSID is known before we activate.
+nmcli device wifi rescan ifname wlan1 2>>"$LOGFILE" || true
+sleep 2
+
 ADD_CMD=(nmcli connection add type wifi ifname wlan1 con-name astromech-internet
          ssid "$SSID"
          connection.autoconnect yes
-         connection.autoconnect-priority 10)
+         connection.autoconnect-priority 10
+         ipv4.method auto
+         802-11-wireless.powersave 2)   # 2 = disable powersave (assoc stability)
 if [ -n "$PSK" ]; then
     ADD_CMD+=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK")
 fi
@@ -145,11 +183,22 @@ else
     exit 0
 fi
 
-# Bring it up — tolerant; NM may auto-reconnect later anyway.
-if nmcli connection up astromech-internet 2>>"$LOGFILE"; then
-    log_ok "wlan1 associated with '$SSID'"
-else
-    log_warn "nmcli connection up failed — profile stored, NM will retry"
+# Bring it up — RETRY a few times. Right after boot the dongle may still be
+# scanning, so the AP isn't visible on the first attempt; a single try then
+# left it disconnected. Rescan + retry, then fall back to NM autoconnect.
+_up_ok=0
+for _try in 1 2 3 4; do
+    if nmcli connection up astromech-internet 2>>"$LOGFILE"; then
+        log_ok "wlan1 associated with '$SSID' (attempt $_try)"
+        _up_ok=1
+        break
+    fi
+    log_warn "connection up attempt $_try failed — rescan + retry"
+    nmcli device wifi rescan ifname wlan1 2>>"$LOGFILE" || true
+    sleep 3
+done
+if [ "$_up_ok" != "1" ]; then
+    log_warn "could not bring up wlan1 now — profile saved with autoconnect=yes; NM will retry when '$SSID' is in range"
 fi
 
 # ─── 6. Persist to local.cfg + shred the /boot source ────────────────────
