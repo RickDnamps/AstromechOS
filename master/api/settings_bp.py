@@ -492,7 +492,7 @@ def get_settings():
             'ip':         (wlan1_ip.split('/')[0] if wlan1_ip else '') if is_admin else '',
         },
         'hotspot': {
-            'ssid':         _mask_ssid(cfg.get('hotspot', 'ssid', fallback='Astromech_Control')),
+            'ssid':         _mask_ssid(cfg.get('hotspot', 'ssid', fallback='Astromech')),
             'password_set': bool(cfg.get('hotspot', 'password', fallback='')),
             'ip':           '192.168.4.1',
             'active':       '100' in wlan0_state,
@@ -864,7 +864,7 @@ def _set_hotspot_impl():
     # rc!=0 left cfg pointing at bad creds → reboot used the bad config
     # → hotspot broken silently.
     _old_cfg = _read_cfg()
-    prev_ssid = _old_cfg.get('hotspot', 'ssid', fallback='Astromech_Control')
+    prev_ssid = _old_cfg.get('hotspot', 'ssid', fallback='Astromech')
     prev_pwd  = _old_cfg.get('hotspot', 'password', fallback='')
 
     # Save

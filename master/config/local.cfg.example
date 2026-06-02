@@ -43,9 +43,9 @@ password = TON_MOT_DE_PASSE
 # SSID et mot de passe du point d'accès Wi-Fi du Master (wlan0)
 # Le Slave et ta télécommande se connectent ici.
 # À l'install, setup_master_network.sh remplace ce SSID par un nom unique
-# par robot (Astromech_Control_XXXX, suffixe = série du Pi) pour éviter que
+# par robot (Astromech-XXXX, suffixe = série du Pi) pour éviter que
 # plusieurs robots partagent le même hotspot en convention.
-ssid = Astromech_Control
+ssid = Astromech
 password = r2d2droid
 
 [deploy]

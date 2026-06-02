@@ -4,15 +4,15 @@
 #
 # A fixed SSID collides when several AstromechOS robots run in the same place
 # (expos / conventions). This derives a unique 4-char suffix from the Pi's
-# hardware so each robot's access point is distinct, e.g. "Astromech_Control_3A2B".
+# hardware so each robot's access point is distinct, e.g. "Astromech-3A2B".
 #
 # Suffix source order: Pi serial (/proc/cpuinfo) → wlan0 MAC → random.
-# Usage:   gen_hotspot_ssid.sh [base]      (base defaults to "Astromech_Control")
-# Output:  <base>_<XXXX>   (XXXX = 4 uppercase hex chars)
+# Usage:   gen_hotspot_ssid.sh [base]      (base defaults to "Astromech")
+# Output:  <base>-<XXXX>   (XXXX = 4 uppercase hex chars)
 # =============================================================================
 set -euo pipefail
 
-BASE="${1:-Astromech_Control}"
+BASE="${1:-Astromech}"
 suffix=""
 
 # 1. Pi serial — stable + unique per board (last 4 hex chars).
@@ -34,4 +34,4 @@ fi
 [[ -z "$suffix" ]] && suffix="$(printf '%04x' $((RANDOM % 65536)))"
 
 # Uppercase for a clean, readable SSID.
-printf '%s_%s\n' "$BASE" "$(printf '%s' "$suffix" | tr 'a-f' 'A-F')"
+printf '%s-%s\n' "$BASE" "$(printf '%s' "$suffix" | tr 'a-f' 'A-F')"

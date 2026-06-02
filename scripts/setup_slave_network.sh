@@ -181,11 +181,11 @@ if [ -n "$NON_INTERACTIVE" ]; then
     HOTSPOT_PASS="$PSK_FLAG"
     info "Non-interactive: SSID='$HOTSPOT_SSID' (PSK from --psk)"
 else
-    # Each Master now has a per-robot SSID (Astromech_Control_XXXX). Enter the EXACT
+    # Each Master now has a per-robot SSID (Astromech-XXXX). Enter the EXACT
     # SSID shown during the Master network setup (or in master/config/local.cfg
     # [hotspot] ssid). The default is only the base name in case it was overridden.
-    read -r -p "  Master hotspot SSID [Astromech_Control]: " INPUT
-    HOTSPOT_SSID="${INPUT:-Astromech_Control}"
+    read -r -p "  Master hotspot SSID [Astromech]: " INPUT
+    HOTSPOT_SSID="${INPUT:-Astromech}"
 
     while true; do
         read -r -s -p "  Hotspot password                  : " HOTSPOT_PASS

@@ -68,10 +68,10 @@ LOCAL_CFG="${REPO_PATH}/master/config/local.cfg"
 LOCAL_CFG_EXAMPLE="${REPO_PATH}/master/config/local.cfg.example"
 
 # Default hotspot values (can be changed interactively).
-# The SSID gets a per-robot suffix (Astromech_Control_XXXX, derived from the Pi
+# The SSID gets a per-robot suffix (Astromech-XXXX, derived from the Pi
 # serial) so multiple AstromechOS robots don't share one SSID at expos /
 # conventions. The operator can still override it at the prompt below.
-HOTSPOT_SSID="$(bash "${REPO_PATH}/scripts/gen_hotspot_ssid.sh" 2>/dev/null || echo 'Astromech_Control')"
+HOTSPOT_SSID="$(bash "${REPO_PATH}/scripts/gen_hotspot_ssid.sh" 2>/dev/null || echo 'Astromech')"
 HOTSPOT_PASS="r2d2droid"
 HOTSPOT_IP="192.168.4.1/24"
 HOTSPOT_CON="astromech-hotspot"

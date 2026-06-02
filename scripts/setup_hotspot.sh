@@ -30,15 +30,15 @@
 # ============================================================
 # setup_hotspot.sh — Configure wlan0 as an access point on Pi 4B
 # wlan1 = external USB adapter → internet (git pull)
-# wlan0 = interface interne → hotspot "Astromech_Control_XXXX" 192.168.4.x
+# wlan0 = interface interne → hotspot "Astromech-XXXX" 192.168.4.x
 #
 # Usage: sudo bash setup_hotspot.sh
 
 set -e
 
-# Per-robot SSID (Astromech_Control_XXXX, suffix from the Pi serial) so multiple
+# Per-robot SSID (Astromech-XXXX, suffix from the Pi serial) so multiple
 # robots don't collide at expos/conventions. Override: SSID=MyName sudo bash …
-SSID="${SSID:-$(bash "$(dirname "$0")/gen_hotspot_ssid.sh" 2>/dev/null || echo 'Astromech_Control')}"
+SSID="${SSID:-$(bash "$(dirname "$0")/gen_hotspot_ssid.sh" 2>/dev/null || echo 'Astromech')}"
 PASSPHRASE="r2d2droid"
 HOTSPOT_IP="192.168.4.1"
 DHCP_RANGE_START="192.168.4.2"

@@ -86,7 +86,7 @@ fi
 echo "[2/4] Checking Slave connection (${SLAVE_HOST})..."
 if ! ssh $SSH_OPTS "${SLAVE_USER}@${SLAVE_HOST}" echo "ping" > /dev/null 2>&1; then
     echo "ERROR: Cannot reach the Slave ${SLAVE_HOST}"
-    echo "       Check that the R2-Slave is connected to the hotspot (Astromech_Control_XXXX, unique per robot)"
+    echo "       Check that the R2-Slave is connected to the hotspot (Astromech-XXXX, unique per robot)"
     exit 1
 fi
 echo "      Slave reachable OK"
