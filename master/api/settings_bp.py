@@ -1340,13 +1340,14 @@ def apply_audio_profile():
 def _get_admin_password() -> str:
     """Returns the current admin password from local.cfg.
 
-    Default fallback is 'astro' as of 2026-05-30 (was 'astropass' on
-    installs flashed before that date). main.cfg has no [admin]
+    Default fallback is 'astropass' as of 2026-06-02 (was 'astro'
+    transitionally from 2026-05-30 to 2026-06-02, and 'astropass' on
+    legacy installs flashed before 2026-05-30). main.cfg has no [admin]
     section so the fallback IS the shipped default for fresh installs.
-    The Cockpit SYSTEM banner flags both as default-not-yet-changed
-    via status_bp._DEFAULT_ADMIN_PASSWORDS.
+    The Cockpit SYSTEM banner flags all known defaults as
+    default-not-yet-changed via status_bp._DEFAULT_ADMIN_PASSWORDS.
     """
-    return _read_cfg().get('admin', 'password', fallback='astro')
+    return _read_cfg().get('admin', 'password', fallback='astropass')
 
 
 # B-53 (audit 2026-05-15): rate-limit /settings/admin/verify to defeat

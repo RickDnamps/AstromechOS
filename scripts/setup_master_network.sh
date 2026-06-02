@@ -294,7 +294,7 @@ info "Step 2 — Saving to local.cfg..."
 if [[ ! -f "$LOCAL_CFG" ]]; then
     if [[ -f "$LOCAL_CFG_EXAMPLE" ]]; then
         cp "$LOCAL_CFG_EXAMPLE" "$LOCAL_CFG"
-        chown "${SUDO_USER:-${USER:-artoo}}:${SUDO_USER:-${USER:-artoo}}" "$LOCAL_CFG"
+        chown "${SUDO_USER:-${USER:-astromech}}:${SUDO_USER:-${USER:-astromech}}" "$LOCAL_CFG"
         info "local.cfg created from example"
     else
         die "local.cfg.example not found: $LOCAL_CFG_EXAMPLE"
@@ -324,7 +324,7 @@ cfg_set "$LOCAL_CFG" "home_wifi" "ssid"     "$HOME_SSID"
 cfg_set "$LOCAL_CFG" "home_wifi" "password" "$HOME_PASS"
 cfg_set "$LOCAL_CFG" "hotspot"   "ssid"     "$HOTSPOT_SSID"
 cfg_set "$LOCAL_CFG" "hotspot"   "password" "$HOTSPOT_PASS"
-chown "${SUDO_USER:-${USER:-artoo}}:${SUDO_USER:-${USER:-artoo}}" "$LOCAL_CFG"
+chown "${SUDO_USER:-${USER:-astromech}}:${SUDO_USER:-${USER:-astromech}}" "$LOCAL_CFG"
 
 ok "Home WiFi credentials saved to local.cfg [home_wifi]"
 ok "Hotspot credentials saved to local.cfg [hotspot]"

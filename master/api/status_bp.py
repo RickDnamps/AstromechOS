@@ -271,9 +271,11 @@ _DEFAULT_ADMIN_PASSWORDS = ('astro', 'astropass', 'deetoo')
 
 
 def _is_default_admin_password() -> bool:
-    """W2 fix 2026-05-16, updated 2026-05-30: True if [admin] password
-    matches any shipped default ('astro' current, 'astropass' transitional,
-    'deetoo' legacy R2-D2 install).
+    """W2 fix 2026-05-16, updated 2026-06-02: True if [admin] password
+    matches any shipped default. Known defaults:
+      - 'astropass' = current shipped default (2026-06-02 -> present)
+      - 'astro'    = transitional default (2026-05-30 -> 2026-06-02)
+      - 'deetoo'   = legacy R2-D2 install (pre-2026-05-30)
     Either way the operator should have changed it. Used by /status to
     drive the SYSTEM panel banner."""
     try:

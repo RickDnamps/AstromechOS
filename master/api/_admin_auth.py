@@ -31,7 +31,9 @@ but only gated the JS UI, not the actual API.
 
 This module adds a `require_admin` decorator that validates an
 `X-Admin-Pw` header against the `[admin] password` key in local.cfg
-(default 'astro' since 2026-05-30, 'astropass' on legacy installs).
+(default 'astropass' since 2026-06-02; 'astro' was the transitional
+default from 2026-05-30 to 2026-06-02, and 'astropass' was also the
+legacy default on installs flashed before 2026-05-30).
 The frontend remembers the password in-memory
 after a successful /settings/admin/verify, then attaches the header to
 every admin POST/DELETE. On `adminGuard.lock()` the in-memory copy is

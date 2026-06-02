@@ -61,8 +61,9 @@ host = astromech-slave.local
 [admin]
 # Dashboard admin password (protects SERVO / VESC / CONFIG / CHOREO tabs)
 # Change it from the dashboard: Admin → Config → System → Change Admin Password
-# Default 'astro' since 2026-05-30 (was 'astropass' on legacy installs).
-password = astro
+# Default 'astropass' since 2026-06-02 ('astro' transitional 2026-05-30 → 2026-06-02,
+# 'astropass' also legacy on installs flashed before 2026-05-30).
+password = astropass
 
 [robot]
 # Display name shown in the dashboard header
