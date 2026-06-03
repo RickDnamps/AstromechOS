@@ -90,6 +90,34 @@ def is_auto_pull_enabled(cfg: configparser.ConfigParser) -> bool:
     return cfg.getboolean('github', 'auto_pull_on_boot', fallback=True)
 
 
+def _chown_to_parent_owner(path: str) -> None:
+    """Chown `path` to its parent directory's owner uid/gid.
+
+    Rationale (bug fix 2026-06-03): firstboot_setup.sh runs as ROOT and calls
+    write_cfg_atomic() / rotate_backup() — files end up owned root:root mode
+    0600, which the astromech-uid systemd service can't read. configparser.read
+    silently swallows EACCES, so cfg.get('master','repo_path') then raises
+    NoOptionError and the service crash-loops (observed 325 restarts on a test
+    Pi).
+
+    Fix is username-agnostic (per CLAUDE.md HARD RULE): we read the parent
+    directory's owner — which is the operator (UID 1000) regardless of how
+    the Imager renamed them — rather than hardcoding 'astromech'.
+
+    When the script already runs as the eventual owner (normal mutation path),
+    chown(self -> self) is a harmless no-op. PermissionError is swallowed so
+    non-root processes can't break here trying to chown to a different UID.
+    """
+    try:
+        parent_stat = os.stat(os.path.dirname(os.path.abspath(path)))
+        os.chown(path, parent_stat.st_uid, parent_stat.st_gid)
+    except (OSError, AttributeError):
+        # OSError: PermissionError when non-root chown'ing to another UID, or
+        #          Windows / filesystems without POSIX ownership.
+        # AttributeError: os.chown unavailable on Windows.
+        pass
+
+
 def rotate_backup(path: str, keep: int = 3) -> None:
     """User-reported 2026-05-16: 'ça fait plusieurs fois que tu efface
     mes configs j'en ai marre'.
@@ -106,16 +134,25 @@ def rotate_backup(path: str, keep: int = 3) -> None:
 
     Recovery from SSH:
         cp local.cfg.bak1 local.cfg && systemctl restart astromechos
+
+    Ownership (bug fix 2026-06-03): each new .bak* file is chowned to the
+    parent directory's owner so a firstboot (root-run) rotate doesn't leave
+    backups unreadable by the astromech-uid service that later tries to
+    restore from them. See _chown_to_parent_owner() for details.
     """
     if not os.path.exists(path):
         return
     try:
         # Rotate oldest to newest: bak{N-1} -> bakN, ..., bak1 -> bak2
+        # os.replace preserves the existing file's ownership/mode, so rotated
+        # backups keep whatever owner they were created with. We re-chown after
+        # in case an earlier rotation under root left the owner stuck.
         for i in range(keep - 1, 0, -1):
             src = f"{path}.bak{i}"
             dst = f"{path}.bak{i+1}"
             if os.path.exists(src):
                 os.replace(src, dst)
+                _chown_to_parent_owner(dst)
         # Copy current path to .bak1 (NOT rename — current file still needed
         # by readers until the new write lands; rename would create a gap)
         import shutil
@@ -124,6 +161,10 @@ def rotate_backup(path: str, keep: int = 3) -> None:
             os.chmod(f"{path}.bak1", 0o600)
         except OSError:
             pass
+        # shutil.copy2 creates the destination with the CURRENT process's
+        # ownership — if firstboot runs as root, .bak1 becomes root:root and
+        # the service can't read it. Force back to parent dir owner.
+        _chown_to_parent_owner(f"{path}.bak1")
     except OSError as e:
         log.warning("rotate_backup failed for %s: %s — proceeding with write", path, e)
 
@@ -145,6 +186,15 @@ def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
     User-reported 2026-05-16: rotate 3 .bak generations BEFORE writing
     so an unintended mutation (bad audit script, fat-finger in dashboard,
     cascade clear) can be reverted via SSH one-line.
+
+    Ownership (bug fix 2026-06-03): the written file is chowned to the
+    parent directory's owner so that when this runs as root (firstboot
+    systemd unit), the resulting local.cfg isn't left root:root mode 0600
+    — which would make it unreadable by the astromech-uid service that
+    starts immediately after firstboot and crash-loop the master service
+    with configparser.NoOptionError. We read the parent dir owner rather
+    than hardcoding 'astromech' to stay username-agnostic per the CLAUDE.md
+    HARD RULE (the C# Imager renames the operator account on every flash).
     """
     rotate_backup(path)
     tmp = path + '.tmp'
@@ -164,3 +214,7 @@ def write_cfg_atomic(cfg: configparser.ConfigParser, path: str) -> None:
         os.chmod(path, 0o600)
     except OSError:
         pass
+    # Preserve parent dir ownership so the service user (astromech UID 1000)
+    # can read this file even when firstboot wrote it as root. No-op when the
+    # current process is already the parent owner. See _chown_to_parent_owner.
+    _chown_to_parent_owner(path)
