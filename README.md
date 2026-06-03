@@ -18,6 +18,10 @@
 
 ---
 
+> 🛠️ **Building a fresh droid?** Flash both SD cards with **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** — a dedicated Windows app that writes the right image to the right Pi, wires the master ↔ slave SSH handshake automatically, **hard-blocks** mismatched images, and verifies every byte. Then run the two install scripts below.
+
+---
+
 ## Why this and nothing else?
 
 Most astromech builders end up with a pile of shell scripts, a half-working web interface, and a robot that does one thing at a time. **This isn't that.**
@@ -399,7 +403,7 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 
 ### Installation — Two Scripts, Fully Automated
 
-> **Portable across any Pi username** — `setup_master.sh` / `setup_slave.sh` auto-capture via `$SUDO_USER`. The Master and Slave **must share the same Linux user** (same password too — simplifies SSH + first-contact auth). `~` and `$(slave_target)` below resolve to your install dir and SSH target automatically; the AstromechOS Imager (coming) will inject the choices into `/boot/astromech_init.cfg` so no SSH login is needed at all.
+> **Portable across any Pi username** — `setup_master.sh` / `setup_slave.sh` auto-capture via `$SUDO_USER`. The Master and Slave **must share the same Linux user** (same password too — simplifies SSH + first-contact auth). `~` and `$(slave_target)` below resolve to your install dir and SSH target automatically; or skip the SSH login entirely — **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** injects the choices into `/boot/astromech_init.cfg` at flash time.
 
 ```bash
 # Step 1 — Master Pi (SSH into it, then run:)
@@ -417,7 +421,7 @@ bash ~/astromechos/scripts/deploy.sh --first-install
 
 > 🛡️ **Git DNA paternity check** — the Settings → Deploy panel (and the `/api/deploy/save-config` endpoint) now refuse to point `origin` at any repo that isn't a legitimate fork of RickDnamps/AstromechOS. A `git merge-base --is-ancestor` test against a frozen anchor commit blocks typos and malicious URLs *before* `git pull` can touch the working tree. Architecture detail → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
 >
-> ⚡ **First-boot Imager workflow** *(in progress)* — a planned AstromechOS Imager PC tool will drop SSH keys, hostname, role + Wi-Fi credentials directly on the SD card's `/boot` partition. The robot's `scripts/firstboot_setup.sh` runs once at first boot, injects everything atomically, DNA-validates the configured remote, and self-destructs. Fully headless provisioning. Same doc → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+> ⚡ **Headless first-boot provisioning** — **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** drops the account, Wi-Fi, role marker + SSH keys onto the SD card's boot partition (native cloud-init + a first-boot bundle). The robot's `scripts/firstboot_setup.sh` runs once at first boot, injects everything atomically, DNA-validates the configured remote, and self-destructs. Fully headless. Same doc → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
 
 📖 **[Full installation guide →](HOWTO.md)** (recommended — covers reconnecting after reboot, network options, and daily use)
 
