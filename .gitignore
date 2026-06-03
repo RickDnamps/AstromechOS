@@ -167,3 +167,6 @@ docs/_build/
 
 # Local one-shot dev-dir rename tool (not part of the project)
 /rename_to_AstromechOS.ps1
+
+# Session-local temp scripts (never tracked)
+.tmp_*
