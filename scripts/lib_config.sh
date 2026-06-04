@@ -267,6 +267,21 @@ try:
     # Mirror the chmod 0o600 pattern the project uses for cfg writes
     try: os.chmod(cfg_path, 0o600)
     except Exception: pass
+    # Ownership fix (bug 2026-06-04): when firstboot_setup.sh runs us as
+    # ROOT, os.replace leaves cfg_path owned root:root mode 0600, which
+    # the astromech-uid systemd service cannot read. configparser.read
+    # silently swallows EACCES -> cfg.get('master','repo_path') raises
+    # NoOptionError -> master service crash-loops. Mirror the
+    # _chown_to_parent_owner pattern from master/config/config_loader.py
+    # (this is a copy of that fix because lib_config.sh ships its own
+    # inline write_local_cfg rather than importing the Python one).
+    # Read parent dir owner to stay username-agnostic per CLAUDE.md HARD
+    # RULE (the C# Imager renames UID-1000 per device).
+    try:
+        ps = os.stat(d)
+        os.chown(cfg_path, ps.st_uid, ps.st_gid)
+    except (OSError, AttributeError):
+        pass
 except Exception:
     try: os.unlink(tmp)
     except Exception: pass
