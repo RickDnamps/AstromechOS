@@ -18,7 +18,7 @@
 
 ---
 
-> 🛠️ **Building a fresh droid?** Flash both SD cards with **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** — a dedicated Windows app that writes the right image to the right Pi, wires the master ↔ slave SSH handshake automatically, **hard-blocks** mismatched images, and verifies every byte. Then run the two install scripts below.
+> 🛠️ **Building a fresh droid?** The recommended path is **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** — a dedicated Windows app that flashes a Golden Image to each SD card, wires the master ↔ slave SSH handshake automatically, **hard-blocks** mismatched images, and verifies every byte. The Pi boots straight into a working Flask UI in ~3 minutes — no SSH gymnastics, no script-running. The manual `setup_master.sh` / `setup_slave.sh` flow remains fully supported as the maintainer / OS-migration / dev path; see [Installation](#installation) below.
 
 ---
 
@@ -393,17 +393,49 @@ The 4GB on the Master is headroom for future local AI: face tracking, gesture re
 
 ---
 
-## Quick Start
+## Installation
 
-### Prerequisites
+Two supported paths produce a functionally identical Pi state. **Path A is the recommended default** for anyone building a droid. Path B is the maintainer / OS-migration / dev path — it stays in lockstep with Path A (every Golden Image fix lives in committed code, reproducible by re-running Path B on a fresh OS).
 
-- 2× Raspberry Pi 4B (username: `astromech` — set in Raspberry Pi Imager)
-- Both running **Raspberry Pi OS Trixie** (64-bit)
-- USB Wi-Fi dongle on the Master Pi (internet on wlan1 while hosting hotspot on wlan0)
+### Prerequisites (both paths)
 
-### Installation — Two Scripts, Fully Automated
+- 2× Raspberry Pi 4B (4 GB for the Master / dome, 2 GB for the Slave / body)
+- USB Wi-Fi dongle on the Master (internet on wlan1 while wlan0 hosts the hotspot)
+- 3 jumper wires for the UART link (Master TX→Slave RX, Master RX→Slave TX, GND)
 
-> **Portable across any Pi username** — `setup_master.sh` / `setup_slave.sh` auto-capture via `$SUDO_USER`. The Master and Slave **must share the same Linux user** (same password too — simplifies SSH + first-contact auth). `~` and `$(slave_target)` below resolve to your install dir and SSH target automatically; or skip the SSH login entirely — **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** injects the choices into `/boot/astromech_init.cfg` at flash time.
+---
+
+### 🟢 Path A — Golden Image + AstromechOS Imager *(recommended)*
+
+This is the path 99% of operators want. **No SSH, no scripts to remember, no per-Pi config typing.** The Imager flashes a tested Golden Image to each SD card and injects the right secrets onto the boot partition. The Pi boots, provisions itself, and the Flask UI is reachable in roughly 3 minutes.
+
+1. **Download** the latest `astromechos-<version>.img.gz` + `.sha256` from the project's Releases page (or let the Imager fetch them).
+2. **Flash both SD cards** with `dist/AstromechOS Imager.exe`:
+   - Pick the **Master** role for one card and the **Slave** role for the other.
+   - The Imager generates a unique master↔slave SSH keypair, writes the slave's `authorized_keys` automatically, sets hostnames + (optionally) home Wi-Fi / admin password / fork repo URL, and **hard-blocks** flashing a Master image to a Slave slot (or vice-versa). Every byte is verified on read-back.
+3. **Insert each card into its Pi and power on.** Plug the USB Wi-Fi dongle into the Master.
+4. **Wait ~3 minutes.** `firstboot_setup.sh` runs once as root, injects the SSH keys, sets the hostname, atomically writes `local.cfg`, brings up the bootstrap hotspot, then self-destructs. The Master then enables the **event-driven pair-sealing service** (`astromech-pair-sealing.path`) which watches `/var/lib/misc/dnsmasq.leases` and fires the SSID handover **whenever the Slave appears** — seconds after boot in the normal case, hours later if the Slave is powered on after the Master.
+5. **Connect to the hotspot** `Astromech-XXXX` (4 hex from the Pi serial, so two droids never clash) and open **`http://192.168.4.1:5000`**. You're in.
+
+> 🛡️ **Git DNA paternity check** — Settings → Deploy (and `/api/deploy/save-config`) refuse to point `origin` at any repo that isn't a legitimate fork of `RickDnamps/AstromechOS`. A `git merge-base --is-ancestor` test against a frozen anchor commit blocks typos and malicious URLs **before** `git pull` can touch the working tree. The same primitive runs on the Imager-baked `[github] repo_url` at first boot. Details → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+>
+> 🔗 **Pair-sealing is event-driven, not time-bounded.** Old builds waited up to 5 minutes synchronously during firstboot and "gave up" if the Slave wasn't ready in time. As of commit `9cc150b` (2026-06-05), `astromech-pair-sealing.path` is a persistent systemd path-watcher: it fires the final-SSID handover the moment a new DHCP lease lands on the Master, idempotently, marker-protected (`/var/lib/astromech/pair_sealed`). Boot the Slave a minute later, an hour later, or after lunch — the handover Just Works. Full lifecycle → **[docs/FIRSTBOOT.md](docs/FIRSTBOOT.md)**.
+
+📖 **[Full Path A guide →](HOWTO.md)** covers daily use, network options, backup/restore, and the Settings panels.
+
+---
+
+### 🛠️ Path B — Manual install on fresh Raspberry Pi OS *(maintainer / OS migration / dev)*
+
+This path exists for three audiences:
+
+- **Maintainers** rebuilding the next Golden Image after upstream changes.
+- **OS-migration** scenarios (when Raspberry Pi OS Trixie is superseded by the next Debian, Path B re-runs cleanly on the new OS to bootstrap a fresh Golden Image source).
+- **Developers** working on a Pi they already configured by hand.
+
+You won't need this if you have a working Golden Image — use Path A instead.
+
+**Prerequisites:** both Pis already booted into stock Raspberry Pi OS Lite 64-bit (Trixie), SSH reachable, sharing the same Linux user (the Master and Slave **must** use the same username and password — simplifies key distribution + first-contact auth). The scripts auto-detect the user via `$SUDO_USER` (or read `/boot/astromech_init.cfg` if one happens to be present) and persist install-time identity into `shared/identity.py` + `scripts/lib_config.sh`, so any UID-1000 username works.
 
 ```bash
 # Step 1 — Master Pi (SSH into it, then run:)
@@ -417,13 +449,11 @@ bash ~/astromechos/scripts/setup_ssh_keys.sh         # pushes Master pubkey to t
 bash ~/astromechos/scripts/deploy.sh --first-install
 ```
 
-**Done.** Open **`http://192.168.4.1:5000`** on any device connected to the robot hotspot (`Astromech_Control_XXXX`).
+Each `setup_*.sh` handles system update, repo clone, UART (`miniuart-bt`) + I2C enable, Python deps, atomic `local.cfg`, network reconfiguration, systemd units, and an Ed25519 keypair. The two scripts are **stand-alone**, **idempotent**, and **shippable as the next Golden Image source** — every fix added to the Imager pipeline lives in committed code that Path B re-runs deterministically. Once happy, run `clean_for_imager.sh` (below) and `dd` the SD to produce the next-generation Golden Image.
 
-> 🛡️ **Git DNA paternity check** — the Settings → Deploy panel (and the `/api/deploy/save-config` endpoint) now refuse to point `origin` at any repo that isn't a legitimate fork of RickDnamps/AstromechOS. A `git merge-base --is-ancestor` test against a frozen anchor commit blocks typos and malicious URLs *before* `git pull` can touch the working tree. Architecture detail → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
->
-> ⚡ **Headless first-boot provisioning** — **[AstromechOS Imager](https://github.com/RickDnamps/AstromechOS_Imager)** drops the account, Wi-Fi, role marker + SSH keys onto the SD card's boot partition (native cloud-init + a first-boot bundle). The robot's `scripts/firstboot_setup.sh` runs once at first boot, injects everything atomically, DNA-validates the configured remote, and self-destructs. Fully headless. Same doc → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+Open **`http://192.168.4.1:5000`** on a device connected to the robot hotspot.
 
-📖 **[Full installation guide →](HOWTO.md)** (recommended — covers reconnecting after reboot, network options, and daily use)
+📖 **[Full Path B walkthrough →](HOWTO.md#path-b--manual-install-on-fresh-raspberry-pi-os)** (same guide — Path B is the second section).
 
 ### Updates
 
@@ -433,16 +463,11 @@ bash /home/astromech/astromechos/scripts/update.sh
 
 Or press the physical dome button (short press). Updates itself over-the-air — no SSH required.
 
-### 🧹 Production-ready imaging (`clean_for_imager.sh`)
+### 🧹 Path B → Path A bridge — `clean_for_imager.sh`
 
-Before pulling the SD card to clone a distributable image, run the
-industrial cleanup script. It stops every `astromech-*` service, purges
-caches (pip / npm / `.cache`), wipes `/tmp/` + shell history + the
-security snapshot, vacuums systemd journal + truncates active `/var/log`
-files (NEVER `rm -rf` — daemons keep writing), `apt-get clean +
-autoremove`, and resets `/etc/machine-id` so every cloned Pi boots with
-its own unique identity. Before/after disk usage is reported so you see
-exactly how much was reclaimed.
+This is the script that closes the loop between the two install paths: once you've validated a Path B install (manual `setup_master.sh` on a fresh OS, optionally a new Debian version), `clean_for_imager.sh` strips it down to a flashable Golden Image that the Path A `AstromechOS_Imager` can distribute. **The two paths share the same code — only the operator-side ergonomics differ.**
+
+It stops every `astromech-*` service, purges caches (pip / npm / `.cache`), wipes `/tmp/` + shell history + the security snapshot, vacuums the systemd journal + truncates active `/var/log` files (never `rm -rf` — daemons keep writing), `apt-get clean + autoremove`, **enables `rpi-resize.service`** (so the new image expands its root partition to the destination card's full size on first boot — moved out of `setup_master.sh`/`setup_slave.sh` in commit `2617079`), and resets `/etc/machine-id` so every cloned Pi boots with its own identity. Before/after disk usage is reported so you see exactly how much was reclaimed.
 
 ```bash
 # First time only — copy the script to /usr/local/bin/ (so it lives on

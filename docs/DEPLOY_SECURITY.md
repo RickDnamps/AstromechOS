@@ -587,25 +587,32 @@ firstboot_setup.sh
                                           baked value; absent → main.cfg
                                           default 'astro' applies — or
                                           'astropass' on legacy installs)
-  4.7 Hotspot bootstrap + handover (the chicken-and-egg solver):
+  4.7 Bootstrap AP + enable event-driven pair-sealing service:
         Master role →  setup_master_network.sh --non-interactive
                           --ssid BOOT_SSID --psk BOOT_PSK
-                       → wait ≤5 min for Slave on astromech-slave.local
-                       → gen_hotspot_ssid.sh → FINAL serial-derived SSID
-                       → ssh slave 'sudo -n nmcli connection modify ...'
-                          (mirrors _push_slave_hotspot_creds in
-                           settings_bp.py:772)
-                       → nmcli modify own AP + nmcli connection up
-                       → sed local.cfg [hotspot] with final creds
-                          (pair sealed for life)
+                       → systemctl enable --now
+                            astromech-pair-sealing.path
+                          (persistent path-watcher on
+                           /var/lib/misc/dnsmasq.leases — fires the
+                           handover service WHENEVER the Slave joins,
+                           seconds-to-hours after firstboot completes;
+                           idempotent, marker-protected by
+                           /var/lib/astromech/pair_sealed)
+                       → exit; firstboot's wall-clock budget is NOT
+                          consumed by handover (rewritten 2026-06-05,
+                          commit 9cc150b — was a 5-min sync loop)
         Slave  role →  setup_slave_network.sh --non-interactive
                           --ssid BOOT_SSID --psk BOOT_PSK
-                          (Master rewrites this profile over SSH a few
-                           seconds later — NM transparently rejoins
-                           the FINAL SSID on the next AP cycle)
+                          (Master rewrites this profile over SSH after
+                           a DHCP lease arrives — NM transparently
+                           rejoins the FINAL SSID on the next AP cycle)
         Failure modes: every step log_err and falls through. firstboot
-                       NEVER aborts on networking; operator can finish
-                       via Flask UI → Settings → Hotspot.
+                       NEVER aborts on networking; pair-sealing retries
+                       on every DHCP lease event; operator can finish
+                       manually via Flask UI → Settings → Hotspot.
+  4.7a astromech-pair-sealing.{path,service}: see FIRSTBOOT.md §6 for
+       the full async handover lifecycle (mirrors _push_slave_hotspot_creds
+       in settings_bp.py:772).
   5. If [github] repo_url differs from current `origin`:
         dna_validate  → DNA OK   → git remote set-url + fetch + reset --hard
                      → DNA FAIL → KEEP origin pointing at the official URL,

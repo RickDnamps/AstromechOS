@@ -2,11 +2,16 @@
 
 > This is the **primary and most up-to-date guide**. 🇫🇷 [Lire en français](HOWTO_FR.md) *(may lag behind)*
 
-Everything is automated. The full installation is **3 commands + 2 reboots**.
+Two supported install paths produce a functionally identical Pi state:
 
-> **Portability (2026-05-28)** — AstromechOS no longer assumes your Pi user is named `astromech`. The setup scripts auto-detect your user via `$SUDO_USER` (or read `/boot/astromech_init.cfg` if the AstromechOS Imager — coming soon — has written one), and all systemd unit files + SSH targets + repo paths are derived at runtime via `shared/identity.py` + `scripts/lib_config.sh`. Examples in this guide use `astromech` as a placeholder — **replace it with your Pi username** if you imaged your SD card under a different name. Master and Slave **must share the same Linux user** (and the same password — simplifies SSH key distribution and first-contact auth).
+- **🟢 Path A — Golden Image + AstromechOS Imager** *(recommended default — what 99% of operators want)*. The Imager flashes a tested image to each SD card, injects role + secrets onto the boot partition, and the Pi self-provisions in ~3 minutes. **No SSH needed.** Jump to [Path A](#-path-a--golden-image--astromechos-imager-recommended).
+- **🛠️ Path B — Manual install on fresh Raspberry Pi OS** *(maintainers / OS migration / dev)*. Three SSH commands + two reboots; runs `setup_master.sh` / `setup_slave.sh` over the network. This is the path that **builds the next Golden Image** when you migrate to a new Debian version. Jump to [Path B](#-path-b--manual-install-on-fresh-raspberry-pi-os).
 
-> **🛡️ Deploy Security & First-Boot Imager (2026-05-28)** — the Settings → Deploy panel runs a Git **DNA paternity check** before letting `origin` point at any repo that isn't a fork of RickDnamps/AstromechOS — blocks typos, hostile URLs, mis-pasted clones, all the way upstream of `git pull`. The same primitive runs at first boot of an Imager-prepared SD card (`scripts/firstboot_setup.sh` + the oneshot `astromech-firstboot.service`), which atomically injects SSH keys, sets the hostname + role, and DNA-validates the configured remote — fully headless provisioning. Architecture, threat model, recovery procedures → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)**.
+Both paths share the same committed code. Every Golden Image fix is reproducible by re-running Path B on a fresh OS — nothing lives live-only on the Imager pipeline.
+
+> **Portability** — AstromechOS no longer assumes your Pi user is named `astromech`. Path A injects a per-card username via COLD rootfs surgery; Path B auto-detects via `$SUDO_USER` (or reads `/boot/astromech_init.cfg` if present). All systemd unit files + SSH targets + repo paths derive at runtime via `shared/identity.py` + `scripts/lib_config.sh`. Examples here use `astromech` as a placeholder — **substitute your real username** if you imaged with a different one. Master and Slave **must share the same Linux user** (and the same password — simplifies SSH key distribution and first-contact auth).
+
+> **🛡️ Deploy Security & First-Boot provisioning** — Settings → Deploy runs a Git **DNA paternity check** before letting `origin` point at any repo that isn't a fork of RickDnamps/AstromechOS — blocks typos, hostile URLs, mis-pasted clones, all the way upstream of `git pull`. The same primitive runs at first boot of an Imager-prepared SD card (`scripts/firstboot_setup.sh` + the oneshot `astromech-firstboot.service`), which atomically injects SSH keys, sets the hostname + role, DNA-validates the configured remote, and enables the **event-driven pair-sealing service** that finishes the SSID handover whenever the Slave appears on the hotspot. Fully headless provisioning. Architecture → **[docs/DEPLOY_SECURITY.md](docs/DEPLOY_SECURITY.md)** + **[docs/FIRSTBOOT.md](docs/FIRSTBOOT.md)**.
 
 > **🧬 Industrialisation HAT Mapping (chantier G, 2026-05-28)** — labels and calibrations now anchor to a **stable HAT identity** (`Body_HAT_A`, `Dome_HAT_A`, ...) instead of an I2C address. Re-soldering a PCA9685 jumper to change an address never wipes calibration: a 3-click re-map in Settings → HATs moves the identity to the new address with a driver hot-reload. Dropdowns filter to **only addresses physically detected** by the I2C scan; **anti-collision blindage** disables the SAVE button with a red pulsing banner if two identities target the same address. 6 phases (G1→G6) + 111 unit tests. Full architecture → **[docs/MAPPING.md](docs/MAPPING.md)**.
 
@@ -70,13 +75,77 @@ The UART port used is `/dev/ttyAMA0` (hardware UART, freed from Bluetooth by the
 
 ---
 
-## Step 0 — Flash both SD cards
+## 🟢 Path A — Golden Image + AstromechOS Imager *(recommended)*
+
+This is the path that ships a droid in three steps. No SSH, no script-running, no per-card config typing. The Imager flashes a tested Golden Image and bakes role + secrets onto the boot partition; the Pi self-provisions on first boot.
+
+### A.1 Get the image
+
+Download the latest `astromechos-<version>.img.gz` + matching `.sha256` from the project's Releases page on GitHub (or let the Imager fetch them — it has a built-in release picker).
+
+### A.2 Flash both SD cards with the Imager
+
+Launch `dist/AstromechOS Imager.exe` (Windows). For each card:
+
+1. Insert the SD card.
+2. Pick the **role** — **Master** (dome) or **Slave** (body). The Imager **hard-refuses** to flash a master image to a slave slot or vice-versa.
+3. Optionally type a **hostname**, **hotspot SSID/password**, **home Wi-Fi**, **admin password**, and **fork repo URL** (validated by the DNA paternity check at first boot).
+4. **Flash.** The Imager writes the image, performs COLD rootfs surgery (`/etc/passwd`, `/etc/shadow`, `/etc/group`, `/home/<user>` rename, systemd unit `User=` lines) so each SD card has a unique UID-1000 username, generates a master↔slave SSH keypair, drops `authorized_keys` on both sides, writes `/boot/astromech_init.cfg`, and verifies every byte on read-back.
+
+The Imager refuses to seal a bundle if the master is missing its keypair or the slave is missing the master's pubkey — you cannot accidentally ship a pair that can't talk to itself.
+
+### A.3 Boot both Pis
+
+Insert each card into its Pi, plug the USB Wi-Fi dongle into the Master, power on. The robot needs **~3 minutes total**:
+
+1. **Both Pis** — `astromech-firstboot.service` fires once (gated by the `/boot/ASTROMECH_FIRSTBOOT_READY` trigger), injects SSH keys, sets hostnames, atomically writes `local.cfg`, brings up the **bootstrap hotspot** on the Master and joins it from the Slave, then deletes the secrets bundle and `disable`s itself. Service logs: `journalctl -u astromech-firstboot`.
+2. **Master only — event-driven pair-sealing** — the firstboot script enables `astromech-pair-sealing.path`, a persistent systemd path-watcher on `/var/lib/misc/dnsmasq.leases`. The moment a new DHCP lease appears (the Slave joining the bootstrap hotspot), `astromech-pair-sealing.service` runs `scripts/astromech_pair_sealing.sh`:
+   - Generates the **final per-robot SSID** `Astromech-XXXX` (4 hex chars from the Pi serial).
+   - SSH+`nmcli`-pushes the final SSID/PSK to the Slave **first** (so it's ready to rejoin before the Master flips).
+   - Flips the Master's own AP to the final SSID.
+   - Persists the final creds to `local.cfg [hotspot]` and writes the `/var/lib/astromech/pair_sealed` marker so the path-watcher never re-fires.
+   - **The Slave's NetworkManager auto-reconnects to the new SSID within seconds.**
+3. **Flask UI is reachable.** Open **`http://192.168.4.1:5000`** from any device joined to `Astromech-XXXX`.
+
+> **Event-driven, not time-bounded.** The Slave doesn't have to be powered on at the same time as the Master. Boot the Slave a minute later, an hour later, or the next morning — the moment its DHCP lease lands, the pair-sealing service fires and finishes the handover. Idempotent, marker-protected. (Earlier builds had a 5-minute synchronous wait inside firstboot and gave up if the Slave wasn't ready in time. That's gone — commit `9cc150b`, 2026-06-05.) Operator can always finish manually via the Flask UI → **Settings → Hotspot** if anything went wrong (e.g. Slave never powered on).
+
+### A.4 Done
+
+Open the Flask UI and use the dashboard. SSH is available for diagnostics:
+
+```bash
+ssh <your-username>@192.168.4.1     # Master (fixed hotspot IP)
+ssh <your-username>@192.168.4.171   # Slave (typical DHCP lease — Cockpit STATUS shows the live value)
+```
+
+If you need to peek at firstboot or pair-sealing while debugging:
+
+```bash
+journalctl -u astromech-firstboot --boot=0
+journalctl -u astromech-pair-sealing --boot=0
+```
+
+Skip the rest of this section — the "Daily use" subsections below apply to both install paths.
+
+---
+
+## 🛠️ Path B — Manual install on fresh Raspberry Pi OS
+
+This path exists for three audiences:
+
+- **Maintainers** rebuilding the next Golden Image after upstream changes.
+- **OS-migration** — when Raspberry Pi OS Trixie is superseded by the next Debian, you re-run Path B on the new OS to bootstrap a fresh Golden Image source.
+- **Developers** working on a Pi they already configured by hand.
+
+If you have a working Golden Image, use Path A instead — it's faster, safer, and headless.
+
+### B.1 Flash both SD cards (Raspberry Pi Imager)
 
 Use **Raspberry Pi Imager** → click ⚙️ Options before writing:
 
 | Setting | Master | Slave |
 |---------|--------|-------|
-| Username | `astromech` | `astromech` |
+| Username | `astromech` (or any name — both Pis must match) | same |
 | Password | (your choice — same on both is recommended) | same |
 | Hostname | `astromech-master` | `astromech-slave` |
 | Wi-Fi | your home network | your home network |
@@ -85,9 +154,7 @@ Use **Raspberry Pi Imager** → click ⚙️ Options before writing:
 Both Pis boot directly connected to your home Wi-Fi on wlan0.
 Find their IPs in your router, or use `astromech-master.local` / `astromech-slave.local`.
 
----
-
-## Step 1 — Install the Master
+### B.2 Install the Master
 
 Plug the USB Wi-Fi dongle into the Master, then SSH into it from your PC:
 
@@ -116,30 +183,30 @@ This script handles everything automatically:
 - UART fix (`miniuart-bt` — Bluetooth stays active for the gamepad)
 - Enable hardware UART + I2C
 - Python dependencies
-- `local.cfg` from the example template
-- Wi-Fi reconfiguration: wlan0 → hotspot `Astromech_Control_XXXX` (192.168.4.1), wlan1 → home internet
+- `local.cfg` from the example template (chowned to the parent dir owner since commit `327085f` so per-card identity is preserved)
+- Wi-Fi reconfiguration: wlan0 → hotspot `Astromech-XXXX` (192.168.4.1), wlan1 → home internet
 - Ed25519 SSH key generation (for Master → Slave rsync)
 - systemd services installed and enabled
 
+> `rpi-resize.service` is **NOT** enabled by `setup_master.sh` / `setup_slave.sh` (since commit `2617079`). It only gets switched on by `clean_for_imager.sh` when you produce the next Golden Image — running it on a live install would needlessly resize a partition that's already at full size.
+
 **At the end it asks to reboot — answer Y.**
 
----
-
-### After the reboot — reconnecting to the Master
+#### After the reboot — reconnecting to the Master
 
 After reboot, the Master's Wi-Fi changes:
 
 ```
 Before:  wlan0 → your home Wi-Fi  (accessible from your PC)
-After:   wlan0 → hotspot `Astromech_Control_XXXX`  192.168.4.1  (only from hotspot)
+After:   wlan0 → hotspot `Astromech-XXXX`  192.168.4.1  (only from hotspot)
          wlan1 → your home Wi-Fi  (new IP assigned by your router)
 ```
 
 Your PC is still on the home network, so you have **two options** to reconnect:
 
-**Option A — Connect your PC to the robot hotspot (`Astromech_Control_XXXX`) (recommended)**
+**Option A — Connect your PC to the robot hotspot (`Astromech-XXXX`) (recommended)**
 
-1. On your PC, connect to Wi-Fi network: **`Astromech_Control_XXXX`** (the SSID shown at the end of install)
+1. On your PC, connect to Wi-Fi network: **`Astromech-XXXX`** (the SSID shown at the end of install)
 2. SSH using the fixed hotspot IP:
    ```bash
    ssh astromech@192.168.4.1
@@ -157,9 +224,7 @@ Find it in one of these ways:
 > Option A is simpler and what you'll use permanently — the hotspot IP 192.168.4.1 is fixed forever.
 > Switch to it now and you won't need to look up IPs again.
 
----
-
-## Step 2 — Install the Slave
+### B.3 Install the Slave
 
 **While the Slave is still on your home Wi-Fi** (before connecting to the hotspot), SSH into it:
 
@@ -179,7 +244,7 @@ This script handles everything automatically:
 - UART fix (`miniuart-bt` — BT chip stays active via mini-UART, freeing the PL011 hardware UART `/dev/ttyAMA0` for the Master↔Slave link)
 - Enable hardware UART + I2C
 - Python dependencies (pyserial, smbus2, adafruit-pca9685)
-- Wi-Fi: connect wlan0 to the robot hotspot (`Astromech_Control_XXXX`)
+- Wi-Fi: connect wlan0 to the robot hotspot (`Astromech-XXXX`)
 - ALSA → PulseAudio routing (`~/.asoundrc`) — `mpg123` audio routes through PulseAudio, enabling 3.5mm jack or BT speaker output
 - BT speaker support: `astromech` user added to `bluetooth` group, PulseAudio BT modules configured (`default.pa`), linger enabled for headless session
 
@@ -187,11 +252,9 @@ This script handles everything automatically:
 
 The Slave now joins the Master hotspot and gets a DHCP address in the `192.168.4.x` range. The Master always reaches it by hostname (`astromech-slave.local`), so you never need to know the exact IP. The examples below use `192.168.4.171` as a typical lease — substitute the address your Slave actually received if it differs (check the Cockpit STATUS panel, which shows the live Slave IP).
 
----
+### B.4 First code deployment (from the Master)
 
-## Step 3 — First code deployment (from the Master)
-
-SSH into the Master using whichever method you used in Step 1:
+SSH into the Master using whichever method you used in B.2:
 
 - **Option A (hotspot):** your PC is on the robot hotspot → `ssh astromech@192.168.4.1`
 - **Option B (home network):** `ssh astromech@astromech-master.local` or the IP you found in your router
@@ -215,6 +278,19 @@ ssh-copy-id astromech@astromech-slave.local
 ```
 
 **Done.** Your droid is operational.
+
+### B.5 Producing the next Golden Image
+
+Once you've validated this Path B install (services healthy, choreographies playing, hotspot stable), you can hand the SD card off to Path A by running `clean_for_imager.sh`:
+
+```bash
+sudo bash /home/astromech/astromechos/scripts/clean_for_imager.sh --install   # one-time: copies the script to /usr/local/bin
+sudo clean_for_imager.sh --yes
+sudo shutdown now
+# Pull the SD card, `dd` it to a .img, gzip, hash, distribute.
+```
+
+This stops every `astromech-*` service, purges caches + logs + machine-id, **enables `rpi-resize.service`** (so the resulting image re-grows on the next destination card), and resets the Pi to its first-boot state. Hand the resulting `.img.gz` + `.sha256` to the Imager and you have the next-generation Golden Image — Path A is back in business on the new OS version.
 
 ---
 

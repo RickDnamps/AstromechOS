@@ -211,8 +211,10 @@ Key properties:
 - `Before=astromech-master.service astromech-slave.service` — provisioning
   finishes (and the Pi reboots) before the application services try to
   start, so they never see a half-configured state
-- `TimeoutStartSec=600` — 10 min budget covers slow SD cards + the
-  5 min hotspot handover wait
+- `TimeoutStartSec=600` — 10 min budget covers slow SD cards + first
+  package install. Pair-sealing is now event-driven (separate
+  `astromech-pair-sealing.path` unit) and does **not** consume any
+  firstboot wall-clock budget — see §6.
 - `ConditionPathExists=|...` — pipe-prefix = "OR semantics", so the unit
   only fires when the marker actually exists
 - `__REPO_PATH__` — placeholder substituted by
@@ -251,7 +253,9 @@ SSH in later and finish manually, not get locked out of a brick.
 │                          set via hostnamectl, persist to local.cfg  │
 │   §4.5 (lines 230-302)  HW layout — Imager override OR scan         │
 │   §4.6 (lines 309-322)  Admin password (Master only, see §10)       │
-│   §4.7 (lines 376-486)  Hotspot bootstrap → per-robot SSID (see §6) │
+│   §4.7 (lines 376-432)  Bootstrap AP + enable async pair-sealing    │
+│                          .path unit (see §6 — event-driven, no      │
+│                          synchronous wait loop)                     │
 ├─────────────────────────────────────────────────────────────────────┤
 │ Phase 5 — DNA-validated repo switch (lines 491-518)                 │
 │   See §11. Only swaps git origin if the candidate URL passes        │
@@ -332,19 +336,31 @@ Zero password prompt.
 
 ---
 
-## 6. Hotspot bootstrap → per-robot final SSID
+## 6. Hotspot bootstrap → per-robot final SSID *(event-driven)*
 
 This is the section that explains the *"my Pi renamed its hotspot to
-`Astromech_Control_3A2B`"* mystery.
+`Astromech-3A2B`"* mystery.
 
 **Goal**: each shipped robot gets a **unique hotspot SSID** so several
-AstromechOS robots at the same convention (expos, conventions) don't
-collide on the same network name.
+AstromechOS robots at the same convention don't collide on the same
+network name.
 
-**The dance** (`firstboot_setup.sh:376-486`, §4.7):
+> **Architecture rewrite — commit `9cc150b` (2026-06-05).** Previous
+> builds had a **5-minute synchronous wait loop** inside
+> `firstboot_setup.sh` that polled `ping + ssh BatchMode=yes` against the
+> Slave and "gave up" if it didn't respond in time. With cloud-init
+> race, Pi-clock drift, and dnsmasq settling, the Slave routinely joined
+> just **after** the 5-min window — leaving the Master stuck on the
+> bootstrap SSID and the operator forced to finish pairing manually via
+> the Flask UI. **That loop is gone.** Pair-sealing is now a persistent,
+> event-driven systemd .path unit that fires whenever a DHCP lease lands
+> on the Master — seconds, minutes, or hours after firstboot completed.
+
+**The new dance** (`firstboot_setup.sh:376-432`, §4.7, +
+[`scripts/astromech_pair_sealing.sh`](../scripts/astromech_pair_sealing.sh)):
 
 ```
-┌── Master path ──────────────────────────────────────────────────────┐
+┌── Phase 1 — firstboot (Master) ─────────────────────────────────────┐
 │                                                                     │
 │ 1. Read BOOT_SSID + BOOT_PSK from /boot/astromech_init.cfg          │
 │    [hotspot] section (Imager-baked, same on both Pis)               │
@@ -353,32 +369,15 @@ collide on the same network name.
 │    bash scripts/setup_master_network.sh --non-interactive           │
 │         --ssid $BOOT_SSID --psk $BOOT_PSK                           │
 │                                                                     │
-│ 3. Wait up to 5 minutes for the Slave to join. Test:                │
-│      ping -c 1 $SLAVE_TARGET                                        │
-│        && ssh -o BatchMode=yes $SSH_USER@$SLAVE_TARGET 'true'       │
-│    BatchMode=yes = key-based auth must work (no fallback prompt).   │
+│ 3. Enable the persistent pair-sealing path unit:                    │
+│    systemctl enable --now astromech-pair-sealing.path               │
 │                                                                     │
-│ 4. Generate the FINAL per-robot SSID via                            │
-│      bash scripts/gen_hotspot_ssid.sh                               │
-│    → Astromech_Control_XXXX (4 hex chars from /proc/cpuinfo serial, │
-│       fallback wlan0 MAC, fallback random)                          │
-│                                                                     │
-│ 5. Push FINAL creds to the Slave FIRST via SSH+nmcli:               │
-│      sudo -n nmcli connection modify <astromech-master-hotspot>     │
-│           802-11-wireless.ssid '$FINAL_SSID'                        │
-│           wifi-sec.psk '$FINAL_PSK'                                 │
-│    nmcli modify rewrites the stored profile WITHOUT dropping the    │
-│    live connection — the Slave only switches when the Master flips. │
-│                                                                     │
-│ 6. Flip the Master's own AP to FINAL_SSID:                          │
-│      nmcli connection modify astromech-hotspot ... && up            │
-│    The Slave's NetworkManager auto-reconnects to the new SSID.      │
-│                                                                     │
-│ 7. Persist FINAL creds to local.cfg [hotspot] for the Flask UI to   │
-│    display + the next deploy to use.                                │
+│ 4. Exit. firstboot is DONE. NO synchronous wait. No 5-min budget.   │
+│    Master is on bootstrap SSID, ready to host the Slave WHENEVER    │
+│    the Slave shows up.                                              │
 └─────────────────────────────────────────────────────────────────────┘
 
-┌── Slave path ───────────────────────────────────────────────────────┐
+┌── Phase 1 — firstboot (Slave) ──────────────────────────────────────┐
 │                                                                     │
 │ 1. Read BOOT_SSID + BOOT_PSK from /boot/astromech_init.cfg          │
 │                                                                     │
@@ -386,8 +385,48 @@ collide on the same network name.
 │    bash scripts/setup_slave_network.sh --non-interactive            │
 │         --ssid $BOOT_SSID --psk $BOOT_PSK                           │
 │                                                                     │
-│ 3. Wait. The Master will rewrite our stored profile via SSH and     │
-│    we'll auto-reconnect when it flips its own AP.                   │
+│ 3. Exit. The Master will rewrite our stored profile via SSH after   │
+│    we get a DHCP lease — we'll auto-reconnect when it flips its AP. │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌── Phase 2 — async pair-sealing (Master, event-driven) ──────────────┐
+│                                                                     │
+│ astromech-pair-sealing.path                                         │
+│   ┃                                                                 │
+│   ┃ Watches /var/lib/misc/dnsmasq.leases (PathChanged +             │
+│   ┃ PathExistsGlob). Fires astromech-pair-sealing.service on        │
+│   ┃ every lease change. ConditionPathExists=!/var/lib/astromech/    │
+│   ┃ pair_sealed → once sealed, the .path stops triggering.          │
+│   ┃ TriggerLimitIntervalSec=30 / TriggerLimitBurst=5 protects       │
+│   ┃ against dnsmasq churn during boot.                              │
+│   ▼                                                                 │
+│ astromech-pair-sealing.service                                      │
+│   ┃                                                                 │
+│   ┃ Runs scripts/astromech_pair_sealing.sh as root, oneshot.        │
+│   ┃ SuccessExitStatus=0 2 → exit 2 ("Slave not reachable yet")      │
+│   ┃ is NOT a failure; the .path re-fires on the next lease.         │
+│   ▼                                                                 │
+│ scripts/astromech_pair_sealing.sh:                                  │
+│   1. Re-check the marker (idempotent — no-op if already sealed).    │
+│   2. Probe the Slave: ping -c 1 + ssh -o BatchMode=yes 'true'.      │
+│      If unreachable → exit 2, .path will retry on next lease event. │
+│   3. Generate the FINAL per-robot SSID via                          │
+│      bash scripts/gen_hotspot_ssid.sh                               │
+│      → Astromech-XXXX (4 hex from /proc/cpuinfo serial, fallback    │
+│         wlan0 MAC, fallback random)                                 │
+│   4. Push FINAL creds to the Slave FIRST over SSH+nmcli:            │
+│        sudo -n nmcli connection modify <astromech-master-hotspot>   │
+│             802-11-wireless.ssid '$FINAL_SSID'                      │
+│             wifi-sec.psk '$FINAL_PSK'                               │
+│      nmcli modify rewrites the stored profile WITHOUT dropping the  │
+│      live connection — the Slave only switches when the Master flips│
+│   5. Flip the Master's own AP to FINAL_SSID:                        │
+│        nmcli connection modify astromech-hotspot ... && up          │
+│      The Slave's NetworkManager auto-reconnects within seconds.     │
+│   6. Persist FINAL creds to local.cfg [hotspot] for the Flask UI    │
+│      to display + future deploys to use.                            │
+│   7. Write /var/lib/astromech/pair_sealed → the .path unit will     │
+│      never re-fire on this Pi.                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -396,7 +435,7 @@ suffix generator:
 
 ```bash
 # Source order: Pi serial (/proc/cpuinfo) → wlan0 MAC → random (4 hex).
-# Output: <base>_<XXXX> with XXXX uppercase hex.
+# Output: <base>-<XXXX> with XXXX uppercase hex.
 #
 # Pipeline endings with `|| true` are CRITICAL — without them,
 # `set -euo pipefail` would abort BEFORE the fallbacks on a grep
@@ -405,16 +444,25 @@ suffix generator:
 # (fixed SSID = collision again, defeats the whole point).
 ```
 
-**Manual install equivalent**: skip §4.7 entirely. The operator runs
-`scripts/setup_master_network.sh` interactively, picks their own SSID
-+ PSK, runs `scripts/setup_slave_network.sh` on the Slave with the same
-creds. No automatic per-robot rename.
+**Manual install equivalent (Path B)**: skip §4.7 entirely. The operator
+runs `scripts/setup_master_network.sh` interactively, picks their own
+SSID + PSK, runs `scripts/setup_slave_network.sh` on the Slave with the
+same creds. No automatic per-robot rename, no pair-sealing service
+enabled — Path B operators name their own hotspot at install time.
 
-**5-min timeout fallback** (firstboot_setup.sh:425-427): if the Slave
-doesn't show up within 5 min (e.g. powered off, hotspot bootstrap
-mistyped), the Master keeps the bootstrap SSID and logs a clear warning.
-The operator can finish the pairing later via **Settings → Hotspot** in
-the Flask UI without re-running firstboot. The Pi is never bricked.
+**Failure mode — Slave never shows up**: the `.path` unit stays armed
+indefinitely. The Master keeps serving the bootstrap SSID; the Slave can
+be powered on **at any later time** (an hour, a day, a week later) and
+the handover will happen automatically the moment its DHCP lease lands.
+If the operator wants to finish pairing manually (Slave is on a
+different network, or the operator wants to pick a non-default SSID),
+they can do so any time via the Flask UI → **Settings → Hotspot**. The
+Pi is never bricked.
+
+**Re-pairing after a sealed handover** (e.g. operator changed the SSID
+in Settings, then re-flashed the Slave): delete
+`/var/lib/astromech/pair_sealed`, re-enable `astromech-pair-sealing.path`,
+the next Slave DHCP lease fires the dance again.
 
 ---
 
@@ -670,7 +718,7 @@ The script is designed to **never brick the robot**. Every section is:
 |---|---|---|
 | Pi boots but services don't start | `astromech-firstboot.service` failed | `journalctl -u astromech-firstboot --boot=0` and look for `[ERR]` lines |
 | `astromech_init.cfg` parsed but a key is missing | Imager bundle incomplete | Re-flash. The Imager's `_self_validate` should have caught this — file a bug |
-| Hotspot stayed on bootstrap SSID | Slave didn't show up in 5 min | Power up Slave, finish pairing via Flask **Settings → Hotspot** |
+| Hotspot stuck on bootstrap SSID | Slave hasn't shown up yet (or pair-sealing service refused) | `journalctl -u astromech-pair-sealing` to see why. If Slave is off, power it on — the `.path` unit will fire the moment its DHCP lease lands. If you want to force a manual handover: Flask **Settings → Hotspot**. |
 | `git pull` fails after firstboot | Pi tracks the wrong remote / repo URL switch was a DNA fail | `cd ~/astromechos && git remote -v` to confirm, `git remote set-url origin <correct>` |
 | `~/.ssh/authorized_keys` missing | `/boot/astromech_secrets/authorized_keys` was absent | Run `ssh-copy-id` from the laptop manually, or re-flash |
 
@@ -745,6 +793,7 @@ unique creds each).
 | Is the master→slave SSH key in place? | On the master: `ls ~/.ssh/id_ed25519* && ssh -o BatchMode=yes $(scripts/lib_config.sh; echo "$(slave_user)@$(slave_host)") true && echo OK` |
 | What hostname did firstboot set? | `cat /etc/hostname` or `hostnamectl` |
 | What's the final hotspot SSID? | `nmcli connection show astromech-hotspot | grep ssid` or check Flask **Settings → Hotspot** |
+| Has pair-sealing fired? | `ls /var/lib/astromech/pair_sealed` (present = sealed) and `journalctl -u astromech-pair-sealing --boot=0`. If never fired, check `systemctl status astromech-pair-sealing.path` is active + the Slave has a lease in `/var/lib/misc/dnsmasq.leases`. |
 | Does the Pi know which role it is? | `cat /boot/firmware/astromech_role.json` (operator-visible) or `grep role $REPO_PATH/master/config/local.cfg` (firstboot-persisted, master only) |
 | How do I re-run firstboot from scratch? | See **§14 — Re-trigger by hand** |
 | How do I see what the Imager wrote without booting the Pi? | Mount the SD on the dev PC, look at the FAT32 partition's root |
