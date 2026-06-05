@@ -76,12 +76,20 @@ SSH_USER=$(cfg_get slave user "$TARGET_USER")
 # Two-stage probe: ping (cheap, ~2s timeout) then SSH BatchMode (confirms
 # the host key + authorized_keys flow is ready). Either failure → exit 2,
 # .path unit will re-trigger us on the next lease change.
+#
+# Bug fix 2026-06-05: the service runs as User=root (needs nmcli + marker
+# write), so ssh would consult /root/.ssh which has no Imager-baked key.
+# Explicitly use the TARGET_USER's id_ed25519 (the outbound key firstboot
+# installed into /home/$TARGET_USER/.ssh/) and pin known_hosts to that
+# same dir so accept-new persists across runs without polluting /root.
+_SSH_KEY="/home/$TARGET_USER/.ssh/id_ed25519"
+_SSH_KNOWN="/home/$TARGET_USER/.ssh/known_hosts"
+_SSH_OPTS="-i $_SSH_KEY -o UserKnownHostsFile=$_SSH_KNOWN -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
 if ! ping -c 1 -W 2 "$SLAVE_TARGET" >/dev/null 2>&1; then
     log "Slave not reachable ($SLAVE_TARGET ping fail). Exit 2."
     exit 2
 fi
-if ! ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-         -o ConnectTimeout=4 "$SSH_USER@$SLAVE_TARGET" 'true' >/dev/null 2>&1; then
+if ! ssh $_SSH_OPTS -o ConnectTimeout=4 "$SSH_USER@$SLAVE_TARGET" 'true' >/dev/null 2>&1; then
     log "Slave SSH not yet ready (probe to $SSH_USER@$SLAVE_TARGET failed). Exit 2."
     exit 2
 fi
@@ -139,8 +147,7 @@ _QSSID=$(printf '%q' "$FINAL_SSID")
 _QPSK=$(printf '%q' "$FINAL_PSK")
 _PUSH="$_PICK; sudo -n nmcli connection modify \"\$CON\" 802-11-wireless.ssid $_QSSID wifi-sec.psk $_QPSK"
 
-if ! ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
-         -o ConnectTimeout=6 "$SSH_USER@$SLAVE_TARGET" "$_PUSH" 2>>"$LOGFILE"; then
+if ! ssh $_SSH_OPTS -o ConnectTimeout=6 "$SSH_USER@$SLAVE_TARGET" "$_PUSH" 2>>"$LOGFILE"; then
     log_err "SSH push to Slave failed."
     exit 1
 fi
