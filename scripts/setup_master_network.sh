@@ -294,7 +294,14 @@ info "Step 2 — Saving to local.cfg..."
 if [[ ! -f "$LOCAL_CFG" ]]; then
     if [[ -f "$LOCAL_CFG_EXAMPLE" ]]; then
         cp "$LOCAL_CFG_EXAMPLE" "$LOCAL_CFG"
-        chown "${SUDO_USER:-${USER:-astromech}}:${SUDO_USER:-${USER:-astromech}}" "$LOCAL_CFG"
+        # Ownership fix (bug 2026-06-04): when called from firstboot_setup.sh
+        # under systemd, SUDO_USER is unset and USER=root, so the original
+        # `${SUDO_USER:-${USER:-astromech}}` expanded to `root:root` -> the
+        # service running as astromech couldn't read it and crash-looped.
+        # Read parent dir owner (always the operator UID 1000) to stay
+        # username-agnostic per CLAUDE.md HARD RULE.
+        _OWNER="$(stat -c '%U:%G' "$(dirname "$LOCAL_CFG")")"
+        chown "$_OWNER" "$LOCAL_CFG"
         info "local.cfg created from example"
     else
         die "local.cfg.example not found: $LOCAL_CFG_EXAMPLE"
@@ -324,7 +331,9 @@ cfg_set "$LOCAL_CFG" "home_wifi" "ssid"     "$HOME_SSID"
 cfg_set "$LOCAL_CFG" "home_wifi" "password" "$HOME_PASS"
 cfg_set "$LOCAL_CFG" "hotspot"   "ssid"     "$HOTSPOT_SSID"
 cfg_set "$LOCAL_CFG" "hotspot"   "password" "$HOTSPOT_PASS"
-chown "${SUDO_USER:-${USER:-astromech}}:${SUDO_USER:-${USER:-astromech}}" "$LOCAL_CFG"
+# Ownership fix (bug 2026-06-04): see same fix above on line ~303.
+_OWNER="$(stat -c '%U:%G' "$(dirname "$LOCAL_CFG")")"
+chown "$_OWNER" "$LOCAL_CFG"
 
 ok "Home WiFi credentials saved to local.cfg [home_wifi]"
 ok "Hotspot credentials saved to local.cfg [hotspot]"
