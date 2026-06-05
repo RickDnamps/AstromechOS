@@ -30,6 +30,7 @@ REPO="$(cd "$TEST_DIR/.." && pwd)"
 MASTER="$REPO/scripts/setup_master.sh"
 SLAVE="$REPO/scripts/setup_slave.sh"
 WLAN="$REPO/scripts/astromech_wlan_setup.sh"
+MASTER_NET="$REPO/scripts/setup_master_network.sh"
 
 assert_grep() {
     local label="$1" file="$2" pattern="$3"
@@ -122,6 +123,37 @@ assert_grep "clean_for_imager: wipes astromech-master-hotspot.nmconnection" "$CL
 assert_grep "clean_for_imager: wipes ~/.ssh/authorized_keys"  "$CLEAN" 'authorized_keys'
 assert_grep "clean_for_imager: wipes ~/.ssh/id_ed25519"        "$CLEAN" 'id_ed25519'
 assert_grep "clean_for_imager: wipes ~/.ssh/id_ed25519.pub"    "$CLEAN" 'id_ed25519\.pub'
+
+# ── setup_master_network.sh Step 1 priority order (bug fix 2026-06-05) ─
+# Step 1 must resolve HOME_SSID/HOME_PASS via a 4-tier priority order:
+#   1) /boot/firmware/astromech_wlan.conf (Imager bake)
+#   2) --home-ssid / --home-psk flags
+#   3) wlan0 active connection IF in client (infrastructure) mode
+#   4) Interactive prompt
+# Root cause of bug: previous code did an UNCONDITIONAL wlan0 read at Step 1,
+# which on a legacy Master (wlan0 = AP/hotspot) snapshotted the HOTSPOT SSID
+# into local.cfg [home_wifi] and seeded a stale astromech-internet profile
+# into every Golden Image. Mode-check fixes this third defense layer.
+echo ""
+echo "setup_master_network.sh Step 1 priority order (2026-06-05 fix):"
+assert_grep "master_network: Priority 1 reads /boot/firmware/astromech_wlan.conf" \
+    "$MASTER_NET" '_WLAN_CONF="/boot/firmware/astromech_wlan\.conf"'
+assert_grep "master_network: Priority 1 falls back to legacy /boot/astromech_wlan.conf" \
+    "$MASTER_NET" '_WLAN_CONF="/boot/astromech_wlan\.conf"'
+assert_grep "master_network: Priority 1 awk-parses [home_wifi] ssid" \
+    "$MASTER_NET" '\[home_wifi\]'
+assert_grep "master_network: Priority 3 checks wlan0 802-11-wireless.mode" \
+    "$MASTER_NET" 'WLAN0_MODE=.*nmcli.*802-11-wireless\.mode'
+assert_grep "master_network: Priority 3 skips wlan0 read when mode = ap" \
+    "$MASTER_NET" 'WLAN0_MODE.*=.*"ap"'
+assert_grep "master_network: Priority 3 read is gated on HOME_SSID empty" \
+    "$MASTER_NET" 'if \[ -z "\$HOME_SSID" \]'
+# Ensure the OLD unconditional read path is gone: there must be no nmcli
+# 802-11-wireless.ssid read on wlan0 outside an HOME_SSID empty + mode-check
+# guard. The old structure had the SSID read at top-level (no if-z guard
+# around the WLAN0_CON discovery, and no mode check before the SSID read).
+assert_no_grep "master_network: NO unconditional wlan0 SSID read (old bug path)" \
+    "$MASTER_NET" 'Step 1 — Reading home WiFi credentials \(current wlan0\)\.\.\.'
 
 echo ""
 echo "================================================================"

@@ -181,36 +181,84 @@ setup_regdomain
 [[ -d "$REPO_PATH" ]] || die "Repo not found: $REPO_PATH\n    Clone first: git clone ... $REPO_PATH"
 
 # =============================================================================
-# STEP 1 — Retrieve home WiFi credentials from wlan0
+# STEP 1 — Resolve home Wi-Fi credentials (priority order)
 # =============================================================================
+# Four-tier resolution (highest priority first):
+#   1) Imager-baked /boot/firmware/astromech_wlan.conf  (operator's at-flash choice)
+#   2) --home-ssid / --home-psk flags                   (firstboot orchestration)
+#   3) wlan0 auto-detect IF in client (infrastructure) mode
+#   4) Interactive prompt
+#
+# Why mode-check on wlan0 (bug fix 2026-06-05): on a legacy Master, wlan0 is
+# already an AP (the hotspot). The unconditional read here previously snapshot
+# the HOTSPOT SSID/PSK ("astromech"/"astropass") into local.cfg [home_wifi],
+# which then became the seed of every Golden Image we shipped — and every
+# fresh flash inherited a stale 'astromech-internet' NM profile pointing at
+# the hotspot SSID instead of the operator's home Wi-Fi. Skip wlan0 read in
+# AP mode; fall through to the flag/prompt tiers.
 echo ""
-info "Step 1 — Reading home WiFi credentials (current wlan0)..."
 
 HOME_SSID=""
 HOME_PASS=""
 
-# Find the active connection name on wlan0
-WLAN0_CON=$(nmcli -g GENERAL.CONNECTION device show wlan0 2>/dev/null | tr -d ' ')
-
-if [[ -n "$WLAN0_CON" && "$WLAN0_CON" != "--" ]]; then
-    info "Active connection on wlan0: '$WLAN0_CON'"
-
-    # Extract SSID
-    HOME_SSID=$(nmcli -g 802-11-wireless.ssid connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
-
-    # Extract password (requires sudo, already root here)
-    HOME_PASS=$(nmcli -s -g 802-11-wireless-security.psk connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
-
-    if [[ -n "$HOME_SSID" ]]; then
-        ok "SSID detected: '$HOME_SSID'"
-    fi
-    if [[ -n "$HOME_PASS" ]]; then
-        ok "Password retrieved (masked)"
+# Priority 1 — Imager-baked /boot/firmware/astromech_wlan.conf wins always.
+# The operator chose these creds at flash time; we MUST honor them even on a
+# Pi where wlan0 is already an AP. Mirror the inline INI parser style used by
+# scripts/astromech_wlan_setup.sh:_ini_get (lib_config.sh:66-71 clone). Do
+# NOT shred the file here — astromech_wlan_setup.sh already handles the shred.
+_WLAN_CONF="/boot/firmware/astromech_wlan.conf"
+[ -f "$_WLAN_CONF" ] || _WLAN_CONF="/boot/astromech_wlan.conf"  # legacy path
+if [ -f "$_WLAN_CONF" ]; then
+    info "Step 1 — Imager-baked creds detected: $_WLAN_CONF"
+    HOME_SSID=$(awk -F'[[:space:]]*=[[:space:]]*' '
+        /^\[home_wifi\]/{f=1; next}
+        /^\[/{f=0}
+        f && $1=="ssid"{print $2; exit}
+    ' "$_WLAN_CONF" 2>/dev/null)
+    HOME_PASS=$(awk -F'[[:space:]]*=[[:space:]]*' '
+        /^\[home_wifi\]/{f=1; next}
+        /^\[/{f=0}
+        f && $1=="password"{print $2; exit}
+    ' "$_WLAN_CONF" 2>/dev/null)
+    if [ -n "$HOME_SSID" ]; then
+        ok "SSID from Imager bake: '$HOME_SSID'"
+        if [ -n "$HOME_PASS" ]; then
+            ok "Password retrieved (masked)"
+        else
+            warn "PSK empty in Imager bake (open network?)"
+        fi
     else
-        warn "Password not found automatically (open network or unknown format)"
+        warn "Imager bake file present but [home_wifi] ssid missing — falling through"
     fi
-else
-    warn "No active connection on wlan0"
+fi
+
+# Priority 3 (after env flag) — auto-detect from current wlan0 IF the device
+# is in client mode. wlan0 in AP mode means we'd be reading the hotspot SSID
+# (= bug 2026-06-05), so skip with a clear log line. Empty mode (no security
+# wireless section) still treated as client.
+if [ -z "$HOME_SSID" ]; then
+    info "Step 1 — Auto-detect from current wlan0 connection..."
+    WLAN0_CON=$(nmcli -g GENERAL.CONNECTION device show wlan0 2>/dev/null | tr -d ' ')
+    if [[ -n "$WLAN0_CON" && "$WLAN0_CON" != "--" ]]; then
+        WLAN0_MODE=$(nmcli -g 802-11-wireless.mode connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
+        if [ "$WLAN0_MODE" = "ap" ]; then
+            warn "wlan0 active connection '$WLAN0_CON' is AP mode (hotspot SSID) — NOT home Wi-Fi; skipping wlan0 read"
+        else
+            info "Active client connection on wlan0: '$WLAN0_CON'"
+            HOME_SSID=$(nmcli -g 802-11-wireless.ssid connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
+            HOME_PASS=$(nmcli -s -g 802-11-wireless-security.psk connection show "$WLAN0_CON" 2>/dev/null | tr -d ' ')
+            if [ -n "$HOME_SSID" ]; then
+                ok "SSID detected from wlan0: '$HOME_SSID'"
+            fi
+            if [ -n "$HOME_PASS" ]; then
+                ok "Password retrieved from wlan0 (masked)"
+            else
+                warn "Password not found automatically (open network?)"
+            fi
+        fi
+    else
+        warn "No active connection on wlan0 — falling through to flags/prompt"
+    fi
 fi
 
 # --- Ask for confirmation or manual entry ---
