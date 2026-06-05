@@ -1,16 +1,25 @@
 [Unit]
-Description=AstromechOS pair-sealing trigger — watch dnsmasq leases for Slave join
-After=dnsmasq.service NetworkManager.service
+Description=AstromechOS pair-sealing trigger — watch NM dnsmasq leases for Slave join
+After=NetworkManager.service
 # Don't run if we already sealed (same marker the .service checks — saves a
 # fork+exec on every dnsmasq lease event after sealing is complete).
 ConditionPathExists=!/var/lib/astromech/pair_sealed
 
 [Path]
-# Fires whenever dnsmasq writes a new lease line (slave joins → new MAC →
+# Bug fix 2026-06-05: NetworkManager's ipv4.method=shared spawns its OWN
+# dnsmasq instance (not the system one) and writes leases to
+# /var/lib/NetworkManager/dnsmasq-<iface>.leases. Watching the standalone
+# dnsmasq path /var/lib/misc/dnsmasq.leases meant the unit NEVER fired —
+# the slave got its lease, sealing should have run, but the trigger file
+# was created at a different location. Verified live on a freshly flashed
+# Pi: nm dnsmasq cmdline includes
+# --dhcp-leasefile=/var/lib/NetworkManager/dnsmasq-wlan0.leases
+#
+# Fires whenever NM dnsmasq writes a new lease line (slave joins → new MAC →
 # new line appended). PathChanged covers in-place modification; the Exists
-# entry covers the case where dnsmasq starts later than this path unit.
-PathChanged=/var/lib/misc/dnsmasq.leases
-PathExistsGlob=/var/lib/misc/dnsmasq.leases
+# entry covers the case where the file gets recreated after a hotspot flip.
+PathChanged=/var/lib/NetworkManager/dnsmasq-wlan0.leases
+PathExistsGlob=/var/lib/NetworkManager/dnsmasq-wlan0.leases
 Unit=astromech-pair-sealing.service
 # Defense in depth: NM rapid renew loops or dnsmasq churn during boot can
 # cause bursts of lease-file writes. Cap to 5 firings per 30s — the sealing
