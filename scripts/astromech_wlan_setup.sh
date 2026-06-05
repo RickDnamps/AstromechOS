@@ -138,19 +138,34 @@ if [ -z "$PSK" ]; then
     log_warn "Empty PSK — creating OPEN network profile (no encryption)"
 fi
 
-# ─── 4. Idempotency — skip if profile already exists ─────────────────────
+# ─── 4. Profile create vs update — split by source ───────────────────────
+# Bug fix 2026-06-05: previously this block exited 0 whenever the profile
+# already existed, which was WRONG when SOURCE=boot. The Imager-baked
+# /boot/firmware/astromech_wlan.conf is the operator's explicit at-flash
+# choice; if the Golden Image had a stale 'astromech-internet' profile
+# from the BUILDER Pi (e.g., builder's home wifi creds), the old code
+# shredded the new creds + kept the stale profile + wlan1 never joined the
+# operator's home wifi. With this fix, SOURCE=boot ALWAYS wins: it updates
+# the existing profile in place, then falls through to the "bring up" +
+# "shred" block below.
+PROFILE_EXISTS=0
 if nmcli -t -f NAME connection show 2>/dev/null | grep -Fxq 'astromech-internet'; then
-    log_ok "Profile 'astromech-internet' already exists — no-op (idempotent)"
-    # Still shred the /boot creds file if it was the source (no point keeping
-    # plaintext around just because the profile was pre-existing).
-    [ "$SOURCE" = "boot" ] && _shred_boot_conf
+    PROFILE_EXISTS=1
+fi
+
+if [ "$PROFILE_EXISTS" = "1" ] && [ "$SOURCE" != "boot" ]; then
+    log_ok "Profile 'astromech-internet' already exists — no-op (idempotent, source=$SOURCE)"
     exit 0
 fi
 
-# ─── 5. NM profile creation ──────────────────────────────────────────────
+# ─── 5. NM profile creation OR update ────────────────────────────────────
 # Run nmcli directly (no sudo: the service runs as root). Tolerant on
 # failure — any error path falls through to exit 0 so the boot never blocks.
-log "Creating NM profile 'astromech-internet' for wlan1 (ssid=$SSID, source=$SOURCE)"
+if [ "$PROFILE_EXISTS" = "1" ]; then
+    log "Updating existing NM profile 'astromech-internet' for wlan1 (ssid=$SSID, source=$SOURCE)"
+else
+    log "Creating NM profile 'astromech-internet' for wlan1 (ssid=$SSID, source=$SOURCE)"
+fi
 
 # Make sure NetworkManager actually MANAGES wlan1. USB dongles are often left
 # unmanaged (claimed by dhcpcd/wpa_supplicant, or brought up after NM
@@ -164,23 +179,49 @@ nmcli device set wlan1 managed yes 2>>"$LOGFILE" \
 nmcli device wifi rescan ifname wlan1 2>>"$LOGFILE" || true
 sleep 2
 
-ADD_CMD=(nmcli connection add type wifi ifname wlan1 con-name astromech-internet
-         ssid "$SSID"
-         connection.autoconnect yes
-         connection.autoconnect-priority 10
-         ipv4.method auto
-         802-11-wireless.powersave 2)   # 2 = disable powersave (assoc stability)
-if [ -n "$PSK" ]; then
-    ADD_CMD+=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK")
-fi
-if "${ADD_CMD[@]}" 2>>"$LOGFILE"; then
-    log_ok "NM profile 'astromech-internet' created"
+if [ "$PROFILE_EXISTS" = "1" ]; then
+    # Modify in place — set SSID, autoconnect, ipv4, powersave, then PSK/keymgmt.
+    MOD_CMD=(nmcli connection modify astromech-internet
+             connection.interface-name wlan1
+             802-11-wireless.ssid "$SSID"
+             connection.autoconnect yes
+             connection.autoconnect-priority 10
+             ipv4.method auto
+             802-11-wireless.powersave 2)
+    if [ -n "$PSK" ]; then
+        MOD_CMD+=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK")
+    else
+        # Open network: clear any prior wifi-sec settings.
+        MOD_CMD+=(wifi-sec.key-mgmt "" wifi-sec.psk "")
+    fi
+    if "${MOD_CMD[@]}" 2>>"$LOGFILE"; then
+        log_ok "NM profile 'astromech-internet' updated with fresh creds"
+    else
+        log_err "nmcli connection modify failed — leaving network alone"
+        # Even on failure we shred the /boot creds (otherwise plaintext stays
+        # on the partition; operator can retry via Flask /settings/wifi).
+        [ "$SOURCE" = "boot" ] && _shred_boot_conf
+        exit 0
+    fi
 else
-    log_err "nmcli connection add failed — leaving network alone"
-    # Even on failure we shred the /boot creds (otherwise plaintext stays
-    # on the partition; operator can retry via Flask /settings/wifi).
-    [ "$SOURCE" = "boot" ] && _shred_boot_conf
-    exit 0
+    ADD_CMD=(nmcli connection add type wifi ifname wlan1 con-name astromech-internet
+             ssid "$SSID"
+             connection.autoconnect yes
+             connection.autoconnect-priority 10
+             ipv4.method auto
+             802-11-wireless.powersave 2)   # 2 = disable powersave (assoc stability)
+    if [ -n "$PSK" ]; then
+        ADD_CMD+=(wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PSK")
+    fi
+    if "${ADD_CMD[@]}" 2>>"$LOGFILE"; then
+        log_ok "NM profile 'astromech-internet' created"
+    else
+        log_err "nmcli connection add failed — leaving network alone"
+        # Even on failure we shred the /boot creds (otherwise plaintext stays
+        # on the partition; operator can retry via Flask /settings/wifi).
+        [ "$SOURCE" = "boot" ] && _shred_boot_conf
+        exit 0
+    fi
 fi
 
 # Bring it up — RETRY a few times. Right after boot the dongle may still be

@@ -29,6 +29,7 @@ REPO="$(cd "$TEST_DIR/.." && pwd)"
 
 MASTER="$REPO/scripts/setup_master.sh"
 SLAVE="$REPO/scripts/setup_slave.sh"
+WLAN="$REPO/scripts/astromech_wlan_setup.sh"
 
 assert_grep() {
     local label="$1" file="$2" pattern="$3"
@@ -95,6 +96,32 @@ echo ""
 echo "capture_user called (username-agnostic install):"
 assert_grep "master calls capture_user" "$MASTER" 'capture_user'
 assert_grep "slave calls capture_user"  "$SLAVE"  'capture_user'
+
+# ── wlan_setup SOURCE=boot split (bug fix 2026-06-05) ────────────────
+# astromech_wlan_setup.sh must:
+#   - have a PROFILE_EXISTS guard split by SOURCE
+#   - skip-on-exist must be GATED on SOURCE != boot (no unconditional exit 0)
+#   - perform an nmcli connection modify when SOURCE=boot + profile exists
+echo ""
+echo "astromech_wlan_setup.sh SOURCE=boot split (2026-06-05 fix):"
+assert_grep "wlan_setup: PROFILE_EXISTS guard introduced" "$WLAN" 'PROFILE_EXISTS=1'
+assert_grep "wlan_setup: skip is gated on SOURCE != boot" "$WLAN" 'PROFILE_EXISTS.*=.*"1".*SOURCE.*!=.*"boot"'
+assert_grep "wlan_setup: uses nmcli connection modify when updating" "$WLAN" 'nmcli connection modify astromech-internet'
+assert_no_grep "wlan_setup: NO unconditional skip on profile-exists" "$WLAN" "Profile 'astromech-internet' already exists — no-op \(idempotent\)$"
+
+# ── clean_for_imager.sh wipes per-deployment state (bug fix 2026-06-05) ──
+# clean_for_imager.sh must wipe NM profiles + SSH key state pre-DD so the
+# Golden Image never carries builder-Pi-specific deployment state into a
+# fresh flash (root cause of the wlan_setup idempotency + slave
+# authorized_keys merge bugs verified live 2026-06-05).
+echo ""
+echo "clean_for_imager.sh wipes per-deployment state (2026-06-05 fix):"
+assert_grep "clean_for_imager: wipes astromech-internet.nmconnection" "$CLEAN" 'astromech-internet'
+assert_grep "clean_for_imager: wipes astromech-hotspot.nmconnection"  "$CLEAN" 'astromech-hotspot'
+assert_grep "clean_for_imager: wipes astromech-master-hotspot.nmconnection" "$CLEAN" 'astromech-master-hotspot'
+assert_grep "clean_for_imager: wipes ~/.ssh/authorized_keys"  "$CLEAN" 'authorized_keys'
+assert_grep "clean_for_imager: wipes ~/.ssh/id_ed25519"        "$CLEAN" 'id_ed25519'
+assert_grep "clean_for_imager: wipes ~/.ssh/id_ed25519.pub"    "$CLEAN" 'id_ed25519\.pub'
 
 echo ""
 echo "================================================================"

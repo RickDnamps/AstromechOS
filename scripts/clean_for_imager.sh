@@ -422,6 +422,52 @@ else
     fi
 fi
 
+# ─── Wipe per-deployment NM profiles + SSH keys ────────────────────────────
+# The Golden Image must NOT carry deployment-specific NM connection
+# profiles or SSH key state. Each deployment (one Imager flash) provides
+# its own via the Imager bake (/boot/firmware/astromech_*) — firstboot
+# extracts them. Anything left over from the BUILDER Pi causes the
+# idempotent-skip cascade verified live 2026-06-05 (the wlan1 profile
+# stayed on builder creds; the slave's authorized_keys merged a stale
+# legacy master pubkey → pair-sealing SSH probe failed → SSID stuck on
+# bootstrap). Wipe all of:
+#   - astromech-hotspot.nmconnection         (wlan0 AP, per-deployment SSID)
+#   - astromech-internet.nmconnection        (wlan1 client, per-deployment SSID/PSK)
+#   - astromech-master-hotspot.nmconnection  (slave-side; per-deployment master SSID)
+#   - r2d2-*.nmconnection                    (legacy rename; defense-in-depth)
+# AND wipe ~/.ssh/{authorized_keys,id_ed25519,id_ed25519.pub} on the
+# target_user's home dir. Imager bake re-installs all of these.
+# NOTE: ~/.ssh/known_hosts is intentionally preserved (slow-changing,
+# operator may have added entries).
+step "Pre-DD  Wipe per-deployment NM profiles + SSH keys (Imager re-bakes)"
+if [ "$DRY_RUN" = true ]; then
+    for f in astromech-hotspot astromech-internet astromech-master-hotspot \
+             r2d2-internet r2d2-master-hotspot; do
+        p="/etc/NetworkManager/system-connections/${f}.nmconnection"
+        [ -f "$p" ] && dryln "Would remove $p"
+    done
+    for k in authorized_keys id_ed25519 id_ed25519.pub; do
+        f="$TARGET_HOME/.ssh/$k"
+        [ -f "$f" ] && dryln "Would remove $f"
+    done
+else
+    for f in astromech-hotspot astromech-internet astromech-master-hotspot \
+             r2d2-internet r2d2-master-hotspot; do
+        p="/etc/NetworkManager/system-connections/${f}.nmconnection"
+        if [ -f "$p" ]; then
+            rm -f "$p" 2>/dev/null && ok "Removed ${f}.nmconnection" \
+                || warn "Could not remove $p"
+        fi
+    done
+    for k in authorized_keys id_ed25519 id_ed25519.pub; do
+        f="$TARGET_HOME/.ssh/$k"
+        if [ -f "$f" ]; then
+            rm -f "$f" 2>/dev/null && ok "Removed $TARGET_USER/.ssh/$k" \
+                || warn "Could not remove $f"
+        fi
+    done
+fi
+
 # ─── Ensure rpi-resize.service enabled for first-boot FS grow ──────────────
 # The DD + pishrink workflow shrinks the image's rootfs partition. On the
 # operator's freshly flashed card, rpi-resize.service (gated by
