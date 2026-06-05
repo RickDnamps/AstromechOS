@@ -1,0 +1,32 @@
+[Unit]
+Description=AstromechOS pair-sealing — flip Master AP to final SSID when Slave joins
+# Run only after NetworkManager + dnsmasq are up so nmcli mutations succeed
+# and the leases file has had a chance to populate. network-online.target
+# ensures the wlan0 AP is actually carrying clients before we try to flip it.
+After=NetworkManager.service network-online.target dnsmasq.service
+Wants=NetworkManager.service
+# Don't run if we already sealed (script writes this marker on success).
+ConditionPathExists=!/var/lib/astromech/pair_sealed
+# Don't run if the operator hasn't installed the hotspot NM connection yet
+# (setup_master_network.sh creates it; bootstrap AP comes up before sealing
+# is ever meaningful).
+ConditionPathExists=/etc/NetworkManager/system-connections/astromech-hotspot.nmconnection
+
+[Service]
+Type=oneshot
+# Sealing needs nmcli connection modify (root for radio interface mod) +
+# write to /var/lib/astromech/pair_sealed marker + write to local.cfg.
+User=root
+WorkingDirectory=__REPO_PATH__
+ExecStart=/bin/bash __REPO_PATH__/scripts/astromech_pair_sealing.sh
+# 0 = sealed (or already sealed). 2 = slave not reachable yet — the .path
+# unit will re-trigger us on the next DHCP lease change, so 2 is NOT a
+# systemd failure.
+SuccessExitStatus=0 2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astromech-pair-sealing
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

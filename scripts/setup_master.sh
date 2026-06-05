@@ -233,8 +233,17 @@ install_service_template "$REPO_PATH/master/services/astromech-firstboot.service
 # dongle is unplugged. Reads creds from /boot/astromech_wlan.conf
 # (Imager-baked, shredded after use) or local.cfg [home_wifi].
 install_service_template "$REPO_PATH/master/services/astromech-wlan-setup.service.template" astromech-wlan-setup.service
+# astromech-pair-sealing.service + .path: event-driven Master AP SSID
+# handover. The .path watches /var/lib/misc/dnsmasq.leases — any DHCP
+# lease change (slave joining the bootstrap AP) triggers the .service,
+# which runs scripts/astromech_pair_sealing.sh. Idempotent (marker at
+# /var/lib/astromech/pair_sealed), self-disabling once sealed. Replaces
+# the old synchronous 5-min wait in firstboot_setup.sh:410-500.
+install_service_template "$REPO_PATH/master/services/astromech-pair-sealing.service.template" astromech-pair-sealing.service
+install_service_template "$REPO_PATH/master/services/astromech-pair-sealing.path.template"    astromech-pair-sealing.path
 systemctl daemon-reload
-systemctl enable astromech-master astromech-monitor astromech-firstboot astromech-wlan-setup
+# Note: only the .path is enabled — the .service is triggered BY the .path.
+systemctl enable astromech-master astromech-monitor astromech-firstboot astromech-wlan-setup astromech-pair-sealing.path
 ok "systemd services installed and enabled (templated for $USER)"
 ok "  astromech-firstboot.service installed — fires when /boot/ASTROMECH_FIRSTBOOT_READY is dropped by the Imager"
 

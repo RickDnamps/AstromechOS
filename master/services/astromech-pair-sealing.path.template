@@ -1,0 +1,23 @@
+[Unit]
+Description=AstromechOS pair-sealing trigger — watch dnsmasq leases for Slave join
+After=dnsmasq.service NetworkManager.service
+# Don't run if we already sealed (same marker the .service checks — saves a
+# fork+exec on every dnsmasq lease event after sealing is complete).
+ConditionPathExists=!/var/lib/astromech/pair_sealed
+
+[Path]
+# Fires whenever dnsmasq writes a new lease line (slave joins → new MAC →
+# new line appended). PathChanged covers in-place modification; the Exists
+# entry covers the case where dnsmasq starts later than this path unit.
+PathChanged=/var/lib/misc/dnsmasq.leases
+PathExistsGlob=/var/lib/misc/dnsmasq.leases
+Unit=astromech-pair-sealing.service
+# Defense in depth: NM rapid renew loops or dnsmasq churn during boot can
+# cause bursts of lease-file writes. Cap to 5 firings per 30s — the sealing
+# script is idempotent and writes the marker on first success, but we don't
+# want a runaway fork loop if dnsmasq goes berserk.
+TriggerLimitIntervalSec=30
+TriggerLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
