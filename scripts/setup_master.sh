@@ -145,6 +145,15 @@ raspi-config nonint do_serial_cons 1 # disable serial console on UART
 raspi-config nonint do_i2c 0         # enable I2C
 ok "Hardware UART enabled, serial console disabled, I2C enabled"
 
+# Enable rpi-resize.service — Pi OS ships it DISABLED by default, but our
+# triple-defense rootfs resize (initramfs resize_early + this service +
+# pishrink rc.local fallback) needs it ENABLED to guarantee the FS grows on
+# first boot. `|| true` keeps the installer safe on older Pi OS images that
+# don't ship the unit (raspberrypi-sys-mods < the version that introduced it).
+# Idempotent: systemctl enable on an already-enabled unit is a no-op.
+systemctl enable rpi-resize.service 2>/dev/null || true
+ok "rpi-resize.service enabled (first-boot FS grow)"
+
 # =============================================================================
 # STEP 5 — Python dependencies
 # =============================================================================
