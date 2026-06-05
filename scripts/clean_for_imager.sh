@@ -422,6 +422,24 @@ else
     fi
 fi
 
+# ─── Ensure rpi-resize.service enabled for first-boot FS grow ──────────────
+# The DD + pishrink workflow shrinks the image's rootfs partition. On the
+# operator's freshly flashed card, rpi-resize.service (gated by
+# ConditionFirstBoot=yes — re-trues now that machine-id was reset above)
+# triggers systemd-growfs-root which calls resize2fs to grow the FS to fill
+# the SD. Pi OS ships this unit DISABLED; we enable it here so the DD'd state
+# carries the enabled symlink into the Golden Image.
+step "Pre-DD  Enable rpi-resize.service (first-boot FS grow on flashed cards)"
+if [ "$DRY_RUN" = true ]; then
+    dryln "Would: systemctl enable rpi-resize.service"
+else
+    if systemctl enable rpi-resize.service 2>/dev/null; then
+        ok "rpi-resize.service enabled (next-boot ConditionFirstBoot=yes fires)"
+    else
+        warn "rpi-resize.service not present (older Pi OS) — pishrink rc.local fallback will still grow the FS"
+    fi
+fi
+
 # ─── Final sync + page-cache drop ──────────────────────────────────────────
 step "Final  sync + drop_caches (commit writes, flush page cache)"
 if [ "$DRY_RUN" = true ]; then

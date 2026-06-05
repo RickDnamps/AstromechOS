@@ -62,13 +62,18 @@ echo "================================================================"
 echo "setup_master.sh + setup_slave.sh — alignment smoke checks"
 echo "================================================================"
 
-# ── rpi-resize.service enable (gap fix this commit) ──────────────────
+# ── rpi-resize.service stays out of setup_*.sh; lives in clean_for_imager.sh ─
+# On a fresh Pi OS install via rpi-imager, the FS is already grown before
+# setup_*.sh runs (rpi-imager triggers the resize on the user's behalf).
+# rpi-resize.service enable belongs to the Golden Image build prep, which is
+# scripts/clean_for_imager.sh — that's the script the operator runs before
+# DD'ing the master+slave for a pishrunk Golden Image.
+CLEAN="$REPO/scripts/clean_for_imager.sh"
 echo ""
-echo "rpi-resize.service enabled at install:"
-assert_grep "master enables rpi-resize.service"  "$MASTER" '^[[:space:]]*systemctl enable rpi-resize\.service'
-assert_grep "master tolerates missing unit (|| true)" "$MASTER" 'systemctl enable rpi-resize\.service.*\|\| true'
-assert_grep "slave enables rpi-resize.service"   "$SLAVE"  '^[[:space:]]*systemctl enable rpi-resize\.service'
-assert_grep "slave tolerates missing unit (|| true)"  "$SLAVE"  'systemctl enable rpi-resize\.service.*\|\| true'
+echo "rpi-resize.service handling (per role):"
+assert_grep "clean_for_imager.sh enables rpi-resize"      "$CLEAN"  'systemctl enable rpi-resize\.service'
+assert_no_grep "setup_master.sh does NOT enable rpi-resize" "$MASTER" 'systemctl enable rpi-resize\.service'
+assert_no_grep "setup_slave.sh does NOT enable rpi-resize"  "$SLAVE"  'systemctl enable rpi-resize\.service'
 
 # ── pair-sealing (commit 9cc150b) ────────────────────────────────────
 echo ""

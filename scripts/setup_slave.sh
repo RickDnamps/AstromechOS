@@ -134,12 +134,10 @@ raspi-config nonint do_serial_cons 1 # disable serial console on UART
 raspi-config nonint do_i2c 0         # enable I2C
 ok "Hardware UART enabled, serial console disabled, I2C enabled"
 
-# Enable rpi-resize.service — Pi OS ships it DISABLED by default. The Slave
-# SD also needs FS grow on first boot (triple-defense alongside initramfs
-# resize_early + pishrink fallback). `|| true` keeps the installer safe on
-# older Pi OS images that don't ship the unit. Idempotent.
-systemctl enable rpi-resize.service 2>/dev/null || true
-ok "rpi-resize.service enabled (first-boot FS grow)"
+# NOTE: rpi-resize.service is NOT enabled here. On a fresh Pi OS install via
+# rpi-imager, the FS is already grown. The enable belongs to the Golden Image
+# build prep (scripts/clean_for_imager.sh) — see master's setup_master.sh
+# for the matching comment.
 
 # =============================================================================
 # STEP 4 — Create the repo directory (will be filled by rsync from the Master)
