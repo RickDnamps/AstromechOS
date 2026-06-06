@@ -121,6 +121,20 @@ else
     warn "wlan1 not available — git pull skipped, using local version"
 fi
 
+# ──────────────────────────────────────────────
+# 1b. Auto-reinstall systemd unit templates that drifted
+# ──────────────────────────────────────────────
+# Bug verified live 2026-06-06: a pull can update *.service.template files
+# in master/services/ (e.g. commit 3065d6c added After=cloud-final.service),
+# but the installed unit files in /etc/systemd/system/ stay stale unless
+# install_service_template is re-run. DD'ing a stale legacy as a Golden
+# Image then propagated the race condition to every flashed Pi. The
+# helper diffs each rendered template against the installed unit and
+# re-runs install_service_template only for changed ones (idempotent;
+# no churn on a clean pull). Runs BEFORE the rsync+restart steps so the
+# Master picks up the new unit on the systemctl restart at step 5.
+reinstall_changed_service_templates || warn "service template reinstall pass failed (non-fatal)"
+
 # Restore angle calibrations only if the live files are MISSING (git was
 # never supposed to ship them, but a reset --hard from a stale checkout
 # can still wipe them). NEVER overwrite the live files — the operator's

@@ -33,6 +33,9 @@ WLAN="$REPO/scripts/astromech_wlan_setup.sh"
 MASTER_NET="$REPO/scripts/setup_master_network.sh"
 FIRSTBOOT_UNIT="$REPO/master/services/astromech-firstboot.service.template"
 WLAN_UNIT="$REPO/master/services/astromech-wlan-setup.service.template"
+LIB_CONFIG="$REPO/scripts/lib_config.sh"
+UPDATE_SH="$REPO/scripts/update.sh"
+MASTER_MAIN="$REPO/master/main.py"
 
 assert_grep() {
     local label="$1" file="$2" pattern="$3"
@@ -174,6 +177,25 @@ assert_grep "firstboot service still has After=network-online.target" \
     "$FIRSTBOOT_UNIT" '^After=.*network-online\.target'
 assert_grep "firstboot service still has Before=astromech-master.service astromech-slave.service" \
     "$FIRSTBOOT_UNIT" '^Before=astromech-master\.service astromech-slave\.service'
+
+# ── auto-reinstall systemd unit templates after pull (bug fix 2026-06-06) ──
+# Bug verified live 2026-06-06: a git pull updated *.service.template files
+# (e.g. commit 3065d6c added After=cloud-final.service) but the installed
+# /etc/systemd/system/<unit>.service stayed STALE because
+# install_service_template was never re-run. DD'ing that stale legacy
+# into a Golden Image propagated the race to every flashed Pi.
+# Fix: reinstall_changed_service_templates diffs each rendered template
+# against the installed unit and re-runs install_service_template only
+# for changed ones. Invoked from both update.sh and main.py::try_git_pull
+# so EVERY pull path closes the drift.
+echo ""
+echo "auto-reinstall systemd unit templates after pull (2026-06-06 fix):"
+assert_grep "lib_config.sh defines reinstall_changed_service_templates" \
+    "$LIB_CONFIG" '^reinstall_changed_service_templates\(\)'
+assert_grep "update.sh calls reinstall_changed_service_templates" \
+    "$UPDATE_SH" 'reinstall_changed_service_templates'
+assert_grep "main.py references reinstall_changed_service_templates" \
+    "$MASTER_MAIN" 'reinstall_changed_service_templates'
 
 echo ""
 echo "================================================================"

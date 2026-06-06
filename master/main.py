@@ -180,6 +180,27 @@ def try_git_pull(cfg: configparser.ConfigParser) -> bool:
                 except OSError as e:
                     logging.warning(f"Failed to write VERSION file: {e}")
             logging.info("git pull succeeded at startup")
+            # Bug verified live 2026-06-06: the pull above can update
+            # master/services/*.service.template files, but the installed
+            # /etc/systemd/system/<unit>.service stays STALE unless we
+            # re-run install_service_template. Drift the legacy carried
+            # into a Golden Image then propagated a race to every flashed
+            # Pi. The helper below diffs each rendered template against
+            # the installed unit and re-installs only the changed ones
+            # (idempotent; no churn on a clean pull). check=False +
+            # broad except keep boot going on any failure here.
+            try:
+                subprocess.run(
+                    ['/bin/bash', '-c',
+                     f'. "{repo}/scripts/lib_config.sh" && '
+                     'capture_user >/dev/null 2>&1 || true; '
+                     'reinstall_changed_service_templates'],
+                    cwd=repo, timeout=20, check=False,
+                    capture_output=True, text=True,
+                )
+                logging.info("systemd unit template reinstall pass completed")
+            except Exception as e:
+                logging.warning(f"reinstall_changed_service_templates failed: {e}")
             return True
         else:
             logging.warning(f"git pull failed: {result.stderr.strip()}")

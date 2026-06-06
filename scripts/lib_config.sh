@@ -231,6 +231,78 @@ REMOTE
 }
 
 # ──────────────────────────────────────────────────────────────────
+# reinstall_changed_service_templates
+# Walk master/services/*.service.template (and *.path.template), render
+# each via the SAME substitution rules as install_service_template, and
+# diff the result against the installed unit in /etc/systemd/system/.
+# Any template that DIFFERS (or has no installed counterpart yet) gets
+# re-installed; a single `systemctl daemon-reload` is fired at the end
+# if anything changed.
+#
+# Motivation (bug verified live 2026-06-06):
+#   Master legacy auto-pulls the latest code at boot via main.py::try_git_pull.
+#   The repo's *.service.template files updated (e.g. commit 3065d6c added
+#   After=cloud-final.service), but install_service_template was NEVER
+#   re-run, so /etc/systemd/system/<unit>.service stayed STALE. DD'ing
+#   that legacy as a Golden Image then propagated the stale unit to every
+#   freshly flashed Pi — race condition + wipe loop. The auto-reinstall
+#   below closes that gap on every pull.
+#
+# Idempotent: cmp -s skips reinstall when bytes already match → no
+# systemctl churn on a clean pull.
+#
+# Failure tolerant: each step is wrapped so a single bad template never
+# aborts the whole pass (try_git_pull must keep going on error).
+# ──────────────────────────────────────────────────────────────────
+reinstall_changed_service_templates() {
+    local REPO_DIR="${REPO_PATH:-${REPO:-}}"
+    if [ -z "$REPO_DIR" ] || [ ! -d "$REPO_DIR/master/services" ]; then
+        return 0
+    fi
+    # Mirror install_service_template's substitution variables exactly.
+    local U H UD R
+    U="${TARGET_USER:-$(whoami)}"
+    H="${TARGET_HOME:-$(getent passwd "$U" 2>/dev/null | cut -d: -f6)}"
+    [ -z "$H" ] && H="/home/$U"
+    UD=$(id -u "$U" 2>/dev/null) || UD=1000
+    R="${REPO_PATH:-$H/astromechos}"
+
+    local changed=0 tpl basename installed rendered
+    shopt -s nullglob
+    for tpl in "$REPO_DIR/master/services"/*.service.template \
+               "$REPO_DIR/master/services"/*.path.template; do
+        [ -e "$tpl" ] || continue
+        basename="$(basename "$tpl" .template)"
+        installed="/etc/systemd/system/$basename"
+        rendered="$(mktemp 2>/dev/null)" || continue
+        # Render with the SAME sed expressions install_service_template uses.
+        if ! sed -e "s|__USER__|$U|g" \
+                 -e "s|__HOME__|$H|g" \
+                 -e "s|__UID__|$UD|g" \
+                 -e "s|__REPO_PATH__|$R|g" \
+                 "$tpl" > "$rendered" 2>/dev/null; then
+            rm -f "$rendered"
+            continue
+        fi
+        if [ ! -f "$installed" ] || ! cmp -s "$rendered" "$installed"; then
+            if install_service_template "$tpl" "$basename" 2>/dev/null; then
+                changed=$((changed + 1))
+                echo "[OK] re-installed systemd unit: $basename (template drift detected)"
+            else
+                echo "[WARN] failed to re-install $basename — leaving stale unit in place" >&2
+            fi
+        fi
+        rm -f "$rendered"
+    done
+    shopt -u nullglob
+    if [ "$changed" -gt 0 ]; then
+        sudo systemctl daemon-reload 2>/dev/null || true
+        echo "[OK] re-installed $changed systemd unit template(s) and ran daemon-reload"
+    fi
+    return 0
+}
+
+# ──────────────────────────────────────────────────────────────────
 # write_local_cfg <section> <key> <value>
 # Atomically write a key/value into local.cfg via configparser, so
 # sections are created/preserved correctly and concurrent writes can't
