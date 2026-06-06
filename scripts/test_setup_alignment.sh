@@ -31,6 +31,8 @@ MASTER="$REPO/scripts/setup_master.sh"
 SLAVE="$REPO/scripts/setup_slave.sh"
 WLAN="$REPO/scripts/astromech_wlan_setup.sh"
 MASTER_NET="$REPO/scripts/setup_master_network.sh"
+FIRSTBOOT_UNIT="$REPO/master/services/astromech-firstboot.service.template"
+WLAN_UNIT="$REPO/master/services/astromech-wlan-setup.service.template"
 
 assert_grep() {
     local label="$1" file="$2" pattern="$3"
@@ -154,6 +156,24 @@ assert_grep "master_network: Priority 3 read is gated on HOME_SSID empty" \
 # around the WLAN0_CON discovery, and no mode check before the SSID read).
 assert_no_grep "master_network: NO unconditional wlan0 SSID read (old bug path)" \
     "$MASTER_NET" 'Step 1 — Reading home WiFi credentials \(current wlan0\)\.\.\.'
+
+# ── systemd unit ordering vs cloud-init runcmd (bug fix 2026-06-06) ──
+# The Imager bakes a cloud-init runcmd that scrubs stale NM profiles +
+# authorized_keys on first boot. Without explicit After=cloud-final.service,
+# astromech-firstboot.service and astromech-wlan-setup.service race the
+# runcmd and lose the fresh state to the wipe. Live autopsy 2026-06-06
+# confirmed the race; the fix is the explicit ordering edge below.
+echo ""
+echo "systemd unit ordering vs cloud-init runcmd (2026-06-06 fix):"
+assert_grep "firstboot service has After=cloud-final.service" \
+    "$FIRSTBOOT_UNIT" '^After=.*cloud-final\.service'
+assert_grep "wlan-setup service has After=cloud-final.service" \
+    "$WLAN_UNIT" '^After=.*cloud-final\.service'
+# Defensive: don't regress the pre-existing ordering directives.
+assert_grep "firstboot service still has After=network-online.target" \
+    "$FIRSTBOOT_UNIT" '^After=.*network-online\.target'
+assert_grep "firstboot service still has Before=astromech-master.service astromech-slave.service" \
+    "$FIRSTBOOT_UNIT" '^Before=astromech-master\.service astromech-slave\.service'
 
 echo ""
 echo "================================================================"
