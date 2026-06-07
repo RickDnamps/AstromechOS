@@ -5,10 +5,14 @@ Description=AstromechOS wlan1 dynamic provisioning
 # call (which may itself create the astromech-internet profile during the
 # Imager bootstrap path). Boot is never blocked: TimeoutStartSec=30 caps the
 # wait, and the script returns 0 on every error path.
-# Bug fix 2026-06-06: see astromech-firstboot.service.template — the same
-# cloud-init runcmd race applies. Wait for cloud-final to finish before
-# we update the astromech-internet NM profile.
-After=NetworkManager.service network-online.target astromech-firstboot.service cloud-final.service
+# Bug fix 2026-06-06 (revert): removed cloud-final.service from After=.
+# The Imager-baked scrub now runs as bootcmd in cloud-init-local (uptime
+# ~7s, before NetworkManager) instead of runcmd, so there is no longer
+# any race to order against. The cloud-final After= edge also caused a
+# dependency cycle (cloud-final After=multi-user.target, this unit
+# WantedBy=multi-user.target) which systemd silently broke by dropping
+# the unit from the boot transaction.
+After=NetworkManager.service network-online.target astromech-firstboot.service
 Wants=NetworkManager.service network-online.target
 Before=astromech-master.service astromech-slave.service
 # Refuse to run while firstboot is still pending — firstboot reboots at end,

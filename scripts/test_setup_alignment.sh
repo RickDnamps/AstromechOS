@@ -160,17 +160,23 @@ assert_grep "master_network: Priority 3 read is gated on HOME_SSID empty" \
 assert_no_grep "master_network: NO unconditional wlan0 SSID read (old bug path)" \
     "$MASTER_NET" 'Step 1 — Reading home WiFi credentials \(current wlan0\)\.\.\.'
 
-# ── systemd unit ordering vs cloud-init runcmd (bug fix 2026-06-06) ──
-# The Imager bakes a cloud-init runcmd that scrubs stale NM profiles +
-# authorized_keys on first boot. Without explicit After=cloud-final.service,
-# astromech-firstboot.service and astromech-wlan-setup.service race the
-# runcmd and lose the fresh state to the wipe. Live autopsy 2026-06-06
-# confirmed the race; the fix is the explicit ordering edge below.
+# ── systemd unit ordering vs cloud-init (bug fix 2026-06-06 REVERT) ──
+# Initial fix added After=cloud-final.service to firstboot + wlan-setup
+# to order them after the Imager-baked cloud-init runcmd scrub. Live
+# SD-USB autopsy 2026-06-06 proved this CREATED a dependency cycle:
+#   cloud-final.service:    After=multi-user.target
+#   astromech-firstboot:    WantedBy=multi-user.target + After=cloud-final
+# systemd detected the cycle and silently dropped firstboot from the
+# boot transaction (firstboot.log absent, trigger marker still present,
+# NM profiles empty). The Imager now bakes the scrub as bootcmd instead
+# of runcmd — bootcmd runs at cloud-init-local (uptime ~7s, before
+# NetworkManager), so no race with firstboot. After=cloud-final is
+# unnecessary AND harmful; assert it stays out.
 echo ""
-echo "systemd unit ordering vs cloud-init runcmd (2026-06-06 fix):"
-assert_grep "firstboot service has After=cloud-final.service" \
+echo "systemd unit ordering vs cloud-init (2026-06-06 REVERT):"
+assert_no_grep "firstboot service does NOT have After=cloud-final.service" \
     "$FIRSTBOOT_UNIT" '^After=.*cloud-final\.service'
-assert_grep "wlan-setup service has After=cloud-final.service" \
+assert_no_grep "wlan-setup service does NOT have After=cloud-final.service" \
     "$WLAN_UNIT" '^After=.*cloud-final\.service'
 # Defensive: don't regress the pre-existing ordering directives.
 assert_grep "firstboot service still has After=network-online.target" \

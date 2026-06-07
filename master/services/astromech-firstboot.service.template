@@ -2,14 +2,16 @@
 Description=AstromechOS first-boot provisioning (Imager bootstrap)
 # Run after the network manager is up but BEFORE the master/slave services
 # start (firstboot may swap origin + reboot before they should ever launch).
-# Bug fix 2026-06-06: cloud-init runcmd (Imager-baked) scrubs stale NM
-# profiles + authorized_keys from the Golden Image. Without an explicit
-# After=cloud-final.service, firstboot races with the runcmd — firstboot
-# wins, creates fresh profiles, and then cloud-init's per-always
-# scripts-user phase fires the runcmd which wipes them. After= guarantees
-# firstboot waits for the runcmd's once-per-Pi marker-guarded wipe to
-# finish before creating its fresh NM profiles.
-After=network-online.target cloud-final.service
+# Bug fix 2026-06-06 (commit will be in this PR): removed
+# After=cloud-final.service. The cloud-init unit declares
+# After=multi-user.target and astromech-firstboot is WantedBy=multi-user.target
+# — adding After=cloud-final created a dependency cycle that systemd
+# silently broke by dropping firstboot from the boot transaction
+# (verified live via SD-USB autopsy: firstboot.log absent, trigger
+# marker still present, NM profiles empty). The runcmd that this clause
+# tried to order against is now baked as bootcmd in the Imager (runs
+# at cloud-init-local uptime ~7s, before NetworkManager — no race).
+After=network-online.target
 Wants=network-online.target
 Before=astromech-master.service astromech-slave.service
 # Only fire when the Imager has placed the trigger marker. Two paths to
