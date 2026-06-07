@@ -258,6 +258,30 @@ sudo -u "$USER" XDG_RUNTIME_DIR="/run/user/$ASTROMECH_UID" \
 ok "PulseAudio BT configured (auto-start, BT modules loaded)"
 
 # =============================================================================
+# STEP 7 — Install astromech-firstboot.service
+# =============================================================================
+# Bug fix 2026-06-06 (live SD-USB autopsy): the slave Golden Image was DD'd
+# from a legacy slave Pi that never had astromech-firstboot.service installed.
+# Without firstboot, the slave never reads /boot/firmware/astromech_secrets/
+# authorized_keys → master_pub never lands in slave's ~/.ssh/authorized_keys
+# → master can't SSH to slave with key auth → pair-sealing breaks (master
+# uses SSH to push the final SSID to the slave's NM profile).
+#
+# Master and slave SHARE the same firstboot.service.template — the
+# firstboot_setup.sh script is role-aware (reads /boot/firmware/
+# astromech_init.cfg [system] role to dispatch master vs slave logic).
+# Install + enable the unit so every fresh slave Golden Image carries it.
+info "Step 7 — Installing astromech-firstboot.service..."
+if [ -f "$REPO_PATH/master/services/astromech-firstboot.service.template" ]; then
+    install_service_template "$REPO_PATH/master/services/astromech-firstboot.service.template" astromech-firstboot.service
+    systemctl daemon-reload
+    systemctl enable astromech-firstboot
+    ok "astromech-firstboot.service installed and enabled (fires when /boot/ASTROMECH_FIRSTBOOT_READY is dropped by the Imager)"
+else
+    warn "astromech-firstboot.service.template not found at $REPO_PATH/master/services/ — slave firstboot will be installed by deploy.sh --first-install later"
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 echo ""

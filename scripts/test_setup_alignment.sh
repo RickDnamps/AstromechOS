@@ -184,6 +184,25 @@ assert_grep "firstboot service still has After=network-online.target" \
 assert_grep "firstboot service still has Before=astromech-master.service astromech-slave.service" \
     "$FIRSTBOOT_UNIT" '^Before=astromech-master\.service astromech-slave\.service'
 
+# ── slave installs astromech-firstboot.service (bug fix 2026-06-06) ──
+# Verified live via SD-USB autopsy 2026-06-06: the slave Golden Image was
+# missing /etc/systemd/system/astromech-firstboot.service entirely. Without
+# firstboot, the slave never reads /boot/firmware/astromech_secrets/
+# authorized_keys → master can't SSH to slave with key auth → pair-sealing
+# breaks. Fix: setup_slave.sh installs + enables the shared firstboot
+# template (master and slave use the same template; firstboot_setup.sh is
+# role-aware via /boot/firmware/astromech_init.cfg).
+echo ""
+echo "slave installs astromech-firstboot.service (2026-06-06 fix):"
+assert_grep "setup_slave.sh installs astromech-firstboot.service" \
+    "$SLAVE" 'install_service_template.*astromech-firstboot\.service\.template.*astromech-firstboot\.service'
+assert_grep "setup_slave.sh enables astromech-firstboot" \
+    "$SLAVE" 'systemctl enable astromech-firstboot'
+# Defensive: don't lose the existing slave service install path
+# (deploy.sh --first-install installs astromech-slave.service via SSH).
+assert_grep "deploy.sh --first-install still installs astromech-slave.service" \
+    "$REPO/scripts/deploy.sh" 'astromech-slave\.service\.template|astromech-slave astromech-version|astromech-version astromech-slave'
+
 # ── auto-reinstall systemd unit templates after pull (bug fix 2026-06-06) ──
 # Bug verified live 2026-06-06: a git pull updated *.service.template files
 # (e.g. commit 3065d6c added After=cloud-final.service) but the installed
