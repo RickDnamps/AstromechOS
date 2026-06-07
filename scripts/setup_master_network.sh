@@ -356,19 +356,38 @@ if [[ ! -f "$LOCAL_CFG" ]]; then
     fi
 fi
 
-# Helper to write/update a key in a .cfg section
+# Helper to write/update a key in a .cfg section.
+#
+# Bug fix 2026-06-06: section-scoped sed (was global, leaked ${key} = ...
+# lines across sections — root cause of multi-day [admin]/[home_wifi]/
+# [deploy] password leaks). The previous implementation ran a global
+# substitution `sed -i "s|^${key}\s*=.*|...|"` which rewrote EVERY line
+# matching the key regardless of which [section] it lived in. Calling
+# cfg_set hotspot password X then leaked the hotspot PSK into [admin],
+# [deploy], etc. — verified via live SD-USB autopsy 2026-06-06.
+#
+# The new implementation mirrors astromech_pair_sealing.sh's proven
+# section-scoped sed range idiom: `/^\[${section}\]/,/^\[/ s|...|`
+# constrains the substitution to lines BETWEEN [$section] and the next
+# [*] header. The next-section header line is included in sed's range
+# semantics but starts with `[`, so it cannot match `^${key}[[:space:]]*=`
+# — no false positive on the boundary.
+#
+# POSIX [[:space:]] used instead of GNU \s for portability.
 cfg_set() {
     local file="$1" section="$2" key="$3" value="$4"
-    # Check if the section exists
     if grep -q "^\[${section}\]" "$file"; then
-        # Update or add the key in the section
-        if grep -q "^${key}\s*=" "$file"; then
-            sed -i "s|^${key}\s*=.*|${key} = ${value}|" "$file"
+        # Section exists — check if the key already lives INSIDE this section
+        # (not just somewhere in the file). sed -n range + grep tells us.
+        if sed -n "/^\[${section}\]/,/^\[/ p" "$file" | grep -q "^${key}[[:space:]]*="; then
+            # Key exists in this section — substitute within the range only
+            sed -i "/^\[${section}\]/,/^\[/ s|^${key}[[:space:]]*=.*|${key} = ${value}|" "$file"
         else
+            # Key absent within this section — append after the section header
             sed -i "/^\[${section}\]/a ${key} = ${value}" "$file"
         fi
     else
-        # Add the entire section
+        # Section absent — append a fresh section at EOF
         echo "" >> "$file"
         echo "[${section}]" >> "$file"
         echo "${key} = ${value}" >> "$file"
