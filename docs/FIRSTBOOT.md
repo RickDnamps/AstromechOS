@@ -220,10 +220,64 @@ Key properties:
 - `__REPO_PATH__` — placeholder substituted by
   `scripts/lib_config.sh::install_service_template` at install time
   (this is part of the username-agnostic invariant, see §13)
+- `After=network-online.target` **ONLY** — must **NEVER** chain
+  `After=cloud-final.service` (see anti-recurrence callout below)
 
 The unit `disable`s itself at the end of provisioning
 (`firstboot_setup.sh:550`) — even if the trigger marker isn't cleanly
 deleted, the service won't try to run again.
+
+> ### ⚠️ Anti-recurrence — do NOT add `After=cloud-final.service`
+>
+> Commit `3065d6c` (since reverted by **`b8d2838`**, marathon
+> 2026-06-02→07) added `After=cloud-final.service` to this unit to fix a
+> race with cloud-init's `runcmd`. **It silently broke every Golden
+> Image flash for 5 days.** Why: `cloud-final.service` declares
+> `After=multi-user.target` on Pi OS Bookworm/Trixie, and this unit
+> declares `WantedBy=multi-user.target`. That's a startup cycle.
+> systemd resolves cycles by **silently dropping one of the edges** with
+> only a `Found ordering cycle on …` message in the journal — the
+> dropped edge can be ours, in which case firstboot is removed from the
+> boot transaction entirely. Symptom: Pi boots clean, no `Astromech-XXXX`
+> AP ever appears, no Flask, no servos.
+>
+> **Diagnostic**: `journalctl -b -1 -u astromech-firstboot.service` →
+> look for `Found ordering cycle on astromech-firstboot.service/start`.
+>
+> The race with cloud-init's `runcmd` that motivated `3065d6c` was
+> solved differently — by moving Imager-side wipes from `runcmd` to
+> `bootcmd` (see §2 below). **Rule**: no `After=` clause on this unit
+> may introduce a cycle with `multi-user.target`.
+
+> ### ⚠️ Anti-recurrence — Imager uses `bootcmd:`, **NEVER `runcmd:`**
+>
+> cloud-init exposes two stages where Imager-baked shell can wipe stale
+> NM profiles before firstboot stages its own:
+>
+> | Stage | cloud-init module | Fires at | Default scope |
+> |---|---|---|---|
+> | `runcmd:` | `cc_scripts_user` | uptime ~22s, in `cloud-config.target` | **per-always** (runs on every boot) |
+> | `bootcmd:` | `cc_bootcmd` | uptime ~7s, in `cloud-init-local.service` | per-instance by default |
+>
+> **Why `runcmd:` is wrong** (marathon 2026-06-02→07 root cause): on
+> Boot 1, `runcmd` (~22s) raced firstboot (~24s) and wiped firstboot's
+> freshly-created NM profiles. On Boot 2+, `runcmd` re-fired and wiped
+> the FINAL per-robot AP that pair-sealing had just installed — every
+> reboot reset the robot to the bootstrap SSID.
+>
+> **The fix** (Imager-side commits `0be1fa7` + `f961378`): (a) marker-
+> guard the wipe against re-runs (belt-and-suspenders), (b) move the
+> wipe from `runcmd` to `bootcmd`. `bootcmd` runs in
+> `cloud-init-local.service` **before NetworkManager is even started**,
+> **before** firstboot can be scheduled — no race possible. The marker
+> guard stays as belt-and-suspenders against future cloud-init module
+> changes.
+>
+> **Rule**: any Imager-baked shell in `user-data` that mutates network
+> state MUST live in `bootcmd:` AND be marker-guarded under
+> `/var/lib/astromech/runcmd_done` (or equivalent). `clean_for_imager.sh`
+> wipes this marker pre-DD so the wipe fires on the first boot of every
+> flashed Pi (see CLAUDE.md §"🏗️ Golden Image build invariants").
 
 ---
 
