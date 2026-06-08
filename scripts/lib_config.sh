@@ -267,10 +267,17 @@ reinstall_changed_service_templates() {
     UD=$(id -u "$U" 2>/dev/null) || UD=1000
     R="${REPO_PATH:-$H/astromechos}"
 
+    # Iterate ALL systemd unit templates (.service, .path, .timer) so any new
+    # unit type added under master/services/ is picked up automatically by
+    # the auto-reinstall flow. astromech-pair-sealing.timer (2026-06-08)
+    # was the first .timer unit shipped — without the timer glob below, a
+    # template drift on the timer would never propagate to the installed
+    # unit after a git pull.
     local changed=0 tpl basename installed rendered
     shopt -s nullglob
     for tpl in "$REPO_DIR/master/services"/*.service.template \
-               "$REPO_DIR/master/services"/*.path.template; do
+               "$REPO_DIR/master/services"/*.path.template \
+               "$REPO_DIR/master/services"/*.timer.template; do
         [ -e "$tpl" ] || continue
         basename="$(basename "$tpl" .template)"
         installed="/etc/systemd/system/$basename"

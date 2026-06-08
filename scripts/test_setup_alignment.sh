@@ -91,6 +91,28 @@ assert_grep "master enables pair-sealing.path"              "$MASTER" 'systemctl
 # The .service must NOT be enabled directly — the .path triggers it.
 assert_no_grep "master does NOT enable pair-sealing.service directly" "$MASTER" 'systemctl enable[^|]*astromech-pair-sealing\.service([^.]|$)'
 
+# ── pair-sealing timer fallback (2026-06-08 fix) ─────────────────────
+# Bug verified live 2026-06-08: inotify events on the dnsmasq leases file
+# can be MISSED (slave joins during .path startup, dnsmasq writes via
+# atomic rename → no MODIFY event). astromech-pair-sealing.timer is a
+# belt-and-suspenders fallback that retries the .service every 60s while
+# the marker is absent. The script (astromech_pair_sealing.sh:59) exits
+# 0 immediately if the marker already exists, so timer ticks are
+# cheap no-ops once paired.
+PAIR_TIMER_UNIT="$REPO/master/services/astromech-pair-sealing.timer.template"
+echo ""
+echo "pair-sealing timer fallback (2026-06-08 fix):"
+assert_grep "setup_master.sh installs astromech-pair-sealing.timer.template" \
+    "$MASTER" 'astromech-pair-sealing\.timer\.template'
+assert_grep "setup_master.sh enables astromech-pair-sealing.timer" \
+    "$MASTER" 'systemctl enable.*astromech-pair-sealing\.timer'
+assert_grep "pair-sealing.timer has Unit=astromech-pair-sealing.service" \
+    "$PAIR_TIMER_UNIT" '^Unit=astromech-pair-sealing\.service'
+assert_grep "pair-sealing.timer has OnUnitInactiveSec=60sec (retry cadence)" \
+    "$PAIR_TIMER_UNIT" '^OnUnitInactiveSec=60sec'
+assert_grep "pair-sealing.timer has WantedBy=timers.target" \
+    "$PAIR_TIMER_UNIT" '^WantedBy=timers\.target'
+
 # ── lib_config.sh sourced (carries chown fixes 1973566 + 327085f) ────
 echo ""
 echo "lib_config.sh sourced (carries chown fixes):"

@@ -247,9 +247,16 @@ install_service_template "$REPO_PATH/master/services/astromech-wlan-setup.servic
 # the old synchronous 5-min wait in firstboot_setup.sh:410-500.
 install_service_template "$REPO_PATH/master/services/astromech-pair-sealing.service.template" astromech-pair-sealing.service
 install_service_template "$REPO_PATH/master/services/astromech-pair-sealing.path.template"    astromech-pair-sealing.path
+# astromech-pair-sealing.timer: belt-and-suspenders fallback for the .path
+# inotify watcher. Verified live 2026-06-08: inotify events on the dnsmasq
+# leases file can be missed (slave joins during .path startup, or dnsmasq
+# writes via atomic rename → no MODIFY event). The timer retries the
+# .service every 60s; the script exits 0 immediately if the marker
+# already exists, so timer ticks are cheap no-ops once paired.
+install_service_template "$REPO_PATH/master/services/astromech-pair-sealing.timer.template"   astromech-pair-sealing.timer
 systemctl daemon-reload
-# Note: only the .path is enabled — the .service is triggered BY the .path.
-systemctl enable astromech-master astromech-monitor astromech-firstboot astromech-wlan-setup astromech-pair-sealing.path
+# Note: only the .path + .timer are enabled — the .service is triggered BY them.
+systemctl enable astromech-master astromech-monitor astromech-firstboot astromech-wlan-setup astromech-pair-sealing.path astromech-pair-sealing.timer
 ok "systemd services installed and enabled (templated for $USER)"
 ok "  astromech-firstboot.service installed — fires when /boot/ASTROMECH_FIRSTBOOT_READY is dropped by the Imager"
 

@@ -1,0 +1,27 @@
+[Unit]
+Description=Periodic retry for astromech pair-sealing while marker absent
+Documentation=https://github.com/RickDnamps/AstromechOS/blob/main/docs/FIRSTBOOT.md
+# Belt-and-suspenders next to astromech-pair-sealing.path (inotify watcher).
+# Inotify events on /var/lib/NetworkManager/dnsmasq-wlan0.leases can be MISSED —
+# slave joins during .path startup, dnsmasq writes the lease via atomic
+# rename (no MODIFY event), or the file is created (no MODIFY before CREATE).
+# This timer retries astromech-pair-sealing.service every 60s; the script
+# (scripts/astromech_pair_sealing.sh:59) exits 0 immediately if the marker
+# already exists, so timer ticks are cheap no-ops once paired.
+#
+# Bug fix 2026-06-08 (this PR): identified during birthday-edition validation
+# cycle. After master + slave fresh flash from Golden Image, slave joined
+# Astromech-7197 bootstrap correctly but .path inotify watcher missed the
+# dnsmasq lease event. Manual `systemctl start astromech-pair-sealing.service`
+# 15 min later worked instantly. UX risk: maker pulls power → SD corruption.
+# This timer guarantees pair-sealing completes within 60s of slave joining.
+After=NetworkManager.service
+
+[Timer]
+OnBootSec=30sec
+OnUnitInactiveSec=60sec
+Unit=astromech-pair-sealing.service
+RandomizedDelaySec=5sec
+
+[Install]
+WantedBy=timers.target
