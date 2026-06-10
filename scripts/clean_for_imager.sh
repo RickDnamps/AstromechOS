@@ -486,6 +486,42 @@ else
     fi
 fi
 
+# ─── Ensure astromech-firstboot.service enabled (CRITICAL) ─────────────────
+# Root cause of the "no hotspot / no pairing on a freshly flashed card"
+# regression — autopsy-confirmed 2026-06-10 on a flashed master SD:
+# /etc/systemd/system/multi-user.target.wants/astromech-firstboot.service was
+# MISSING while the 6 other astromech units were enabled.
+#
+# Why ONLY firstboot: firstboot_setup.sh self-disables the unit at the end of
+# its first successful run (`systemctl disable astromech-firstboot.service`) so
+# it never re-runs on a deployed robot. But the canonical DD source IS a
+# flashed Pi whose firstboot has already completed — so by construction its
+# rootfs has firstboot DISABLED. DD'ing that state means every freshly flashed
+# card boots with firstboot disabled: systemd ignores the Imager trigger
+# marker, never schedules provisioning → no AP, no Flask, no pairing.
+#
+# Re-enable here so the DD'd state carries the enable symlink into the Golden
+# Image — identical rationale to the rpi-resize block above. FAIL LOUD if the
+# symlink can't be (re)created: a Golden Image without firstboot enabled is
+# unshippable and MUST abort the prep, never slip out silently.
+step "Pre-DD  Re-enable astromech-firstboot.service (self-disabled after first run)"
+FB_WANTS="/etc/systemd/system/multi-user.target.wants/astromech-firstboot.service"
+if [ "$DRY_RUN" = true ]; then
+    dryln "Would: systemctl enable astromech-firstboot.service + verify $FB_WANTS symlink"
+else
+    systemctl enable astromech-firstboot.service 2>/dev/null || true
+    if [ -L "$FB_WANTS" ]; then
+        ok "astromech-firstboot.service enabled (enable symlink present → fresh flashes will provision)"
+    else
+        echo "[FATAL] astromech-firstboot.service is NOT enabled and the enable symlink"   >&2
+        echo "        ($FB_WANTS) could not be created. A Golden Image built from this"     >&2
+        echo "        state would NEVER broadcast its hotspot or pair. Aborting pre-DD."    >&2
+        echo "        Check: systemctl status astromech-firstboot.service ;"                >&2
+        echo "               ls -la /etc/systemd/system/astromech-firstboot.service"        >&2
+        exit 1
+    fi
+fi
+
 # ─── Final sync + page-cache drop ──────────────────────────────────────────
 step "Final  sync + drop_caches (commit writes, flush page cache)"
 if [ "$DRY_RUN" = true ]; then

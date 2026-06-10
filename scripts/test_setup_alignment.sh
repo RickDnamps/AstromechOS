@@ -82,6 +82,23 @@ assert_grep "clean_for_imager.sh enables rpi-resize"      "$CLEAN"  'systemctl e
 assert_no_grep "setup_master.sh does NOT enable rpi-resize" "$MASTER" 'systemctl enable rpi-resize\.service'
 assert_no_grep "setup_slave.sh does NOT enable rpi-resize"  "$SLAVE"  'systemctl enable rpi-resize\.service'
 
+# ── firstboot re-enable before DD (2026-06-10 root cause: no-AP on fresh flash) ──
+# firstboot_setup.sh self-disables astromech-firstboot at the end of its first
+# run, so the canonical (flashed + firstboot-completed) DD source has it
+# DISABLED. clean_for_imager.sh MUST re-enable it before DD or every flashed
+# card boots with firstboot disabled → no hotspot, no pairing. Autopsy-confirmed
+# on a flashed master SD: multi-user.target.wants/astromech-firstboot.service
+# was MISSING. The enable MUST be fail-loud (abort prep) so a broken Golden
+# Image can never ship silently again.
+echo ""
+echo "firstboot re-enable before DD (no-AP regression guard):"
+assert_grep "clean_for_imager.sh re-enables astromech-firstboot" \
+    "$CLEAN" 'systemctl enable astromech-firstboot\.service'
+assert_grep "clean_for_imager.sh fail-loud verifies the firstboot enable symlink" \
+    "$CLEAN" 'multi-user\.target\.wants/astromech-firstboot\.service'
+assert_grep "firstboot_setup.sh self-disables firstboot after first run (why re-enable is needed)" \
+    "$REPO/scripts/firstboot_setup.sh" 'systemctl disable astromech-firstboot\.service'
+
 # ── pair-sealing (commit 9cc150b) ────────────────────────────────────
 echo ""
 echo "pair-sealing install (9cc150b):"
