@@ -164,6 +164,24 @@ assert_grep "clean_for_imager.sh wipes pair_sealed pre-DD" \
 assert_grep "clean_for_imager.sh wipes runcmd_done pre-DD" \
     "$CLEAN" 'runcmd_done'
 
+# ── dd_state_guard.sh — builder pair survives its own DD (2026-06-11) ─
+# clean_for_imager re-arms firstboot for the IMAGE, but the physical builder
+# cards have no Imager bake left in /boot — they must come back disabled,
+# sealed, and on their final SSID after the DD.
+GUARD="$REPO/scripts/dd_state_guard.sh"
+echo ""
+echo "dd_state_guard.sh (builder-pair post-DD restore):"
+assert_grep "guard snapshots to tmpfs (never lands in the image)" \
+    "$GUARD" '^BK=/dev/shm/'
+assert_grep "guard restore re-disables astromech-firstboot" \
+    "$GUARD" 'systemctl disable astromech-firstboot\.service'
+assert_grep "guard restore removes any firstboot trigger marker" \
+    "$GUARD" 'ASTROMECH_FIRSTBOOT_READY'
+assert_grep "guard backs up the lifecycle markers dir" \
+    "$GUARD" 'var/lib/astromech'
+assert_grep "guard fail-louds when NM profiles did not come back" \
+    "$GUARD" 'DO NOT REBOOT'
+
 # ── lib_config.sh sourced (carries chown fixes 1973566 + 327085f) ────
 echo ""
 echo "lib_config.sh sourced (carries chown fixes):"
