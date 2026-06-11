@@ -413,10 +413,17 @@ elif [ "$ROLE" = "master" ]; then
         # firstboot completes if needed. Idempotent, marker-protected, and
         # the sealing script self-completes the FINAL_SSID handover that
         # used to live inline here.
-        if systemctl enable --now astromech-pair-sealing.path >/dev/null 2>&1; then
-            log_ok "astromech-pair-sealing.path enabled — final SSID handover will fire async when Slave joins"
+        # Bug fix 2026-06-11: clear any stale 'failed (trigger-limit-hit)'
+        # state from boot-time dnsmasq churn before (re)starting, and bring
+        # up BOTH trigger units — .path (inotify fast path) and .timer (60s
+        # belt-and-suspenders retry, the unit that actually sealed the first
+        # successful flashed pair when the .path had trigger-limited out).
+        systemctl reset-failed astromech-pair-sealing.path 2>/dev/null || true
+        if systemctl enable astromech-pair-sealing.path astromech-pair-sealing.timer >/dev/null 2>&1 \
+           && systemctl restart astromech-pair-sealing.path astromech-pair-sealing.timer >/dev/null 2>&1; then
+            log_ok "pair-sealing trigger units up (.path inotify + .timer 60s retry) — final SSID handover fires async when Slave joins"
         else
-            log_warn "Could not enable astromech-pair-sealing.path — pairing must be triggered manually"
+            log_warn "Could not enable/start pair-sealing trigger units — run 'systemctl start astromech-pair-sealing.service' manually once the Slave has joined"
         fi
     fi
 
@@ -439,6 +446,15 @@ CANDIDATE_URL=$(cfg_get github repo_url "")
 CANDIDATE_BRANCH=$(cfg_get github branch "main")
 
 if [ -n "$CANDIDATE_URL" ] && [ -d "$REPO_PATH/.git" ]; then
+    # Bug fix 2026-06-11 (software-fhl): this script runs as root but the
+    # repo is owned by $TARGET_USER → every root git call (including the
+    # fetch inside dna_validate/validate_paternity) was refused with git's
+    # dubious-ownership 'safe.directory' error, so the tree was never reset
+    # at firstboot. Whitelist the repo for root. Note: safe.directory is
+    # ONLY honored from system/global config — `git -c` is deliberately
+    # ignored by git, hence the global add. /root/.gitconfig accumulating
+    # one path per firstboot run is harmless.
+    git config --global --add safe.directory "$REPO_PATH" 2>/dev/null || true
     # Find current origin URL (best effort — git remote in a freshly-imaged
     # repo may or may not be set yet)
     CURRENT_ORIGIN=$(git -C "$REPO_PATH" remote get-url origin 2>/dev/null || echo "")
@@ -460,6 +476,15 @@ if [ -n "$CANDIDATE_URL" ] && [ -d "$REPO_PATH/.git" ]; then
     fi
 else
     log "Skipping repo switch: candidate='$CANDIDATE_URL' .git present=$([ -d "$REPO_PATH/.git" ] && echo y || echo n)"
+fi
+
+# Root git ops above (fetch/reset/remote set-url) leave root-owned files in
+# the user's repo (.git/FETCH_HEAD, fetched packs, reset working-tree files).
+# The user-run try_git_pull in master/main.py would then hit EACCES on every
+# boot. Hand the whole tree back to the install user (username-agnostic per
+# CLAUDE.md HARD RULE — never a literal username here).
+if [ -d "$REPO_PATH" ] && [ -n "${TARGET_USER:-}" ]; then
+    chown -R "$TARGET_USER:$TARGET_USER" "$REPO_PATH" 2>/dev/null || true
 fi
 
 # ─── 6. Self-destruct + reboot ──────────────────────────────────────────

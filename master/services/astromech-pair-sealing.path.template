@@ -22,11 +22,18 @@ PathChanged=/var/lib/NetworkManager/dnsmasq-wlan0.leases
 PathExistsGlob=/var/lib/NetworkManager/dnsmasq-wlan0.leases
 Unit=astromech-pair-sealing.service
 # Defense in depth: NM rapid renew loops or dnsmasq churn during boot can
-# cause bursts of lease-file writes. Cap to 5 firings per 30s — the sealing
+# cause bursts of lease-file writes. Cap firings per 30s — the sealing
 # script is idempotent and writes the marker on first success, but we don't
 # want a runaway fork loop if dnsmasq goes berserk.
+#
+# Bug fix 2026-06-11 (live, first flashed-pair boot): boot-time dnsmasq churn
+# (AP bring-up + bootstrap lease writes during firstboot) exceeded the old
+# burst of 5 → systemd put the .path in PERMANENT 'failed (trigger-limit-hit)'
+# state and it never watched again; only the .timer fallback sealed the pair.
+# 20/30s absorbs boot churn while still capping a runaway loop. The sealing
+# script additionally reset-fails this unit after sealing (defense in depth).
 TriggerLimitIntervalSec=30
-TriggerLimitBurst=5
+TriggerLimitBurst=20
 
 [Install]
 WantedBy=multi-user.target

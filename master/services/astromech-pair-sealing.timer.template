@@ -16,6 +16,15 @@ Documentation=https://github.com/RickDnamps/AstromechOS/blob/main/docs/FIRSTBOOT
 # 15 min later worked instantly. UX risk: maker pulls power → SD corruption.
 # This timer guarantees pair-sealing completes within 60s of slave joining.
 After=NetworkManager.service
+# Bug fix 2026-06-11: without this condition the timer activated on EVERY
+# boot of an already-sealed robot and ticked the (condition-skipped) .service
+# every 60s forever — one journal line per minute for the life of the robot.
+# Timer-unit conditions are evaluated at timer ACTIVATION (boot), so a sealed
+# robot never starts the timer at all. For the boot where sealing happens
+# mid-session, astromech_pair_sealing.sh stops this timer right after writing
+# the marker. Re-pair flow unchanged: rm the marker + systemctl start the
+# .path and .timer (docs/FIRSTBOOT.md).
+ConditionPathExists=!/var/lib/astromech/pair_sealed
 
 [Timer]
 OnBootSec=30sec

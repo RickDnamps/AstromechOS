@@ -130,6 +130,40 @@ assert_grep "pair-sealing.timer has OnUnitInactiveSec=60sec (retry cadence)" \
 assert_grep "pair-sealing.timer has WantedBy=timers.target" \
     "$PAIR_TIMER_UNIT" '^WantedBy=timers\.target'
 
+# ── pair-sealing hardening (2026-06-11, software-4rs) ────────────────
+# Live first-flashed-pair boot: boot dnsmasq churn trigger-limited the .path
+# into permanent 'failed', and the sealed robot's .timer ticked a skipped
+# .service every 60s forever. Guards below lock the three-part fix.
+PAIR_PATH_UNIT="$REPO/master/services/astromech-pair-sealing.path.template"
+echo ""
+echo "pair-sealing hardening (2026-06-11):"
+assert_grep "pair-sealing.path burst raised to 20 (boot-churn headroom)" \
+    "$PAIR_PATH_UNIT" '^TriggerLimitBurst=20'
+assert_grep "pair-sealing.timer gated on !pair_sealed (no eternal ticks on sealed robots)" \
+    "$PAIR_TIMER_UNIT" '^ConditionPathExists=!/var/lib/astromech/pair_sealed'
+assert_grep "sealing script quiesces trigger units after writing the marker" \
+    "$REPO/scripts/astromech_pair_sealing.sh" 'systemctl stop --no-block astromech-pair-sealing\.path astromech-pair-sealing\.timer'
+assert_grep "firstboot clears stale trigger-limit failed state before enabling" \
+    "$REPO/scripts/firstboot_setup.sh" 'systemctl reset-failed astromech-pair-sealing\.path'
+
+# ── firstboot root-git safe.directory (2026-06-11, software-fhl) ─────
+echo ""
+echo "firstboot root-git handling (2026-06-11):"
+assert_grep "firstboot whitelists the repo for root git (safe.directory)" \
+    "$REPO/scripts/firstboot_setup.sh" 'git config --global --add safe\.directory'
+assert_grep "firstboot chowns the repo back to TARGET_USER after root git ops" \
+    "$REPO/scripts/firstboot_setup.sh" 'chown -R "\$TARGET_USER:\$TARGET_USER" "\$REPO_PATH"'
+
+# ── per-deployment lifecycle marker wipe pre-DD (2026-06-11) ─────────
+# Without this, a Golden Image DD'd from a SEALED builder pair ships with
+# pair_sealed baked in → fresh flashes never seal (bootstrap SSID forever).
+echo ""
+echo "pre-DD lifecycle marker wipe (2026-06-11):"
+assert_grep "clean_for_imager.sh wipes pair_sealed pre-DD" \
+    "$CLEAN" 'pair_sealed'
+assert_grep "clean_for_imager.sh wipes runcmd_done pre-DD" \
+    "$CLEAN" 'runcmd_done'
+
 # ── lib_config.sh sourced (carries chown fixes 1973566 + 327085f) ────
 echo ""
 echo "lib_config.sh sourced (carries chown fixes):"

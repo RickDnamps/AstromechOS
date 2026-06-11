@@ -199,5 +199,19 @@ mkdir -p "$MARKER_DIR"
 touch "$MARKER"
 chown "$TARGET_USER:$TARGET_USER" "$MARKER" 2>/dev/null || true
 
+# ── 11. Quiesce the trigger units for THIS session ───────────────────────
+# The ConditionPathExists=!marker gate on .path/.timer only applies at the
+# units' NEXT activation — the already-active .timer would otherwise keep
+# ticking a condition-skipped .service every 60s (journal spam for the rest
+# of the session), and a .path stuck in 'failed (trigger-limit-hit)' from
+# boot churn (observed live 2026-06-11) would linger forever. Stopping the
+# .timer from the oneshot it triggered is safe — it does not kill this
+# running instance. Guarded so the sandboxed test harness (fake MARKER_DIR)
+# never touches the real units.
+if [ "$MARKER_DIR" = "/var/lib/astromech" ] && command -v systemctl >/dev/null 2>&1; then
+    systemctl reset-failed astromech-pair-sealing.path 2>/dev/null || true
+    systemctl stop --no-block astromech-pair-sealing.path astromech-pair-sealing.timer 2>/dev/null || true
+fi
+
 log_ok "Pair-sealing complete. Marker written. Service will not run again."
 exit 0

@@ -468,6 +468,30 @@ else
     done
 fi
 
+# ─── Wipe per-deployment lifecycle markers ─────────────────────────────────
+# Contract from CLAUDE.md "Golden Image build invariants" (commit b174e3a) —
+# previously a MANUAL marathon step, permanent in code since 2026-06-11:
+#   /var/lib/astromech/pair_sealed — written by astromech_pair_sealing.sh on
+#     the BUILDER pair. Baked into the image, every freshly flashed robot
+#     believes it is already paired: .path/.timer/.service all gate on
+#     ConditionPathExists=!pair_sealed → the AP stays on the bootstrap SSID
+#     forever and the slave handover never happens.
+#   /var/lib/astromech/runcmd_done — cloud-init bootcmd marker-guard. Baked
+#     in, a fresh flash SKIPS the early NM-profile wipe (belt-and-suspenders
+#     next to the explicit profile wipe above).
+step "Pre-DD  Wipe per-deployment lifecycle markers (pair_sealed, runcmd_done)"
+for m in pair_sealed runcmd_done; do
+    p="/var/lib/astromech/$m"
+    if [ "$DRY_RUN" = true ]; then
+        [ -f "$p" ] && dryln "Would remove $p"
+    else
+        if [ -f "$p" ]; then
+            rm -f "$p" 2>/dev/null && ok "Removed $m marker" \
+                || warn "Could not remove $p"
+        fi
+    fi
+done
+
 # ─── Ensure rpi-resize.service enabled for first-boot FS grow ──────────────
 # The DD + pishrink workflow shrinks the image's rootfs partition. On the
 # operator's freshly flashed card, rpi-resize.service (gated by
