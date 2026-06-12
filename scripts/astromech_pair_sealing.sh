@@ -169,6 +169,13 @@ if [ "$CURRENT_SSID" = "$FINAL_SSID" ]; then
     touch "$MARKER"
     chown "$TARGET_USER:$TARGET_USER" "$MARKER" 2>/dev/null || true
     rm -f "$INTENT" 2>/dev/null || true
+    # Quiesce the trigger units on THIS exit path too (field 2026-06-12: the
+    # idempotent path returned before step 11, leaving the active .timer
+    # ticking a condition-skipped service every 60s until the next reboot).
+    if [ "$MARKER_DIR" = "/var/lib/astromech" ] && command -v systemctl >/dev/null 2>&1; then
+        systemctl reset-failed astromech-pair-sealing.path 2>/dev/null || true
+        systemctl stop --no-block astromech-pair-sealing.path astromech-pair-sealing.timer 2>/dev/null || true
+    fi
     exit 0
 fi
 
