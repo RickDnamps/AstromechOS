@@ -272,10 +272,15 @@ if [ -z "$HW_LAYOUT_SOURCE" ]; then
     # write to the I2C bus (ReadOnlySMBus wrapper raises AssertionError on
     # any write attempt + the test suite spies on that contract).
     DETECT_RC=0
+    # Scoped pipefail: without it `|| DETECT_RC=$?` captures TEE's status
+    # (always 0) and a failed scan is silently treated as success (same
+    # swallow class as the 2026-06-12 "no hotspot" bug).
+    set -o pipefail
     python3 "$REPO_PATH/scripts/detect_hats.py" \
         --output "$HW_LAYOUT_OUT" \
         --role "$ROLE" \
         --verbose 2>&1 | tee -a "$LOGFILE" || DETECT_RC=$?
+    set +o pipefail
     if [ "$DETECT_RC" -eq 0 ] && [ -s "$HW_LAYOUT_OUT" ]; then
         chmod 0644 "$HW_LAYOUT_OUT" 2>>"$LOGFILE" || true
         chown "$TARGET_USER:$TARGET_USER" "$HW_LAYOUT_OUT" 2>>"$LOGFILE" || true
@@ -376,6 +381,30 @@ fi
 # scripts preserve their full interactive mode when `--non-interactive`
 # is NOT passed). This keeps the "git pull + bash setup_*.sh" workflow
 # 100% functional alongside the Imager-driven Golden Image path.
+# Wait for NetworkManager before invoking the network setup scripts.
+# Field log 2026-06-12 (12-06 images, master): firstboot beat NM to the
+# punch — setup_master_network.sh died with "NetworkManager is not
+# active" and the `| tee` pipeline swallowed the non-zero exit, so
+# firstboot logged a FALSE "[OK] Bootstrap AP up", wiped its artefacts
+# and rebooted → robot with no hotspot at all and no retry path. The
+# race was always there (persistent-journal boot I/O merely shifted the
+# timing); wait up to 90 s, nudging NM along the way.
+_wait_for_nm() {
+    local waited=0
+    until systemctl is-active --quiet NetworkManager; do
+        if [ "$waited" -ge 90 ]; then
+            log_err "NetworkManager still inactive after ${waited}s"
+            return 1
+        fi
+        [ "$waited" -eq 0 ] && log "Waiting for NetworkManager to come up ..."
+        systemctl start NetworkManager >/dev/null 2>&1 || true
+        sleep 3
+        waited=$((waited + 3))
+    done
+    [ "$waited" -gt 0 ] && log_ok "NetworkManager active after ${waited}s wait"
+    return 0
+}
+
 log "Step 4.7: hotspot bootstrap + handover ..."
 BOOT_SSID=$(cfg_get hotspot ssid "")
 BOOT_PSK=$(cfg_get hotspot password "")
@@ -391,11 +420,18 @@ elif [ "$ROLE" = "master" ]; then
     #    migrates wlan0's home WiFi to wlan1 if a USB dongle is plugged in
     #    AND wlan0 already had a known connection — otherwise it skips
     #    that step gracefully (Imager image may not have wlan1 yet).
+    _wait_for_nm || log_warn "NM not confirmed active — setup script may fail (it will be reported truthfully below)"
+    # pipefail is SCOPED to this test: without it, `if cmd | tee` tests
+    # TEE's exit status and a failed setup logs a false [OK] (field log
+    # 2026-06-12 — the exact "no hotspot at all" bug).
+    set -o pipefail
     if bash "$REPO_PATH/scripts/setup_master_network.sh" \
             --non-interactive --ssid "$BOOT_SSID" --psk "$BOOT_PSK" 2>&1 \
             | tee -a "$LOGFILE"; then
+        set +o pipefail
         log_ok "Bootstrap AP up on wlan0 (SSID='$BOOT_SSID')"
     else
+        set +o pipefail
         log_err "setup_master_network.sh failed — leaving network alone"
         # Fall through; do not abort firstboot. Operator can run manually.
         BOOT_SSID=""   # disables handover below
@@ -429,11 +465,15 @@ elif [ "$ROLE" = "master" ]; then
 
 elif [ "$ROLE" = "slave" ]; then
     log "Slave path: joining bootstrap AP '$BOOT_SSID' (Master will rewrite our profile after handover)"
+    _wait_for_nm || log_warn "NM not confirmed active — setup script may fail (it will be reported truthfully below)"
+    set -o pipefail
     if bash "$REPO_PATH/scripts/setup_slave_network.sh" \
             --non-interactive --ssid "$BOOT_SSID" --psk "$BOOT_PSK" 2>&1 \
             | tee -a "$LOGFILE"; then
+        set +o pipefail
         log_ok "Slave joined bootstrap AP — Master will push final SSID over SSH shortly"
     else
+        set +o pipefail
         log_err "setup_slave_network.sh failed — slave will be unpaired"
     fi
 fi
@@ -460,7 +500,11 @@ if [ -n "$CANDIDATE_URL" ] && [ -d "$REPO_PATH/.git" ]; then
     CURRENT_ORIGIN=$(git -C "$REPO_PATH" remote get-url origin 2>/dev/null || echo "")
     if [ "$CANDIDATE_URL" != "$CURRENT_ORIGIN" ]; then
         log "DNA validating candidate repo_url='$CANDIDATE_URL' branch='$CANDIDATE_BRANCH' ..."
+        # Scoped pipefail: a swallowed dna_validate failure here would log
+        # "DNA OK" and switch origin to an UNVALIDATED repo — security gate.
+        set -o pipefail
         if dna_validate "$CANDIDATE_URL" "$CANDIDATE_BRANCH" 2>&1 | tee -a "$LOGFILE"; then
+            set +o pipefail
             log_ok "DNA OK — switching origin to $CANDIDATE_URL"
             git -C "$REPO_PATH" remote set-url origin "$CANDIDATE_URL"
             git -C "$REPO_PATH" fetch --no-tags origin "$CANDIDATE_BRANCH" \
@@ -468,6 +512,7 @@ if [ -n "$CANDIDATE_URL" ] && [ -d "$REPO_PATH/.git" ]; then
                 && log_ok "Aligned to origin/$CANDIDATE_BRANCH" \
                 || log_err "fetch+reset failed; origin URL still updated but tree not reset"
         else
+            set +o pipefail
             log_err "DNA FAIL — keeping origin pointed at: $CURRENT_ORIGIN"
             log_err "Candidate URL '$CANDIDATE_URL' is NOT a fork of RickDnamps/AstromechOS"
         fi

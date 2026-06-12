@@ -13,6 +13,17 @@ Description=AstromechOS first-boot provisioning (Imager bootstrap)
 # at cloud-init-local uptime ~7s, before NetworkManager — no race).
 After=network-online.target
 Wants=network-online.target
+# Bug fix 2026-06-12 (field: "no hotspot at all" on the 12-06 images):
+# network-online.target does NOT guarantee NetworkManager is active when
+# NetworkManager-wait-online is absent from the transaction — firstboot
+# beat NM to the punch and setup_master_network.sh died on its NM check
+# (the | tee pipeline then swallowed the failure; fixed with scoped
+# pipefail + a _wait_for_nm loop in firstboot_setup.sh — this ordering
+# is the third layer). After=NetworkManager.service creates NO cycle:
+# NM is not ordered after multi-user.target (unlike cloud-final, see
+# the 2026-06-06 note above).
+Wants=NetworkManager.service
+After=NetworkManager.service
 Before=astromech-master.service astromech-slave.service
 # Only fire when the Imager has placed the trigger marker. Two paths to
 # cover Pi OS Bullseye (/boot) vs Bookworm+ (/boot/firmware).
