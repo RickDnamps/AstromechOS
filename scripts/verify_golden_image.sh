@@ -2,7 +2,7 @@
 # ============================================================================
 # verify_golden_image.sh — final quality gate for a Golden Image .img file.
 #
-# Loop-mounts the raw image READ-ONLY and checks the 7 ship-state criteria
+# Loop-mounts the raw image READ-ONLY and checks the 9 ship-state criteria
 # inside the actual filesystem content. This is the check that proves an
 # image will provision (hotspot + pairing) on a fresh flash — the two
 # historical Golden Image bugs (firstboot disabled in the 07-06 images,
@@ -25,6 +25,8 @@
 #   5. machine-id truncated
 #   6. firstboot.log + .bash_history empty
 #   7. Boot partition carries no leftover trigger marker / secrets dir
+#   8. /var/log/journal present (persistent journald — bd software-7dh)
+#   9. No stale netplan 90-NM-*.yaml (old-pairing leftover — bd software-ri7)
 # ============================================================================
 set -u
 
@@ -106,6 +108,22 @@ if ls "$BOOT_MNT" 2>/dev/null | grep -iqE "ASTROMECH_FIRSTBOOT_READY|astromech_s
     echo "[FAIL] 7. leftover trigger/secrets on boot partition"; FAIL=1
 else
     echo "[PASS] 7. boot partition clean (Imager adds trigger+secrets at flash)"
+fi
+
+# 8. Persistent journal dir (bd software-7dh: 11-06 images shipped without
+#    it → volatile journals → zero forensics on flashed robots)
+if [ -d "$ROOT_MNT/var/log/journal" ]; then
+    echo "[PASS] 8. /var/log/journal present (persistent journald)"
+else
+    echo "[FAIL] 8. /var/log/journal MISSING — flashed robots get volatile logs"; FAIL=1
+fi
+
+# 9. Stale netplan-exported NM profiles (bd software-ri7: leftover
+#    90-NM-*.yaml regenerates an old pairing's connection on every boot)
+if ls "$ROOT_MNT/etc/netplan/" 2>/dev/null | grep -q "^90-NM-"; then
+    echo "[FAIL] 9. stale netplan 90-NM-*.yaml present (old pairing leftover)"; FAIL=1
+else
+    echo "[PASS] 9. no stale netplan-exported profiles"
 fi
 
 echo ""

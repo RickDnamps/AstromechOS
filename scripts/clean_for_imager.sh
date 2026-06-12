@@ -361,6 +361,15 @@ else
         journalctl --vacuum-time=1s >/dev/null 2>&1 || true
         ok "systemd journal vacuumed"
     fi
+    # Persistent journal (bd software-7dh, field 2026-06-12): the 11-06
+    # images shipped WITHOUT /var/log/journal → journald stayed volatile
+    # (RAM) on every flashed robot → zero post-mortem forensics for failed
+    # firstboot/pairing boots. Ship-state REQUIRES the directory; journald
+    # (Storage=auto) persists as soon as it exists.
+    mkdir -p /var/log/journal 2>/dev/null || true
+    chgrp systemd-journal /var/log/journal 2>/dev/null || true
+    chmod 2755 /var/log/journal 2>/dev/null || true
+    ok "/var/log/journal present (persistent journald on flashed robots)"
     TRUNCATED=0
     DELETED=0
     while IFS= read -r f; do
@@ -446,6 +455,9 @@ if [ "$DRY_RUN" = true ]; then
         p="/etc/NetworkManager/system-connections/${f}.nmconnection"
         [ -f "$p" ] && dryln "Would remove $p"
     done
+    for y in /etc/netplan/90-NM-*.yaml; do
+        [ -f "$y" ] && dryln "Would remove $y (netplan-exported NM profile)"
+    done
     for k in authorized_keys id_ed25519 id_ed25519.pub; do
         f="$TARGET_HOME/.ssh/$k"
         [ -f "$f" ] && dryln "Would remove $f"
@@ -457,6 +469,17 @@ else
         if [ -f "$p" ]; then
             rm -f "$p" 2>/dev/null && ok "Removed ${f}.nmconnection" \
                 || warn "Could not remove $p"
+        fi
+    done
+    # Netplan-exported NM profiles (bd software-ri7, field 2026-06-12): the
+    # builder slave carried /etc/netplan/90-NM-<uuid>.yaml from an OLD
+    # pairing (NM connection 'netplan-wlan0-Astromech-1390'). netplan
+    # regenerates that connection from the yaml on every boot, so wiping
+    # the .nmconnection alone is not enough — the yaml must go too.
+    for y in /etc/netplan/90-NM-*.yaml; do
+        if [ -f "$y" ]; then
+            rm -f "$y" 2>/dev/null && ok "Removed $(basename "$y") (stale netplan profile)" \
+                || warn "Could not remove $y"
         fi
     done
     for k in authorized_keys id_ed25519 id_ed25519.pub; do
