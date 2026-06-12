@@ -187,7 +187,29 @@ PYEOF
 )
     log_ok "Parsed role='$ROLE'  hostname='$HOSTNAME_TARGET'"
 else
-    log_warn "No $INIT_JSON — role/hostname not configured (using defaults below)"
+    log_warn "No $INIT_JSON — role/hostname not configured (trying astromech_role.json fallback)"
+fi
+
+# Role fallback from the boot-partition astromech_role.json (field 2026-06-12).
+# init_config.json lives INSIDE the secrets dir, which the self-destruct
+# shreds (line ~544). astromech_role.json is baked by the Imager OUTSIDE the
+# secrets dir, so it SURVIVES — making it the only role source on a re-armed
+# firstboot (or any boot where the secrets were already consumed). Without
+# this, a re-armed SLAVE silently defaults to 'master' (line ~201) and
+# reprovisions itself with the wrong hostname + master network branch.
+# Imager path is UNCHANGED: this only fires when init_config.json gave nothing.
+if [ -z "$ROLE" ] && [ -f "$BOOT_DIR/astromech_role.json" ]; then
+    ROLE=$(_python - "$BOOT_DIR/astromech_role.json" 'role' << 'PYEOF' 2>>"$LOGFILE" || true
+import json, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as f:
+        d = json.load(f)
+    print(str(d.get(sys.argv[2], '')).strip().lower())
+except Exception:
+    print('', file=sys.stderr); sys.exit(0)
+PYEOF
+)
+    [ -n "$ROLE" ] && log_ok "role='$ROLE' recovered from astromech_role.json (init_config.json absent)"
 fi
 
 # Validate + default role
