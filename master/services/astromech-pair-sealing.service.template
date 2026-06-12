@@ -7,6 +7,15 @@ After=NetworkManager.service network-online.target dnsmasq.service
 Wants=NetworkManager.service
 # Don't run if we already sealed (script writes this marker on success).
 ConditionPathExists=!/var/lib/astromech/pair_sealed
+# Never run during the firstboot boot (field log 2026-06-12): firstboot
+# brings the bootstrap AP up and schedules its own reboot ~5s later. A
+# sealing run started in that window got KILLED by the reboot BETWEEN the
+# SSH push to the slave and the Master AP flip — slave orphaned on the
+# final SSID, master stuck on bootstrap, retry loop deadlocked on ping.
+# The trigger marker exists for the whole firstboot window (deleted ~6s
+# before the reboot; the script-side intent roll-forward covers that tail).
+ConditionPathExists=!/boot/ASTROMECH_FIRSTBOOT_READY
+ConditionPathExists=!/boot/firmware/ASTROMECH_FIRSTBOOT_READY
 # Don't run if the operator hasn't installed the hotspot NM connection yet
 # (setup_master_network.sh creates it; bootstrap AP comes up before sealing
 # is ever meaningful).

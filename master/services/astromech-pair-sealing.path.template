@@ -4,6 +4,11 @@ After=NetworkManager.service
 # Don't run if we already sealed (same marker the .service checks — saves a
 # fork+exec on every dnsmasq lease event after sealing is complete).
 ConditionPathExists=!/var/lib/astromech/pair_sealed
+# Never activate during the firstboot boot — its scheduled reboot kills a
+# mid-flight sealing run between slave-push and AP-flip (field log
+# 2026-06-12, see .service.template for the full autopsy).
+ConditionPathExists=!/boot/ASTROMECH_FIRSTBOOT_READY
+ConditionPathExists=!/boot/firmware/ASTROMECH_FIRSTBOOT_READY
 
 [Path]
 # Bug fix 2026-06-05: NetworkManager's ipv4.method=shared spawns its OWN

@@ -53,6 +53,15 @@ log_err()  { printf '[%s] [ERR]  %s\n' "$(date -Iseconds)" "$*" | tee -a "$LOGFI
 
 MARKER_DIR="/var/lib/astromech"
 MARKER="$MARKER_DIR/pair_sealed"
+# Crash-safe push intent (field log 2026-06-12): written right BEFORE the
+# SSH push to the slave, removed when sealing completes. If a run dies
+# between the push and the Master AP flip (the firstboot scheduled reboot
+# did exactly that), the slave is left hunting the FINAL SSID while the
+# master still broadcasts the bootstrap one — and the normal retry path
+# can never proceed (it requires the slave reachable, which now requires
+# the flip). The intent marker lets a later run ROLL FORWARD: flip the AP
+# without re-probing, reuniting the pair.
+INTENT="$MARKER_DIR/pair_push_intent"
 LOCAL_CFG_PATH="$REPO_PATH/master/config/local.cfg"
 
 # ── 1. Already sealed? ────────────────────────────────────────────────────
@@ -85,15 +94,46 @@ SSH_USER=$(cfg_get slave user "$TARGET_USER")
 _SSH_KEY="/home/$TARGET_USER/.ssh/id_ed25519"
 _SSH_KNOWN="/home/$TARGET_USER/.ssh/known_hosts"
 _SSH_OPTS="-i $_SSH_KEY -o UserKnownHostsFile=$_SSH_KNOWN -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
-if ! ping -c 1 -W 2 "$SLAVE_TARGET" >/dev/null 2>&1; then
-    log "Slave not reachable ($SLAVE_TARGET ping fail). Exit 2."
+
+_slave_reachable() {
+    if ! ping -c 1 -W 2 "$SLAVE_TARGET" >/dev/null 2>&1; then
+        log "Slave not reachable ($SLAVE_TARGET ping fail)."
+        return 1
+    fi
+    if ! ssh $_SSH_OPTS -o ConnectTimeout=4 "$SSH_USER@$SLAVE_TARGET" 'true' >/dev/null 2>&1; then
+        log "Slave SSH not yet ready (probe to $SSH_USER@$SLAVE_TARGET failed)."
+        return 1
+    fi
+    return 0
+}
+
+# ROLL_FORWARD=1 means: a previous run already pushed the FINAL SSID to the
+# slave and died before flipping the Master AP. The slave is EXPECTED to be
+# unreachable (it hunts an SSID nobody broadcasts yet) — skip the probe and
+# the push, flip the AP, and the slave's NM autoconnect reunites the pair.
+# Age-gated at 180s: a slave that dropped for benign reasons (its own
+# firstboot reboot) comes back on the bootstrap SSID within ~1 min and takes
+# the normal path; only a genuinely orphaned slave stays unreachable.
+# Residual risk accepted: a slave that lost power in the ~1s between probe
+# and push AND stayed off >180s would still hold the bootstrap SSID after a
+# roll-forward — power it while the master is up and re-pair per
+# docs/FIRSTBOOT.md (rm pair_sealed + restart units).
+ROLL_FORWARD=0
+if _slave_reachable; then
+    log_ok "Slave reachable at $SSH_USER@$SLAVE_TARGET"
+elif [ -f "$INTENT" ]; then
+    _AGE=$(( $(date +%s) - $(stat -c %Y "$INTENT" 2>/dev/null || echo 0) ))
+    if [ "$_AGE" -ge 180 ]; then
+        ROLL_FORWARD=1
+        log_warn "Push intent is ${_AGE}s old and the slave is still unreachable — assuming the previous run pushed the final SSID and was killed before the AP flip (field log 2026-06-12). ROLLING FORWARD: flipping the Master AP without re-push."
+    else
+        log "Push intent present (${_AGE}s old), slave unreachable — letting it settle before roll-forward. Exit 2."
+        exit 2
+    fi
+else
+    log "Exit 2."
     exit 2
 fi
-if ! ssh $_SSH_OPTS -o ConnectTimeout=4 "$SSH_USER@$SLAVE_TARGET" 'true' >/dev/null 2>&1; then
-    log "Slave SSH not yet ready (probe to $SSH_USER@$SLAVE_TARGET failed). Exit 2."
-    exit 2
-fi
-log_ok "Slave reachable at $SSH_USER@$SLAVE_TARGET"
 
 # ── 5. Generate FINAL_SSID ───────────────────────────────────────────────
 FINAL_SSID=$(bash "$REPO_PATH/scripts/gen_hotspot_ssid.sh" 2>/dev/null || echo "")
@@ -128,6 +168,7 @@ if [ "$CURRENT_SSID" = "$FINAL_SSID" ]; then
     mkdir -p "$MARKER_DIR"
     touch "$MARKER"
     chown "$TARGET_USER:$TARGET_USER" "$MARKER" 2>/dev/null || true
+    rm -f "$INTENT" 2>/dev/null || true
     exit 0
 fi
 
@@ -147,11 +188,25 @@ _QSSID=$(printf '%q' "$FINAL_SSID")
 _QPSK=$(printf '%q' "$FINAL_PSK")
 _PUSH="$_PICK; sudo -n nmcli connection modify \"\$CON\" 802-11-wireless.ssid $_QSSID wifi-sec.psk $_QPSK"
 
-if ! ssh $_SSH_OPTS -o ConnectTimeout=6 "$SSH_USER@$SLAVE_TARGET" "$_PUSH" 2>>"$LOGFILE"; then
-    log_err "SSH push to Slave failed."
-    exit 1
+if [ "$ROLL_FORWARD" -eq 1 ]; then
+    log "Roll-forward: skipping slave push (delivered by the interrupted run)."
+else
+    # CRASH-SAFE ORDER (field log 2026-06-12): record the push intent BEFORE
+    # the push. If this process dies between the push and the AP flip (the
+    # firstboot scheduled reboot did exactly that — sealing log stopped at
+    # 'Slave reachable', slave profile mtime proved the push landed), the
+    # next run finds the intent + an unreachable slave and rolls forward.
+    mkdir -p "$MARKER_DIR"
+    printf '%s\n' "$FINAL_SSID" > "$INTENT" 2>/dev/null || true
+    if ! ssh $_SSH_OPTS -o ConnectTimeout=6 "$SSH_USER@$SLAVE_TARGET" "$_PUSH" 2>>"$LOGFILE"; then
+        log_err "SSH push to Slave failed."
+        # Leave the intent in place: an ssh killed mid-flight may still have
+        # delivered the nmcli on the slave — the age-gated roll-forward will
+        # converge either way.
+        exit 1
+    fi
+    log_ok "Slave NM profile updated with FINAL_SSID='$FINAL_SSID'"
 fi
-log_ok "Slave NM profile updated with FINAL_SSID='$FINAL_SSID'"
 
 # ── 8. Flip Master AP ────────────────────────────────────────────────────
 # Slave NM auto-reconnects to the new SSID (its profile now points at it).
@@ -198,6 +253,7 @@ fi
 mkdir -p "$MARKER_DIR"
 touch "$MARKER"
 chown "$TARGET_USER:$TARGET_USER" "$MARKER" 2>/dev/null || true
+rm -f "$INTENT" 2>/dev/null || true
 
 # ── 11. Quiesce the trigger units for THIS session ───────────────────────
 # The ConditionPathExists=!marker gate on .path/.timer only applies at the

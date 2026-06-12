@@ -479,8 +479,11 @@ fi
 #   /var/lib/astromech/runcmd_done — cloud-init bootcmd marker-guard. Baked
 #     in, a fresh flash SKIPS the early NM-profile wipe (belt-and-suspenders
 #     next to the explicit profile wipe above).
-step "Pre-DD  Wipe per-deployment lifecycle markers (pair_sealed, runcmd_done)"
-for m in pair_sealed runcmd_done; do
+#   /var/lib/astromech/pair_push_intent — crash-safe sealing intent (field
+#     log 2026-06-12). Baked in, a fresh flash would roll-forward the AP
+#     flip after 180s even though no push ever happened on THIS deployment.
+step "Pre-DD  Wipe per-deployment lifecycle markers (pair_sealed, runcmd_done, pair_push_intent)"
+for m in pair_sealed runcmd_done pair_push_intent; do
     p="/var/lib/astromech/$m"
     if [ "$DRY_RUN" = true ]; then
         [ -f "$p" ] && dryln "Would remove $p"

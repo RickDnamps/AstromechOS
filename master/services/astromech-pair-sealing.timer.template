@@ -25,6 +25,11 @@ After=NetworkManager.service
 # the marker. Re-pair flow unchanged: rm the marker + systemctl start the
 # .path and .timer (docs/FIRSTBOOT.md).
 ConditionPathExists=!/var/lib/astromech/pair_sealed
+# Never activate during the firstboot boot — its scheduled reboot kills a
+# mid-flight sealing run between slave-push and AP-flip (field log
+# 2026-06-12, see .service.template for the full autopsy).
+ConditionPathExists=!/boot/ASTROMECH_FIRSTBOOT_READY
+ConditionPathExists=!/boot/firmware/ASTROMECH_FIRSTBOOT_READY
 
 [Timer]
 OnBootSec=30sec
