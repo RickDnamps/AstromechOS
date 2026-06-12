@@ -445,30 +445,40 @@ network name.
 
 ┌── Phase 2 — async pair-sealing (Master, event-driven) ──────────────┐
 │                                                                     │
-│ astromech-pair-sealing.path                                         │
+│ astromech-pair-sealing.path  (+ .timer fallback every 60 s)         │
 │   ┃                                                                 │
-│   ┃ Watches /var/lib/misc/dnsmasq.leases (PathChanged +             │
-│   ┃ PathExistsGlob). Fires astromech-pair-sealing.service on        │
-│   ┃ every lease change. ConditionPathExists=!/var/lib/astromech/    │
-│   ┃ pair_sealed → once sealed, the .path stops triggering.          │
-│   ┃ TriggerLimitIntervalSec=30 / TriggerLimitBurst=5 protects       │
-│   ┃ against dnsmasq churn during boot.                              │
+│   ┃ Watches /var/lib/NetworkManager/dnsmasq-wlan0.leases            │
+│   ┃ (PathChanged + PathExistsGlob — NM's shared-mode dnsmasq, NOT   │
+│   ┃ the standalone /var/lib/misc path; fixed 2026-06-05). Fires     │
+│   ┃ astromech-pair-sealing.service on every lease change; the       │
+│   ┃ .timer retries every 60 s in case inotify misses the event.     │
+│   ┃ ConditionPathExists=!/var/lib/astromech/pair_sealed → once      │
+│   ┃ sealed, the units stop. TriggerLimitIntervalSec=30 /            │
+│   ┃ TriggerLimitBurst=20 absorbs boot-time dnsmasq churn.           │
+│   ┃ ConditionPathExists=!ASTROMECH_FIRSTBOOT_READY (both /boot and  │
+│   ┃ /boot/firmware) → the units NEVER run during the firstboot      │
+│   ┃ boot, whose scheduled reboot once killed a handover mid-push    │
+│   ┃ (field log 2026-06-12, fix d91068e).                            │
 │   ▼                                                                 │
 │ astromech-pair-sealing.service                                      │
 │   ┃                                                                 │
 │   ┃ Runs scripts/astromech_pair_sealing.sh as root, oneshot.        │
 │   ┃ SuccessExitStatus=0 2 → exit 2 ("Slave not reachable yet")      │
-│   ┃ is NOT a failure; the .path re-fires on the next lease.         │
+│   ┃ is NOT a failure; the .path/.timer re-fire it.                  │
 │   ▼                                                                 │
-│ scripts/astromech_pair_sealing.sh:                                  │
+│ scripts/astromech_pair_sealing.sh (crash-safe since d91068e):       │
 │   1. Re-check the marker (idempotent — no-op if already sealed).    │
 │   2. Probe the Slave: ping -c 1 + ssh -o BatchMode=yes 'true'.      │
-│      If unreachable → exit 2, .path will retry on next lease event. │
+│      Unreachable + NO push intent → exit 2 (retry on next event).   │
+│      Unreachable + push intent ≥180 s old → ROLL FORWARD: a prior   │
+│      run already delivered the final SSID to the Slave and died     │
+│      before flipping the Master AP — skip probe+push, flip now.     │
 │   3. Generate the FINAL per-robot SSID via                          │
 │      bash scripts/gen_hotspot_ssid.sh                               │
 │      → Astromech-XXXX (4 hex from /proc/cpuinfo serial, fallback    │
 │         wlan0 MAC, fallback random)                                 │
-│   4. Push FINAL creds to the Slave FIRST over SSH+nmcli:            │
+│   4. Write /var/lib/astromech/pair_push_intent, THEN push FINAL     │
+│      creds to the Slave over SSH+nmcli:                             │
 │        sudo -n nmcli connection modify <astromech-master-hotspot>   │
 │             802-11-wireless.ssid '$FINAL_SSID'                      │
 │             wifi-sec.psk '$FINAL_PSK'                               │
@@ -479,7 +489,8 @@ network name.
 │      The Slave's NetworkManager auto-reconnects within seconds.     │
 │   6. Persist FINAL creds to local.cfg [hotspot] for the Flask UI    │
 │      to display + future deploys to use.                            │
-│   7. Write /var/lib/astromech/pair_sealed → the .path unit will     │
+│   7. Write /var/lib/astromech/pair_sealed, remove the push intent,  │
+│      and quiesce the .path/.timer for this session → the units      │
 │      never re-fire on this Pi.                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
