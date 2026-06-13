@@ -37,8 +37,9 @@
 #      URL: DNA-validate via dna_validate. If valid, switch origin +
 #      `git reset --hard origin/<branch>`. If invalid, log + KEEP origin
 #      pointed at the (presumably official) original.
-#   6. Self-destruct: rm the trigger marker, shred + rmdir the secrets
-#      directory, sync, reboot.
+#   6. Self-destruct: shred + rmdir the secrets directory, shred the
+#      credential-bearing boot files (astromech_init.cfg, network-config,
+#      user-data, meta-data), rm the trigger marker, sync, reboot.
 #
 # Idempotency: every step is safe to re-run on its own; we only delete the
 # trigger in step 6, so a crashed run can be retried by simply re-booting.
@@ -566,6 +567,25 @@ if [ -d "$SECRETS_DIR" ]; then
     rm -rf "$SECRETS_DIR" 2>/dev/null && log_ok "Secrets directory wiped" \
         || log_warn "Could not fully remove $SECRETS_DIR — check /boot perms"
 fi
+
+# Shred the remaining first-boot config files that hold credentials in
+# cleartext on the FAT boot partition. The hotspot PSK is written in clear in
+# astromech_init.cfg ([hotspot] password) and — on the slave — in
+# network-config (wlan0 join); the login password hash lives in the cloud-init
+# user-data. All are consumed by now (cfg parsed above; cloud-init applies this
+# instance before firstboot runs, gated After=cloud-final.service), so wiping
+# them keeps the secrets off a card anyone can read on a PC. shred where
+# possible, rm as the fallback; missing files are skipped (network-config is
+# slave-only, so the master simply has nothing to wipe there).
+for f in "$INIT_CFG" "$BOOT_DIR/network-config" "$BOOT_DIR/user-data" "$BOOT_DIR/meta-data"; do
+    [ -f "$f" ] || continue
+    shred -u "$f" 2>/dev/null || rm -f "$f" 2>/dev/null || true
+    if [ -f "$f" ]; then
+        log_warn "Could not remove $(basename "$f") — check $BOOT_DIR perms"
+    else
+        log_ok "Wiped $(basename "$f")"
+    fi
+done
 
 # Delete the trigger LAST — if anything above failed catastrophically the
 # operator can re-trigger by re-creating the marker.
