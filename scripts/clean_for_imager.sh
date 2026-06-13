@@ -6,8 +6,9 @@
 # applies:
 #
 #   A) Whitelist sweep in /home/<install-user>/
-#      Keep      : astromechos/, angles_backup/, all hidden entries (.*)
+#      Keep      : astromechos/, all hidden entries (.*)
 #      Delete    : everything else at the TOP level of the home dir
+#                  (incl. angles_backup/ — builder-local, see note at whitelist)
 #
 #   B) System cleanup (logs, caches, history, apt, machine-id)
 #
@@ -142,7 +143,13 @@ printf "${GRAY}Target user : %s\nTarget home : %s\nRepo path   : %s${RESET}\n\n"
 
 # ─── Whitelist scan: build deletion list before asking for confirmation ────
 step "0/9  Scanning $TARGET_HOME for non-whitelisted entries"
-declare -a HOME_WHITELIST=( 'astromechos' 'angles_backup' )
+# angles_backup/ is deliberately NOT whitelisted: it is the builder's own
+# update.sh safety-net copy of the servo/dome calibration, useless in a Golden
+# Image (every flashed robot recreates its own from its live calibration the
+# first time update.sh runs). Deleting it keeps the builder's calibration out
+# of the image. The live calibration in the repo (master/config/dome_angles.json,
+# slave/config/servo_angles.json) is untouched by this sweep.
+declare -a HOME_WHITELIST=( 'astromechos' )
 declare -a DELETION_TARGETS=()
 declare -a KEPT_TARGETS=()
 shopt -s nullglob
@@ -162,7 +169,7 @@ shopt -u nullglob
 
 printf "  ${GREEN}KEEP${RESET}   (whitelist):\n"
 if [ ${#KEPT_TARGETS[@]} -eq 0 ]; then
-    printf "    ${GRAY}(none of astromechos/, angles_backup/ found in this home dir)${RESET}\n"
+    printf "    ${GRAY}(astromechos/ not found in this home dir)${RESET}\n"
 else
     for k in "${KEPT_TARGETS[@]}"; do
         printf "    ${GREEN}•${RESET} %s\n" "$k"
