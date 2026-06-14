@@ -1016,3 +1016,40 @@ scripts/setup_master.sh                             ← install firstboot.servic
   (`astromech-portability-chantier-2026-05-28`) is the foundation
   this builds on — without `shared/identity.py` + `lib_config.sh`,
   none of this is portable.
+
+---
+
+## Appendix — Assets rule + operator git-cleanup checklist
+
+> Remontés depuis `CLAUDE.md` (2026-06-13) pour alléger le contexte always-on.
+> `CLAUDE.md` ne garde qu'un pointeur ici. La procédure canonique complète
+> reste § 1 ("Recovery procedure: history surgery" + "Before every future
+> cleanup — checklist") ; ce qui suit est la version opérateur condensée + la
+> règle de gestion des assets (même thème : garder le `.git` léger).
+
+### 🖼️ Règle standard de gestion des assets (verrouillée 2026-05-29, split `Screenshots_Astro/` + `Screenshots_Imager/`)
+
+> Toute capture d'écran générée par les scripts d'AstromechOS doit impérativement être dirigée vers le sous-répertoire local `J:\R2-D2_Build\AstromechOS_Screenshots\Screenshots_Astro\`. Toute capture du C# Imager doit être dirigée vers le **sibling** `J:\R2-D2_Build\AstromechOS_Screenshots\Screenshots_Imager\`. Aucun dépôt de code source (`AstromechOS` ni `AstroMechOS_Imager`) ne doit jamais contenir de captures d'écran. Les deux sous-dossiers vivent dans **un seul et même dépôt distant** : https://github.com/RickDnamps/AstromechOS_Screenshots (un repo central pour héberger tous les assets visuels des deux projets sans polluer leurs repos de code). Chaque README pointe **uniquement vers son propre sous-dossier**. Tout nouveau script de capture doit respecter ce chemin et cette séparation des dépôts.
+
+**Mise en œuvre concrète** :
+- **Pattern URL** utilisé dans `README.md` d'AstromechOS = `https://raw.githubusercontent.com/RickDnamps/AstromechOS_Screenshots/main/Screenshots_Astro/<name>.png`. Pour l'Imager (futur) = `.../main/Screenshots_Imager/<name>.png`.
+- **Scripts canoniques** d'AstromechOS : `tools/refresh_screenshots.py` (33 PNGs full dashboard) + `tools/refresh_settings_hats_only.py` (1 PNG targeted) — tous deux gitignored via `tools/` ligne 62 du `.gitignore`. Leurs `OUT` pointent vers `os.path.join(os.path.dirname(REPO), 'AstromechOS_Screenshots', 'Screenshots_Astro', ...)`.
+- **Defense-in-depth** : `Screenshots/` + `Screenshots_Astro/` + `Screenshots_Imager/` sont tous gitignored (`.gitignore` lignes 73-75 du main repo) — si la règle est violée par accident, le commit est bloqué.
+- **Imager (sibling repo C# `AstroMechOS_Imager`)** : son propre script (`scripts/ui_tour.py` per `.gitignore:32` Imager-side) doit pointer vers `../AstromechOS_Screenshots/Screenshots_Imager/`. À patcher dans une passe séparée du dépôt Imager.
+- **Workflow opérateur** : run le script → review local → `cd ../AstromechOS_Screenshots && git add Screenshots_Astro/` (ou `Screenshots_Imager/`) `&& git commit + push` (PAS dans le main repo). Détails : `bd memories ui-screenshot-automation-playwright` (workflow) + `bd memories assets-rule-split-screenshots-astro-imager-2026-05-29` (path layout).
+
+**Compléments bloat-prevention** :
+- **Sparse-checkout sur master** : `.git/info/sparse-checkout` exclut `Screenshots/`, `android/`, `docs/`, `tests/`, `tools/`, root `*.md`, `LICENSE`, `preview.py` du working tree master (working tree ≈ 160 M au lieu de 192 M ; `.git` à 223 M après `git gc`). N'affecte PAS `.git` ni le slave (slave reçoit son code via rsync, pas de `.git`). Récupération : `git config core.sparseCheckout false && rm .git/info/sparse-checkout && git read-tree -mu HEAD`.
+- **APK Android non-trackés** : depuis 2026-05-29, `android/compiled/*.apk` est gitignored (source principale du bloat git, ~10 MB/build × 110 versions = ~1 GB pré-purge). Distribuer l'APK via GitHub Releases ou `adb install`, jamais par commit.
+
+### ⚠ Checklist opérateur AVANT tout ménage du `.git` (purge filter-repo, BFG, history rewrite)
+
+1. **Test DNA-safety** : `git ls-tree -r --name-only $(grep ^OFFICIAL_INITIAL_COMMIT shared/git_provenance.py | cut -d"'" -f2) | grep -c "^<chemin>/"`. Résultat `0` = safe sans toucher l'ADN. Résultat `>0` = re-anchor obligatoire dans le même commit.
+2. **Tag safety** : `git tag pre-surgery-$(date +%F)` avant de lancer la chirurgie.
+3. **Working tree clean** : commit ou stash tout changement pending — filter-repo refuse de tourner avec un working tree sale.
+4. **Re-add origin** : filter-repo strip `origin` par défaut → `git remote add origin https://github.com/RickDnamps/AstromechOS.git` AVANT `git push --force`.
+5. **Procédure de recovery sur chaque clone live** (master Pi inclus) : `git fetch origin && git reset --hard origin/main` (le `git pull --ff-only` de `update.sh:108` FAIL après un force-push).
+6. **`git gc` sur Windows** plante souvent (`fatal: failed to run repack`) → workaround validé 2026-05-29 : `git prune --expire=now` puis `git repack -a -d --depth=250 --window=250` (911 MB → 111 MB sur le dev PC).
+7. **Tests DNA** : `python -m pytest scripts/test_git_provenance.py -v` doit passer 12/12 après update de la constante.
+
+Procédure complète + table historique des anchors + lessons learned : § 1 ci-dessus ("Anchor history", "Recovery procedure", "Lessons learned"). Memory beads : `bd memories dna-chirurgie-2026-05-29`.
